@@ -4,11 +4,12 @@
 
 - 所属产品模块：玩家接入与发行
 - 上位产品 PRD：[`prd.md`](prd.md)
-- 配对需求文档：[`public-site-discovery-and-showcase.prd.md`](public-site-discovery-and-showcase.prd.md)
-- 生命周期：`active`（目标体验，不是上线声明）
+- 配对产品 PRD：[`public-site-discovery-and-showcase.prd.md`](public-site-discovery-and-showcase.prd.md)
+- 生命周期：active
+- 状态边界：目标体验，不是上线声明
 - Owner role：`game_visual_interaction_designer`
 - Last reviewed：2026-10-14
-- 专业系统设计：[`站点系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
+- 专业权威：[`站点系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
 - 既有布局约束：[`site 视觉与交互权威`](../../site/design.md#homepage-layout-authority)
 
 ## 1. 问题、目标与范围
@@ -21,12 +22,12 @@
 
 | 上游要求 | 体验决定 | 不承担的承诺 |
 | --- | --- | --- |
-| [REQ-001](public-site-discovery-and-showcase.prd.md#req-site-discovery-001) | 首屏说明角色；一个主要观看动作，一个次要预览链接 | 不表示无需配置即可游玩 |
-| [REQ-002](public-site-discovery-and-showcase.prd.md#req-site-discovery-002) | 展示一件事的目标、回应、后果、再选择 | 不用生成图证明真实运行 |
-| [REQ-003](public-site-discovery-and-showcase.prd.md#req-site-discovery-003) | 小规模可读内容与稳定链接，允许真实空状态 | 不承诺实时或固定更新节奏 |
-| [REQ-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004) | 先了解成本/限制，再选择下载；可随时不安装 | 不新增免费模型、签名或平台支持 |
-| [REQ-005](public-site-discovery-and-showcase.prd.md#req-site-discovery-005) | 小说先导读后正文，版本资料下沉 | 不把具身叙事扩成当前玩法 |
-| [REQ-006](public-site-discovery-and-showcase.prd.md#req-site-discovery-006) | 双语同构、正文优先、动效可关闭、错误可恢复 | 不以桌面概念图代签其他入口 |
+| [REQ-SITE-DISCOVERY-001](public-site-discovery-and-showcase.prd.md#req-site-discovery-001) / [AC-SITE-DISCOVERY-001](public-site-discovery-and-showcase.prd.md#ac-site-discovery-001) | 首屏说明角色；一个主要观看动作，一个次要预览链接 | 不表示无需配置即可游玩 |
+| [REQ-SITE-DISCOVERY-002](public-site-discovery-and-showcase.prd.md#req-site-discovery-002) / [AC-SITE-DISCOVERY-002](public-site-discovery-and-showcase.prd.md#ac-site-discovery-002) | 展示一件事的目标、回应、后果、再选择 | 不用生成图证明真实运行 |
+| [REQ-SITE-DISCOVERY-003](public-site-discovery-and-showcase.prd.md#req-site-discovery-003) / [AC-SITE-DISCOVERY-003](public-site-discovery-and-showcase.prd.md#ac-site-discovery-003) | 小规模可读内容与稳定链接，允许真实空状态 | 不承诺实时或固定更新节奏 |
+| [REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004) / [AC-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#ac-site-discovery-004) | 先了解成本/限制，再选择下载；可随时不安装 | 不新增免费模型、签名或平台支持 |
+| [REQ-SITE-DISCOVERY-005](public-site-discovery-and-showcase.prd.md#req-site-discovery-005) / [AC-SITE-DISCOVERY-005](public-site-discovery-and-showcase.prd.md#ac-site-discovery-005) | 小说先导读后正文，版本资料下沉 | 不把具身叙事扩成当前玩法 |
+| [REQ-SITE-DISCOVERY-006](public-site-discovery-and-showcase.prd.md#req-site-discovery-006) / [AC-SITE-DISCOVERY-006](public-site-discovery-and-showcase.prd.md#ac-site-discovery-006) | 双语同构、正文优先、动效可关闭、错误可恢复 | 不以桌面概念图代签其他入口 |
 
 本页通过上表消费同一组要求，Trace ID 的唯一声明留在配对 PRD；系统设计维护完整 Trace refs、技术分配与验证矩阵。
 
@@ -37,13 +38,13 @@
 
 | 区域 | 内容层级 | 主要动作与终点 |
 | --- | --- | --- |
-| 顶栏 | oasis7、玩法、世界记录、开发进展、世界观、获取预览；语言独立于五项主导航 | 原生链接到对应正文；技术文档移到页尾 |
+| 顶栏 | oasis7、玩法、世界记录、开发进展、获取预览；语言独立于四项主导航 | 原生链接到对应正文；技术文档与小说入口放页尾或渐进披露 |
 | 首屏 | 类型 → 标题 → 角色/资源压力 → 主次动作 → 当前状态；旁边世界氛围画面 | “看一次 Agent 决策”到玩法展示；“了解技术预览”到下载前说明 |
 | 一次选择 | 素材类型与范围 → 目标 → Agent 响应 → 后果 → 下一次选择 | 点击步骤只改变阅读位置；可看原始来源 |
 | 精选记录 | 最多三条真实已发布内容；标题说明事件，标签说明证据性质 | 去该条记录详情；无内容时保留一句解释 |
 | 当前阶段与进展 | 当前阶段摘要与最近三篇玩家视角文章；不把 commit 数当进展 | 阅读文章或当前说明；历史文章保留版本 |
 | 预览说明 | 适合谁、能体验什么、需准备什么、费用责任、风险；其后一个平台主包 | 查看对应说明/下载，或不安装继续阅读 |
-| 世界观 | 小说名、一段无剧透引子、明确“世界观小说”标签 | 开始阅读；没有对应语言时说明实际语言 |
+| 世界观（次级渐进披露） | 小说名、一段无剧透引子、明确“世界观小说”标签 | 开始阅读；没有对应语言时说明实际语言 |
 | 页尾 | 文档、GitHub、反馈、RSS 与状态说明 | 只连接真实存在的入口，无虚构社区 |
 
 首屏不恢复三列事实条；资源压力保留在正文问题中，不重复堆叠统计卡。既有 `#proof`、`#world`、`#download`、`#contribute`、`#world-laws` 深链必须保留兼容去向。旧“世界规则”内容可合入玩法说明后的可展开区域，不能丢失玩家边界。
@@ -131,7 +132,7 @@
 
 ## 8. 验收与证据
 
-[PRD AC-001–006](public-site-discovery-and-showcase.prd.md#ac-site-discovery-001)分别判定理解、证据性质、内容纠正、预览选择、小说区分和可访问性。实际锚点以各 AC 的显式定位为准，完整技术矩阵见[系统设计验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)。
+[PRD AC-SITE-DISCOVERY-001–006](public-site-discovery-and-showcase.prd.md#ac-site-discovery-001)分别判定理解、证据性质、内容纠正、预览选择、小说区分和可访问性。实际锚点以各 AC 的显式定位为准，完整技术矩阵见[系统设计验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)。
 
 评审检查主动作真实去向、关键限制是否贴近决策点、截图标签是否清楚、错误是否可恢复和各语言是否等价。真人观察记录访客原话及误解；生成稿审查只回答信息层级与视觉方向，不宣布理解测试、响应式、性能或游戏邀测通过。
 

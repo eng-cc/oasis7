@@ -4,7 +4,8 @@
 
 - 所属产品模块：玩家接入与发行
 - 上位产品 PRD：[`prd.md`](prd.md)
-- 生命周期：`active`（设计约定，不代表页面已经实现或部署）
+- 生命周期：active
+- 状态边界：设计约定，不代表页面已经实现或部署
 - Owner role：`producer_system_designer`
 - Last reviewed：2026-10-14
 - 配对产品设计：[`public-site-discovery-and-showcase.design.md`](public-site-discovery-and-showcase.design.md)
@@ -51,13 +52,13 @@
 
 Trace ID: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19
 
-- 功能点：F-SITE-DISCOVERY-001；首期 CN/EN 首页；验收 [AC-001](#ac-site-discovery-001)。
+- 功能点：F-SITE-DISCOVERY-001；首期 CN/EN 首页；验收 [AC-SITE-DISCOVERY-001](#ac-site-discovery-001)。
 - 要求：首屏和首个说明段必须让访客辨认游戏类型、玩家与 Agent 的分工、资源压力和当前可做事项；主按钮进入真实存在的展示，次链接进入预览说明，不用“立即进入世界”代替未开放入口。按钮不能直接调用模型或世界写接口。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ENTRY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-entry)，含旧锚点与无脚本入口。
 - 实现状态：未核实
 - 实现与验证依据：[基线首页](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)有定位与入口；本专题完整顺序及真人理解尚无对应实现/验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；首页 AC-001。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；首页 AC-SITE-DISCOVERY-001。
 - 剩余范围：目标页面实现、双语浏览器证据与陌生访客理解验证。
 
 <a id="req-site-discovery-002"></a>
@@ -65,13 +66,13 @@ Trace ID: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19
 
 Trace ID: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822
 
-- 功能点：F-SITE-DISCOVERY-002；首期分步展示与记录详情；验收 [AC-002](#ac-site-discovery-002)。
+- 功能点：F-SITE-DISCOVERY-002；首期分步展示与记录详情；验收 [AC-SITE-DISCOVERY-002](#ac-site-discovery-002)。
 - 要求：每个展示必须把目标/授权边界、Agent 解释、实际或说明性结果、下一次选择分开；概念图、说明性受控示例、真实运行记录和小说不得混称。真实记录只展示来源能证明的范围；素材缺失/失效时收窄或停止相关展示，不用生成图补成“实机”。浏览、切换和回放均不产生世界效果。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-EVIDENCE](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)，含来源校验、失效与竞态隔离。
 - 实现状态：未核实
 - 实现与验证依据：[基线示例展示](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)存在；没有本专题来源合同和真实运行样本的完整验收。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；展示/记录 AC-002。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；展示/记录 AC-SITE-DISCOVERY-002。
 - 剩余范围：选择合法素材、来源复核、目标展示实现及失败/快速切换验证。
 
 <a id="req-site-discovery-003"></a>
@@ -79,13 +80,13 @@ Trace ID: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822
 
 Trace ID: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04
 
-- 功能点：F-SITE-DISCOVERY-003；首期观测记录与开发日志；验收 [AC-003](#ac-site-discovery-003)。
+- 功能点：F-SITE-DISCOVERY-003；首期观测记录与开发日志；验收 [AC-SITE-DISCOVERY-003](#ac-site-discovery-003)。
 - 要求：访客必须能免注册阅读有日期、适用范围和稳定链接的内容；观测解释一件事，日志解释玩家问题、变化及限制。无内容时明确为空，不编造新闻、人数、日期、成功故事或更新频率。撤回内容保留安全的纠正入口，不继续推荐错误摘要；敏感内容不以历史保留为由继续公开。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-PUBLISHING](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-publishing)，含静态来源、排序、RSS 与撤回。
 - 实现状态：未核实
 - 实现与验证依据：[基线跟进入口](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)主要指向 Release/文档；没有本专题内容发布与撤回链的实现/验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；内容 AC-003。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；内容 AC-SITE-DISCOVERY-003。
 - 剩余范围：首篇真实内容、列表/详情/RSS 实现和纠正链验证。
 
 <a id="req-site-discovery-004"></a>
@@ -93,13 +94,13 @@ Trace ID: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04
 
 Trace ID: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3
 
-- 功能点：F-SITE-DISCOVERY-004；首期速览、下载与 FAQ；验收 [AC-004](#ac-site-discovery-004)。
+- 功能点：F-SITE-DISCOVERY-004；首期速览、下载与 FAQ；验收 [AC-SITE-DISCOVERY-004](#ac-site-discovery-004)。
 - 要求：下载前必须能读到适用版本/平台、当前可体验范围、必要环境与 provider 配置、费用责任、签名和数据保留/升级限制。未知值明确未知；无对应资产时不能猜下载地址或暗示支持。关键警示留在对应按钮附近，其余详细说明可渐进展开；保留不安装的选择。静态网站不提供凭据输入框。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-DOWNLOAD](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)，消费现行下载与升级 authority。
 - 实现状态：未核实
 - 实现与验证依据：[基线下载区](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)已有主包和警示；本专题完整速览及异常分流尚无验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；预览 AC-004。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；预览 AC-SITE-DISCOVERY-004。
 - 剩余范围：同候选内容核对、目标页面实现及版本/资产负例；本专题不验收安装器本身。
 
 <a id="req-site-discovery-005"></a>
@@ -107,13 +108,13 @@ Trace ID: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3
 
 Trace ID: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae
 
-- 功能点：F-SITE-DISCOVERY-005；首期首页小说导读与既有阅读器入口；验收 [AC-005](#ac-site-discovery-005)。
+- 功能点：F-SITE-DISCOVERY-005；首期首页小说导读与既有阅读器入口；验收 [AC-SITE-DISCOVERY-005](#ac-site-discovery-005)。
 - 要求：小说必须明确为世界观创作，不作为当前玩法证据；首次入口优先简介、开始阅读和无剧透背景，版本清单/总纲置于次级入口。故事加载失败保留真实错误、原文与重试；不存在英文正文时明确中文内容，不伪造翻译或英文路由。不更改小说正文。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-STORY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-story)，复用阅读器恢复合同。
 - 实现状态：未核实
 - 实现与验证依据：[基线阅读器](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/story/index.html)存在；本专题导读和游戏/小说区分无完整验收。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；小说入口 AC-005。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；小说入口 AC-SITE-DISCOVERY-005。
 - 剩余范围：导读实现、语言目标核对、阅读器失败与迟到响应回归。
 
 <a id="req-site-discovery-006"></a>
@@ -121,39 +122,45 @@ Trace ID: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae
 
 Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 
-- 功能点：F-SITE-DISCOVERY-006；首期全部受影响公开路由；验收 [AC-006](#ac-site-discovery-006)。
+- 功能点：F-SITE-DISCOVERY-006；首期全部受影响公开路由；验收 [AC-SITE-DISCOVERY-006](#ac-site-discovery-006)。
 - 要求：CN/EN 必须保留同等主路径、素材类型及公开边界；键盘、窄屏、减少动效和脚本失效时仍能读正文并抵达有效下一步。失效语言目标、媒体或网络请求只影响所属内容，不吞掉页面或显示虚假成功。设计稿不能替代这些入口的浏览器证据。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ACCESSIBILITY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-accessibility)，含响应式、语言与降级验证。
 - 实现状态：未核实
 - 实现与验证依据：[现有设计合同](../../site/design.md#homepage-layout-authority)已有通用要求；本专题所有新增路由与状态没有真实浏览器验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；受影响页面 AC-006。
+- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；受影响页面 AC-SITE-DISCOVERY-006。
 - 剩余范围：桌面/移动、无 JS、键盘、200% 缩放和失败状态实测。
 
 ## 5. 验收与证据
 
 <a id="ac-site-discovery-001"></a>
-### AC-001：理解玩家位置
+### AC-SITE-DISCOVERY-001：理解玩家位置
+- 覆盖要求：REQ-SITE-DISCOVERY-001
 给定未接触项目的访客，当阅读首屏及第一段展示后，则能用自己的话区分玩家目标、Agent 决策与世界约束，并找到当前允许的下一步；不能认为已开放公共网页加入。记录误解和原话，不用作者自测代签。30 秒是沿用 site SC-8 的理解目标，不是已实测结果。
 
 <a id="ac-site-discovery-002"></a>
-### AC-002：展示不伪造事实
+### AC-SITE-DISCOVERY-002：展示不伪造事实
+- 覆盖要求：REQ-SITE-DISCOVERY-002
 给定概念、说明性、真实记录以及来源缺失四种材料，当浏览与快速切换步骤时，则类型标识与当前内容一致；缺失/失效来源不能进入真实记录陈述，旧响应不覆盖新选择，任何步骤均无世界写请求。人能分清“目标”“结果未知”和“已确认结果”。
 
 <a id="ac-site-discovery-003"></a>
-### AC-003：空内容与纠正可理解
+### AC-SITE-DISCOVERY-003：空内容与纠正可理解
+- 覆盖要求：REQ-SITE-DISCOVERY-003
 给定零条、一条、多条、历史和撤回内容，当进入列表、详情、旧链接或订阅源时，则顺序与日期一致，无假填充；撤回理由和当前说明可达，敏感正文及错误推荐被移除。只记录站点内容行为，不推导游戏活跃或留存。
 
 <a id="ac-site-discovery-004"></a>
-### AC-004：预览选择不诱导
+### AC-SITE-DISCOVERY-004：预览选择不诱导
+- 覆盖要求：REQ-SITE-DISCOVERY-004
 给定支持/不支持平台、版本请求超时、缺资产和签名未完成，当访客选择预览时，则看见对应限制与文档/重试/退出路径；不会拼接不存在的资产、绕过信任警示或把未知版本标为最新。安装成本、费用责任和保留语义能被正确复述。
 
 <a id="ac-site-discovery-005"></a>
-### AC-005：小说不变成玩法承诺
+### AC-SITE-DISCOVERY-005：小说不变成玩法承诺
+- 覆盖要求：REQ-SITE-DISCOVERY-005
 给定英文首页、无英文小说、章节正常/空/失败与快速切换，当进入导读和阅读器时，则读者知道是小说、知道实际语言、可回首页或重试；不错误跳转，不把具身叙事当当前操作模式，不把迟到章节当当前章节。
 
 <a id="ac-site-discovery-006"></a>
-### AC-006：降级仍有完整路径
+### AC-SITE-DISCOVERY-006：降级仍有完整路径
+- 覆盖要求：REQ-SITE-DISCOVERY-006
 给定 CN/EN、1440×900、390×844、360×800、200% 缩放、键盘、无 JS 与 reduced-motion，当沿主路径浏览时，则文字、限制、导航、CTA 均可达，没有横向溢出或仅靠颜色传意；媒体失效仍有文字与替代入口。真实浏览器结果按路由和环境分别记录。
 
 验证方法由[系统设计验证矩阵](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)和现有 [testing-manual](../../../testing-manual.md)承接。自动结构检查不证明人类理解，生成稿不证明浏览器结果，页面合入不证明上线或游戏发行。
@@ -178,3 +185,14 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 | [EVE Frontier](https://evefrontier.com/en) | 游戏、Builders、Vision、Roadmap 与文档分层 | 采纳读者分流；不复制账户、市场或发布范围 |
 
 只借鉴信息组织与交互原则；不复制竞品美术、标志、截图或文案。生成设计稿是 oasis7 的方案表达，来源与非证据边界见配对产品设计。
+
+## 专业 owner、authority 与测试层级追踪
+
+| REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-SITE-DISCOVERY-001](#req-site-discovery-001) / [AC-SITE-DISCOVERY-001](#ac-site-discovery-001) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-002](#req-site-discovery-002) / [AC-SITE-DISCOVERY-002](#ac-site-discovery-002) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-003](#req-site-discovery-003) / [AC-SITE-DISCOVERY-003](#ac-site-discovery-003) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-004](#req-site-discovery-004) / [AC-SITE-DISCOVERY-004](#ac-site-discovery-004) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-005](#req-site-discovery-005) / [AC-SITE-DISCOVERY-005](#ac-site-discovery-005) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-006](#req-site-discovery-006) / [AC-SITE-DISCOVERY-006](#ac-site-discovery-006) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
