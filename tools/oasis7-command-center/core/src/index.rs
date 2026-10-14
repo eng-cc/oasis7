@@ -62,6 +62,7 @@ fn read_candidate(
     let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
     let mut observed = Vec::new();
+    let mut omissions = Vec::new();
     let mut names: Vec<&[u8]> = files
         .split(|b| *b == 0)
         .filter(|b| b.ends_with(b".md"))
@@ -93,21 +94,12 @@ fn read_candidate(
             coverage.omit(name, "file_count_budget");
             continue;
         }
-        let path = match safe_path(root, name) {
-            Ok(path) => path,
-            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                coverage.omit(name, "deleted");
-                continue;
-            }
-            Err(_) => {
-                coverage.omit(name, "path_unavailable");
-                continue;
-            }
-        };
-        let content = match read_document(&path, 16 * 1024 * 1024 - total) {
+        let remaining = 16 * 1024 * 1024 - total;
+        let content = match read_source(root, name, remaining) {
             Ok(content) => content,
             Err(reason) => {
                 coverage.omit(name, reason);
+                omissions.push((name.to_owned(), reason, remaining));
                 continue;
             }
         };
@@ -166,6 +158,13 @@ fn read_candidate(
             ));
         }
     }
+    for (name, reason, remaining) in omissions {
+        if read_source(root, &name, remaining).err() != Some(reason) {
+            return Err(Error::Invalid(
+                "document omission changed during indexing; refresh again".into(),
+            ));
+        }
+    }
     if git(root, &["rev-parse", "HEAD"])? != project.head {
         return Err(Error::Invalid(
             "HEAD changed during indexing; refresh again".into(),
@@ -177,6 +176,20 @@ fn read_candidate(
         coverage.summary(total),
         coverage.has_omissions(),
     ))
+}
+fn read_source(
+    root: &Path,
+    name: &str,
+    remaining: usize,
+) -> std::result::Result<String, &'static str> {
+    let path = safe_path(root, name).map_err(|error| match error {
+        Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound => "deleted",
+        Error::Io(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            "permission_denied"
+        }
+        _ => "path_unavailable",
+    })?;
+    read_document(&path, remaining)
 }
 fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
     run(

@@ -127,3 +127,17 @@ fn rejects_dirty_document_replaced_with_fifo_during_verification() {
         "replacement must reject rather than wait for a writer"
     );
 }
+
+#[test]
+fn rejects_repaired_omitted_dirty_document_before_publication() {
+    let (tmp, project) = fixture();
+    let file = tmp.path().join("doc/prd.md");
+    std::fs::write(&file, [0xff]).unwrap();
+    let result = read_candidate(&project, || {
+        std::fs::write(&file, "# Repaired\n").unwrap();
+    });
+    assert!(
+        result.is_err(),
+        "old omission must not publish after the source becomes readable"
+    );
+}
