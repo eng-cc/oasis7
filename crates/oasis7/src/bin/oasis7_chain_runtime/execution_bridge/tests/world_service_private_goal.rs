@@ -36,6 +36,33 @@ pub(super) fn http_with_hook(
     headers: &str,
     before_delivery: impl FnOnce(),
 ) -> (u16, serde_json::Value) {
+    let (status, body, _) = http_with_diagnostic_hook(
+        dir,
+        runtime,
+        signer,
+        store,
+        path,
+        body,
+        headers,
+        before_delivery,
+    );
+    (status, body)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit fixture, deterministic delivery hook, and bounded stage observation"
+)]
+pub(super) fn http_with_diagnostic_hook(
+    dir: &Path,
+    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
+    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
+    store: Option<&PrivateGoalStore>,
+    path: &str,
+    body: &impl serde::Serialize,
+    headers: &str,
+    before_delivery: impl FnOnce(),
+) -> (u16, serde_json::Value, Option<&'static str>) {
     let body = serde_json::to_vec(body).unwrap();
     let mut bytes=format!("POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\n\r\n",body.len()).into_bytes();
     bytes.extend(body);
@@ -45,6 +72,7 @@ pub(super) fn http_with_hook(
     client.write_all(&bytes).unwrap();
     let mut read = vec![0; bytes.len()];
     server.read_exact(&mut read).unwrap();
+    let mut read_conflict_stage = None;
     let private = crate::world_service_api::private_goal::maybe_handle_with_delivery_hook(
         &mut server,
         &read,
@@ -58,6 +86,7 @@ pub(super) fn http_with_hook(
         signer,
         store,
         before_delivery,
+        |stage| read_conflict_stage = Some(stage),
     )
     .unwrap();
     if !private {
@@ -88,6 +117,7 @@ pub(super) fn http_with_hook(
     (
         status,
         serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap(),
+        read_conflict_stage,
     )
 }
 pub(super) fn consumer<T>(

@@ -66,6 +66,25 @@ struct CleanupCategories {
     lookup_transport: u64,
     cooldown: u64,
 }
+fn report_cleanup_boundary(
+    phase: &'static str,
+    error: &oasis7::world_service::client::WorldServiceClientError,
+    categories: &CleanupCategories,
+) {
+    use oasis7::world_service::client::WorldServiceClientError;
+    let (class, status) = match error {
+        WorldServiceClientError::Configuration(_) => ("configuration", None),
+        WorldServiceClientError::Transport(_) => ("transport", None),
+        WorldServiceClientError::Rejected { status, .. } => ("rejected", Some(*status)),
+        WorldServiceClientError::Assurance(_) => ("assurance", None),
+        WorldServiceClientError::Cooldown { status, .. } => ("cooldown", Some(*status)),
+    };
+    // Only fixed classes, HTTP status and counters: never private payload or raw errors.
+    eprintln!(
+        "TASK_CLEANUP_BOUNDARY {}",
+        serde_json::json!({"phase":phase,"class":class,"status":status,"categories":categories})
+    );
+}
 fn settle_cleanup_original(
     client: &RemoteWorldServiceClient,
     original: &SubmitIntentRequest<WorldServicePayloadV1>,
@@ -92,7 +111,10 @@ fn settle_cleanup_original(
                 Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
                     ..
                 }) => categories.cooldown += 1,
-                Err(_) => return Err("cleanup submit boundary rejected"),
+                Err(error) => {
+                    report_cleanup_boundary("submit", &error, categories);
+                    return Err("cleanup submit boundary rejected");
+                }
             }
         }
         match client.lookup(
@@ -125,10 +147,17 @@ fn settle_cleanup_original(
             Err(oasis7::world_service::client::WorldServiceClientError::Cooldown { .. }) => {
                 categories.cooldown += 1
             }
-            Err(_) => return Err("cleanup lookup boundary rejected"),
+            Err(error) => {
+                report_cleanup_boundary("lookup", &error, categories);
+                return Err("cleanup lookup boundary rejected");
+            }
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    eprintln!(
+        "TASK_CLEANUP_DEADLINE {}",
+        serde_json::json!({"categories":categories})
+    );
     Err("cleanup original deadline exceeded")
 }
 #[test]

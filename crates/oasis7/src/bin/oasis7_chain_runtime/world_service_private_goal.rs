@@ -85,6 +85,7 @@ enum PrivateError {
     Invalid,
     Forbidden,
     Conflict,
+    TaskContextReadConflict(task_context::ReadConflictStage),
     Recovery,
     Unavailable,
 }
@@ -353,6 +354,7 @@ pub(crate) fn maybe_handle(
         signer,
         store,
         || {},
+        |stage| tracing::warn!(stage, "private task context operation rejected"),
     )
 }
 /// Returns bounded errors only; never prints body, signatures, keys or paths.
@@ -373,6 +375,7 @@ pub(crate) fn maybe_handle_with_delivery_hook(
     signer: &FeedbackSubmitSigner,
     store: Option<&PrivateGoalStore>,
     before_delivery: impl FnOnce(),
+    mut on_read_conflict: impl FnMut(&'static str),
 ) -> Result<bool, String> {
     let path = target.split('?').next().unwrap_or(target);
     if ![
@@ -442,19 +445,25 @@ pub(crate) fn maybe_handle_with_delivery_hook(
             )
         }
     })();
-    let (status, value) = match result {
-        Ok(value) => (200, value),
+    let (status, value, read_conflict_stage) = match result {
+        Ok(value) => (200, value, None),
         Err(error) => {
-            let (status, code) = match error {
-                PrivateError::Invalid => (400, "invalid_private_goal_request"),
-                PrivateError::Forbidden => (403, "private_goal_forbidden"),
-                PrivateError::Conflict => (409, "private_goal_conflict"),
-                PrivateError::Recovery => (503, "private_goal_recovery_required"),
-                PrivateError::Unavailable => (503, "private_goal_unavailable"),
+            let (status, code, stage) = match error {
+                PrivateError::Invalid => (400, "invalid_private_goal_request", None),
+                PrivateError::Forbidden => (403, "private_goal_forbidden", None),
+                PrivateError::Conflict => (409, "private_goal_conflict", None),
+                PrivateError::TaskContextReadConflict(stage) => {
+                    (409, "private_goal_conflict", Some(stage.as_str()))
+                }
+                PrivateError::Recovery => (503, "private_goal_recovery_required", None),
+                PrivateError::Unavailable => (503, "private_goal_unavailable", None),
             };
-            (status, json!({"error":code}))
+            (status, json!({"error":code}), stage)
         }
     };
+    if let Some(stage) = read_conflict_stage {
+        on_read_conflict(stage);
+    }
     let body = serde_json::to_vec(&value).map_err(|_| "private response encoding failed")?;
     let response = format!(
         "HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nPragma: no-cache\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

@@ -1,4 +1,4 @@
-use super::private_goal_tests::{consumer, http_with_hook};
+use super::private_goal_tests::{consumer, http_with_diagnostic_hook, http_with_hook};
 use super::*;
 use oasis7::world_service::{
     private_goal_prepare::sign_goal_prepare, private_goal_read::publication,
@@ -188,6 +188,53 @@ fn active_context_read_fixture() -> ActiveContextReadFixture {
         get,
         fence,
     }
+}
+
+fn advance_past_context_deadline(fixture: &mut ActiveContextReadFixture) {
+    let context_deadline = fixture.get.request.context.valid_until_tick.0;
+    let pin = super::super::world_service_read::pin(
+        &fixture.dir.join("records"),
+        &fixture.dir.join("store"),
+        &fixture.world,
+        None,
+    )
+    .unwrap();
+    advance_driver_past_context_deadline(
+        &mut fixture.driver,
+        pin.commit.position,
+        context_deadline,
+    );
+}
+
+fn advance_driver_past_context_deadline(
+    driver: &mut NodeRuntimeExecutionDriver,
+    starting_height: u64,
+    context_deadline: u64,
+) {
+    let mut height = starting_height;
+    while driver.execution_world.state().time <= context_deadline {
+        height += 1;
+        assert!(
+            height - starting_height <= 128,
+            "test fixture should have a bounded task-context lifetime"
+        );
+        let actions = vec![];
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".into(),
+                node_id: "node-a".into(),
+                proposer_id: "node-a".into(),
+                height,
+                slot: height,
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: compute_consensus_action_root(&actions).unwrap(),
+                committed_actions: actions,
+                committed_at_unix_ms: height as i64 * 1000,
+            })
+            .unwrap();
+    }
+    assert!(driver.execution_world.state().time > context_deadline);
 }
 
 #[test]
@@ -391,4 +438,59 @@ fn private_task_context_read_rejects_goal_revision_advanced_before_delivery() {
             .latest_goal_revision,
         DecimalU64(2)
     );
+}
+
+#[test]
+fn private_task_context_read_reports_expiry_at_capture_and_delivery() {
+    let mut initial = active_context_read_fixture();
+    advance_past_context_deadline(&mut initial);
+    let (status, body, stage) = http_with_diagnostic_hook(
+        &initial.dir,
+        &initial.runtime,
+        &initial.signer,
+        Some(&initial.store),
+        TASK_CONTEXT_READ_PATH,
+        &initial.get,
+        "",
+        || {},
+    );
+    assert_eq!(status, 409);
+    assert_eq!(body["error"], "private_goal_conflict");
+    assert!(body.get("payload").is_none());
+    assert_eq!(stage, Some("initial_capture_expired"));
+
+    let mut delivery = active_context_read_fixture();
+    let starting_height = super::super::world_service_read::pin(
+        &delivery.dir.join("records"),
+        &delivery.dir.join("store"),
+        &delivery.world,
+        None,
+    )
+    .unwrap()
+    .commit
+    .position;
+    let context_deadline = delivery.get.request.context.valid_until_tick.0;
+    let ActiveContextReadFixture {
+        dir,
+        driver,
+        signer,
+        runtime,
+        store,
+        get,
+        ..
+    } = &mut delivery;
+    let (status, body, stage) = http_with_diagnostic_hook(
+        dir,
+        runtime,
+        signer,
+        Some(store),
+        TASK_CONTEXT_READ_PATH,
+        get,
+        "",
+        || advance_driver_past_context_deadline(driver, starting_height, context_deadline),
+    );
+    assert_eq!(status, 409);
+    assert_eq!(body["error"], "private_goal_conflict");
+    assert!(body.get("payload").is_none());
+    assert_eq!(stage, Some("delivery_capture_expired"));
 }
