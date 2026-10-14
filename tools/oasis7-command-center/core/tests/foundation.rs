@@ -272,3 +272,53 @@ fn wholly_omitted_documents_are_partial_instead_of_successfully_empty() {
     assert_eq!(source.state, "empty");
     assert!(source.coverage.contains("候选 1，已读 1，遗漏 0"));
 }
+
+#[test]
+fn markdown_titles_use_visible_text_and_keep_reading_identity() {
+    let tmp = tempfile::tempdir().unwrap();
+    git(tmp.path(), &["init"]);
+    git(tmp.path(), &["config", "user.name", "test"]);
+    git(tmp.path(), &["config", "user.email", "test@example.org"]);
+    std::fs::create_dir(tmp.path().join("doc")).unwrap();
+    let path = tmp.path().join("doc/design.md");
+    std::fs::write(&path, "# 项目\n\n## **恢复**[策略](other.md) `API` ##\n正文\n\n多行\n标题\n====\n内容\n\n```md\n## 伪标题\n```\n").unwrap();
+    git(tmp.path(), &["add", "."]);
+    git(tmp.path(), &["commit", "-m", "fixture"]);
+    let db = tmp.path().join("state.sqlite");
+    let mut core = CommandCenter::open(&db).unwrap();
+    core.open_project(tmp.path()).unwrap();
+    let section = core
+        .search("恢复策略", 20)
+        .unwrap()
+        .pop()
+        .expect("visible title is searchable");
+    assert_eq!(section.title, "恢复策略 API");
+    use sha2::{Digest, Sha256};
+    let old_context = serde_json::to_vec(&["项目", "**恢复**[策略](other.md) `API` ##"]).unwrap();
+    assert_eq!(
+        section.id,
+        format!("doc/design.md#heading-{:x}", Sha256::digest(old_context))
+    );
+
+    assert_eq!(section.line, 3);
+    assert!(section.content.starts_with("## **恢复**"));
+    assert_eq!(core.search("多行 标题", 20).unwrap()[0].title, "多行 标题");
+    assert!(
+        !core
+            .snapshot()
+            .sections
+            .iter()
+            .any(|s| s.title.contains("伪标题"))
+    );
+    core.record_reading(&section.id, &section.revision, 0)
+        .unwrap();
+    // Normalizing display text preserves the existing source-based heading key.
+    std::fs::write(
+        &path,
+        "# 项目\n\n## **恢复**[策略](other.md) `API` ##\n更新正文\n",
+    )
+    .unwrap();
+    core.open_project(tmp.path()).unwrap();
+    assert_eq!(core.search("恢复策略", 20).unwrap()[0].id, section.id);
+    assert_eq!(core.snapshot().reading_positions.len(), 1);
+}

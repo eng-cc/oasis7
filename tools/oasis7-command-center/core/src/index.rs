@@ -243,26 +243,45 @@ fn document_sections(
 ) -> Vec<DocumentSection> {
     use std::collections::HashMap;
     let lines: Vec<&str> = content.lines().collect();
-    let headings: HashMap<usize, usize> = pulldown_cmark::Parser::new(content)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Heading { level, .. }) => Some((
-                content[..range.start]
+    // Use rendered inline text; source lines retain Markdown syntax and miss
+    // multiline Setext headings. Keep the original lines for source display.
+    let mut headings = HashMap::new();
+    let mut heading: Option<(usize, usize, String)> = None;
+    for (event, range) in pulldown_cmark::Parser::new(content).into_offset_iter() {
+        use pulldown_cmark::{Event, Tag, TagEnd};
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                let line = content[..range.start]
                     .bytes()
                     .filter(|b| *b == b'\n')
-                    .count(),
-                level as usize,
-            )),
-            _ => None,
-        })
-        .collect();
+                    .count();
+                heading = Some((line, level as usize, String::new()));
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some((_, _, title)) = &mut heading {
+                    title.push_str(&text);
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                if let Some((_, _, title)) = &mut heading {
+                    title.push(' ');
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((line, level, title)) = heading.take() {
+                    headings.insert(line, (level, title.trim().to_owned()));
+                }
+            }
+            _ => {}
+        }
+    }
     let mut result = Vec::new();
     let mut parents: Vec<(usize, String)> = Vec::new();
     let mut title = path.to_string();
     let mut key = format!("{path}#preamble");
     let mut start = 0;
-    for (line, text) in lines.iter().enumerate() {
-        let Some(level) = headings.get(&line) else {
+    for line in 0..lines.len() {
+        let Some((level, heading_title)) = headings.get(&line) else {
             continue;
         };
         if line > start {
@@ -276,7 +295,10 @@ fn document_sections(
                 project,
             ));
         }
-        title = text.trim_start_matches('#').trim().to_string();
+        title = heading_title.clone();
+        // Keep the existing source-based key contract for personal records.
+        // Display normalization must not silently rebind an old reading position.
+        let identity_title = lines[line].trim_start_matches('#').trim().to_owned();
         while parents.last().is_some_and(|(old, _)| old >= level) {
             parents.pop();
         }
@@ -285,14 +307,14 @@ fn document_sections(
             .rev()
             .find(|l| !l.trim().is_empty())
             .and_then(|l| anchor(l));
-        let explicit = adjacent_anchor.or_else(|| clause_id(&title));
+        let explicit = adjacent_anchor.or_else(|| clause_id(&identity_title));
         key = match explicit {
             Some(id) => format!("{path}#{id}"),
             None => {
                 let context: Vec<&str> = parents
                     .iter()
                     .map(|(_, t)| t.as_str())
-                    .chain(std::iter::once(title.as_str()))
+                    .chain(std::iter::once(identity_title.as_str()))
                     .collect();
                 format!(
                     "{path}#heading-{}",
@@ -300,7 +322,7 @@ fn document_sections(
                 )
             }
         };
-        parents.push((*level, title.clone()));
+        parents.push((*level, identity_title));
         start = line;
     }
     if start < lines.len() {
