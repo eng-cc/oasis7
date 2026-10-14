@@ -11,6 +11,7 @@ professional review roles.
 from __future__ import annotations
 
 import argparse
+from doc_content_warnings import report_findings
 from collections.abc import Callable
 from dataclasses import dataclass
 import html
@@ -359,7 +360,7 @@ def changed_system_design_paths(
             else git_text(root, head_oid, path)
         )
         if new_text is None:
-            continue
+            raise OSError(f"selected document cannot be read: {path}")
         if status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
             selected.append(target)
     return selected
@@ -1035,6 +1036,7 @@ def main() -> int:
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
+    parser.add_argument("--warn-only", action="store_true", help="Report documentation findings without blocking; execution errors still fail")
     args = parser.parse_args()
     root = args.repo_root.resolve()
     if args.worktree and not (args.base and args.head):
@@ -1098,8 +1100,7 @@ def main() -> int:
             )
         )
     if errors:
-        print("\n".join(errors))
-        return 1
+        return report_findings(errors, args.warn_only)
     print(f"system-design-traceability: OK (checked {len(selected)} changed/new system designs)")
     return 0
 

@@ -18,7 +18,7 @@ In oasis7, this skill is a specialist planning surface governed by [the developm
 - Record execution scope, handoff and actual evidence in the existing Task/PR; an Issue is optional. A read-only analysis or draft does not require a remote evidence comment.
 - PRD-only output is not proof of implementation readiness or delivery. Check the actual acceptance gaps, applicable system-design obligations and verification entry.
 - Check existing requirements, design, PR/Issue evidence and handoff before asking the user for more information. Ask only about unresolved product decisions or acceptance gaps that would materially change the PRD.
-- Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6. Follow [the global requirements-trace contract](../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace): for new or substantively changed stable requirements, reuse one globally declared Trace ID across the requirement, applicable system design and Task (which may be the PR). Preserve local PRD/REQ/AC IDs and exact clause links; explain genuinely inapplicable or not-yet-formed layers. Do not bulk-backfill untouched content or add a workflow gate. Current lookup is full-text search and manual link following; automatic three-layer aggregation is not implemented.
+- Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6. Follow [the global requirements-trace contract](../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace): for new or substantively changed stable requirements, reuse one globally declared Trace ID across the requirement, applicable system design and Task (which may be the PR). Preserve local PRD/REQ/AC IDs and exact clause links; explain genuinely inapplicable or not-yet-formed layers. Do not bulk-backfill untouched content or add a workflow gate. The [read-only trace CLI](../../scripts/requirement-trace.README.md) provides bounded queries and rebuildable indexes; full-text search and manual link following remain useful. Its diagnostics are not completeness or completion proofs. For each new or substantively changed product feature, follow the [independent design/implementation status contract](../../doc/engineering/doc-governance/product-documentation-standard.design.md#feature-design-implementation-status): preserve exact design and Task/evidence links, remaining scope, and review baseline/environment/acceptance scope. Recheck statuses when requirements change; keep detailed execution history in Task and preserve existing trace-table columns.
 
 ## When to Use
 
@@ -127,6 +127,8 @@ Use the following split and avoid duplicate definitions:
 | Devlog (`doc/devlog/YYYY-MM-DD.md`) | immutable daily record (timestamp, done, pending, blockers) | requirement definitions |
 
 Guardrails:
+- Product feature design/implementation status summaries are allowed next to their requirements; retain evidence links and baseline, and keep detailed execution history in Task/PR. They are not a second progress ledger.
+- oasis7 content-check findings follow the [incremental CI boundary](../../doc/engineering/doc-governance/product-documentation-standard.design.md#advisory-content-checks); findings in new or substantively changed PR documents block CI, while untouched legacy content remains advisory. Input/execution errors and existing integrity checks remain blocking. Do not treat warnings as semantic acceptance.
 - `Critical User Flows` describe system/user/operator runtime behavior, not "rewrite/migrate docs" steps.
 - `Acceptance Criteria` describe verifiable outcomes (behavior/invariants/metrics/tests), not file existence.
 - `Roadmap/Milestones` describe shipped capability phases (MVP/v1.1/v2.0), not daily to-do updates.
@@ -158,7 +160,7 @@ You **MUST** follow this exact structure for the output:
 - **User Scenarios & Frequency**: When and how often each persona uses this feature.
 - **User Stories**: `As a [user], I want to [action] so that [benefit].`
 - **Critical User Flows**: Step-by-step flow for key paths.
-- **Functional Specification Matrix**: fields, button actions, state transitions, sorting/computation rules, and permission behavior.
+- **Functional Specification Matrix**: fields, button actions, state transitions, sorting/computation rules, and permission behavior. In oasis7 product documents, keep each touched feature’s independent design/implementation status card adjacent to its feature/requirement; do not add columns to existing fixed trace tables.
 - **Acceptance Criteria**: Bulleted list of "Done" definitions for each story.
 - **Non-Goals**: What are we NOT building?
 

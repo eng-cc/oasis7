@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from doc_content_warnings import report_findings
 from dataclasses import dataclass
 from datetime import date
 import html
@@ -130,23 +131,23 @@ def parse_name_status(output: str) -> dict[str, str]:
     return changed
 
 
-def diff_paths(root: Path, base: str, head: str, worktree: bool) -> tuple[dict[str, str], set[str]]:
+def diff_paths(root: Path, base: str, head: str, worktree: bool, scope: str = "doc/product") -> tuple[dict[str, str], set[str]]:
     source_base = run_git(root, "merge-base", base, head).strip()
     if not source_base:
         raise ValueError(f"base/head have no merge-base: {base} {head}")
-    changed = parse_name_status(run_git(root, "diff", "--name-status", "-M", source_base, head, "--", "doc/product"))
+    changed = parse_name_status(run_git(root, "diff", "--name-status", "-M", source_base, head, "--", scope))
     if not worktree:
         return changed, set()
     checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
     overlay = parse_name_status(
-        run_git(root, "diff", "--name-status", "-M", checkout_head, "--", "doc/product")
+        run_git(root, "diff", "--name-status", "-M", checkout_head, "--", scope)
     )
     overlay.update(
         parse_name_status(
-            run_git(root, "diff", "--cached", "--name-status", "-M", checkout_head, "--", "doc/product")
+            run_git(root, "diff", "--cached", "--name-status", "-M", checkout_head, "--", scope)
         )
     )
-    for path in run_git(root, "ls-files", "--others", "--exclude-standard", "--", "doc/product").splitlines():
+    for path in run_git(root, "ls-files", "--others", "--exclude-standard", "--", scope).splitlines():
         if path.strip():
             overlay[path.strip()] = "??"
     for path, status in overlay.items():
@@ -1467,10 +1468,7 @@ def check_document(
     source = root / path
     is_root_document = path.endswith("/prd.md")
     if is_root_document:
-        if full_corpus:
-            check_root_document(path, text, errors)
-        else:
-            return
+        check_root_document(path, text, errors)
     lines = visible_lines(text)
     inactive_lifecycle = False
     if not is_root_document:
@@ -1559,12 +1557,12 @@ def collect_documents(root: Path, base: str, head: str, worktree: bool) -> tuple
         raise ValueError(f"base/head have no merge-base: {base} {head}")
     documents: list[ChangedDocument] = []
     for path, status in sorted(changed.items()):
-        if not is_product_doc(path) or status.startswith("D"):
+        if not (is_product_doc(path) or is_product_root(path)) or status.startswith("D"):
             continue
         old_text = git_text(root, source_base, path)
         new_text = current_text(root, head, path, path in worktree_paths)
         if new_text is None:
-            continue
+            raise OSError(f"selected document cannot be read: {path}")
         if status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
             documents.append(ChangedDocument(path, status, old_text, new_text))
     if not documents:
@@ -1607,6 +1605,7 @@ def main() -> int:
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
     parser.add_argument("--full-corpus", action="store_true")
+    parser.add_argument("--warn-only", action="store_true", help="Report documentation findings without blocking; execution errors still fail")
     args = parser.parse_args()
     root = args.repo_root.resolve()
     if args.full_corpus and (args.base is not None or args.head is not None or args.worktree):
@@ -1628,8 +1627,7 @@ def main() -> int:
         for document in documents:
             check_document(root, head, document.path, document.new_text, errors, True, full_corpus=True)
         if errors:
-            print("\n".join(errors))
-            return 1
+            return report_findings(errors, args.warn_only)
         print(f"product-doc-content: OK (full-corpus checked {len(documents)} current-tree product documents)")
         return 0
     if args.worktree and not (args.base and args.head):
@@ -1649,8 +1647,7 @@ def main() -> int:
     for document in documents:
         check_document(root, head, document.path, document.new_text, errors, args.worktree)
     if errors:
-        print("\n".join(errors))
-        return 1
+        return report_findings(errors, args.warn_only)
     print(f"product-doc-content: OK (checked {len(documents)} changed/new documents)")
     return 0
 

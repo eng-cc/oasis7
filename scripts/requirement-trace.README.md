@@ -2,11 +2,12 @@
 
 `requirement-trace.py` is a Python 3.9+ standard-library CLI and importable module.
 It implements the bounded query tool in Issue #4681 against the trace syntax in
-[the proposed specification](https://github.com/eng-cc/oasis7/blob/ad078e8bebc3ef596ffb898d58638b1901b5b3a8/doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md).
-The specification PR #4680 remains a separate change. This tool is engineering
+[the adopted specification](../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md).
+The specification was adopted in PR #4680 and this CLI was delivered in PR #4682. This tool is engineering
 infrastructure: there is no player-facing behavior, CI gate, service, new task
 entity, or new credential requirement. Source documents and task bodies remain
-authoritative; the index can always be rebuilt.
+authoritative; the index can always be rebuilt. Product feature design and
+implementation statuses follow the [product content contract](../doc/engineering/doc-governance/product-documentation-standard.design.md#feature-design-implementation-status); this CLI returns recorded relationships and context, not inferred feature status or acceptance verdicts.
 
 ## Commands
 

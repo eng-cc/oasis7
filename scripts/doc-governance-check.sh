@@ -95,10 +95,16 @@ run_product_doc_content_check() {
     echo "product-doc-content: error: unable to derive explicit base/head for worktree check" >&2
     return 1
   fi
+  "$PYTHON_BIN" scripts/product-doc-governance-check.py --enforce-changed \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
   "$PYTHON_BIN" scripts/product-doc-content-check.py \
     --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
+  "$PYTHON_BIN" scripts/doc-core-content-check.py \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
   if ((full_corpus == 1)); then
-    "$PYTHON_BIN" scripts/product-doc-content-check.py \
+    "$PYTHON_BIN" scripts/product-doc-content-check.py --warn-only \
+      --repo-root "$repo_root" --full-corpus || return $?
+    "$PYTHON_BIN" scripts/doc-core-content-check.py --warn-only \
       --repo-root "$repo_root" --full-corpus
   fi
 }
@@ -627,10 +633,6 @@ if [[ ${#handoff_template_files[@]} -gt 0 ]]; then
   for file in "${handoff_template_files[@]}"; do
     check_handoff_role_fields "$file"
   done
-fi
-
-if ! "$PYTHON_BIN" scripts/product-doc-governance-check.py; then
-  fail "product documentation overlay contract failed"
 fi
 
 if ! run_product_doc_content_check; then

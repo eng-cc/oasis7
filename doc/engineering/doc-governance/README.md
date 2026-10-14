@@ -22,9 +22,9 @@
 | 问题 | Canonical 入口 | 说明 |
 | --- | --- | --- |
 | 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/manual/runbook 边界，交付事实使用 Git/PR/实际 CI 与评审记录，Issue/Project 按需 |
-| 产品文档应该写什么、如何验收和追踪 | `product-documentation-standard.design.md` | 在现有四模块与专业 authority 上补充内容合同、REQ/AC 追踪、状态/证据边界和三类试点 |
+| 产品文档应该写什么、如何验收和追踪 | `product-documentation-standard.design.md` | 在现有四模块与专业 authority 上补充内容合同、REQ/AC 追踪、每功能点设计/实现状态摘要、证据边界和三类试点 |
 | 产品文档如何套用结构、迁移代表性主题 | `product-documentation-standard.templates.md` | 提供根/专题/design 模板、需求/验收卡和 Prompt/首局/SC-31 迁移模式 |
-| 用同一全局 ID 查找要求、设计和项目执行记录 | `cross-layer-requirements-traceability.design.md` | 全长 UUID 的一次声明、多层引用与生命周期；当前全文检索和人工追链，自动聚合尚未实现 |
+| 用同一全局 ID 查找要求、设计和项目执行记录 | `cross-layer-requirements-traceability.design.md` | 全长 UUID 的一次声明、多层引用与生命周期；已有只读查询/有界索引，结果仍需按来源范围人工核对 |
 | 已采纳规范如何覆盖全部存量产品文档 | `product-documentation-full-corpus-governance.design.md` | 定义 active/retired 内容闭合、外部语义迁移、配对 design 判定与全量检查 |
 | 专业系统设计如何承接需求、表达合同并映射验证 | `system-design-writing-standard.design.md` | 十二段技术骨架；不替代产品设计、实现、运行或发布证据 |
 | 任务范围、实际版本和组合验收如何留证 | `project-management-record-standard.design.md` | 复用 PR 与实际验证记录，Issue/Project 按需；不新增本地台账或状态机 |
@@ -36,6 +36,8 @@
 | `p2p/node` 首读分流或主题簇维护 | `../../p2p/node/README.md` | 当前 node 子域的 canonical landing page；完整文件检索回到 `../../p2p/prd.index.md` |
 | testing evidence 与手册/门禁文档混叠 | `../../testing/evidence/README.md` | 现行 evidence 子域入口；与 testing 模块入口、文件级索引和 operator 手册分层 |
 | readme 外部口径、渠道 runbook 与入口职责混叠 | `../../readme/governance/README.md` | 已收口的热点路径；当前 landing page 承接分流与维护触发器 |
+
+PR 新增或实质修改的产品/系统设计文档规范 finding 阻断 CI，未触达历史只警告；范围/执行错误和既有拓扑、库存、安全检查仍阻断。具体范围见[内容规范检查的增量边界](product-documentation-standard.design.md#advisory-content-checks)。
 
 ## REQ/AC 追踪边界
 

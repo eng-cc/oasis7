@@ -12,7 +12,7 @@
 4. 按来源实际变化更新受影响的投影，并保留缺失和读取范围。文件刚被读取不代表其中的部署、PR 或验收事实刚核验；各来源成功时间分别保留。遇到分页中断、权限不足或离线时，继续处理可用区域，不把失败改为空结果，也不让迟到旧结果覆盖更新事实。
 5. 计算进度前回到 PRD [REQ-CC-003](../../../doc/engineering/command-center/command-center.prd.md#REQ-CC-003)核对验收集合与适用证据；没有可核实分母时说明已知与未知部分。
 
-Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接关联消费边界。当前通过完整 ID 全文检索和人工追链核对产品或专业要求、适用设计及 Task/PR，包含已关闭 Issue 与已合入 PR。索引时延、权限或分页缺口须明确披露；共享 ID 不证明完整关联或验收通过。自动三层聚合尚未实现，文档树目标接口不等于已有查询工具。
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接关联消费边界。当前通过完整 ID 全文检索和人工追链核对产品或专业要求、适用设计及 Task/PR，包含已关闭 Issue 与已合入 PR。索引时延、权限或分页缺口须明确披露；共享 ID 不证明完整关联或验收通过。[只读追踪 CLI](../../../scripts/requirement-trace.README.md)已提供有界查询与可重建索引；它不等于文档树图形目标接口，也不自动判定设计覆盖或实现完成。消费[产品功能状态摘要](../../../doc/engineering/doc-governance/product-documentation-standard.design.md#feature-design-implementation-status)时，回核准确设计条款和 Task/PR/验证证据的基线、环境、验收及剩余范围，不将旧摘要当作当前事实。
 
 ## 回顾与记录决定
 
