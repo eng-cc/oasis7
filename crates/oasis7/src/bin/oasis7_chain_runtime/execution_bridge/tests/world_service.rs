@@ -468,5 +468,9 @@ mod private_goal_tests;
 mod private_task_context_tests;
 
 #[cfg(unix)]
+#[path = "world_service_private_task_context_read_race.rs"]
+mod private_task_context_read_race_tests;
+
+#[cfg(unix)]
 #[path = "world_service_task_playtest.rs"]
 mod task_playtest;

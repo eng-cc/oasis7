@@ -195,47 +195,49 @@ pub(super) fn refresh(
         if *height > latest {
             return Err("live task result exceeds durable head".into());
         }
+        // `protected_heights` has just validated every retained shard against
+        // its current durable record, CAS objects, and historical proof. Do
+        // not repeat that same record/CAS/proof read for an already-protected
+        // height on every commit; newly protected heights still receive the
+        // full validation below before their exact receipt is pinned.
+        if previous.contains(height) {
+            continue;
+        }
         let record = checked_record(records, store, *height)?;
         // A newly retained height must prove each exact public receipt at the real historical cut.
-        if !previous.contains(height) {
-            let identity = &results
-                .first()
-                .ok_or("empty live task evidence")?
-                .request
-                .correlation
-                .key
-                .world;
-            let pinned = super::super::world_service_read::pin_at_height(
-                records,
-                store.root(),
-                identity,
-                *height,
-            )?;
-            for result in results {
-                let key = correlation::key_digest(&result.request.correlation.key)?;
-                if pinned
-                    .world
-                    .capability_revocation_state()
-                    .world_service_results
-                    .get(&key)
-                    != Some(
-                        &serde_json::to_value(result).map_err(|_| "invalid live task evidence")?,
-                    )
-                {
-                    return Err("live task historical receipt mismatch".into());
-                }
+        let identity = &results
+            .first()
+            .ok_or("empty live task evidence")?
+            .request
+            .correlation
+            .key
+            .world;
+        let pinned = super::super::world_service_read::pin_at_height(
+            records,
+            store.root(),
+            identity,
+            *height,
+        )?;
+        for result in results {
+            let key = correlation::key_digest(&result.request.correlation.key)?;
+            if pinned
+                .world
+                .capability_revocation_state()
+                .world_service_results
+                .get(&key)
+                != Some(&serde_json::to_value(result).map_err(|_| "invalid live task evidence")?)
+            {
+                return Err("live task historical receipt mismatch".into());
             }
-            // protected_heights already checked every existing shard's exact
-            // record-derived pins and verified CAS/proof binding. Re-publishing
-            // that same semantic set adds durable I/O without changing retention.
-            store
-                .replace_pin_scope_shard(
-                    SCOPE,
-                    &format!("record-{height:020}"),
-                    &required_refs(&record)?,
-                )
-                .map_err(|_| "live task dependency pin failed")?;
         }
+        // Validate the historical receipt before atomically publishing pins.
+        store
+            .replace_pin_scope_shard(
+                SCOPE,
+                &format!("record-{height:020}"),
+                &required_refs(&record)?,
+            )
+            .map_err(|_| "live task dependency pin failed")?;
     }
     let wanted = wanted.keys().copied().collect::<BTreeSet<_>>();
     let hot_start = latest.saturating_sub(hot.max(1).saturating_sub(1));

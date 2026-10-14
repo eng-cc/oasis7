@@ -10,6 +10,7 @@ use oasis7_agent_api::game::{
     game_goal_version_digest,
 };
 use std::sync::{Arc, Mutex};
+
 #[test]
 fn private_task_context_native_complete_prepare_capture_read_action_and_restart() {
     const AGE: u64 = 34;
