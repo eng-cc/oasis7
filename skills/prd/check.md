@@ -219,12 +219,16 @@
 
 ## 11.5 依赖可追溯性（Traceability）
 
+oasis7 内容检查的规范 finding 按[增量检查边界](../../doc/engineering/doc-governance/product-documentation-standard.design.md#advisory-content-checks)在 PR 新增或实质修改的适用文档范围内阻断 CI，未触达历史只警告；本清单的人工语义判定不等于检查器能自动证明的事实，输入/执行错误和既有完整性检查仍失败。
+
 * [ ] 是否可从本 PRD 追溯到系统总览？
 * [ ] 是否标注版本号？
 * [ ] oasis7 新增或实质修改的稳定要求是否按[跨层要求与验证映射](../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)复用唯一声明的全局 Trace ID，并保留本地条款 ID 和真实链接？
 * [ ] 是否能人工追到适用系统设计与已有 Task/PR 的本次范围和实际证据；尚未形成或确实不适用的层级是否如实说明？不要求为此新建 Issue、回填未触达存量或增加准入/合入门禁。
 
-Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；以上核对消费既有全局要求追踪规范，不代表已实现自动聚合或唯一性检查。
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；以上核对消费既有全局要求追踪规范，只读查询工具已有有界聚合与重复声明诊断，但不代表完整性、全仓唯一性或功能完成证明。
+
+* [ ] 每个本次触达的产品功能点是否按[双状态规范](../../doc/engineering/doc-governance/product-documentation-standard.design.md#feature-design-implementation-status)分别记录系统设计与实现状态，并链接准确设计条款、适用 Trace ID 和 Task/PR/实际验证证据？“部分”是否列剩余范围，“已验证”是否有固定基线、环境与验收范围，要求变化后是否重核？详细过程仍在 Task，原有追踪表列保持不变。
 
 理想结构：
 
@@ -263,8 +267,8 @@ Module PRD
 
 ## 11.8 反流水账（PRD vs Project vs Devlog）
 
-* [ ] PRD 仅描述目标态规格（Why/What/Done），不写任务拆解或进度叙述。
-* [ ] GitHub task issue evidence comments 仅描述任务与执行（How/When/Who），不重写需求规格。
+* [ ] PRD 描述目标态规格（Why/What/Done）及有依据的功能设计/实现状态摘要，不写任务拆解或详细进度叙述。
+* [ ] 既有 Task/PR（Issue 按需）描述任务与执行（How/When/Who），不重写需求规格。
 * [ ] `doc/devlog/YYYY-MM-DD.md` 仅记录当日过程（时刻、完成内容、遗留事项），不定义需求。
 * [ ] `Critical User Flows` 描述系统/用户/操作者行为与状态变化，不描述“改文档流程”。
 * [ ] `Acceptance Criteria` 描述可复现验证结果（行为/不变量/指标/测试），不是文件清单。

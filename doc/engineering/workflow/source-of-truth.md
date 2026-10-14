@@ -32,7 +32,7 @@ Git、PR、实际 CI 结果和评审记录承载代码交付事实。Issue 和 P
 
 Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本段承接[全局要求追踪](../doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)的流程边界。
 
-跨层要求按[跨层要求与验证映射](../doc-governance/cross-layer-requirements-traceability.design.md)使用同一稳定 Trace ID 关联产品或专业要求、系统设计和项目执行记录。ID 在要求原文声明一次，设计和 Task 引用；Task 可以直接使用 PR，不强制创建 Issue 或额外任务标识。只对新增或实质修改的相关要求补齐本次关系，不全仓迁移，不新增任务准入、审批或合入检查。当前使用全文检索和人工追链；自动三层聚合索引未实现，现有检查不因此获得新的验证能力。
+跨层要求按[跨层要求与验证映射](../doc-governance/cross-layer-requirements-traceability.design.md)使用同一稳定 Trace ID 关联产品或专业要求、系统设计和项目执行记录。ID 在要求原文声明一次，设计和 Task 引用；Task 可以直接使用 PR，不强制创建 Issue 或额外任务标识。只对新增或实质修改的相关要求补齐本次关系，不全仓迁移，不新增任务准入、审批或合入检查。当前可使用[只读追踪工具](../../../scripts/requirement-trace.README.md)的有界查询/索引，结合全文检索和人工追链；现有检查不因此获得新的验证能力。产品文档按[内容规范](../doc-governance/product-documentation-standard.design.md#feature-design-implementation-status)保留功能点的设计/实现状态摘要，详细执行过程仍归 Task。
 
 修改影响对外行为、接口、部署方式或使用方法时，同步维护相关文档。文档长度是编辑参考，不能作为是否允许提交的门禁，也不能通过压成长行掩盖过量内容。
 

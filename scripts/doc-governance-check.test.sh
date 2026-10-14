@@ -70,6 +70,12 @@ print("product-doc-content: checked 0: reason=fixture")
 if "--worktree" in sys.argv and os.environ.get("PRODUCT_DOC_FAIL_CHANGED") == "1":
     raise SystemExit(1)
 PY
+cat >"$FIXTURE/scripts/doc-core-content-check.py" <<'PY'
+#!/usr/bin/env python3
+import sys
+assert ("--warn-only" in sys.argv) == ("--full-corpus" in sys.argv)
+print("doc-core-content: fixture scope flags OK")
+PY
 cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
 #!/usr/bin/env python3
 print("system-design-traceability: checked 0: reason=fixture")
@@ -268,6 +274,7 @@ grep -Fq 'document corpus inventory contract' "$TMPDIR/corpus-failure.out"
 # receive the same trusted range and reject a malformed changed design.
 fixture_base="$(git -C "$FIXTURE" rev-parse HEAD^{commit})"
 fixture_head="$fixture_base"
+cp "$ROOT_DIR/scripts/doc_content_warnings.py" "$FIXTURE/scripts/doc_content_warnings.py"
 cp "$ROOT_DIR/scripts/product_doc_markdown.py" "$FIXTURE/scripts/product_doc_markdown.py"
 cp "$ROOT_DIR/scripts/system-design-traceability-check.py" "$FIXTURE/scripts/system-design-traceability-check.real.py"
 cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
