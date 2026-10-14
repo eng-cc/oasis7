@@ -8,6 +8,7 @@
 - 状态边界：设计约定，不代表页面已经实现或部署
 - Owner role：`producer_system_designer`
 - Last reviewed：2026-10-14
+- 设计判定：`paired-design`。
 - 配对产品设计：[`public-site-discovery-and-showcase.design.md`](public-site-discovery-and-showcase.design.md)
 - 专业系统设计：[`官网发现与展示系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
 - 专业权威：[`site PRD`](../../site/prd.md)、[`site 设计`](../../site/design.md#homepage-layout-authority)、[`公开口径`](release-communications-and-public-claims.prd.md#public-claim-four-layer-model)、[`README`](../../../README.md)
