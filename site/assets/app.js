@@ -1140,7 +1140,9 @@
       const isMobile =
         (uaData && uaData.mobile === true) ||
         /android|iphone|ipad|ipod|mobile/.test(candidateText);
-      if (isMobile) {
+      // The advertised packages are x64. An explicitly ARM device must not
+      // inherit an automatic x64 recommendation from its operating-system name.
+      if (isMobile || /\barm(?:64)?\b|aarch64/.test(candidateText)) {
         return "";
       }
 

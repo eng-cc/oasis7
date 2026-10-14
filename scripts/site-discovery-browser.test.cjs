@@ -26,8 +26,8 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   else {assert.equal(tag,'qa-candidate');if(scenario==='full')assert.ok(href.includes('/qa-candidate/'));else assert.equal(href,null);}
   await c.close();record('release '+scenario+' coherent metadata/assets or safe fallback');
  }
- {
-  const c=await context({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile'});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();await p.goto(origin+'/');assert.equal(await p.locator('[data-download-primary-link]').getAttribute('href'),null);assert.equal(await p.locator('[data-download-platform-button][aria-pressed="true"]').count(),0);await c.close();record('unsupported device has no recommendation');
+ for (const userAgent of ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile', 'Mozilla/5.0 (Windows NT 10.0; ARM64)', 'Mozilla/5.0 (X11; Linux aarch64)']) {
+  const c=await context({userAgent});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();await p.goto(origin+'/');assert.equal(await p.locator('[data-download-primary-link]').getAttribute('href'),null);assert.equal(await p.locator('[data-download-platform-button][aria-pressed="true"]').count(),0);await c.close();record('unsupported device has no recommendation: '+userAgent);
  }
  {
   const c=await context({viewport:{width:390,height:844}});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();await p.goto(origin+'/');
