@@ -22,6 +22,11 @@ class Page(HTMLParser):
         attrs = dict(attrs)
         self.nodes.append((tag, attrs))
         markers = [key for key in attrs if key in {'data-content-body','data-content-correction','data-content-description'}]
+        if 'data-content-summary' in attrs:
+            markers.append('summary:' + attrs['data-content-summary'])
+        summary = next((marker.removeprefix('summary:') for _, parent_markers in reversed(self.stack) for marker in parent_markers if marker.startswith('summary:')), None)
+        if summary and 'data-content-description' in attrs: markers.append('description:' + summary)
+        if summary and tag in {'h2','h3'}: markers.append('title:' + summary)
         if tag == 'h1': markers.append('h1')
         if tag not in {'meta','link','img','br','input','hr'}: self.stack.append((tag, markers))
     def handle_endtag(self, tag):
@@ -65,6 +70,13 @@ def check(root=ROOT):
                 except ValueError: need(False,f'{path}: invalid {field}')
             need(bool(attrs.get('data-source-version')), f'{path}: source version missing')
             articles.append((path,attrs,page))
+        published = sorted((entry for entry in articles if entry[1]['data-content-status']=='published'), key=lambda entry: (-datetime.strptime(entry[1]['data-published-at'],'%Y-%m-%d').timestamp(),entry[1]['data-content-id'])) if not errors else articles
+        published_ids = [entry[1]['data-content-id'] for entry in published]
+        for rel in ['index.html','devlog/index.html']:
+            parsed=Page(root/prefix/rel)
+            actual=[a['data-content-summary'] for _,a in parsed.with_attr('data-content-summary')]
+            expected=published_ids[:3] if rel=='index.html' else published_ids
+            need(actual==expected, f'{prefix}{rel}: published order, capacity or withdrawal mismatch')
         feed = ET.parse(root / prefix / 'feed.xml').getroot()
         items=feed.findall('channel/item')
         need(len(items)==len(articles), f'{prefix}: RSS/detail set mismatch')
@@ -81,9 +93,10 @@ def check(root=ROOT):
             for surface in [root/prefix/'index.html',root/prefix/'devlog/index.html']:
                 parsed=Page(surface)
                 summaries=parsed.with_attr('data-content-summary')
-                need(any(a['data-content-summary']==attrs['data-content-id'] for _,a in summaries) == (attrs['data-content-status']=='published'),f'{surface}: missing published derivative or withdrawn recommendation')
-                if attrs['data-content-status']=='published': need(item.findtext('title') in ''.join(parsed.text),f'{surface}: summary title drift')
-                if attrs['data-content-status']=='published': need(item.findtext('description') == parsed.region('data-content-description'),f'{surface}: summary description drift')
+                need(any(a['data-content-summary']==attrs['data-content-id'] for _,a in summaries) == (attrs['data-content-id'] in (published_ids[:3] if surface.name=='index.html' and surface.parent==root/prefix else published_ids)),f'{surface}: missing published derivative or withdrawn recommendation')
+                if any(a['data-content-summary']==attrs['data-content-id'] for _,a in summaries):
+                    need(item.findtext('title') == parsed.region('title:'+attrs['data-content-id']),f'{surface}: summary title drift')
+                    need(item.findtext('description') == parsed.region('description:'+attrs['data-content-id']),f'{surface}: summary description drift')
             if attrs['data-content-status']=='withdrawn':
                 need(not page.with_attr('data-content-body'),f'{path}: withdrawn body must be removed')
                 need(bool(page.region('data-content-correction')),f'{path}: explicit safe correction required')

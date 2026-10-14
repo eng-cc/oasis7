@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');const fs=require('node:fs');const pat
 const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
 (async()=>{
  const browser=await chromium.launch({headless:process.env.OASIS7_SITE_QA_HEADLESS === '1', ...(process.env.OASIS7_SITE_QA_BROWSER ? {executablePath:process.env.OASIS7_SITE_QA_BROWSER} : {})});
- const out=path.join(process.cwd(),'.cache/site-discovery-qa');const results=[];
+ const out=path.join(process.cwd(),'output/site-discovery-qa');const results=[];
  const record=(name)=>{results.push({name,result:'pass'});console.log('PASS '+name);};
  const context=async(opts={})=>browser.newContext({locale:'zh-CN',reducedMotion:'reduce',...opts});
  try{

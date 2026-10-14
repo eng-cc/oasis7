@@ -5,9 +5,9 @@
 - 所属产品模块：玩家接入与发行
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：active
-- 状态边界：设计约定，不代表页面已经实现或部署
+- 状态边界：静态实现与完整验收分别表达，不代表已经部署或发行升级
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-14
+- Last reviewed：2026-10-15
 - 设计判定：`paired-design`。
 - 配对产品设计：[`public-site-discovery-and-showcase.design.md`](public-site-discovery-and-showcase.design.md)
 - 专业系统设计：[`官网发现与展示系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
@@ -29,7 +29,7 @@
 
 不在范围：实时星图或游戏服务接入、账号/手机号预约、支付、投稿平台、创作者市场、公开网页加入、自动更新客户端、第三方追踪服务、全站框架迁移、游戏规则改造、小说正文重写。媒体资料包和实时数据是后续候选，不是首期隐藏依赖。不保证固定更新周期、模型费用、邀测时间或新平台支持。
 
-本次文档与生成式设计稿只确定目标和验证方法；不修改 `site/**` 页面，不宣布持久世界开放。后续实现仍依赖真实素材与当前发行 authority。
+产品文档与生成式设计稿确定目标与验证方法，不宣布持久世界开放。当前静态实现以功能状态中的固定版本为依据；真实素材、完整验收和发行仍消费各自主责证据。
 
 ## 3. 体验与决策
 
@@ -46,7 +46,7 @@
 
 ## 4. 产品要求与功能状态
 
-以下功能 ID 同时对应独立 REQ；状态只覆盖本专题定义的首期范围。共同核对基线为 2026-10-14、上述源提交、远程源码阅读环境；没有本专题实现 PR 或浏览器验收结果。系统设计“已覆盖”仅指条款可逐项定位，不等于已通过独立评审。
+以下功能 ID 同时对应独立 REQ；状态只覆盖本专题定义的首期范围。共同核对基线为 2026-10-14、上述源提交、远程源码阅读环境；实现基线与对应检查范围见各功能点；尚未完成陌生访客理解和完整发行验收。系统设计“已覆盖”仅指条款可逐项定位，不等于已通过独立评审。
 
 <a id="req-site-discovery-001"></a>
 ### REQ-SITE-DISCOVERY-001：访客理解与主路径
@@ -57,10 +57,10 @@ Trace ID: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19
 - 要求：首屏和首个说明段必须让访客辨认游戏类型、玩家与 Agent 的分工、资源压力和当前可做事项；主按钮进入真实存在的展示，次链接进入预览说明，不用“立即进入世界”代替未开放入口。按钮不能直接调用模型或世界写接口。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ENTRY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-entry)，含旧锚点与无脚本入口。
-- 实现状态：未核实
-- 实现与验证依据：[基线首页](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)有定位与入口；本专题完整顺序及真人理解尚无对应实现/验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；首页 AC-SITE-DISCOVERY-001。
-- 剩余范围：目标页面实现、双语浏览器证据与陌生访客理解验证。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：陌生访客理解观察；当前页面变化不证明游戏可玩或线上更新。
 
 <a id="req-site-discovery-002"></a>
 ### REQ-SITE-DISCOVERY-002：一次选择及证据性质
@@ -71,10 +71,10 @@ Trace ID: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822
 - 要求：每个展示必须把目标/授权边界、Agent 解释、实际或说明性结果、下一次选择分开；概念图、说明性受控示例、真实运行记录和小说不得混称。真实记录只展示来源能证明的范围；素材缺失/失效时收窄或停止相关展示，不用生成图补成“实机”。浏览、切换和回放均不产生世界效果。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-EVIDENCE](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)，含来源校验、失效与竞态隔离。
-- 实现状态：未核实
-- 实现与验证依据：[基线示例展示](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)存在；没有本专题来源合同和真实运行样本的完整验收。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；展示/记录 AC-SITE-DISCOVERY-002。
-- 剩余范围：选择合法素材、来源复核、目标展示实现及失败/快速切换验证。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：可公开真实运行材料的选择与来源核对；本候选只交付明确说明性示例，不声称 runtime_capture。
 
 <a id="req-site-discovery-003"></a>
 ### REQ-SITE-DISCOVERY-003：值得回访且可纠正的内容
@@ -85,10 +85,10 @@ Trace ID: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04
 - 要求：访客必须能免注册阅读有日期、适用范围和稳定链接的内容；观测解释一件事，日志解释玩家问题、变化及限制。无内容时明确为空，不编造新闻、人数、日期、成功故事或更新频率。撤回内容保留安全的纠正入口，不继续推荐错误摘要；敏感内容不以历史保留为由继续公开。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-PUBLISHING](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-publishing)，含静态来源、排序、RSS 与撤回。
-- 实现状态：未核实
-- 实现与验证依据：[基线跟进入口](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)主要指向 Release/文档；没有本专题内容发布与撤回链的实现/验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；内容 AC-SITE-DISCOVERY-003。
-- 剩余范围：首篇真实内容、列表/详情/RSS 实现和纠正链验证。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：可公开世界运行记录；本候选提供真实空列表及首篇双语站点开发说明，不承诺更新频率或留存。
 
 <a id="req-site-discovery-004"></a>
 ### REQ-SITE-DISCOVERY-004：预览选择与安全分流
@@ -99,10 +99,10 @@ Trace ID: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3
 - 要求：下载前必须能读到适用版本/平台、当前可体验范围、必要环境与 provider 配置、费用责任、签名和数据保留/升级限制。未知值明确未知；无对应资产时不能猜下载地址或暗示支持。关键警示留在对应按钮附近，其余详细说明可渐进展开；保留不安装的选择。静态网站不提供凭据输入框。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-DOWNLOAD](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)，消费现行下载与升级 authority。
-- 实现状态：未核实
-- 实现与验证依据：[基线下载区](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)已有主包和警示；本专题完整速览及异常分流尚无验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；预览 AC-SITE-DISCOVERY-004。
-- 剩余范围：同候选内容核对、目标页面实现及版本/资产负例；本专题不验收安装器本身。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：真人复述参与成本/安装限制；当前浏览器验证不代签发布资产、安装器或平台兼容性。
 
 <a id="req-site-discovery-005"></a>
 ### REQ-SITE-DISCOVERY-005：小说与世界记录分离
@@ -113,10 +113,10 @@ Trace ID: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae
 - 要求：小说必须明确为世界观创作，不作为当前玩法证据；首次入口优先简介、开始阅读和无剧透背景，版本清单/总纲置于次级入口。故事加载失败保留真实错误、原文与重试；不存在英文正文时明确中文内容，不伪造翻译或英文路由。不更改小说正文。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-STORY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-story)，复用阅读器恢复合同。
-- 实现状态：未核实
-- 实现与验证依据：[基线阅读器](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/story/index.html)存在；本专题导读和游戏/小说区分无完整验收。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；小说入口 AC-SITE-DISCOVERY-005。
-- 剩余范围：导读实现、语言目标核对、阅读器失败与迟到响应回归。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：更多正文内容与小说质量；中文 reader 不提供英文正文，不将具身叙事变成玩法承诺。
 
 <a id="req-site-discovery-006"></a>
 ### REQ-SITE-DISCOVERY-006：一致且可恢复的阅读
@@ -127,10 +127,10 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 - 要求：CN/EN 必须保留同等主路径、素材类型及公开边界；键盘、窄屏、减少动效和脚本失效时仍能读正文并抵达有效下一步。失效语言目标、媒体或网络请求只影响所属内容，不吞掉页面或显示虚假成功。设计稿不能替代这些入口的浏览器证据。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ACCESSIBILITY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-accessibility)，含响应式、语言与降级验证。
-- 实现状态：未核实
-- 实现与验证依据：[现有设计合同](../../site/design.md#homepage-layout-authority)已有通用要求；本专题所有新增路由与状态没有真实浏览器验收记录。
-- 核对日期与基线：2026-10-14；本 PR 需求版本；源提交同上；远程源码；受影响页面 AC-SITE-DISCOVERY-006。
-- 剩余范围：桌面/移动、无 JS、键盘、200% 缩放和失败状态实测。
+- 实现状态：已实现待验证
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
+- 剩余范围：完整无障碍与性能测量；既有桌面/窄屏/键盘/无脚本与故障场景的实际结果只覆盖已记录范围。
 
 ## 5. 验收与证据
 
