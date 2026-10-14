@@ -5,7 +5,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/external-task-native-execution-2026-10-12/README.md",
         "claim_boundary": "targeted_native_candidate_history_only_not_full_runtime_first_session_or_current_deployment",
-        "content_sha256": "f171ffc4062c3352e7e4af0062b5c7d2b2748db8517dea3134250727fe7c1934",
+        "content_sha256": "c1bcecb5b13877ed27270e204bb3b390262b95eb253314d876cc31928b252606",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-12-native-task-candidates",
@@ -262,7 +262,7 @@
         "semantic_role": "private_task_execution_history"
       }
     ],
-    "group_sha256": "0095a7b43d0e6524995205beaaf888b1382a27bb8b1c456d922867f965a89599",
+    "group_sha256": "e9faf388b3f82b1d40f0bfbb1c70b21d38ef0f7c3d51385d30eb9282e2000ebc",
     "id": "external-task-native-execution-2026-10-12"
   },
   "schema": "oasis7.document-evidence-group/v1"

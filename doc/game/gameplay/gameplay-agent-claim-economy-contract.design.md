@@ -1,5 +1,7 @@
 # Gameplay Agent 认领经济合同设计
 
+历史状态边界：§9 的 2026-03-27 样本与 §10 的 2026-03-29 reopening 是原窗口记录，不表示今日闭环、任务状态或重新调参。原 AGC-005 接收 Task 尚未唯一定位，原过程保留；经济参数、维持理由及重新评估条件继续有效，实际能力须取当前候选证据。
+
 - 对应需求文档: [`Gameplay Agent 认领经济合同`](gameplay-agent-claim-economy-contract.prd.md)
 - 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
@@ -244,14 +246,14 @@ service 来源需单独限定：[world_service/projection.rs](../../../crates/oa
 - 最后补 Viewer / pure API 表达与 QA abuse suite，再决定是否进入新一轮平衡调参。
 
 ## 9. 首轮平衡复核结论
-- `TASK-GAMEPLAY-AGC-005`（2026-03-27）当前结论：继续维持 v1 默认值，不新开调参专题。
+- `TASK-GAMEPLAY-AGC-005`（2026-03-27）历史结论：继续维持 v1 默认值，不新开调参专题。
 - 维持项：
   - `slot multiplier = 1.0 / 1.5 / 2.0`
   - `grace_epochs = 2`
   - `forced_reclaim_penalty_bps = 2000`
   - `tier cap = 1 / 2 / 3`
 - 维持理由：
-  - runtime / viewer / QA 三条闭环都已通过，说明当前更缺“真实持有行为样本”，而不是“再造一轮默认值”。
+  - 该历史窗口记录 runtime / viewer / QA 三条闭环通过，当时更缺“真实持有行为样本”，而不是“再造一轮默认值”。
   - 当前成本曲线仍满足本专题最重要的结构边界：首个 claim 非免费、额外槽位单调更贵、欠费与闲置都能回收、refund/slash 可审计。
   - 在还没有真实 claim 分布、平均持有时长、grace 命中率、forced reclaim 占比之前，提前改参数只会稀释对当前默认值的验证意义。
 - 后续只有在以下任一条件成立时，才重新开调参专题：

@@ -2,13 +2,13 @@
 
 # oasis7 CodeQL 全面接入：系统设计与实施方案
 
-- 文档状态：规范设计候选；扫描实现、运行及激活尚未完成。规范 authority 仅来自 [canonical clause](../../engineering/workflow/source-of-truth.md)，本文件不自启用。
+- 文档状态：保留 2026-09-30 设计依据与技术合同；后续实现见 [PR #4207](https://github.com/eng-cc/oasis7/pull/4207)，SARIF 修订见 [PR #4232](https://github.com/eng-cc/oasis7/pull/4232)。实现合入不证明 hosted baseline/observe 已验收；实际结果回到对应 PR/CI。规范 authority 来自 [canonical clause](../../engineering/workflow/source-of-truth.md)，本文件不自启用。
 - 审查日期：2026-09-30。
 - 审查基线：`d868cbd76594f843c19d797253dc73eb67a684dc`。这是本次分析的快照，不是生产扫描、合入或复用时必须追赶的固定基线。
 - 仓库落点：`doc/testing/ci/codeql-integration.design.md`。
 - 系统 owner：`repository_health_engineer`。
 - 验收 owner：`qa_engineer`；Rust 覆盖与提取边界由 `runtime_engineer` 复核；涉及权限、发布凭据隔离时由 `blockchain_ops_engineer` 复核。
-- 推荐交付：**2 个合入 PR：PR-S（规范与设计），PR-C（实现、测试、接线）。PR-C 内按工作包并行，不按语言、扫描阶段或工作包继续拆合入 PR。**
+- 历史交付安排：[原协调记录](https://github.com/eng-cc/oasis7/issues/4218#issuecomment-6162416255)；原协调 Issue 已停止独立跟踪，不恢复旧保持 OPEN、子任务或扫描义务。
 - 默认运行策略：**全面扫描、观察性接入；不增加 required check，不开启 code-scanning 合并保护，不等待 CodeQL 完成才能合入。**
 
 > 核心原则：以 package 识别影响，以稳定分析单元保留上下文，以原生并发槽位约束资源；不以“每个 crate 一个 job”或“只扫描 diff 文件”换取表面提速。
@@ -421,6 +421,8 @@ build.rs/宏可能执行不可信代码，最小权限仍不等于无风险。�
 
 ### 11.1 验证映射表
 
+下表 N/A 记录规范 PR #4189 的设计/文档验证窗口，不表示后续实现仍未交付。当前 fixture/hosted/baseline/observe 的真实结果分别读取实际实现 PR/CI，不从设计表推导已运行或放行。
+
 | 上游 requirement（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 验证方法、test/manual source、scenario/layer | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R01](codeql-integration.design.md#cq-r01) | 全面接入四语言 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R01 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不证明所有缺陷均可检出；本次不证明扫描已运行 |
@@ -430,63 +432,21 @@ build.rs/宏可能执行不可信代码，最小权限仍不等于无风险。�
 | [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R05](codeql-integration.design.md#cq-r05) | 失败真实可见，不构造绿灯 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R05 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 观察态不等于安全合入担保；本次不证明扫描已运行 |
 | [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R09](codeql-integration.design.md#cq-r09) | 能运营、排障、回退 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R09 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不承诺当前已有健康运行数据；本次不证明扫描已运行 |
 
-## 12. 最少 PR 的交付划分
+<a id="12-最少-pr-的交付划分"></a>
+<a id="121-pr-s规范与设计"></a>
+<a id="122-pr-c一次完整实现"></a>
+## 12. 历史交付来源
 
-### 12.1 PR-S：规范与设计
+规范 [PR #4189](https://github.com/eng-cc/oasis7/pull/4189)、实现 [PR #4207](https://github.com/eng-cc/oasis7/pull/4207) 与 SARIF [PR #4232](https://github.com/eng-cc/oasis7/pull/4232) 是实际交付来源。原 PR-S/PR-C、C1–C5 分工与并行图见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4218#issuecomment-6162416255)；#4188/#4218/#4141 已以 `not_planned` 关闭，只作历史来源，不重建实施或扫描排期。
 
-只做 system 文档：
+<a id="13-pr-c-内部分工和并行图"></a>
+<a id="131-一个-canonical-code-task多份有边界工作包"></a>
+<a id="132-工作包与文件所有权"></a>
+<a id="133-依赖顺序"></a>
+<a id="134-实施顺序"></a>
+## 13. 技术依赖与验收边界
 
-- 在 workflow source of truth 增加观察性扫描、来源分类、资源限制与非自启用规范。
-- 新增本设计文档，承接需求、实施、验收、排障与回退；不另建一套产品承诺。
-- 现有 CI 专题文档只添加简短边界/导航，避免重复规范。
-- 按现有文档登记机制登记新设计；只改必要条目，不整体重写 document inventory，不捆绑其他文档拆分迁移。
-
-PR-S 独立审查并合入后，PR-C 绑定该不可变规范提交。PR-S 不声称扫描已启用、不修改生产门禁。
-
-### 12.2 PR-C：一次完整实现
-
-一次交付四语言、planner、工作流、全仓双槽位、gate 兼容、静态回归、只读健康报告与模式切换。默认关闭重型扫描，合入后通过运维配置完成 baseline → observe，不为开启语言和档位再分别开 PR。
-
-若在 PR-C 合入前实测能够安全分离独立 Rust 单元，可在 PR-C 内完成；不能证明则保持 Rust 全仓单元，不为追求分包数量另开重构 PR。
-
-后续业务漏洞修复不计作“接入的第三 PR”，也不应为了两 PR 指标而省略必要修复。强制安全门禁不属于本次默认交付。
-
-## 13. PR-C 内部分工和并行图
-
-### 13.1 一个 canonical code task，多份有边界工作包
-
-每个合入 PR 对应既有 canonical task/branch/worktree。C1–C5 是同一 code task 下的有界工作包/子 Agent packet，不自行创建多个 leaf task、Issue、Project item 或 PR，也不共享写 git index。
-
-可以由多个执行者并行修改互不重叠的文件或交付 patch；只有集成者负责 canonical git index、提交、最终推送和共享热点文件。不让多个 Agent 在同一 worktree 并发 rebase、checkout 或 cherry-pick。
-
-### 13.2 工作包与文件所有权
-
-| 工作包 | 交付 | 独占路径/输入 | 依赖 |
-| --- | --- | --- | --- |
-| C1 范围与分包 | policy、planner、路径/manifest/改名测试 | `scripts/security/codeql-policy.json`、`codeql-plan.py`、对应测试 | PR-S 规范和冻结接口 |
-| C2 扫描执行与结果 | CodeQL workflow、双槽位、profile、读回健康工具及测试 | `.github/workflows/codeql.yml`、`codeql-health.py`、workflow/health 测试 | 可按 C1 固定输出 fixture 并行开发 |
-| C4 CI 接线 | scope 精确路由、测试清单、dispatcher 接线 | `scripts/ci-required-scope.v2.json`、`scripts/ci-tests.sh`、capability inventory | 先准备；单一集成者最后落热点文件 |
-| C5 QA 与验收 | 独立负例、联合树测试、真实 hosted 覆盖/队列演练 | 测试数据与现有任务 evidence；不重复编辑 C1–C4 源文件 | 可先写用例，联合验收在集成后 |
-
-### 13.3 依赖顺序
-
-```text
-PR-S 规范与接口冻结
-          │
-          ├─ C1 planner/policy ─────┐
-          ├─ C2 workflow/health ────┤
-          ├─ C3 gate compatibility ─┼─ C4 单点接线 → 联合树回归 → PR-C 合入
-          └─ C5 独立验收用例 ──────┘                           │
-                                                   baseline → observe
-```
-
-C2 不必等 C1 全部实现结束：共享一个冻结的 matrix/config 输出 fixture 即可开发。C3 不必等待首次扫描成功才实现来源 resolver；可先用隔离 fixture，再由真实读回确认平台 check 形态。
-
-规范与代码 PR 串行，工作包开发和审查可并行；无需“一个语言一个 PR”“gate 修复一个 PR、激活另一个 PR”。
-
-### 13.4 实施顺序
-
-先固定接口与 category；然后 C1/C2/C3 并行；C5 同步准备负例；C4 最后统一更新热点接线；对同一精确 combined tree 运行审查和既有 required 验证。基线扫描的真实结果只能在获得相应可信执行条件后验收，不能用 fixture 代替生产扫描事实。
+planner 的固定 matrix/config 输出是 workflow/health 消费者的共同输入；scope 路由、dispatcher、capability inventory 和汇总必须与实际执行一致。变更需验证真实受影响组合，不能用 isolated fixture 代签 hosted 扫描事实，也不为旧两 PR 数量目标省略必要漏洞修复。四语言单元、权限、查询集、资源槽位、失败语义与 CQ-R/CQ-T 合同仍由前述技术章节持有；预检、启用及回退顺序见下节。
 
 ## 14. 激活、预检和回退
 

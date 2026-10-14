@@ -254,4 +254,3 @@ Critical dimensions that cannot be `❌`:
 
 - Keep PRDs aligned with repo truth and acceptance evidence.
 - Do not let generated PRD content replace GitHub-backed task truth in oasis7.
-

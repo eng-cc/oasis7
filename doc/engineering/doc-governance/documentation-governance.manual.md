@@ -38,6 +38,10 @@ python3 scripts/product-doc-content-check.py \
 
 若变更只涉及产品文档，仍应运行 `./scripts/doc-governance-check.sh`、`python3 scripts/product-doc-governance-check.test.py`、`./scripts/readme-link-check.sh` 和 `git diff --check`；PR-prep/CI 会用同一 base/head 合同再次执行，不能把本地通过外推成实现或发行结论。
 
+### 1.1 过程信息归位
+
+先按[流程规范的信息归属](../workflow/source-of-truth.md#information-record-placement)区分长期合同、过程、原始证据与派生摘要。具体接收/变化记录使用[项目管理记录方法](project-management-record-standard.design.md)。迁移旧标题时，兼容 fragment 应紧邻对应替代条款或历史记录入口；链接能解析不等于仍指向正确内容。同步文档时更新长期方法/边界；实际测试计数、候选/CI 等待、重试、评审修复和下一轮安排不追加到长期正文。拆分原始 evidence 时保留运行身份、原判定与真实消费者，按本手册的局部对象/组操作处理适用 hash，不用全量 sync 或改日期制造新鲜度。
+
 ## 2. 产品语义迁移
 
 1. 逐文件清点待迁移源中的产品语义、专业语义与活跃引用。

@@ -8,7 +8,7 @@
 - Channel: `小红书`
 - Audience: `人类开发者 / 对 AI 游戏、agent 协作、项目判断和 demo 祛魅感兴趣的人`
 - Positioning: `把第八篇长文版压成 4 页更适合小红书 feed 的轮播，用“先停住 -> demo vs project -> checklist -> 站队”的节奏，把“我越来越不信 demo / 更能看到本质了”这件事讲得更短、更直、更适合评论区接话`
-- Review Status: `ready_for_publish`
+- Review Status: `ready_for_publish`（素材版本 2026-03-31 的历史状态；实际审核时间未记载，不代表当前审核、发布许可或已经发布）
 
 ## 使用说明
 - 这是第八篇的轮播版，不替代长文版；它解决的是“手机端更容易读完”和“每页只记住一个判断点”。

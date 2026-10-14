@@ -431,28 +431,22 @@ object 内容、组成员或来源集合变化均触发重新核对；普通任�
 
 ## 10. 兼容、迁移与回滚
 
-### 10.1 交付组织
+<a id="101-交付组织"></a>
+### 10.1 原子迁移与消费者合同
 
-推荐一项已明确授权的原子格式迁移任务、一份最终合入 PR。PR 内可以有独立 review 的规范提交、实现提交、机械数据提交，但最终启用不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+当次 PR 包装、工作包和逐文件执行清单见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610)。持续维护仍按 [workflow source of truth](../workflow/source-of-truth.md)；本文不要求普通改动先建 Task 或按旧 loop/packet 包装。
 
-原审读基线的 workflow 曾使用同 PR source＋implementation 包装。当前同一交付目的的格式切换可包含规范、实现、数据和测试，按现行 workflow 核对授权范围及必要独立评审，不要求额外 loop 包装。本文不扩大实际操作权限，也不免除无损迁移和存储检查。
+同一交付目的的格式切换可包含规范、实现、数据和测试，按现行 workflow 核对授权范围及必要独立评审，不要求额外 loop 包装。本文不扩大实际操作权限，也不免除无损迁移和存储检查。
 
-### 10.2 逐文件改动清单
+- 格式切换必须原子启用，不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+- 规范变化接受适用独立评审；数据转换、checker、入口、trusted-root 保护、CI 路由、测试和文档必须与真实消费者一致。
+- 在实际 base/head 搜索旧路径、glob、动态加载、发布和测试消费者；修齐调用链后才退役旧入口，不以旧逐文件表代替搜索。
+- legacy fixtures 继续保留字段全集、冻结 cohort 和 golden 等价结果，不进入活跃 corpus，也不作为批准证据。精确忽略报告，不扩大 ignore 范围，不重写历史源 bytes。
 
-| 文件/集合 | 实施动作 | 验收重点 |
-| --- | --- | --- |
-| 本设计、doc-governance README、engineering `prd.index.md` | 新增设计与导航；长期规则只维护本设计 | 十二段、需求与验证映射可解析；无任务台账 |
-| `doc/engineering/workflow/source-of-truth.md` | 增补窄 sidecar 所有权、scope、trusted loader、启用边界和启用后的 corpus baseline obligation | 保留实际适用的 gate 与 full fallback；三 loop 仅为原基线背景，候选策略不自我激活 |
-| `documentation-governance.manual.md` | 替换旧整表刷新步骤为 locate/sync/propose/check | 不鼓励 blanket regenerate 或自动续签 |
-| 新公共库、evidence policy、管理 CLI | 提供读取、严格模型、局部写入、转换与三方导入 | 单一算法、无 shell 注入、幂等 |
-| 两个现有 checker 及其测试 | 使用公共模型，保留专用语义检查，退役旧生成输出 | 现有负例语义不丢失 |
-| 两个入口与新分片集合 | 静态化、无损拆分、删除旧 semantic 表 | 无动态父级摘要 |
-| CI scope、runner、capability inventory、调用链测试 | 接入实际检查与按需回归 | source/merge 检查都执行，未引入 accidental full |
-| `.gitignore`、`.gitattributes` | 精确忽略报告目录；约束新增元数据换行 | 不大范围忽略 doc，不改变历史源 bytes |
-| `scripts/fixtures/document-corpus-v3/legacy/` | 保留旧结构、字段全集、冻结 cohort、golden 等价结果 | fixture 不进入活跃 corpus、不当作批准证据 |
-| 旧路径实际消费者 | `git grep` 完整查找后修复，包括 testing/templates、playability 入口等 | 只留明确历史或迁移专用引用 |
+<a id="102-逐文件改动清单"></a>
+### 10.2 历史执行清单入口
 
-实施必须建立 base/head 下的精确消费者清单，不以本表代替仓库搜索。新增模块位置若调整，需同步 trusted-root 保护、CI 路由、测试与文档，不能只改 import。
+[历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610) 保留原文件/动作/验收表；迁移算法、精确保护范围和失败/恢复含义继续由下节持有。
 
 ### 10.3 迁移算法与命令
 
