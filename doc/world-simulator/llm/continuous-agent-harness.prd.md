@@ -194,7 +194,7 @@ canonical encoding 必须固定字段顺序、长度前缀、UTF-8 规范化、m
 domain `oasis7.cognition.request.v1`；response outer 中回显的 request digest 永不进入自身
 输入。实现不得把空字符串、JSON null 或 provider 返回的 digest 当作缺失字段的替代。
 
-同一 `decision_request_id + request_digest` 的重试必须得到同一逻辑结果或同一结构化失败；同一 request id 搭配不同 digest 是 `request_identity_collision`，必须 fail closed，不能覆盖旧结果。timeout 不能再单独构成幂等 identity。Runtime action/module envelope 的 `envelope_digest/envelope_idempotency_key` 是另一条 runtime-owned identity，必须在 paired runtime docs 定义，不能复用 `provider_invocation_key`。
+同一 `decision_request_id + request_digest` 一旦确定逻辑结果或稳定结构化失败，后续重试必须重放该结果；尚未确定结果的可重试 attempt 按下节有界恢复。同一 request id 搭配不同 digest 是 `request_identity_collision`，必须 fail closed，不能覆盖旧结果。timeout 不能再单独构成幂等 identity。Runtime action/module envelope 的 `envelope_digest/envelope_idempotency_key` 是另一条 runtime-owned identity，必须在 paired runtime docs 定义，不能复用 `provider_invocation_key`。
 
 Response digest follows an independently versioned semantic contract:
 `response_digest = H_v1("oasis7.cognition.response.v2", canonical(decision, module_command, provider_error, memory_write_intents))`.
@@ -207,6 +207,19 @@ state schema and rejects old state on load, because the stored legacy digest is 
 self-describing and the response body is not persisted for safe recomputation. Any future
 migration must explicitly rewrite the complete response/artifact lineage; target adapters never
 silently reinterpret a V1 full-response digest as the V2 semantic digest.
+
+<a id="harness-retryable-attempt-outcome"></a>
+#### 可重试 attempt 与最终逻辑结果
+
+该补充合同区分传输尝试、provider 的逻辑结果和 Runtime 的世界结果；不改变 response digest 的字段或算法，也不增加调用预算。`retryable=true` 且本请求仍未终结的瞬时 transport/provider failure 只表示本次 attempt 未得到逻辑结果。adapter 不得把该错误摘要冻结为此 request 不可变的最终 `response_digest`，再将同请求恢复后的合法结果拒绝为 collision。
+
+| 请求事实 | 后续行为 | 必须保留的边界 |
+| --- | --- | --- |
+| 尚无逻辑结果的 retryable attempt，且预算尚余 | 保持 session/turn/request、`request_digest` 和 invocation key，仅递增 `transport_attempt`；可再次请求并得到合法 `Wait` 或候选动作 | attempt 错误保留有界诊断及请求关联；不是世界失败 receipt、候选已接受或已提交 memory |
+| 已得到合法逻辑结果，或已确定不可重试/预算耗尽的稳定失败 | 冻结并幂等重放原逻辑结果/稳定失败，不为重复投递重新调用上游 | 正常 `Wait` 是可确定的逻辑结果；不能因它不执行动作而无限重试 |
+| 最终结果确定后，同 identity 出现不同成功语义 | `response_identity_collision`，不覆盖原结果 | 保留成功语义碰撞保护、request digest 检查及原预算；不能删除 digest 校验来允许恢复 |
+
+Harness/Runtime 已把请求终结为失败、取消或失效后，不得利用 retryable 标记复活原 turn；后续工作遵循新 turn 的准入合同。反馈只消费匹配的 Runtime disposition；attempt 诊断不得替代或污染恢复后对应结果的反馈。配置持久化时，重启必须保留“未决 attempt / 已确定结果”的区别及剩余预算、请求关联；不能把暂态错误恢复成已确定失败，也不能遗失已确定结果后再次调用。实现与离线验证见[配对设计](continuous-agent-harness.design.md#harness-retryable-attempt-design)，本次文档补充不表示恢复缺陷已修复。
 
 Harness 与 Runtime 的 canonical wire mapping 使用 paired runtime PRD 的
 `Cross-contract identity mapping`：`agent_subject == agent_id`，session/turn/request 使用
@@ -376,6 +389,15 @@ prompt；缺口超过 retention boundary 返回 `feedback_sequence_gap`，不按
 sequence+digest 是幂等 duplicate；相同 sequence+不同 digest 是 `feedback_identity_collision`，
 必须 fail closed。
 
+<a id="harness-feedback-session-watermark"></a>
+### 7.1 有效 session 的反馈水位与容量
+
+有界 recent 摘要保留与 session 排序水位是不同责任。只要原 session 仍有效并允许新 turn，已 ACK 的连续序列水位、必要的去重/tombstone 与投影状态必须延续；淘汰旧摘要、旧 request cache 或其他 session 的记录，不能使该 session 从 sequence 1 重新开始。缺少摘要可以少带历史，缺少可靠水位必须显式停止该 projection，不能继续成功接纳新 turn 后把其正常反馈永久留在 held。
+
+容量不足时，适配器必须在下一次 turn 准入前选择维持该 session 的水位，或明确关闭其 projection 并要求 host 走受支持的 session 关闭/重建路径。旧 session 不得静默复用；新 session 由 trusted host 颁发新身份。真正乱序仍按原 gap/hold 合同处理，不能跳过未知事实、接受任意较大的 seq 作为恢复办法。已 ACK 的反馈不再位于 Runtime 待投递 outbox，适配器不能假设它会自动重送来修复自行丢失的水位。
+
+启用持久化时，重启后的水位、held、关闭状态与请求关联保持同一语义；accepted-request cache 独立淘汰不能重置仍有效 session 的序列。验收必须重访仍有效的旧 session，不能只断言 partition 数量受限或状态文件可加载。具体边界与离线样例见[配对设计](continuous-agent-harness.design.md#harness-feedback-watermark-design)；这是目标合同，当前有界缓存存在不等于该能力已经通过。
+
 - late、unknown、duplicate 或 cross-agent feedback：写入 bounded diagnostic trace，不能进入 Agent memory/context，也不能改变 continuation；active turn 仍由 Runtime 的 pending/failed disposition 或 lease expiry 收口，不能永久停留 active；
 - receipt 未提交的 provider transcript：不是 feedback，不得提升为 world fact；
 - feedback 顺序由 Runtime receipt/sequence authority 决定，Harness 不按到达时间重排世界事实；
@@ -508,7 +530,7 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 | provider timeout/transport failure | bounded retry（同 request id）；耗尽后 `Wait(provider_unavailable)` | 不产生 heuristic action；保留脱敏 trace |
 | malformed/unknown/disallowed decision | `ActionRejected(invalid_decision)` 或 `Wait` | 不进入 Runtime commit，不消费 memory intent |
 | native timeout/token/repair/model/tool call limit exceeded | `Wait(budget_exhausted)` | 不把 repair 文本当 action；不再发起超限 native provider/module call |
-| duplicate same digest | 原结果/原失败的 idempotent replay | exactly-once；不重复 provider side effect |
+| duplicate same digest，且逻辑结果已确定 | 原结果/稳定失败的 idempotent replay | 不重调 provider；尚未确定结果的 retryable attempt 沿原预算恢复 |
 | same request id with different digest | `ProtocolViolation(request_identity_collision)` | fail closed；不覆盖历史结果 |
 | unmatched/late/cross-agent feedback | diagnostic-only discard | 不污染 context/memory/continuation |
 | Runtime `late_response_after_cancel` | `stale` / `expired` diagnostic | 保留 feedback identity/reason；不重新打开 turn，不进入 context/memory/continuation |
@@ -620,6 +642,8 @@ Use the [design evidence join](continuous-agent-harness.design.md#harness-infras
 | `required` | C0 native request-budget zero/positive fixtures、pre-`complete`/pre-`run_prompt_module` admission、repair/retry、exhaustion、no-call `active_execute_until` | native model/tool call count bounded、budget policy identity binding、稳定 `budget_exhausted -> Wait`、无新 action/projected-durable memory/world/resource side effect | opaque ProviderBacked internal calls、paid cognition、token/latency/cost rate、lease/reserve/settle/refund/receipt |
 | `required` | per-agent concurrency harness、retry/timeout、bounded repair | single in-flight、无双调用、稳定 Wait/Rejected | world scheduler 非阻塞或 MVCC 正确性 |
 | `required` | A/B interleaved feedback、late/unknown/duplicate feedback | correlation、分区、无 context contamination | Runtime receipt 持久化 |
+| `required` | 真实 HTTP bridge + adapter 的离线 invoker 首次 retryable 失败、第二次合法 Wait/Act；不可重试/预算耗尽及成功语义冲突；配置持久化后的重启 | 同 request/digest 仅 attempt 增长时可恢复，无 collision/400；已确定结果重放不再次调用，终态/预算/反馈关联不丢失 | 真实付费 provider 可用性、世界效果或完整远端恢复 |
+| `required` | A 原 session seq1 已 ACK → 其他合法 session 触发容量压力 → A 新 turn/seq2 → 重试；另测乱序补洞、duplicate、关闭/新 session、跨 Agent、accepted cache 独立淘汰及持久化重启 | A 的 seq2 正确进入 projection，或新 turn 前明确关闭；不出现新 turn 成功而反馈永久 held，不重置水位或跳过事实 | 仅 partition 数量/序列化通过不证明连续性；不代签 Runtime receipt 持久化 |
 | `required` | feedback/trace bounds、credential redaction、gap/overflow、cancelled/backpressure、legacy module/feedback mapping | bounded projection、稳定 overflow、终态 cleanup、无启发式 target 漂移 | 真实 provider 的行为质量 |
 | `required` | memory intent size/scope/provenance/dedupe fixtures | 未提交不写入、非法 intent 拒绝 | durable journal exactly-once |
 | `required` | MockProvider 对 Builtin/ProviderBacked common contract | abstraction convergence 的协议等价性 | 两个真实模型的行为 parity |

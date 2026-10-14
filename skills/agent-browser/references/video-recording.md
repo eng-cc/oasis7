@@ -98,23 +98,46 @@ agent-browser record stop
 
 ```bash
 #!/bin/bash
-# Record E2E test runs for CI artifacts
+set -uo pipefail
+# Reuse only the session owned by this run. run_e2e_test must use the
+# session ID passed as its first argument for every browser command.
+: "${AB_SESSION:?Set AB_SESSION to the session owned by this run}"
+mkdir -p ./test-recordings || exit $?
+RECORDING_DIR="$(mktemp -d ./test-recordings/e2e.XXXXXX)" || exit $?
+RECORDING_PATH="$RECORDING_DIR/e2e.webm"
 
-TEST_NAME="${1:-e2e-test}"
-RECORDING_DIR="./test-recordings"
-mkdir -p "$RECORDING_DIR"
-
-agent-browser record start "$RECORDING_DIR/$TEST_NAME-$(date +%s).webm"
-
-# Run test
-if run_e2e_test; then
-    echo "Test passed"
+if agent-browser --session "$AB_SESSION" record start "$RECORDING_PATH" >"$RECORDING_DIR/start.log" 2>&1; then
+    :
 else
-    echo "Test failed - recording saved"
+    start_status=$?
+    printf 'Recording start failed: %s; see %s/start.log\n' "$start_status" "$RECORDING_DIR" >&2
+    exit "$start_status"
 fi
 
-agent-browser record stop
+if run_e2e_test "$AB_SESSION"; then
+    test_status=0
+else
+    test_status=$?
+fi
+
+if agent-browser --session "$AB_SESSION" record stop >"$RECORDING_DIR/stop.log" 2>&1; then
+    stop_status=0
+    printf 'Recording stop succeeded; verify artifact at %s\n' "$RECORDING_PATH"
+else
+    stop_status=$?
+    printf 'Recording cleanup blocker: %s; artifact not confirmed saved; see %s/stop.log\n' "$stop_status" "$RECORDING_DIR" >&2
+fi
+if ! printf 'test_status=%s\nstop_status=%s\n' "$test_status" "$stop_status" >"$RECORDING_DIR/result.status"; then
+    printf 'Could not save result.status\n' >&2
+fi
+if (( test_status != 0 )); then
+    exit "$test_status"
+fi
+exit "$stop_status"
 ```
+
+The test status is captured immediately. A failed test keeps its original code even if recording cleanup succeeds or also fails. A successful test with failed `record stop` returns the stop failure. Keep the stop output and check the video artifact before claiming it was saved. This example stops recording only; the session owner still performs its own bounded session cleanup. It does not establish that a repository CI pipeline uses this sample.
+
 
 ## Best Practices
 
@@ -136,19 +159,7 @@ agent-browser record start ./recordings/checkout-test-run-42.webm
 
 ### 3. Handle Recording in Error Cases
 
-```bash
-#!/bin/bash
-set -e
-
-cleanup() {
-    agent-browser record stop 2>/dev/null || true
-    agent-browser close 2>/dev/null || true
-}
-trap cleanup EXIT
-
-agent-browser record start ./automation.webm
-# ... automation steps ...
-```
+Use the CI/CD example above to preserve the original test status and recording cleanup status separately. If adding an EXIT trap, save `$?` before any command, attempt `record stop` once for the owned session, and preserve its output. Keep a prior nonzero status; if the main action succeeded, a stop failure makes the run nonzero. Do not use `|| true` to report an unconfirmed recording or session cleanup as successful.
 
 ### 4. Combine with Screenshots
 

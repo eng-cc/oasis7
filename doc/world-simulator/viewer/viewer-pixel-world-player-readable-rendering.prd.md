@@ -128,7 +128,7 @@ remain pending in the receipt contract. The World Feed never replaces
 
 ### 4.2 UI Layering
 - Stage summary: `World Command Board` / `世界指挥棋盘`。
-- Commercial HUD: objective、next move、player leverage 三列。
+- Commercial HUD: objective、next move、player leverage 的字段与可读性由本文定义；布局只取[终端 shell 当前合同](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)的 Next Move 主区与从属上下文，不再要求三列或三张平级卡片。
 - Canvas foreground: selected entity / goal / blocker callouts。
 - Canvas middle: agents, routes, hotspots。
 - Canvas background: Fragment terrain and subdued Location anchors。
@@ -142,6 +142,7 @@ remain pending in the receipt contract. The World Feed never replaces
 ## 5. Risks & Roadmap
 
 ## 里程碑
+以下是初始专题的历史交付分解，不恢复已退役的 project/PM 维护义务；当前修改按仓库开发流程与适用 PR、测试记录交付。
 - M1：专题 PRD/design/project 与模块入口回写。
 - M2：Rust DTO、commercial HUD、rendered route 与诊断折叠实现。
 - M3：targeted UI test、build、PM/doc/diff hygiene 完成。
@@ -149,7 +150,7 @@ remain pending in the receipt contract. The World Feed never replaces
 ## 风险
 - 当前数据里设施/生产线语义不足，第一期只能用 gameplay summary 和 agent-location routes 表达商业闭环。
 - HUD 如果继续堆 renderer badges，会退回 debug dashboard；本轮通过默认折叠诊断控制。
-- 后续若要展示设施、生产、库存流，需要另开 runtime/viewer 协议扩展任务。
+- 后续若要展示设施、生产、库存流，需要同步 runtime/viewer 协议设计和适用验证范围；Issue/Project 按跟踪需要使用。
 
 ### Terminal implementation slices and evidence
 PixelWorld participates in slices 3 (console/receipt), 5 (separate World Feed), and

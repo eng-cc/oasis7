@@ -1,6 +1,6 @@
 # Gameplay Agent 认领经济合同
 
-- 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md`
+- 对应设计文档: [`Gameplay Agent 认领经济合同设计`](gameplay-agent-claim-economy-contract.design.md)
 - 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
@@ -68,7 +68,7 @@
   5. Flow-AGC-004: `玩家在 cooldown 后主动 release -> 系统结清欠费 -> 按原 funding source 退还 bond 剩余部分 -> agent 回到 unclaimed`
   6. Flow-AGC-005: `claim 进入 grace 后仍未补足 upkeep 或连续闲置达到阈值 -> 系统执行 forced_reclaim -> 计算 slash / refund -> 按 funding source 回写退款 bucket -> agent 回到 unclaimed`
   7. Flow-AGC-006: `玩家尝试认领第 2/3 个 agent 或发起普通转账 -> 系统拒绝消费 restricted bucket，并返回结构化 blocker`
-  8. Flow-AGC-007: `新 player_session 进入已有 Agent 的共享世界 -> Viewer 默认 Agent 控制列表只展示当前账号绑定或当前玩家绑定待同步 Agent -> 其他账号 Agent 与未绑定 Agent 都不进入玩家 Agent 列表 -> 若当前 session 尚无 bound Agent / canonical claimer，则主 CTA 不得把世界中第一个 Agent 当作“我的 Agent”或可操作 Agent -> Viewer 必须展示当前账号尚未绑定/拥有 Agent，并引导到 claim-first starter Agent、canonical slot-1 claim quote 或等待绑定同步`
+  8. Flow-AGC-007: `新 player_session 进入同一共享世界 -> 按 2.1 节区分该账号首次进入与原账号返回 -> 无绑定的新账号经合法显式注册/绑定取得自身第一个可控 Agent；原账号恢复已有绑定 -> 只有已有 canonical claimer 才进入经济 slot-1 ClaimAgent -> Viewer 默认控制列表只展示当前账号可控或绑定待同步 Agent，不以他人 Agent、世界列表顺序或清空世界补齐入口`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -81,7 +81,7 @@
 | Forced Reclaim | `forced_reason`、`forced_reclaim_epoch`、`forced_penalty_amount`、`bond_refund_amount`、`bond_refund_restricted_amount`、`bond_refund_liquid_amount` | 欠费超宽限或持续闲置时系统回收 | `upkeep_grace/inactive_reclaim_candidate -> forced_reclaimed -> unclaimed` | 欠费宽限 `grace_epochs = 2`；闲置阈值 `7` 个 epoch，最晚 `10` 个 epoch 完成回收；`forced_reclaim_penalty_bps = 2000`（作用于剩余 bond） | 仅系统可执行；owner 不能在最终回收点之后阻断 |
 | Transfer Guard | `transferable_balance`、`restricted_balance`、`blocked_reason` | 玩家发起普通 main token 转账或 explorer 导出余额时，系统区分可转账与不可转账余额 | `eligible -> blocked_for_restricted_only` | `transferable_balance = liquid_balance`；`restricted_balance` 只做展示，不计入可转账金额 | `TransferMainToken`、公开转账 API、explorer 排名与总额不得消费或误计 restricted bucket |
 | Reputation Cap | `reputation_tier`、`claim_cap`、`owned_agent_count` | 认领前校验当前账号可占有的 agent 上限 | `eligible -> eligible/blocked_by_cap` | `tier-0 cap=1`、`tier-1 cap=2`、`tier-2+ cap=3` | 非法 tier 或超 cap 直接拒绝，不允许只靠余额绕过 |
-| First Claim Onboarding | `owned_claim_count`、`next_claim_quote.slot_index`、`target_agent_id`、`blocked_reason`、`actor_agent_id` | `owned_claim_count=0` 且 `slot_index=1` 时，HUD 展示专用 `slot-1` CTA；若当前账号还没有 bound Agent，则展示 `claim_first_agent` starter CTA，而不是展示别人的 Agent；扩展 claim 必须先选目标，再执行 `Prepare -> Confirm` 两段式提交 | `no_agent_for_account -> claim_first_agent_visible -> bound_agent_available` 或 `quote_ready -> onboarding_visible -> confirmation_open -> claim_submitted` | 只读取 canonical quote / blocker；不得在 Viewer 侧重算 claim 成本，也不得跳过确认直接自动认领 | `claim_first_agent` 由当前 player_session 直接创建并绑定 starter Agent；扩展 `ClaimAgent` 提交必须绑定当前玩家已注册的 claimer agent，会话 actor 与 claim target 必须分离 |
+| First Claim Onboarding | `owned_claim_count`、`next_claim_quote.slot_index`、`target_agent_id`、`blocked_reason`、`actor_agent_id` | 无 bound Agent 时进入显式首次注册/绑定或原身份恢复；已有 claimer 且 `owned_claim_count=0`、`slot_index=1` 时才展示经济 `slot-1` CTA，要求选目标后 `Prepare -> Confirm` | `no_agent_for_account -> registration_pending -> bound_agent_available`，或已有绑定上的 `quote_ready -> onboarding_visible -> confirmation_open -> claim_submitted` | 消费当前入口公布的注册能力或 canonical quote/blocker；未支持逐账号注册时显示缺口与恢复路径，不伪装可执行 | 首次注册以已认证账号和世界准入为前提，不要求先有 claimer；`ClaimAgent` 仍要求该玩家已注册的 claimer，会话主体、执行 actor 与 claim target 分开校验；2.1 节的后继目标不等于当前固定 starter 入口已支持 |
 | Player Session / Agent Visibility Boundary | `player_session.player_id`、`bound_agent_id`、`claim_owner_id`、`owned_claims`、`agent_player_bindings` | 进入共享世界时，Viewer 默认 Agent 控制列表只展示当前账号绑定或当前玩家绑定待同步 Agent；其他账号 Agent 与未绑定 Agent 不进入默认 Agent 列表，也不得看到 ready chat/command 主操作 | `no_agent_for_account -> bound_agent_available` 或 `no_agent_for_account -> slot_1_claim_visible` | “我的/可操作”只来自当前 session binding 或 canonical claim/owned fields；未绑定 Agent 视为数据不完整或迁移态，不作为正常玩家对象展示；其他账号活动若需要世界感，后续放地图实体、世界事件或只读 world layer，不混入控制列表 | 不得从全局第一个 Agent、左侧默认选中目标、隐藏的世界 Agent、未绑定 Agent 或 `state.agents.keys().next()` 推断当前账号 ownership |
 
 - Acceptance Criteria:
@@ -97,7 +97,7 @@
   - AC-10: 本机制不得被表述为现实货币付费解锁、公开售卖 agent 或永久产权出售；它是 gameplay 内部的 main token 承诺成本机制与受限启动资助工具。
   - AC-11: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` 认领引导卡；该卡必须直接复用 canonical quote / blocker，并要求玩家完成“选目标 -> Prepare -> Confirm”的显式确认链路，不允许静默自动认领。
   - AC-12: 当玩家处于首个 `slot-1` claim、没有 active restricted grant、账户也没有现成 restricted starter balance，且 dedicated pool 能覆盖 upfront 缺口时，`ClaimAgent` 必须原子完成 auto-funding + claim；若 dedicated pool 仍不足，则 runtime / viewer / pure API 只返回资金不足 blocker，不再生成 pending/operator-review 状态。
-  - AC-13: 新账号进入已有 Agent 的共享世界时，Viewer / pure API 必须把 `其他账号已绑定 Agent`、`未绑定/数据不完整 Agent`、`当前 session bound Agent` 与 `claim_owner_id/owned_claims` 分开表达；Viewer 默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。若当前账号没有 bound Agent 或 canonical claimer，不得显示为“我的 Agent”、不得作为 ready chat/command 主目标，也不得展示可执行 `ClaimAgent` CTA；chat / prompt / actor gameplay action 等 direct control API 也不得把未绑定 Agent 隐式绑定给当前 session，只有显式 session recovery / claim-first 绑定路径可以创建 `agent_player_bindings`。
+  - AC-13: 新账号进入已有 Agent 的共享世界时，Viewer / pure API 必须把 `其他账号已绑定 Agent`、`未绑定/数据不完整 Agent`、`当前 session bound Agent` 与 `claim_owner_id/owned_claims` 分开表达；Viewer 默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。若当前账号没有 bound Agent 或 canonical claimer，不得显示为“我的 Agent”、不得作为 ready chat/command 主目标，也不得展示可执行经济 `ClaimAgent` CTA；显式首次注册不受“先有 claimer”这一经济动作前提限制，但仍须通过当前账号/世界准入。chat / prompt / actor gameplay action 不得隐式绑定。空世界首次进入、已有世界新账号及原账号返回分别按 [AC-AGC-ENTRY-001](#ac-agc-entry-001) 验收。
   - AC-14: 首个 `slot-1` onboarding quote 必须展示候选 agent 的最小差异条：初始位置、擅长能力或当前任务、对首个工业目标的帮助、主要风险和推荐理由；若只展示费用、余额、cap、cooldown，则该 claim 引导只能算成本确认，不能算路线选择。
   - AC-15: Claim Quote 在玩家确认前必须展示 `upkeep_runway_epochs / next_upkeep_due_epoch / projected_grace_entry_epoch / low_runway_warning`；若 eligible balance 扣除 upfront 后只能覆盖少于 runway 阈值的 upkeep，必须提示推荐下一步（补足余额、等待或降低扩张节奏），不得把持续成本包装成一次性解锁。
 - Non-Goals:
@@ -109,17 +109,45 @@
 
 ### 2.1 Player Session / Bound Agent / Claim Owner Boundary
 
+本专题的非零成本、槽位、维护和回收规则适用于建立正式经济认领关系的 `ClaimAgent`。首次创建并绑定可操作 Agent 与经济认领是不同的世界结果：前者不能仅因界面动作名称包含 claim 就被解释为已经支付认领成本、锁定保证金或承担 upkeep；后者仍须遵守本专题完整经济合同。这一区分不新增注册资格，也不提供免费的经济认领旁路。
+
 - `player_session`: 浏览器或 hosted public join 发放的访问身份，包含 `player_id`、device/session 信息和公钥。它不是世界内实体，也不等于 Agent claim owner；清理浏览器 localStorage 或换 profile 只会重建该访问身份，不会清空共享世界状态。
 - `world-visible Agent`: world snapshot 中存在的 Agent。共享世界里的旧 Agent 不等于当前账号的可操作对象；若它已绑定到其他账号或缺少账号绑定，Viewer 默认不得把它放入当前账号的 Agent 控制列表。后续若需要表现“共享世界里有人活动”，应放到地图实体、世界事件或只读 world layer，而不是混进“我的 Agent”列表。
 - `bound Agent`: runtime live / viewer control plane 中当前 `player_session -> agent_id` 的控制绑定。聊天、prompt、需要 actor 的 gameplay action、以及“我的可操作 Agent”表达必须以该绑定或等价 canonical auth 字段为准。
 - `claim_owner_id`: `AgentClaimState` 中的正式 gameplay/economic claim owner。当前 runtime 语义下它是 claimer Agent id，而不是浏览器 `player_id`。`owned_claim_count`、`owned_claims` 和 cap 判断必须读取 canonical runtime claim snapshot，不得由 Viewer 自行按世界列表推导。
-- 空世界 starter path 与共享世界 slot-1 path 必须分开：`claim_first_agent` 只表示空世界 bootstrap 创建 starter Agent；已有 Agent 的共享世界中新账号不应再把该动作解释为“给当前账号领取一个新的第一个 Agent”。此时 Viewer 应进入“当前账号还没有 Agent”的 onboarding，或 canonical `slot-1 ClaimAgent` onboarding，要求明确的 claimable target、quote/blocker 和确认链路。
+- 首次注册/绑定的适用性由当前账号在该世界的权威状态决定，不由世界是否已有其他 Agent 决定。`claim_first_agent` 是既有注册入口名，不代表经济 `ClaimAgent`，也不授权创建或重置世界。正式目标按下表收敛；当前固定 starter 入口尚不能证明逐账号共享世界注册，缺能力时必须明确 blocked/unavailable。
 - Viewer / pure API 验收边界：不得从 `state.agents.keys().next()`、左侧列表第一个 Agent、默认 selection、隐藏的其他账号 Agent、未绑定 Agent 或 legacy `first_agent_id` 推断当前账号 ownership；必须用当前 session binding、`agent_player_bindings`、`owned_claims`、`next_claim_quote` 等 canonical 字段决定“我的/可操作/可认领/不属于当前账号所以不进入默认控制列表”。
+
+<a id="player-session-first-agent-entry"></a>
+#### 同一持久世界的首次进入与返回
+
+| 情境 | 玩家路径与权威前提 | 完成与隔离边界 |
+| --- | --- | --- |
+| 已合法创建的空世界，首个账号尚无绑定 | 认证账号并确认该世界准入，显式申请注册/绑定自身第一个 Agent；无需预先拥有 claimer | 只有匹配该账号、世界和原请求的权威注册/绑定结果才建立可控对象；不由玩家入口新建 genesis，不自动形成经济 claim 或 starter OC 领取 |
+| 已有其他 Agent 的同一世界，新账号尚无绑定 | 同样使用该账号的显式首次注册/绑定；已有他人 Agent 不替代注册，也不要求先执行依赖 claimer 的经济 ClaimAgent | 新结果与其他账号身份、Agent、库存和目标隔离；不得占用他人 Agent、借用全局 starter ID 或清空世界。原账号与新账号各自只能操作当前授权对象 |
+| 原账号回到同一世界 | 按现行身份恢复合同重新认证并读取已有 binding、归属和原请求结果；身份或控制权不能确认时先恢复/补证 | 恢复原 Agent 与已保存成果，不重新注册、不重复领取、不重新认领；换设备、断线或未收到 ACK 不构成新的首次资格 |
+
+注册/绑定、`claim_starter_oc` 与经济 `ClaimAgent` 是三个独立受理与结算边界。前一步成功不能代签后一步；首聊通过也不能代签 canonical owner goal 所需的身份/控制授权。重复和结果未知时沿原账户、世界及请求身份查询已有结果；已提交结果只恢复一次，冲突身份或不完整旧记录不升级为新资格。具体投影、提交与兼容边界见配对设计 [DES-CLAIM-ENTRY-001](gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)。
+
+<a id="req-agc-entry-001"></a>
+#### REQ-AGC-ENTRY-001：同世界逐账号首次控制身份与恢复
+
+- 性质与范围：后继目标；承接 PRD-GAME-011F / AC-13 及[首次绑定与经济认领的区分](#player-session-first-agent-entry)，不表示当前入口已支持多账号。
+- 要求：上述三种情境均有明确的合法路径或实际 blocker；新账号无需借用已有 claimer 完成自身注册，原账号不能以重连重新获得首次资格。注册不创建经济 claim，不替代 OC 领取或 owner/control grant。
+- 验收：[AC-AGC-ENTRY-001](#ac-agc-entry-001)；系统承接：[DES-CLAIM-ENTRY-001](gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)。
+
+<a id="ac-agc-entry-001"></a>
+#### AC-AGC-ENTRY-001：第二位玩家进入与原账号返回
+
+- 给定：固定候选与同一已合法创建世界，账号 A 已有绑定与成果，账号 B 已认证且获准进入但没有 claimer；另保留空世界首账号场景。
+- 当：B 通过正式入口显式注册/绑定，A 断线后返回；分别重复原请求、丢失 ACK、重启恢复，以及尝试使用对方 Agent 或不匹配身份。
+- 则：B 能取得自身合法可控 Agent，A 恢复原 Agent/成果，world/chain/genesis 不变；重复不新增 Agent、OC、经济 claim 或费用，跨账号与身份不匹配请求无越权效果。结果未知先查询，既有 binding 无法验证时不创建替代资格；未支持的当前入口记录 blocked，不能以空世界单账号或 fixture 代签通过。
+- 同候选 Viewer、pure API 与 Agent 适用入口须分别表达注册、已绑定、经济认领和未知状态；经济 Claim 的 Prepare/Confirm 终结仍按原独立合同验收。
 
 ### 2.2 Cold-Start Resource Boundary
 
 - `restricted starter claim balance`: 只服务 `slot-1` claim / upkeep 的受限 main-token bucket；它可以通过 dedicated pool 自动补足首个 `slot-1` upfront 缺口，但不能转账、提现、用于普通资产动作，refund 也必须保留 restricted provenance。
-- `starter OC`: 玩家完成 `claim_first_agent` 后可执行的一次性首聊解锁动作；该动作会授予初始 liquid OC，并写入 `starter_oc_claims` 记录。当前 runtime 只在 liquid OC 为零且没有该记录时阻止 LLM/agent chat，因此非零 liquid OC 或 `starter_oc_claims` 记录均可满足 chat gate；两者都不是持续 claim/upkeep 预算门。零 liquid OC 的 cold-start 动作链可为 `claim_first_agent -> claim_starter_oc -> first agent chat`。
+- `starter OC`: 有效 Agent 控制绑定建立后的一次性首聊解锁与初始 liquid OC 授予；它不建立经济认领。就 starter OC 这一道 gate 而言，非零 liquid OC **或**已有 `starter_oc_claims` 记录均可通过；只有 liquid OC 为零且确认没有该记录时才受阻。领取记录已存在后，即使 liquid OC 后续用尽，也不能重新把该 gate 解释成未解锁。通过此 gate 不替代有效会话、Agent 控制权、LLM 可用性等独立前提，也不授予重复领取资格。零 liquid OC 的 cold-start 动作链可为 `claim_first_agent -> claim_starter_oc -> first agent chat`。
 - 两者不得混写：`restricted starter claim balance` 解决“能否付出首个 agent claim 承诺成本”，`starter OC` 解决“首个 agent 已存在后，是否已完成 LLM/agent agency 对话的首聊解锁”。starter OC 不是免费 agent claim、不是通用补贴，也不是 `slot-1` claim/upkeep 的 restricted bucket。
 - 平衡口径仍未冻结：`starter OC` 的授予额度、实际消耗模型、滥用边界，以及未来是否要把 chat 重新绑定到可耗尽预算，需要后续基于真实 cold-start 样本单独复核；当前文档只冻结资源边界、runtime 现状和首读路由。
 
@@ -134,17 +162,44 @@
 
 该决策包复用本专题已有的 canonical quote、claim、upkeep、release 与 reclaim 语义，不新增字段、数值、状态或 Viewer 布局。`restricted starter claim balance` 只可支持首个 `slot-1` 的 non-zero claim/upkeep 成本；其一次性受限帮助不是 free claim，也不是后续 upkeep 的无限/持续补贴。`starter OC` 则在 Agent 已经通过 `claim_first_agent` 建立后处理首聊的 liquid OC 解锁，两者不得相互计入、替代或被表述为同一资金来源。
 
+<a id="first-chat-unlock-boundary"></a>
 ### 2.3 First-Chat Unlock Value Preview
 
-- `starter_oc_quote` / `first_chat_unlock_preview` 是 `claim_starter_oc` 确认前的玩家侧价值合同：它解释已完成首个 agent claim 的玩家为何现在解锁首聊，而不把 `starter OC` 呈现为第二道不透明支付门。
+玩家已经取得可操作 Agent、准备开始首次对话时，需要知道对话能帮助什么、为何出现解锁动作，以及现在领取或稍后再来分别意味着什么。预览必须解释这次选择的真实后果，不能把首次注册误写成经济认领，也不能让玩家以为首聊是持续支付认领维护费的另一道入口。
+
+- `starter_oc_quote` / `first_chat_unlock_preview` 是 `claim_starter_oc` 确认前的玩家侧价值合同；查看、推荐和延后动作本身不产生领取、经济认领或维护结算，已有经济 claim 仍按原规则随时间推进。
 - 最小字段：
-  - `chat_purpose`：本次首聊如何把已认领 agent 转成可理解的 agency 对话入口。
+  - `chat_purpose`：本次首聊如何把当前有控制权的 Agent 转成可理解的 agency 对话入口；绑定本身不证明已经存在经济认领。
   - `immediate_playable_help`：首聊立即能提供的、与当前 canonical gameplay state 相符的行动帮助或目标澄清；不得承诺尚未存在的 runtime 能力。
   - `first_question_or_action_hint`：玩家可立刻提出的首个问题，或首聊后可执行的下一步 action hint。
-  - `resource_boundary`：明确 `starter OC` 是一次性首聊解锁和 initial liquid OC 授予，和 `restricted starter claim balance` 的 slot-1 claim/upkeep funding 分离；必须说明当前 chat 仅在 liquid OC 为零且没有 `starter_oc_claims` 记录时受阻，不得暗示首聊会再次支付 claim/upkeep 或把 liquid OC 当作持续 claim/upkeep 预算门。
-  - `defer_effect`：延后只保留当前已完成的 claim 与其既有 upkeep 责任；当仍为零 liquid OC 且没有 `starter_oc_claims` 记录时，首聊入口保持未解锁，已有非零 liquid OC 时不得错误宣称 chat 被锁定；不得虚构数值惩罚、冻结 agent 或改变既有 runtime chat 语义。
-  - `recommended_unlock_action`：当即时帮助与当前目标相关时，明确推荐 `claim_starter_oc`；否则允许明确建议先完成可读 blocker 再回访，不能以隐式强制推进替代说明。
-- 合同边界：本节只要求 cold-start disclosure 与玩家下一步可理解性；不冻结 OC 额度或消耗模型，不改变“非零 liquid OC 或 `starter_oc_claims` 记录可通过 chat gate”的 runtime 语义或 agent 行为，也不引入 viewer 实现、组织系统或宏观进程。
+  - `resource_boundary`：明确 `starter OC` 是一次性首聊解锁和 initial liquid OC 授予，与 `restricted starter claim balance` 的 slot-1 claim/upkeep funding 分离；该字段本身必须说明“非零 liquid OC 或已有领取记录即可通过 starter OC gate”，包括领取记录存在但余额已用尽的情况，不能只在其他字段补充。
+  - `defer_effect`：根据当前权威经济认领事实说明延后的后果。真实经济 claim 已存在时，只说明其既有维护规则继续适用；确认没有经济 claim 时，不得声称玩家已有 upkeep 责任。说明缺失或沿用未区分注册与经济认领的旧文案时，应明确义务尚不能确认，不能把缺失资料当作没有责任。延后不会取消已有义务、增加新义务或冻结 Agent；历史未决义务仍以权威状态为准。
+  - `recommended_unlock_action`：在当前 gate 受阻的价值预览中说明 `claim_starter_oc` 这一下一步；实际能否执行继续由现有可用动作与 blocker 决定，字段本身不授予权限，也不要求已通过此 gate 的玩家重复领取。
+- 合同边界：已交付文案切片只细化 cold-start disclosure；下述权威输入与未知状态是待实现的后继目标。二者均不改变 OR 规则、OC 额度、注册/认领资格、账本或独立授权前提；文档收敛不宣称 service gate 已修复。
+
+<a id="req-agc-chat-001"></a>
+#### REQ-AGC-CHAT-001：首聊资源边界准确说明一次性 gate
+
+- 性质与范围：目标要求；适用于 Viewer、pure API 与 Agent 适用读面的首聊预览和解锁状态说明；service 权威投影仍是后继目标。
+- 要求：`resource_boundary` 必须独立说明 OR 条件、余额用尽但领取记录仍有效，以及与经济 claim/upkeep 的分离。同一已认证主体/Agent/世界的适用权威事实中，正余额或已领取任一为真即可通过该 gate；只有已知零余额且已知无记录才阻塞，其余保持未知并提供刷新/补证路径。缺失、裁剪或失效输入不得补成零；规则说明与预览不替代最终提交校验。
+- 上位承诺：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)；规则权威为本专题 2.2、2.3 节。
+- 验收：[AC-AGC-CHAT-001](#ac-agc-chat-001)；系统承接：[既有首聊 gate 投影](gameplay-agent-claim-economy-contract.design.md#des-claim-chat-002)、[service 权威输入后继合同](gameplay-agent-claim-economy-contract.design.md#des-claim-chat-005)。
+
+<a id="req-agc-chat-002"></a>
+#### REQ-AGC-CHAT-002：维护责任只来自真实经济认领
+
+- 性质与范围：目标要求；适用于首聊预览中的绑定、经济认领和延后后果说明。
+- 要求：预览必须区分首次注册/绑定、已确认的经济认领与未知认领事实；不得把绑定、后续认领报价、旧领取记录或缺失资料作为既有 upkeep 责任或不存在责任的证据。
+- 上位承诺：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)；规则权威为本专题 2.1、2.3 节。
+- 验收：[AC-AGC-CHAT-002](#ac-agc-chat-002)；系统承接：[认领事实与延后说明](gameplay-agent-claim-economy-contract.design.md#des-claim-chat-003)。
+
+<a id="req-agc-chat-003"></a>
+#### REQ-AGC-CHAT-003：不同入口和语言保留同一选择后果
+
+- 性质与范围：目标要求；适用于 Viewer 中英文、pure API、Agent 适用读面及旧预览兼容回读。
+- 要求：同一权威预览在不同入口和语言中必须保留相同 gate 条件、义务范围与下一步；旧版缺失或不可验证的状态保持未知。身份切换、断线或来源失效不得沿用旧可执行结论；能力/权限不同的入口可以保持 unavailable，但不能伪造零余额或另一套门禁。语言转换与显示不改变资格或虚构维护责任。
+- 上位承诺：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)；规则权威为本专题 2.3 节。
+- 验收：[AC-AGC-CHAT-003](#ac-agc-chat-003)；系统承接：[显示与兼容边界](gameplay-agent-claim-economy-contract.design.md#des-claim-chat-004)、[service 权威输入后继合同](gameplay-agent-claim-economy-contract.design.md#des-claim-chat-005)。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题不新增 AI 模型能力，仅涉及 gameplay 规则、账本 bucket 与状态机）。
@@ -179,7 +234,7 @@
   - 首次认领缺少持有 runway：若玩家能支付 upfront，但 quote 不展示确认后可支撑的 upkeep epoch、下一次 upkeep 时间或预计 grace/reclaim 风险，必须标记为 `claim_runway_missing`；玩家不应把长期占有成本误读成一次性解锁。
   - 首次认领缺少路线选择判断：若 `slot-1` quote 不能让玩家比较“当前候选 / 其他候选 / 等待或补资金”，或缺少 `claim_now_route_fit / compare_candidates_first / wait_or_fund_first` 分类与推荐动作，必须标记为 `slot_1_claim_choice_missing`；玩家不应把第一次 agent ownership 承诺误读成单纯付费门槛。
   - 首次认领承诺包不完整：若确认前无法同时读到候选用途/差异、upfront 成本、确认后 upkeep runway、release/grace/reclaim 触发、恢复或重新选择以及最佳等待/替代动作，必须标记为 `first_claim_commitment_packet_missing`；不得让玩家靠账本字段或事后回收事件重建风险。
-  - 首聊解锁缺少价值预览：若 `claim_starter_oc` 前没有 `starter_oc_quote` / `first_chat_unlock_preview`，或缺少 `chat_purpose`、`immediate_playable_help`、`first_question_or_action_hint`、`resource_boundary`、`defer_effect`、`recommended_unlock_action` 中任一项，必须标记为 `first_chat_unlock_value_missing`；玩家不应在完成 slot-1 claim 后仍把首聊解锁误读成第二道不透明支付门。
+  - 首聊解锁缺少价值预览：若 `claim_starter_oc` 前没有 `starter_oc_quote` / `first_chat_unlock_preview`，或缺少 `chat_purpose`、`immediate_playable_help`、`first_question_or_action_hint`、`resource_boundary`、`defer_effect`、`recommended_unlock_action` 中任一项，必须标记为 `first_chat_unlock_value_missing`；玩家不应在取得可操作 Agent 后仍把首聊解锁误读成第二道不透明支付门。字段存在不等于含义正确：OR gate 披露缺失、把注册误写成 upkeep、把未知认领当作不存在，或中英文改变义务范围，都不能据此通过首聊价值验收。
   - 新账号进入已有世界：若 world snapshot 已有 Agent 但当前 `player_session` 没有 `bound_agent_id` 或 canonical claimer，Viewer 必须进入“当前账号还没有 Agent”的 onboarding，并在 runtime 发布 `claim_first_agent` 时展示认领入口；若 runtime 只发布 canonical `slot-1` quote，则展示对应 onboarding。默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。不得把全局第一个 Agent 自动标为“我的 Agent”，也不得把该 Agent 的 chat/command 入口显示为 ready。
   - 并发争抢：两个提交同时命中同一 `agent_id` 时，只允许第一个写入 `claim_owner_id`；第二个返回冲突，不得重复扣费。
   - upkeep 结算时余额不足：进入 `upkeep_grace`，并写出 `grace_deadline_epoch`；宽限内补足可用余额后恢复 `claimed_active`。
@@ -275,3 +330,31 @@
 | DEC-AGC-019 | 将默认 Agent 控制列表限定为当前账号绑定或当前玩家绑定待同步 Agent；其他账号已绑定 Agent 与未绑定 Agent 默认不展示在控制列表中 | 把世界里第一个 Agent 继续当作当前账号的 implicit primary Agent；或把其他账号/未绑定 Agent 混进“我的 Agent”列表再用 badge 解释；或把 `player_id` 直接等同于 `claim_owner_id` | 换账号后的第一屏应服务“我的下一步”，不是调试 shared-world 全量实体。隐藏其他账号与未绑定 Agent 可以避免 ownership 误读；共享世界活动感后续应通过地图实体、世界事件或只读 world layer 呈现，不能借 Agent 控制列表补。 |
 | DEC-AGC-020 | 将首个 `slot-1` claim 从“成本确认”提升为“候选 agent 路线选择”，在 canonical quote 中加入候选差异理由 | 只展示费用、余额、cap、cooldown，让玩家先付出承诺成本再自己猜 agent 用途 | 2026-07-08 gameplay slice 指出首个 claim 是玩家第一次带成本的重大承诺；缺少候选差异会削弱路线判断、角色代入和早期 ownership。 |
 | DEC-AGC-021 | 将 claim quote 从“能否支付 upfront”扩展为“能否持续持有”的 runway 判断 | 只展示 activation fee、bond、upkeep 与 grace/cooldown 倒计时 | upkeep 是持续占有成本；玩家需要在确认前知道当前余额还能撑几轮，以及是否应该先补资金、等待或降低扩张节奏。 |
+
+### 6.1 首聊价值预览的独立验收
+
+以下是设计目标的验收场景；既有文案切片的验证见配对设计 [11.2 节](gameplay-agent-claim-economy-contract.design.md#first-chat-validation-matrix)，service 后继协议见 [11.3 节](gameplay-agent-claim-economy-contract.design.md#claim-entry-service-validation-matrix)。本节不记录某个版本已通过。只有适用权威事实参与 gate 判断，未取得的事实显式保持未知；同一预览的显示一致性不能替代真实 service 输入与 gate 的独立验证。
+
+<a id="ac-agc-chat-001"></a>
+#### AC-AGC-CHAT-001：OR gate 与资金边界
+
+- 覆盖要求：[REQ-AGC-CHAT-001](#req-agc-chat-001)。
+- 给定：同一有控制权 Agent 的适用权威余额与领取事实，覆盖零/正余额、有/无记录，以及各输入未知、裁剪、失效的组合。
+- 当：玩家查看首聊资源边界、刷新或返回该入口。
+- 则：适用权威输入中，任一 OR 分支已知为真即通过该 gate，即使另一分支未知；只有两分支均已知为假才受阻，其余为 unknown 并可刷新/补证。记录保留时余额耗尽不重锁，缺字段不按零；主体/世界/版本不匹配的输入先排除。其他授权/provider blocker 独立判断，提交时重验。本地完整状态与真实 service 分别验证，后者不得用前者代签。
+
+<a id="ac-agc-chat-002"></a>
+#### AC-AGC-CHAT-002：注册、经济认领和未知状态
+
+- 覆盖要求：[REQ-AGC-CHAT-002](#req-agc-chat-002)。
+- 给定：已注册/绑定但权威事实确认没有经济 claim、真实经济 claim 已存在，以及只收到旧版无条件维护文案或缺失义务说明的样本。
+- 当：玩家查看预览并选择延后首次对话。
+- 则：第一种不虚构 upkeep，第二种如实保留原有维护规则，第三种明确未知并引导复核；三者均不因预览或延后动作新增费用、不取消已有义务，也不把认领报价当成认领已生效。原经济状态机随时间发生的合法结算继续适用。
+
+<a id="ac-agc-chat-003"></a>
+#### AC-AGC-CHAT-003：语言、入口与旧资料一致性
+
+- 覆盖要求：[REQ-AGC-CHAT-003](#req-agc-chat-003)。
+- 给定：同一权威预览的 Viewer 中英文、pure API 与获准 Agent 读面，以及旧版文案/DTO、缺失说明、新预览、断线和身份切换样本。
+- 当：切换语言或入口、回读旧资料、重新连接或刷新权威状态。
+- 则：当前 gate、义务、未知原因和下一步同义；无权或未实现的读面明确 unavailable，不泄露他人资格。旧值不得跨身份复用，旧 DTO/缺失说明不被转写成零余额或无责任；恢复当前合法投影后才重新提供适用动作。语言兼容通过仅证明显示含义，真实 service 输入、最终提交及跨入口闭环仍需独立验证。

@@ -1,0 +1,13 @@
+{
+  "source_head": "7959443225200c9d3595bbcb47365662e88df787",
+  "tested_tree": "c51a9b169944ee2b52fc625e9f21db2ba25cf8d7",
+  "client_sha256": "2d88d0573bfdaddd1b26dd46689f61f06813ac9b391bcb23a0b562222a01f6e1",
+  "host_sha256": "ec5df1f288c3246ef67a0ce2f063122eac88a3dc1ef96a88331fc1ba5791169b",
+  "skill_sha256": "1472bf483037445f7ba48c30d8b3cc601de80f67cd9ffba91295f1638dbcaf33",
+  "max_client_calls": 10,
+  "hard_deadline_seconds": 240,
+  "user_authorization": "explicit approval of one bounded retry",
+  "attempt": 2,
+  "runtime": "attached_codex_subagent",
+  "isolation": "instruction_only/source_visible"
+}

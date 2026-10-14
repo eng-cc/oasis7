@@ -78,6 +78,8 @@ pub enum WorldServicePayloadV1 {
     Delegation(SignedReadRequest<AgentSignerDelegationChangeV1>),
     Scheduler(SignedReadRequest<SchedulerIntentV1>),
     GameTaskCreate(SignedReadRequest<oasis7_agent_api::game::GameTaskCreateV1>),
+    GameGoalPublish(SignedReadRequest<oasis7_agent_api::game::GameGoalPublishV1>),
+    GameExecutorControl(SignedReadRequest<oasis7_agent_api::game::GameExecutorControlV1>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -92,6 +94,13 @@ pub struct SchedulerIntentV1 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", content = "data", rename_all = "snake_case")]
 pub enum SchedulerOperationV1 {
+    TaskProviderPrefix {
+        context: oasis7_agent_api::game::TaskContextIdentityV1,
+    },
+    TaskProviderFailure {
+        context: oasis7_agent_api::game::TaskContextIdentityV1,
+        reason: String,
+    },
     ProviderPrefix {
         request: crate::simulator::ContinuousAgentRequestContextV1,
         context_digest: String,
@@ -142,6 +151,8 @@ pub struct CognitionIntentV1 {
     // Omitting legacy absence preserves the original signed codec bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub causal_proposal: Option<CognitionCausalProposalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_fence: Option<oasis7_agent_api::game::GameTaskFenceV1>,
 }
 
 /// Public Agent explanation, signed as part of the cognition intent. Canonical

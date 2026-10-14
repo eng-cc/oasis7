@@ -41,7 +41,7 @@
   - SC-5: 提供单命令制作人试玩入口，默认可复用或自动构建本地 bundle，再进入 bundle 模式启动。
   - SC-6: 单命令入口支持可选的 `--open-headed`，在 URL 就绪后自动打开 headed 浏览器，避免制作人再手动复制 URL。
   - SC-7: 通过 `--open-headed` 拉起的浏览器会话在脚本退出时自动关闭，避免遗留残窗或脏会话。
-  - SC-8: `run-producer-playtest.sh --open-headed` 与 `run-game-test-ab.sh --headed` 默认固定硬件 WebGL 启动参数；若 headed 仍命中 software renderer，必须按环境阻断而不是给出玩法结论。
+  - SC-8: producer 与 QA 哨兵默认固定硬件 WebGL 参数并保留实际 renderer；QA 哨兵按 [S6](../../../testing-manual.md#testing-software-renderer-scope)只可继续已确认 viewer/compat safe-mode 的最小 DOM 闭环，producer/GPU/完整发布目标不能被该有限证据代替。
   - SC-9: 已存在 bundle 若缺少 freshness manifest 或落后于当前工作区源码，制作人入口必须自动重建，底层 `run-launcher-stack.sh --bundle-dir` 必须默认 fail-fast，避免继续误用旧 Viewer Web 产物。
 
 ## 2. User Experience & Functionality
@@ -58,7 +58,7 @@
   - PRD-TESTING-LAUNCHER-BUNDLE-002: As a `qa_engineer`, I want the existing `run-launcher-stack.sh` bootstrap to consume a bundle via one flag, so that automation and manual validation share one script surface.
 - Critical User Flows:
   1. Flow-LBFP-001: `run-producer-playtest.sh --open-headed -> 自动准备/复用 bundle -> run-launcher-stack.sh --bundle-dir -> 自动打开 headed agent-browser（默认 `--use-angle=gl,--ignore-gpu-blocklist`） -> 人工游玩 -> 脚本退出时自动关闭该浏览器会话 -> 记录人工结论`
-  2. Flow-LBFP-002: `run-launcher-stack.sh --bundle-dir <bundle> -> freshness manifest 校验 -> 输出 URL/日志 -> run-game-test-ab.sh 采样并校验 renderer 不是 software path`
+  2. Flow-LBFP-002: `run-launcher-stack.sh --bundle-dir <bundle> -> freshness manifest 校验 -> 输出 URL/日志 -> run-game-test-ab.sh 核对实际 renderer/renderMode 与验收目的后限定采样范围`
   3. Flow-LBFP-003: `run-local-letai-game-test.sh -> 规范化 LetAI token config -> 启动本地 provider bridge -> run-launcher-stack.sh 指向该 bridge -> 本地真实 provider-backed 试玩`
   4. Flow-LBFP-004: `run-launcher-stack.sh (源码模式) -> 开发者快速复现 -> 不作为发布结论，不进入普通试玩菜单`
 
@@ -94,15 +94,15 @@
   - `--bundle-dir` 指向不存在目录：脚本必须 fail-fast 并提示目录路径。
   - `--bundle-dir` 缺少 `run-game.sh`：脚本必须明确提示 bundle 不完整。
   - bundle 模式下未显式传 `--viewer-static-dir`：默认使用 bundle 自带 `web/`，不再偷偷 fresh build 源码目录。
-  - `--headless` 若命中 `SwiftShader` / software renderer：必须按浏览器环境阻断快失败，并输出可操作提示，不得误判成 fresh Web 构建或玩法回归。
-  - `--open-headed` / `--headed` 若在默认硬件 WebGL 参数下仍命中 `SwiftShader` / software renderer：同样必须阻断，并把 `browser_env.json` 作为环境证据落盘。
+  - `run-game-test-ab.sh --headless` 命中 software renderer：先确认 viewer/compat safe-mode。最小 DOM 闭环仅在已确认该路径可用时继续；未进入 safe-mode 或目标为 GPU/完整验收时保留环境阻断。不能把 `connecting` 一概归因于构建或玩法。
+  - `--open-headed` / `--headed` 也须记录实际 `browser_env.json`，按同一 scope 规则处理；headed 本身不保证硬件。producer 试玩或 release/GPU 要求仍按各自目标验收，不因 QA 软件最小闭环通过而放行。
   - bundle 缺少 freshness manifest、或 manifest 与当前工作区 fingerprint 不一致：必须视为 stale bundle；`run-launcher-stack.sh` 默认 fail-fast，`run-producer-playtest.sh` 默认重建。
   - 开发者仍需源码回归：保留现有 `cargo run` 分支，但帮助文本与手册必须标注其仅供开发排障。
 - Non-Functional Requirements:
   - NFR-LBFP-1: 新增 bundle 模式不能破坏现有 `run-game-test-ab.sh` 透传契约。
   - NFR-LBFP-2: 脚本帮助、手册和人工清单的口径必须 0 冲突。
   - NFR-LBFP-3: bundle-first 入口的失败必须在一次执行中能定位到“目录错误 / 产物不完整 / 端口冲突 / 运行时失败”中的至少一类。
-  - NFR-LBFP-4: `--headless` 下若浏览器退化到 `SwiftShader`，自动化必须给出环境级阻断，而不是返回模糊的 `connecting` 超时。
+  - NFR-LBFP-4: QA 哨兵的软件 renderer 结果必须给出实际 safe-mode、验收目的、有限继续或环境阻断及证据；不返回无法定位的 `connecting` 超时，也不把有限通过升级为完整通过。
   - NFR-LBFP-5: `--open-headed` / `--headed` 默认参数、renderer 证据和阻断语义必须一致，避免“有头但仍是 SwiftShader”被误判为兼容。
   - NFR-LBFP-6: bundle-first 入口必须能识别本地 bundle 与当前工作区源码的漂移，避免旧 bundle 静态产物与新 runtime 二进制混跑。
 - Security & Privacy: 不新增敏感数据采集，仅调整启动入口与文档口径。
@@ -133,6 +133,6 @@
 | DEC-LBFP-004 | 提供 `run-producer-playtest.sh` 作为 bundle-first 一键入口 | 要求制作人手动执行 build + bootstrap 两条命令 | 单命令更符合制作人实际使用路径，也更不容易退回源码模式。 |
 | DEC-LBFP-005 | `--open-headed` 做成可选模式 | 默认总是自动打开浏览器 | 让脚本既能服务纯起栈，也能服务制作人直接入场，避免强绑浏览器副作用。 |
 | DEC-LBFP-006 | `run-producer-playtest.sh --open-headed` 退出时自动关闭自己拉起的浏览器会话 | 保留 `agent-browser` 会话常驻，要求人工手动关窗 | 制作人单命令试玩默认应无残窗副作用，脚本应负责自己创建资源的收尾。 |
-| DEC-LBFP-007 | headed 浏览器默认固定 `--use-angle=gl,--ignore-gpu-blocklist`，并把 headed 命中 software renderer 视为环境阻断 | 仅把 `--headed` 当作充分条件 | 当前环境已验证默认 headed 仍可能回退 SwiftShader，必须把硬件路径策略写进入口。 |
+| DEC-LBFP-007 | headed 默认固定硬件 WebGL 参数，实际 software renderer 按 S6 的验收目的与 safe-mode 分流 | 仅把 headed 当作充分条件，或不区分目标一概放行/阻断 | 软件 DOM 最小证据与 GPU/producer/release 证据职责不同；保留实际环境和未覆盖范围。 |
 | DEC-LBFP-008 | bundle 复用必须带 freshness manifest 守卫；producer 入口自动重建，底层 bootstrap 默认阻断 | 继续无条件复用本地 bundle | 已实际复现旧 Viewer Web 产物与新 runtime 二进制协议漂移，必须把 bundle freshness 做成默认机制。 |
 | DEC-LBFP-009 | 普通本地试玩菜单收敛为 `run-local-letai-game-test.sh`、`run-producer-playtest.sh --open-headed` 和 QA evidence 入口；底层脚本保留但降级 | 删除/合并 `run-launcher-stack.sh`、`worktree-harness.sh` 或 `run-game-test-ab.sh` | 现有自动化和 L4A/L4B 依赖这些脚本的职责分层，先瘦 operator-facing 口径可降低认知负担且不破坏回归链。 |

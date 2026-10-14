@@ -12,6 +12,8 @@ mod agent_cell;
 mod agent_claims;
 mod audit;
 mod blob_store;
+mod builtin_factory_catalog;
+mod builtin_recipe_catalog;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
 mod capability_authorization;
@@ -59,6 +61,9 @@ mod world_event;
 
 #[cfg(test)]
 mod tests;
+
+pub use builtin_factory_catalog::builtin_factory_spec;
+pub use builtin_recipe_catalog::builtin_recipe_plan;
 
 // Re-export all public types
 pub use oasis7_agent_api::CognitionLeaseConsumptionViewV1;
@@ -128,6 +133,7 @@ pub use cognition::{
 };
 
 // Durable cognition commit/recovery boundary
+pub(crate) use cognition_recovery::response_artifact_digest;
 pub use cognition_recovery::{
     CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
     CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,
@@ -137,20 +143,21 @@ pub use cognition_recovery::{
     RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
 };
 pub use world::{
-    COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
-    COGNITION_LEASE_SCHEMA_VERSION, COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION,
-    COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION, COGNITION_PROVISIONING_SCHEMA_VERSION,
-    COGNITION_RECEIPT_SCHEMA_VERSION, COGNITION_RESOURCE_VERSION_V1, CognitionEconomyError,
-    CognitionEconomyEventV1, CognitionEconomyIdempotencyRecordV1,
-    CognitionEconomyOperationRecordV1, CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease,
-    CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1,
+    BuiltinFactoryStartPreview, BuiltinRecipeStartPreview, COGNITION_ECONOMY_SCHEMA_VERSION,
+    COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION, COGNITION_LEASE_SCHEMA_VERSION,
+    COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION, COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION,
+    COGNITION_PROVISIONING_SCHEMA_VERSION, COGNITION_RECEIPT_SCHEMA_VERSION,
+    COGNITION_RESOURCE_VERSION_V1, CognitionEconomyError, CognitionEconomyEventV1,
+    CognitionEconomyIdempotencyRecordV1, CognitionEconomyOperationRecordV1,
+    CognitionEconomyStateV1, CognitionEconomyV1, CognitionLease, CognitionLeaseQuoteV1,
+    CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1,
     CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
     CognitionProvisioningRequestV1, CognitionQuoteV1, CognitionReceipt, CognitionReceiptV1,
     CognitionResourceBalanceV1, LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS,
     LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS, LocalTestProviderAuthorityConfig,
     LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus, LocalTestProviderModuleArtifact,
-    LocalTestProviderProvisioning, LocalTestProviderSessionMode,
-    ProviderBackedBootstrapAuthorityV1,
+    LocalTestProviderProvisioning, LocalTestProviderSessionMode, NativeBuiltinFactoryQuote,
+    NativeBuiltinRecipeQuote, ProviderBackedBootstrapAuthorityV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections

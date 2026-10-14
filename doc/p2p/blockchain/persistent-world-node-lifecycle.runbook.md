@@ -63,6 +63,7 @@
 - TODO：在明确获准的真实部署环境验证 P/R 物理故障域、受保护 signer/HSM、服务管理器与部署回退。验收为原 C0/身份不变、故障后原请求恰好一次恢复及独立资格读回；本机协议模拟不代签。
 - TODO：补充 macOS 以外平台的 executable-image/no-follow 路径与真实不同版本产物升级矩阵。验收为合法 prior/candidate 通过、错误加载映像及不兼容持久格式在停止前拒绝；shell stub 不代签真实升级。
 - TODO：将本机诊断日志整理为可复用的操作故障排查步骤，保留阶段及原 operation 身份，避免仅凭超时判断故障原因。
+- TODO：补齐 main 新增的 `GameGoalPublish` / `GameExecutorControl` 冷查询索引及保护记录的整体容量规划。当前两类记录保留在热状态，不删除前驱；原 32 条及字节上限保持，超限明确拒绝且保留世界状态。由于 planner 只计算可归档后缀，可能保守拒绝；验收应证明合法长链完整查询、热容量有界与原控制身份不变，不能靠扩大上限或删除控制记录解决。
 - TODO（ST-02/ST-04，blocked）：验证正式玩家 Skill 支持的私有 Formal Game API 与 attached executor binding 后，组织独立 Agent 对 retained task/nonce/control 的目标、问答、断连回读和恢复自主试玩。现有普通合同测试不代签；当前 delivered Skill 指向 LocalProvider/LetAI，不能证明本轮 formal 消费者。本次仍交付最初定义的本机持久化与管理基础设施，不开放完整 formal 玩法。
 
 ## 本轮独立源码评审（2026-10-13）
@@ -177,12 +178,12 @@ watch 为有界、只在 commit 变化时输出的 snapshot polling。`--cursor`
 
 ## 剩余整体验收
 
-| 功能 PR | 必须继续完成的能力 |
+| 范围 | 验收与后续边界 |
 | --- | --- |
-| PR 1 | 健康 durable set 替换的 protected install、双安装激活、跨 epoch Normal 读取与协调器；最新源码完整正式本机脚本；C01—C20 剩余故障交错及适用自主试玩。表中已通过的正式激活、提交、恢复和长期历史场景保留其实际版本范围。 |
-| PR 2 | Package stage/promote 的 OperationRecord 与精确停止实例桥接；旧分散目录迁移的实际正常 binary SIGKILL/续做验证；O01—O19、U01—U10 剩余组合与调用者闭包核对。未实现的 BFT signer/成员写动作继续明确拒绝，不能以本地配置冒充生效。 |
+| 本次本机代码交付 | 健康 durable set 的双安装激活、跨 epoch Normal 读取、原 operation 故障续做；Package stage/promote 与真实失败启动回滚；最新 source HEAD 的 required CI。真实主链失败仍阻断合入。 |
+| 后续 TODO | C01—C20、O01—O19、U01—U10 在真实部署环境中的剩余故障交错与平台组合，以及已明确 blocked 的正式 Skill/executor 自主试玩。表中旧场景保留实际版本范围，不外推为最新完整部署通过。 |
 
-这两个功能 PR 的完整验收尚未满足；当前代码不得合入后宣称方案完成。后续仍按原方案的两个完整交付目的集成，不把 prerequisite 子模块变成额外的用户审批链。
+2026-10-14 用户授权快速推进合入，小遗留在实施文档标记 TODO。本次以同一 PR 交付本机代码及管理基础设施；满足真实主链、独立评审和 required CI 后推进合入。合入不表示整套部署方案、生产故障域或完整 formal 玩法验收已完成。未实现的 BFT signer/成员写动作继续明确拒绝，不能以本地配置冒充生效。
 
 2026-10-14 独立试玩前置预检读取了候选正式玩家 Skill `site/skills/oasis7.md`，SHA-256 为 `c103ef66284e18d23cfc9b6d39ad4bcad9c922d7e18eeb5e93762d12caa3dc92`。官方入口 `./scripts/run-local-letai-game-test.sh --local-world-playtest` 使用私有本机 LocalProvider 世界，不连接 formal/public testnet，但需要真实 LetAI 凭据与付费推理，公开说明含默认自动充值；本轮没有新增付费预算授权，因此未启动该入口。预检子任务未读取实现，但环境仍能访问源码，隔离级别为 `instruction_only/source_visible`。此结果仅是前置预检，不能代签自主试玩；正式网络玩家 Skill 及真实执行 profile 仍未在本轮证明。
 

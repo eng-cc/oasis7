@@ -69,8 +69,23 @@ pub fn validate_cognition(
     world: &World,
     signed: &SignedReadRequest<CognitionIntentV1>,
 ) -> Result<(), String> {
+    validate_cognition_staged(world, signed, &[])
+}
+pub fn validate_cognition_staged(
+    world: &World,
+    signed: &SignedReadRequest<CognitionIntentV1>,
+    staged: &[super::CanonicalIntentResultV1],
+) -> Result<(), String> {
     verify_read_request("cognition", signed)?;
     let intent = &signed.request;
+    if intent.task_fence.is_some() {
+        super::private_goal_prepare::verify_owner_signature_strict(
+            "cognition",
+            intent,
+            &signed.subject_public_key,
+            &signed.signature_hex,
+        )?;
+    }
     if matches!(
         intent.action,
         crate::runtime::Action::WorldServiceIntent { .. }
@@ -108,6 +123,23 @@ pub fn validate_cognition(
         {
             return Err("signed cognition causal proposal invalid".into());
         }
+    }
+    super::game_task::validate_cognition_fence_staged(
+        world,
+        &intent.request.agent_id,
+        intent.task_fence.as_ref(),
+        &signed.subject_public_key,
+        intent.delegation_generation,
+        staged,
+    )?;
+    if let Some(fence) = &intent.task_fence {
+        super::game_task::validate_task_commit_context(
+            world,
+            &intent.request,
+            fence,
+            &signed.subject_public_key,
+            staged,
+        )?;
     }
     validate_agent_signer(
         world,

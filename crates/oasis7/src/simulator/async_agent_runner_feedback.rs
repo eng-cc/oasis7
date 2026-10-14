@@ -11,6 +11,7 @@ pub struct RuntimeReceiptReadbackHandleV1 {
     receipt_id: String,
     receipt_digest: Digest32,
     response_artifact_digest: Digest32,
+    verified_lineage: RuntimeReceiptLineageV1,
 }
 
 impl RuntimeReceiptReadbackHandleV1 {
@@ -26,12 +27,15 @@ impl RuntimeReceiptReadbackHandleV1 {
         &self.response_artifact_digest
     }
 
-    /// Runtime code constructs this only after its durable world readback has
-    /// verified the receipt and response identity. It is crate-visible so a
-    /// Runtime adapter can implement the verifier without exposing a public
-    /// authority-fabricating constructor to provider callers.
-    #[cfg(test)]
-    pub(crate) fn from_verified(
+    pub(crate) fn verified_lineage(&self) -> &RuntimeReceiptLineageV1 {
+        &self.verified_lineage
+    }
+
+    /// Runtime's concrete World adapter constructs this only after it has
+    /// read back and verified both durable identities. Keep the constructor
+    /// crate-private: provider callers and external verifier implementations
+    /// cannot mint a readback capability from a DTO.
+    pub(crate) fn from_durable_world_readback(
         receipt: &RuntimeReceiptLineageV1,
         response_identity: &ResponseArtifactIdentityV1,
     ) -> Self {
@@ -39,6 +43,7 @@ impl RuntimeReceiptReadbackHandleV1 {
             receipt_id: receipt.receipt_id.clone(),
             receipt_digest: Digest32::from(receipt.receipt_digest.clone()),
             response_artifact_digest: response_identity.artifact_digest.clone(),
+            verified_lineage: receipt.clone(),
         }
     }
 }
@@ -46,7 +51,10 @@ impl RuntimeReceiptReadbackHandleV1 {
 /// Integration seam for Runtime's strict World-readback proof. A provider or
 /// simulator fixture cannot authorize this method by echoing receipt fields;
 /// the implementation must be backed by Runtime's durable commit/readback.
-pub trait RuntimeReceiptReadbackVerifier: Send + Sync {
+/// The verifier is borrowed for one synchronous call and is never retained or
+/// transferred to another thread, so it intentionally has no `Send` or `Sync`
+/// supertrait requirement.
+pub trait RuntimeReceiptReadbackVerifier {
     fn verify_world_readback(
         &self,
         context: &ContinuousAgentTurnContextV1,

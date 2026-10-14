@@ -40,6 +40,15 @@
 - 如只为人工查看页面或排查 WebSocket，可在 wrapper 参数后透传 `--chain-disable` 作为临时 page-play mitigation；该模式不代表本地 standalone chain-enabled 世界启动通过，更不能作为 public_testnet 证据。
 - 下方 `oasis7_viewer_live` + `run-viewer-web.sh` 流程只用于 Viewer/debug 或定向 Web 回归，不代表本地真实 provider-backed gameplay 栈。
 
+需要初始暂停并手动点击 Play 时使用：
+
+```bash
+./scripts/run-local-letai-game-test.sh --local-world-playtest --no-auto-play
+```
+
+`--no-auto-play` 只改变启动后的自动播放选择，不跳过该启动 profile 仍会执行的预检或远端请求；
+默认命令会自动 Play，不能把它记录成暂停态样本。
+
 ## 底层 Viewer Debug 快速开始
 
 ### 1）启动 live server
@@ -124,8 +133,9 @@ OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY=<issuer-private-key> \
   Player 沉浸呈现，不是第二产品模式。World Feed v1 已有 runtime transport、状态机
   与 `#viewer-world-feed` panel，但仍是只读环境上下文，不是 Action Receipt 替代。
 - 当前 Player 已是 fullscreen world-first 单舞台；不要按旧“左侧/中间/右侧”三栏 IA
-  操作或编写说明。三张 `Objective / Next Move / Player Leverage` 卡片是 HUD，不是
-  旧三栏；密集三栏仅可能在显式、能力门控的 Director 工具视图出现。
+  操作或编写说明。HUD 由单一 `Next Move` 主动作区和 `Objective / Player Leverage`
+  从属上下文组成；桌面并列，窄屏主动作在上、上下文在下。密集三栏仅可能在显式、
+  能力门控的 Director 工具视图出现。
 - Director 的 `#viewer-director-entry` / `#viewer-director-exit`、Viewer 状态机与
   `/api/public/director/capability` fail-closed endpoint 已实现。当前 endpoint 在没有
   可信 issuer 绑定 live `session_epoch` 时返回 `director_capability_unavailable`，
@@ -136,8 +146,8 @@ OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY=<issuer-private-key> \
   `Next Move` 动作 → `Player Leverage`/selected context → `Action Receipt`；World Feed
   继续作为收起的环境 chip。`world_read` 的 `tick/agents/routes/fragments/hotspots` 只
   在既有权威 projection 提供时显示，不能补造 Power、Data、Consensus 或其他指标。
-- `Next Move` 的目标交互是单一 CTA 和内联 blocker；当前三卡 HUD 是实现基线，完成该
-  目标前不要把目标层级写成已经交付。
+- `Next Move` 已按单一 CTA 和内联 blocker 组织，当前源码不再是三张等权 HUD 卡片。
+  具体输入、浮层遮挡、失败/恢复和可访问性是否通过，仍以实际候选的行为证据为准。
 - Agent Console 默认显示当前选择、已授权的 command/chat、blocker 与 receipt。无选择或
   不可控时只提供 Targets/认领/等待 binding 的恢复说明；raw snapshot/JSON、auth/
   capability、Prompt override、world-scale 和 Director 工具均保持在收起的
@@ -145,8 +155,8 @@ OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY=<issuer-private-key> \
 - 用户-facing Focus 名称为 `Cinematic View / Minimal HUD`，内部 `focusMode` hooks
   保留。显式进入后保留世界、选择标记、当前 objective/blocker、存在中的 receipt 和
   退出入口；Escape 先关局部 drawer，再退出呈现层，IME composition 不被打断。
-- 这只是待实现的视觉 handoff，不改变 runtime/protocol、仿真/replay、renderer、权限、
-  Director capability 或 receipt 因果。后续 QA 必须提供 headed `1440x1000` 与 `390x844`
+- 这些视觉约束不改变 runtime/protocol、仿真/replay、renderer、权限、
+  Director capability 或 receipt 因果。受影响 QA 必须提供 headed `1440x1000` 与 `390x844`
   截图，并覆盖键盘、IME、CJK、长文本和无横向溢出。
 
 ### World-native target handoff（目标契约，不是当前实现声明）
@@ -204,7 +214,7 @@ P1-A 是当前 Viewer 的第一个 Agent-only context slice，不是通用多实
 - `Action Receipt` 仍是唯一玩家因果反馈：只有明确的权威因果身份才算 Receipt；Intent
   生命周期、普通 feedback 和 World Feed 不能创建或替换它。Player/Cinematic 每个呈现只有
   一个正式 Receipt；`accepted`、`queued`、`executing` 和 `completed` 按实际权威状态区分。
-- 选中 Location、Facility、Territory、Organization、Depot 或 Module 时，未来实现必须展示
+- 选中 Location、Facility、Territory、Organization、Depot 或 Module 时，当前 Context Lite 展示
   可读 identity 和 honest unavailable/待同步恢复说明；不得显示上一 Agent 的上下文，也不
   得凭 proximity、同屏或名称生成 ownership、resource、relation 或 capability。相应实体
   projection 和权限合同完成后，才可由后续 slice 注入内容；通用多实体 Inspector 是
@@ -214,10 +224,10 @@ P1-A 是当前 Viewer 的第一个 Agent-only context slice，不是通用多实
 unknown、conflict、replay、gap、reorg、unavailable、control/permission-lost 状态可区分；
 非 Agent 选择不泄漏 Agent 状态；Player/Cinematic 每个呈现只有一个正式 Receipt；并补齐
 headed `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME、CJK、长文本和空态验证。
-当前源码与聚焦自动化已覆盖语义边界；外部 Chrome headed 仅验证 GPU-unavailable fallback
-（`1440x1000`、`390x844`）。`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU
-失败和 tablet `641–1240` 宽度仍未验证，因此当前保持 technical preview，不构成完整 headed
-验收或发行放行结论。
+Context Lite 的源码与聚焦自动化已存在。早期外部 Chrome 样本仅验证 GPU-unavailable fallback
+（`1440x1000`、`390x844`），不能给 `ready=true` WebGL2/Cinematic、probe 后异步 GPU 失败
+或 tablet `641–1240` 放行。后续 #3624/#3638/#3668 的实际证据仍按各自范围保留，不由旧环境
+限制改写为全部未验收；本段也不单独构成完整 headed 验收或发行放行结论。
 
 ### P1-B/P1-C 当前实现边界
 
@@ -252,11 +262,12 @@ security-boundary routes in the current task branch. It is not a release claim:
 World Feed has no inferred receipt links, and production Director success remains
 blocked until a trusted issuer is available.
 
-1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
-   Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
-   Command` route. In fullscreen desktop the three HUD cards share one compact row;
-   on mobile Objective and Player Leverage share the first row and Next Move occupies
-   the second row. `More / Diagnostics` remains reachable as a secondary route.
+1. Fresh load/reload/new tab/session starts in Player. Read the world-first stage,
+   the single `Next Move` primary action and subordinate `Objective / Player Leverage`
+   context, then use the quiet `World / Targets / Command` route. On narrow screens,
+   the primary action occupies the first row and supporting context the second.
+   The [shell PRD](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
+   owns this layout; `More / Diagnostics` remains a reachable secondary route.
 2. Search remains inside Targets and only filters the authoritative visible list.
    Selecting a target recenters/highlights and opens context; it never executes.
    Quote is reached from contextual Command, not a peer rail item.
@@ -353,8 +364,10 @@ turn those tests into issuer-backed production access or a release claim.
 历史 Standard-3D / egui 表面曾提供 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板；该表面及这些操作均已退役，不能作为当前 canonical `viewer` Web 页面的使用说明或能力声明。当前支持边界仍以实时观察、当前选中对象、prompt/chat、`window.__AW_TEST__` 以及本手册列出的三条回归脚本为准。
 
 ## 证据边界
-- 当前 formal gameplay PASS 证据以 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 为准。
-  - 该证据包含 2026-04-08 的 LLM-enabled follow-up PASS，结论是当前 Web 主入口已具备 release-grade formal gameplay 样本。
+- `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 是固定历史样本；其中 2026-04-08 的 LLM-enabled follow-up PASS 仅代表原候选、环境和场景，不是今天默认生效的 formal gameplay 或 release-grade PASS。
+- 当前结论先回到 [证据入口](../../testing/evidence/README.md) 与 [总测试手册](../../../testing-manual.md)：核对适用 source/build、实际测试树、环境、入口、场景、范围和 gate，再引用相匹配的真实结果。
+  - 缺少当前适用证据时写 unknown；所选验证缺前置时写 blocked/inconclusive。这不表示当前玩法已失败，也不授权把旧证据改日期、换 hash 或重命名后作为新候选通过。
+  - 历史样本的失败、输出、来源与原结论保持不变；页面观察、截图、S6 和自主玩法验收不能互相代签。
 - `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md` 只证明 formal-release 技术启动状态在 `--no-llm` 观察链路下可加载、可连接、可选中实体。
   - 这份截图证据属于 observer/debug，不替代 formal gameplay 证明。
 
@@ -387,23 +400,43 @@ agent-browser --version
 agent-browser doctor --offline --quick --json
 AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
 export AB_SESSION
-cleanup() {
-  local status=$?
-  trap - EXIT INT TERM
-  agent-browser --session "$AB_SESSION" close >/dev/null 2>&1 || true
-  exit "$status"
-}
-trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
+VIEWER_EVIDENCE_DIR="$(mktemp -d output/playwright/viewer/viewer-manual.XXXXXX)"
+cleanup() {
+  local main_status=$?
+  local close_status=0
+  trap - EXIT INT TERM
+  if agent-browser --session "$AB_SESSION" close >"$VIEWER_EVIDENCE_DIR/close.log" 2>&1; then
+    close_status=0
+  else
+    close_status=$?
+  fi
+  if (( close_status != 0 )); then
+    printf 'cleanup blocker: close exited %s; see %s/close.log\n' "$close_status" "$VIEWER_EVIDENCE_DIR" >&2
+  fi
+  if ! printf 'main_status=%s\nclose_status=%s\n' "$main_status" "$close_status" >"$VIEWER_EVIDENCE_DIR/cleanup.status"; then
+    printf 'could not write cleanup status\n' >&2
+  fi
+  if (( main_status != 0 )); then
+    exit "$main_status"
+  fi
+  exit "$close_status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
 agent-browser --session "$AB_SESSION" wait --load domcontentloaded
 agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
-agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" session info --json | tee "$VIEWER_EVIDENCE_DIR/session-info.json"
 agent-browser --session "$AB_SESSION" snapshot -i
 agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
-agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
-agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png
+agent-browser --session "$AB_SESSION" console | tee "$VIEWER_EVIDENCE_DIR/console.log"
+agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-web.png"
 ```
+
+本轮主动作失败时保留其退出码；主动作成功而 close 失败时返回 close 退出码。`close.log` 和
+`cleanup.status` 独立保留收尾诊断，不能用 `|| true` 或丢弃输出把未关闭记录成成功。
 
 ### 推荐自动化脚本
 - 主入口 contract：
@@ -447,7 +480,7 @@ agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer
 - `agent-browser` 失败：先运行 `agent-browser --version`、`agent-browser doctor --offline --quick --json` 与 `agent-browser --session <owned-session> session info --json`；若是 daemon/IPC 读取失败，只重建本轮 session，不重放非幂等动作，也不影响其他任务 session。
 - 有状态但不推进：优先跑 `viewer-software-safe-step-regression.sh`，确认是正常推进还是显式 blocker。
 - `test_api=1` 下停在 `connecting` 且 `logicalTime=0`：立即检查 `getState().lastError` / `errorCount` 并归档 state、console、screenshot。已知 WebGL/SwiftShader fatal 最多自动 reload 一次；再次失败是 S6 环境/图形 blocker，不得当作 gameplay 证据。只有确认 Web 图形阻塞后，native 才可作为诊断 fallback。
-- 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；回到 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 看 LLM-enabled follow-up 结论。
+- 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；按本手册[证据边界](#证据边界)查找与实际候选、环境和场景匹配的 LLM-enabled 结果。Apr07/08 follow-up 仅为历史示例，不能替代当前结论。
 
 ## 已移除能力
 - 退役的第二 Viewer 启动路径

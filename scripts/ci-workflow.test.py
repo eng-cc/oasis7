@@ -336,6 +336,7 @@ class Workflow(unittest.TestCase):
         function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
         script = """set -euo pipefail
 run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
+run_cargo_clippy() { printf '%s|clippy %s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
 """ + function + "\nrun_oasis7_workspace_support_crate_tests\nprintf 'after|%s\\n' \"$OASIS7_WASM_BUILD_STD\"\n"
         result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
                                 env=dict(os.environ, OASIS7_WASM_BUILD_STD='1'))
@@ -344,6 +345,58 @@ run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
         self.assertEqual(calls[-2], '0|test -p wasm_build_suite -p wasm_module_observe')
         self.assertTrue(all(call.startswith('1|') for call in calls[:-2]))
         self.assertEqual(calls[-1], 'after|1')
+
+    def test_agent_contract_and_harness_checks_are_in_workspace_support(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = """set -euo pipefail
+run_cargo() { printf 'test|%s\\n' "$*"; }
+run_cargo_clippy() { printf 'clippy|%s\\n' "$*"; }
+""" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = result.stdout.splitlines()
+        self.assertIn('clippy|-p oasis7_agent_api --all-targets', commands)
+        self.assertIn('clippy|-p oasis7_agent_harness --all-targets', commands)
+        self.assertIn('test|test -p oasis7_agent_api', commands)
+        self.assertIn('test|test -p oasis7_agent_harness --lib', commands)
+        self.assertLess(commands.index('clippy|-p oasis7_agent_harness --all-targets'),
+                        commands.index('test|test -p oasis7_agent_harness --lib'))
+
+    def test_private_context_all_targets_and_caller_are_executed(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = "set -euo pipefail\nrun_cargo() { printf '%s\\n' \"$*\"; }\nrun_cargo_clippy() { printf 'clippy %s\\n' \"$*\"; }\n" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = [line.split() for line in result.stdout.splitlines()]
+        self.assertIn(['clippy', '-p', 'oasis7_agent_api', '--all-targets'], calls)
+        self.assertIn(['clippy', '-p', 'oasis7_agent_harness', '--all-targets'], calls)
+        for package in ('oasis7_context', 'oasis7_secure_envelope'):
+            selected = [call for call in calls if package in call]
+            self.assertTrue(selected, package)
+            self.assertTrue(any('--all-targets' in call and '--locked' in call for call in selected))
+            self.assertEqual(CONFIG['package_groups'][package], ['workspace_support'])
+        self.assertTrue(any('oasis7_local_signer' in call and '--test' in call and 'context_cli' in call for call in calls))
+        for path in ('crates/oasis7_context/**', 'crates/oasis7_secure_envelope/**'):
+            selected_groups = {group for rule in CONFIG['rules'] if path in rule['match'] for group in rule['groups']}
+            self.assertIn('fleet_health', selected_groups)
+
+    def test_private_context_macos_uses_fixed_toolchain_and_declared_resource(self):
+        fleet = JOBS['fleet-health']
+        self.assertIn('rust_toolchain', CONFIG['resources']['fleet_health'])
+        prepare = fleet.index('name: Prepare context Rust toolchain on macOS')
+        verify = fleet.index('name: Verify private context filesystem and caller on macOS')
+        self.assertLess(prepare, verify)
+        preparation = fleet[prepare:verify]
+        self.assertIn("if: runner.os == 'macOS'", preparation)
+        self.assertIn('rustup toolchain install "$RUST_TOOLCHAIN"', preparation)
+        self.assertIn('rustup default "$RUST_TOOLCHAIN"', preparation)
+        self.assertTrue((ROOT / 'rust-toolchain.toml').is_file())
+        validation = fleet[verify:fleet.index('name: Ensure Linux process inspection dependency')]
+        self.assertIn("if: runner.os == 'macOS'", validation)
+        self.assertIn('cargo test --locked -p oasis7_context -p oasis7_secure_envelope --all-targets', validation)
+        self.assertIn('cargo test --locked -p oasis7_local_signer --test context_cli', validation)
 
     def test_invalid_selected_group_cannot_silently_skip_command(self):
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()

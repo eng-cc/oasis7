@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "1680f2f5d76e6448cc609bd741387a485bcecae4fb5bbdb569bf5b5ba014c455",
+    "content_sha256": "d0fe9902c53b25ed0cf1435ac3a1b8bb3181da8007d36e98485fcaffa0d31c6f",
     "current_authority": "doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current public claim and release boundary",
+    "note": "current public claim and release boundary retained; author self-review of existing site PRD and bounded story-entry/state additions; no new public player capability, execution result or independent approval claimed",
     "path": "doc/site/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

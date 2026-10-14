@@ -1,8 +1,10 @@
 pub mod codex;
+pub mod context;
 pub mod domain;
 pub mod github;
 mod index;
 pub mod process;
+pub mod tools;
 use domain::*;
 use rusqlite::{Connection, params};
 use std::path::Path;
@@ -10,6 +12,8 @@ use std::path::Path;
 pub enum Error {
     #[error("{0}")]
     Invalid(String),
+    #[error(transparent)]
+    Context(#[from] oasis7_context::error::ContextError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -34,6 +38,7 @@ impl CommandCenter {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db = Connection::open(path)?;
         codex::migrate(&db)?;
+        context::migrate(&db)?;
         let preferences = load(&db, "personal", "preferences")?.unwrap_or_default();
         let current = Snapshot {
             project: None,
@@ -50,6 +55,13 @@ impl CommandCenter {
             this.current = snapshot;
         }
         this.load_personal()?;
+        this.filter_private_cache()?;
+        if let Some(project) = &this.current.project
+            && index::project(Path::new(&project.path)).is_ok_and(|actual| actual.id == project.id)
+            && context::check_project(&this.db, Path::new(&project.path)).is_ok()
+        {
+            context::register_project(&this.db, Path::new(&project.path))?;
+        }
         Ok(this)
     }
     fn personal_key(&self, kind: &str) -> String {
@@ -78,7 +90,37 @@ impl CommandCenter {
         self.current.project.clone()
     }
     pub fn snapshot(&self) -> Snapshot {
-        self.current.clone()
+        let mut snapshot = self.current.clone();
+        if snapshot
+            .project
+            .as_ref()
+            .is_some_and(|p| context::check_project(&self.db, Path::new(&p.path)).is_err())
+        {
+            snapshot.sections.clear();
+            snapshot.decisions.clear();
+            snapshot.associations.clear();
+            snapshot.reading_positions.clear();
+            snapshot.git = GitSnapshot::default();
+        }
+        snapshot
+    }
+    fn filter_private_cache(&mut self) -> Result<()> {
+        if self
+            .current
+            .project
+            .as_ref()
+            .is_some_and(|p| context::check_project(&self.db, Path::new(&p.path)).is_err())
+        {
+            self.current.sections.clear();
+            self.current.reading_positions.clear();
+            self.current.git = GitSnapshot::default();
+            let tx = self.db.unchecked_transaction()?;
+            tx.execute("DELETE FROM search", [])?;
+            tx.execute("DELETE FROM search_fts", [])?;
+            save(&tx, "cache", "snapshot", &self.current)?;
+            tx.commit()?;
+        }
+        Ok(())
     }
     pub fn open_project(&mut self, path: impl AsRef<Path>) -> Result<Snapshot> {
         let before = self.current.clone();
@@ -90,6 +132,7 @@ impl CommandCenter {
     }
     fn open_project_candidate(&mut self, path: &Path) -> Result<Snapshot> {
         let project = index::project(path)?;
+        context::register_project(&self.db, Path::new(&project.path))?;
         if self
             .current
             .project
@@ -121,6 +164,7 @@ impl CommandCenter {
             .project
             .clone()
             .ok_or_else(|| Error::Invalid("select a project first".into()))?;
+        context::check_project(&self.db, Path::new(&old.path))?;
         let attempt = now();
         let result = index::project(Path::new(&old.path)).and_then(|p| {
             if p.id != old.id {
@@ -128,6 +172,7 @@ impl CommandCenter {
                     "repository identity changed; select project again".into(),
                 ));
             }
+            context::register_project(&self.db, Path::new(&p.path))?;
             index::read(&p).map(|(sections, git)| (p, sections, git))
         });
         let previous = self
@@ -201,6 +246,9 @@ impl CommandCenter {
         Ok(self.snapshot())
     }
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<DocumentSection>> {
+        if let Some(project) = &self.current.project {
+            context::check_project(&self.db, Path::new(&project.path))?;
+        }
         let escaped = query
             .trim()
             .replace('\\', "\\\\")
@@ -313,6 +361,9 @@ impl CommandCenter {
         Ok(record)
     }
     pub fn record_reading(&mut self, section_id: &str, revision: &str, line: usize) -> Result<()> {
+        if let Some(project) = &self.current.project {
+            context::check_project(&self.db, Path::new(&project.path))?;
+        }
         if !self
             .current
             .sections
@@ -394,6 +445,9 @@ impl CommandCenter {
         section_id: &str,
         revision: &str,
     ) -> Result<Option<DocumentSection>> {
+        if let Some(project) = &self.current.project {
+            context::check_project(&self.db, Path::new(&project.path))?;
+        }
         load(
             &self.db,
             "history",
@@ -413,6 +467,7 @@ impl CommandCenter {
         if !self.current.sections.iter().any(|s| s.path == relative) {
             return Err(Error::Invalid("path is not an indexed document".into()));
         }
+        context::check_project(&self.db, Path::new(&project.path))?;
         index::safe_path(Path::new(&project.path), relative)
     }
 }

@@ -105,7 +105,7 @@ impl ViewerRuntimeLiveServer {
             delta_event_seq,
         ));
         if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(true)
@@ -147,7 +147,7 @@ impl ViewerRuntimeLiveServer {
         }
 
         if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
 
@@ -166,6 +166,16 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn compat_snapshot(&mut self, current_player_id: Option<&str>) -> WorldSnapshot {
+        self.prune_scoped_gameplay_feedback();
+        let feedback = self.scoped_feedback_for_player(current_player_id);
+        self.compat_snapshot_with_feedback(current_player_id, feedback.as_ref())
+    }
+
+    pub(super) fn compat_snapshot_with_feedback(
+        &mut self,
+        current_player_id: Option<&str>,
+        request_feedback: Option<&PlayerGameplayRecentFeedback>,
+    ) -> WorldSnapshot {
         let mut runtime_snapshot = self.world.snapshot();
         super::snapshot_privacy::omit_private_canonical_chat(&mut runtime_snapshot);
         let runtime_state = &runtime_snapshot.state;
@@ -345,13 +355,28 @@ impl ViewerRuntimeLiveServer {
 
         let micro_depot_facilities =
             WorldKernel::micro_depot_player_facility_snapshots_from_model(&model);
+        // A shared runtime/provider fault remains visible even when this
+        // connection also has a rejected private request. Successful world
+        // progress is the fallback when there is no scoped request feedback.
+        let world_feedback = self.latest_player_gameplay_feedback.as_ref();
+        let world_blocked = world_feedback.is_some_and(|feedback| feedback.stage == "blocked");
+        let recent_feedback = if world_blocked {
+            world_feedback
+        } else {
+            request_feedback.or(world_feedback)
+        };
+        let causality = if !world_blocked && request_feedback.is_some() {
+            None
+        } else {
+            self.latest_player_gameplay_causality.as_ref()
+        };
         let mut player_gameplay = build_player_gameplay_snapshot(
             runtime_state,
             snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
-            self.latest_player_gameplay_feedback.as_ref(),
+            recent_feedback,
             primary_intent,
-            self.latest_player_gameplay_causality.as_ref(),
+            causality,
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),
             self.llm_sidecar.is_llm_mode() && self.supports_agent_chat(),
@@ -456,7 +481,7 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn ensure_gameplay_ready_for_action(
         &mut self,
-        action: &str,
+        _action: &str,
         action_id: Option<&str>,
         target_agent_id: Option<&str>,
     ) -> Result<(), (String, String)> {
@@ -464,17 +489,6 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar
             .ensure_gameplay_ready(&self.world, &self.snapshot_config)
             .map_err(|message| {
-                self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-                    action,
-                    "blocked",
-                    "gameplay action rejected before runtime submission",
-                    Some("submit a gameplay action".to_string()),
-                    target_agent_id.map(ToOwned::to_owned),
-                    Some(message.clone()),
-                    Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
-                    0,
-                    0,
-                ));
                 let code = if self.llm_sidecar.is_llm_mode() {
                     "llm_init_failed"
                 } else {
@@ -575,7 +589,7 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
         if emit_snapshot && session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())
@@ -629,7 +643,7 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
         if emit_snapshot && session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())

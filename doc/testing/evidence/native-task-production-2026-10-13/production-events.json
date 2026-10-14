@@ -1,0 +1,114 @@
+{
+  "source_journal_byte_length": 61451,
+  "source_journal_sha256": "3a07034c0c3129fdc0d3819226aca5c882cc457ec074a78f4011aa8b7ce0bc0f",
+  "events": [
+    {
+      "id": 26,
+      "time": 44,
+      "caused_by": {
+        "type": "Action",
+        "data": 3
+      },
+      "body": {
+        "kind": "Domain",
+        "payload": {
+          "type": "RecipeStarted",
+          "data": {
+            "job_id": 3,
+            "requester_agent_id": "agent-a",
+            "factory_id": "production-factory",
+            "recipe_id": "recipe.smelter.iron_ingot",
+            "accepted_batches": 1,
+            "consume": [
+              {
+                "kind": "carbon_fuel",
+                "amount": 1
+              },
+              {
+                "kind": "iron_ore",
+                "amount": 4
+              }
+            ],
+            "produce": [
+              {
+                "kind": "iron_ingot",
+                "amount": 3
+              }
+            ],
+            "byproducts": [
+              {
+                "kind": "slag",
+                "amount": 1
+              }
+            ],
+            "power_required": 8,
+            "power_owner_agent_id": "agent-a",
+            "duration_ticks": 1,
+            "consume_ledger": "site:production-site",
+            "output_ledger": "site:production-site",
+            "bottleneck_tags": [],
+            "market_quotes": [
+              {
+                "kind": "carbon_fuel",
+                "requested_amount": 1,
+                "local_available_amount": 2,
+                "world_available_amount": 0,
+                "local_deficit_amount": 0,
+                "transit_loss_bps": 5,
+                "governance_tax_bps": 500,
+                "effective_cost_index_ppm": 1050500
+              },
+              {
+                "kind": "iron_ore",
+                "requested_amount": 4,
+                "local_available_amount": 8,
+                "world_available_amount": 0,
+                "local_deficit_amount": 0,
+                "transit_loss_bps": 5,
+                "governance_tax_bps": 500,
+                "effective_cost_index_ppm": 1050500
+              }
+            ],
+            "logistics_route_ids": [],
+            "logistics_path_ids": [],
+            "ready_at": 45
+          }
+        }
+      }
+    },
+    {
+      "id": 28,
+      "time": 45,
+      "caused_by": null,
+      "body": {
+        "kind": "Domain",
+        "payload": {
+          "type": "RecipeCompleted",
+          "data": {
+            "job_id": 3,
+            "requester_agent_id": "agent-a",
+            "factory_id": "production-factory",
+            "recipe_id": "recipe.smelter.iron_ingot",
+            "accepted_batches": 1,
+            "produce": [
+              {
+                "kind": "iron_ingot",
+                "amount": 3
+              }
+            ],
+            "byproducts": [
+              {
+                "kind": "slag",
+                "amount": 1
+              }
+            ],
+            "output_ledger": "site:production-site",
+            "bottleneck_tags": [],
+            "logistics_route_ids": [],
+            "logistics_path_ids": []
+          }
+        }
+      }
+    }
+  ]
+}

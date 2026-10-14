@@ -31,12 +31,12 @@
 - Proposed Solution: 将 engineering 模块定义为工程治理主文档，统一维护规范、质量门禁、改造节奏与验收口径。
 - Success Criteria:
   - SC-1: Rust 单文件超 1200 行新增违规数为 0。
-  - SC-2: Markdown 单文件超 1000 行新增违规数为 0。
+  - SC-2: Markdown 长度只作编辑提示，不因超过 1000 行阻断验证或要求豁免；缺失引用、结构错误等真实检查继续生效，Rust 体量规则不变。
   - SC-3: `scripts/doc-governance-check.sh` 在 required gate 连续通过。
   - SC-4: 工程类任务 100% 映射到 PRD-ENGINEERING-ID。
   - SC-5: `doc/` 根目录与模块根目录平铺文档新增违规数为 0（allowlist 冻结机制）。
-  - SC-6: 重点模块（world-simulator/p2p/world-runtime/testing/site/readme/scripts/game/headless-runtime）根目录平铺专题文档迁移完成并保持引用闭环。
-  - SC-8: 完成四人并行迁移分工，待迁移清单有冻结快照且每日可追踪燃尽进度。
+  - SC-6: 重点模块的当前主责入口和活跃引用保持可达、语义一致；已停止的历史平铺专题迁移不作为当前开发或交付前置。
+  - SC-8: 治理按当前明确缺口有界交付，不恢复固定人数、冻结迁移批次或每日燃尽台账；历史执行安排仅供追溯。
   - SC-9: 活跃文档 `doc/...*.md` 依赖路径断链数为 0。
   - SC-12: 文档-代码偏差在同批次回写闭环率 100%。
   - SC-14: 角色职责入口统一收敛到 `.agents/roles/*.md`，根 `AGENTS.md` 仅保留 7 个组合角色入口与协作规则。
@@ -98,7 +98,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 文档治理检查 | allowlist、模块根目录规则、根目录规则 | 执行 `doc-governance-check.sh` | `pass/fail` | 按违规严重度输出 | 所有人可执行，治理维护者可更新基线 |
 | 工程趋势统计 | 违规率、修复时长、回归率 | 周期性生成报表并复盘 | `collecting -> reported -> actioned` | 按模块与时间排序 | 评审者与维护者可读写 |
-| 并行迁移协作 | Owner、范围、快照日期、燃尽统计 | 依据协作方案分批推进迁移 | `planned -> in_progress -> done` | 目录前缀互斥，按负载均衡调整 | 协调人分配，Owner 执行，复核人抽检 |
+| 有界并行治理 | 明确负责人、当前缺口、实际写入范围和验证结果 | 围绕当前有效缺口协作，不恢复已退役迁移排程 | 按 PR 和实际验证记录进展 | 写入范围避免重叠，必要上下文按需交接 | 负责人协调，适用评审复核 |
 | PRD 文件级索引 | 模块名、专题PRD路径、专题project路径 | 生成/更新模块索引并回写入口引用 | `missing -> indexed -> verified` | 活跃文档优先，按路径稳定排序 | 维护者可更新，所有贡献者可读 |
 | 依赖路径可达门禁 | 引用文档路径、引用来源、豁免列表 | 校验 `doc/...*.md` 引用目标是否存在 | `pass/fail` | 默认全量校验，通配符/模板与白名单文件豁免 | 维护者维护豁免，提交者必须修复断链 |
 | 文档分工与组织规范 | 对象层级（模块/专题/分册）、职责后缀（PRD/Design/Project/Runbook/Manual） | 为新主题选择落点并按规则建档 | `unclassified -> classified -> indexed -> reviewed` | 目录按领域/专题，文件按职责，优先同名三件套 | 作者可建档，评审者可裁定例外 |
@@ -108,13 +108,13 @@
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 模板按实际需要使用，不要求传递协议 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
-  - AC-2: engineering project 文档维护任务拆解与状态。
+  - AC-2: 普通变更由 PR 描述、实际 CI 与评审承载交付事实；Issue/Project 按需使用，不维护本地 project 状态副本。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 的口径一致。
-  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并进入主项目追踪。
+  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界；复杂协调按需使用 Issue/Project，不作为普通 PR 准入。
   - AC-6: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
   - AC-8: 每次迁移任务需附“原文关键约束点 -> 新文档章节”对照，确保内容不丢失。
-  - AC-9: 并行迁移必须有公开分工表、待迁移快照和每日燃尽更新机制。
-  - AC-11: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
+  - AC-9: 并行治理按实际修改范围避免重叠并保留必要交接；旧迁移分工表、冻结批次和每日燃尽不作为当前交付条件。
+  - AC-11: 专题需求、设计和当前导航应能互相追溯；适用检查以现行文档治理入口为准，不恢复 PRD/project 双向互链门禁。
   - AC-13: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
   - AC-14: 2026-03 全量 PRD 审读留痕必须可通过 historical round logs / deleted snapshot prose 追溯；当前不再要求存在旧 checklist 目录活跃清单面。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -136,11 +136,11 @@
 
 ### PRD-ENGINEERING-034：项目开发指挥客户端
 
-为项目负责人提供 macOS 优先的独立桌面入口，关联短期与长期目标、当前适用规范及其理由、Git/PR/CI 交付事实和开发会话，帮助用户定位下一项交付与真正需要处理的问题。
+为项目负责人提供 macOS 优先的独立桌面入口，围绕“看清重点与变化—进入一项工作—处理真实问题—回看结果”接续已有开发现场。首页直接呈现目标、成果、下一步和待处理；同一工作详情关联适用规范及理由、环境/工作树、PR/CI和原工具或自管会话入口。
 
 - 产品范围、四视图、主要失败恢复和验收条件由 [指挥客户端产品设计](command-center/command-center.prd.md) 主责；技术选型、组件、数据和连接合同由 [系统设计](command-center/command-center.design.md) 承接。
 - 该客户端属于 engineering 开发工具，沿用现有文档、Git 与运行来源的事实边界；不扩展游戏产品模块，不新增通用任务登记或开发审批。
-- 当前是待实施设计；文档采纳、应用实现、运行验证和发布分别判断，实际交付事实见 PR、实际 CI 与评审记录。
+- 已有来源/桌面基础、手工关联及可选自管执行；2026-10-13 产品收敛将首页判断、统一工作详情、关联复用/修复及三个日常场景列为基础首版。新的完整闭环尚待实现和验收，范围与差距见配对系统设计 §11；文档采纳、应用实现、运行验证和发布分别判断。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 文档治理脚本、CI 测试脚本、静态检查脚本。
@@ -190,7 +190,7 @@
   - NFR-ENG-4: 工程治理脚本在 Windows、Linux/macOS 环境均可执行。
   - NFR-ENG-5: 规则变更需附带可追溯说明与回归证据。
   - NFR-ENG-6: 活跃文档迁移任务必须包含“原文约束点清单 + 新文档章节映射 + 回归验证结果”三件套证据。
-  - NFR-ENG-7: 并行迁移阶段每工作日至少完成 16 篇迁移（4 人 * 人均 4 篇）。
+  - NFR-ENG-7: 治理收益按当前规则冲突、失效入口和实际消费者缺口的消除判定；不规定固定人数或每日迁移篇数。
   - NFR-ENG-8: 全部模块文件级索引应在 1 次 `doc-governance-check` 执行内完成可达性校验。
   - NFR-ENG-9: 活跃专题 PRD/project 双向互链覆盖率 100%。
   - NFR-ENG-10: 模块主项目任务测试分层显式标注覆盖率 100%。
@@ -217,7 +217,9 @@
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+
+旧 TASK-ENGINEERING 编号、Owner-B 115 篇与旧迁移/aftercare 记录只作原版本来源，不是当前队列或完成证明；未定位原 Task 的过程保留在固定 Git 历史与本表，不批量代配到总体治理 Task。当前验证仍按有效方法列及 workflow source of truth 选择。
+| PRD-ID | 历史来源或验证入口 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-001 | TASK-ENGINEERING-001/005/006/007 | `test_tier_required` | 文档结构检查、平铺治理脚本执行 | 文档组织一致性、工程可维护性 |
 | PRD-ENGINEERING-002 | TASK-ENGINEERING-002/003/007 | `test_tier_required` + `test_tier_full` | `commit` baseline 与 required/full CI 门禁联动校验 | 提交流程稳定性、回归拦截能力 |
@@ -227,8 +229,8 @@
 | PRD-ENGINEERING-006 | TASK-ENGINEERING-011/012/013/013A/013B/013C/013D/014 | historical-only | 迁移批次已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-007 | TASK-ENGINEERING-015 | historical-only | 全量迁移收尾复核已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-008 | TASK-ENGINEERING-016 | `test_tier_required` | 12 模块文件级索引覆盖扫描、入口可达性检查 | 文档树可达性与导航一致性 |
-| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | `doc-governance-check` 双向互链门禁验证 | PRD/project 追溯完整性 |
-| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 模块主项目任务项 tier 显式标注检查 | 任务到测试分层可审计性 |
+| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | 现行 `doc-governance-check` 的入口/引用核验，不恢复 project 投影 | PRD/project 追溯完整性 |
+| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 适用 PR 的实际测试范围、tier 和 CI 结果核对；Issue 按需 | 任务到测试分层可审计性 |
 | PRD-ENGINEERING-011 | TASK-ENGINEERING-019 | `test_tier_required` | 活跃文档引用路径可达性门禁与断链修复验证 | 文档树引用完整性与迁移稳定性 |
 | PRD-ENGINEERING-012 | TASK-ENGINEERING-020/024 | `test_tier_required` | 历史审读留痕与入口文档已读率检查 | PRD 审读可追溯性 |
 | PRD-ENGINEERING-013 | TASK-ENGINEERING-021/022 | `test_tier_required` | 代码一致性抽样与偏差回写核验 | 文档行为与实现一致性 |
@@ -270,3 +272,7 @@
 | DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
 | DEC-ENG-023 | 先冻结“阅读面分层”而不是立刻重组目录树；`活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的差异先体现在 root README、模块 README、`prd.index.md` 与专题互链上 | 立即重引入 `archive/` 树或直接批量移动 `reviews/governance/evidence` 文件 | 当前问题首先是默认阅读面过宽，而不是路径本身不可存放；先压缩入口和消费层，风险最小，也不破坏现有引用稳定性。 |
+
+## PRD-ENGINEERING-035 私有资料管理工具
+
+机器、环境与操作说明保存在独立私有 Markdown 库，支持条件更新、本地历史与加密新目录恢复。需求与验收见 [私有资料产品需求](private-context/private-context.prd.md)，实现合同见 [系统设计](private-context/private-context.design.md)。

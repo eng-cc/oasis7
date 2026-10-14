@@ -6,6 +6,7 @@ license = "MIT"
 description = "Portable provider and cognition harness primitives for Oasis7 agents"
 
 [dependencies]
+blake3 = "1"
 oasis7_agent_api = { version = "0.1.0", path = "../oasis7_agent_api" }
 oasis7_wasm_abi = { version = "0.1.0", path = "../oasis7_wasm_abi" }
 serde = { version = "1", features = ["derive"] }

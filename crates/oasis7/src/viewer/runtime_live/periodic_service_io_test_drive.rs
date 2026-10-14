@@ -2,15 +2,55 @@
 //! Session and pending-map changes below are internal test seams, not public admissions.
 use super::*;
 
-fn witness(server: &ViewerRuntimeLiveServer) -> serde_json::Value {
+fn witness(server: &ViewerRuntimeLiveServer, session: &RuntimeLiveSession) -> serde_json::Value {
     serde_json::json!({
         "world": server.world.snapshot(),
         "cognition": server.world.cognition(),
         "pending": server.pending_world_service_gameplay,
         "feedback": server.latest_player_gameplay_feedback,
+        "private_feedback_players": server.scoped_gameplay_feedback.len(),
+        "private_feedback_origins": server.pending_gameplay_feedback.len(),
+        "session_feedback_reader": session.gameplay_feedback_owner.is_some(),
+        "session_feedback": session.local_gameplay_feedback.lock().unwrap().feedback.clone(),
         "version": server.verified_world_view.as_ref().map(VerifiedWorldView::version),
         "cursor": server.verified_world_view.as_ref().map(VerifiedWorldView::continuation),
     })
+}
+
+fn assert_ownerless_feedback_is_absent(
+    server: &ViewerRuntimeLiveServer,
+    session: &RuntimeLiveSession,
+) {
+    assert!(server.latest_player_gameplay_feedback.is_none());
+    assert!(server.scoped_gameplay_feedback.is_empty());
+    assert!(server.pending_gameplay_feedback.is_empty());
+    assert!(session.gameplay_feedback_owner.is_none());
+    assert!(
+        session
+            .local_gameplay_feedback
+            .lock()
+            .unwrap()
+            .feedback
+            .is_none()
+    );
+}
+
+fn assert_ownerless_snapshot_feedback_is_absent(emitted: &[u8]) -> usize {
+    let mut snapshots = 0;
+    for response in serde_json::Deserializer::from_slice(emitted).into_iter::<ViewerResponse>() {
+        if let ViewerResponse::Snapshot { snapshot } = response.expect("valid Viewer response") {
+            let gameplay = snapshot
+                .player_gameplay
+                .expect("actual snapshot must contain the gameplay projection");
+            assert!(
+                gameplay.recent_feedback.is_none(),
+                "canonical lookup without a Viewer request origin leaked private feedback: {:?}",
+                gameplay.recent_feedback
+            );
+            snapshots += 1;
+        }
+    }
+    snapshots
 }
 
 impl ViewerRuntimeLiveServer {
@@ -32,6 +72,9 @@ impl ViewerRuntimeLiveServer {
             let mut server = shared.lock().unwrap();
             server.verified_world_view = Some(baseline);
             server.pending_world_service_gameplay = original;
+            // The real canonical operation was admitted outside this Viewer.
+            // An internal pending tuple is not a session's signed request origin.
+            assert_ownerless_feedback_is_absent(&server, &session);
         }
         let mut poll = SessionPoll::default();
         let mut emitted = Vec::new();
@@ -78,7 +121,7 @@ impl ViewerRuntimeLiveServer {
                 other => panic!("unknown late completion test seam {other}"),
             }
         }
-        let before = witness(&shared.lock().unwrap());
+        let before = witness(&shared.lock().unwrap(), &session);
         gate("release");
         // Receive the genuine worker capsule, then transfer it unchanged into
         // production poll's mailbox. This bounds the test without inventing an outcome.
@@ -112,7 +155,9 @@ impl ViewerRuntimeLiveServer {
             poll.result.is_none(),
             "completion must be consumed without fresh dispatch"
         );
-        let after = witness(&shared.lock().unwrap());
+        let after = witness(&shared.lock().unwrap(), &session);
+        assert_ownerless_feedback_is_absent(&shared.lock().unwrap(), &session);
+        let first_snapshot_count = assert_ownerless_snapshot_feedback_is_absent(&emitted);
         if change == "matching" {
             assert!(
                 shared
@@ -121,14 +166,19 @@ impl ViewerRuntimeLiveServer {
                     .pending_world_service_gameplay
                     .is_empty()
             );
-            assert_eq!(after["feedback"]["action"], "world_service_intent");
-            assert_eq!(after["feedback"]["stage"], "committed");
+            assert!(
+                first_snapshot_count > 0,
+                "matching completion must publish its view"
+            );
         } else if change == "pending" {
             assert_eq!(
                 shared.lock().unwrap().pending_world_service_gameplay,
                 replacement
             );
-            assert_ne!(after["feedback"]["action"], "world_service_intent");
+            assert!(
+                first_snapshot_count > 0,
+                "accepted view must still be published"
+            );
         } else {
             assert_eq!(
                 after, before,
@@ -203,6 +253,12 @@ impl ViewerRuntimeLiveServer {
             );
             fresh_poll_verified = true;
         }
+        assert_ownerless_feedback_is_absent(&shared.lock().unwrap(), &session);
+        let anonymous_snapshot_count = assert_ownerless_snapshot_feedback_is_absent(&emitted);
+        assert!(
+            anonymous_snapshot_count > 0,
+            "current-token completion must emit a real anonymous snapshot"
+        );
         drop(poll);
         let executor = shared
             .lock()
@@ -226,6 +282,7 @@ impl ViewerRuntimeLiveServer {
         );
         serde_json::json!({"change":change,"actual_lookup_count":actual_lookup_count,
             "actual_signed_view_changes_validated":true,"before":before,"after":after,
+            "anonymous_snapshot_count":anonymous_snapshot_count,"ownerless_feedback_absent":true,
             "emitted_bytes":emitted.len(),"fresh_current_token_poll_verified":fresh_poll_verified,"internal_test_drive":true})
     }
 }

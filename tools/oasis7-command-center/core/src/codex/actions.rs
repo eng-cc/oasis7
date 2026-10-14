@@ -21,7 +21,7 @@ impl Runtime {
         if let Some(value)=self.perform(&scope,"thread/start",None,None,json!({"cwd":project.path,"model":config.model,"approvalPolicy":"on-request","sandbox":"workspace-write","ephemeral":false}),false)?{
         let thread=value["thread"]["id"].as_str().filter(|id|!id.is_empty()).ok_or_else(||Error::Invalid("thread/start response lacks identity".into()))?.to_string();
         let connection=&self.connections[&scope];let mut shared=connection.shared.lock().unwrap();let instance=shared.snapshot.instance_id.clone().unwrap();
-        shared.snapshot.sessions.push(RuntimeSession{purpose:config.purpose,scope:config.scope,model:value["model"].as_str().map(str::to_owned),basis_revision:config.basis_revision,thread_id:thread,instance_id:instance,turn_id:None,state:"idle".into(),owned:true,background_state:"clear".into(),restorable_history:false});}
+        shared.snapshot.sessions.push(RuntimeSession{purpose:config.purpose,scope:config.scope,model:value["model"].as_str().map(str::to_owned),basis_revision:config.basis_revision,thread_id:thread,instance_id:instance,turn_id:None,state:"idle".into(),owned:true,background_state:"clear".into(),restorable_history:false,private_sources:vec![]});}
         self.snapshot(project)
     }
     fn prune_terminal_session(&mut self, scope: &str) -> Result<()> {
@@ -162,7 +162,7 @@ impl Runtime {
         }
         self.snapshot(project)
     }
-    fn input(input: &str) -> Result<()> {
+    pub(super) fn input(input: &str) -> Result<()> {
         if input.trim().is_empty() || input.len() > 32768 {
             return Err(Error::Invalid(
                 "input must be nonempty and at most 32 KiB".into(),
@@ -393,6 +393,7 @@ mod capacity_tests {
             owned: true,
             background_state: "clear".into(),
             restorable_history: true,
+            private_sources: vec![],
         };
         assert!(terminal_summary_removable(&session, &[], &[]));
         for state in ["active", "waiting", "unknown"] {

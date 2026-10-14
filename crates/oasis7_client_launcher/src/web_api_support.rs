@@ -6,8 +6,8 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub(crate) enum WebApiEvent {
-    State(Result<WebStateSnapshot, String>),
-    Action(Result<WebApiResponse, String>),
+    State(u64, Result<WebStateSnapshot, String>),
+    Action(u64, Result<WebApiResponse, String>),
     #[cfg(target_arch = "wasm32")]
     Feedback(Result<WebFeedbackSubmitResponse, String>),
     Transfer(Result<WebTransferSubmitResponse, String>),

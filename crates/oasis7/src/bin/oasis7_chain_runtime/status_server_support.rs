@@ -89,6 +89,16 @@ pub(super) fn start_chain_status_server(
 ) -> Result<ChainStatusServer, String> {
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind status server at {host}:{port}: {err}"))?;
+    let private_goal_store = super::world_service_api::private_goal::configured_store(
+        listener
+            .local_addr()
+            .map_err(|_| "status listener address unavailable")?,
+        &[
+            &execution_world_dir,
+            &execution_records_dir,
+            &execution_storage_root,
+        ],
+    )?;
     listener
         .set_nonblocking(true)
         .map_err(|err| format!("failed to set status server listener nonblocking: {err}"))?;
@@ -115,6 +125,7 @@ pub(super) fn start_chain_status_server(
             storage_metrics,
             feedback_submit_signer,
             runtime_authority_binding,
+            private_goal_store,
         ) {
             let _ = error_tx.send(err);
         }
@@ -188,6 +199,7 @@ fn run_chain_status_server_loop(
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
     runtime_authority_binding: Option<super::runtime_authority::RuntimeAuthorityBinding>,
+    private_goal_store: Option<Arc<oasis7::world_service::private_goal_store::PrivateGoalStore>>,
 ) -> Result<(), String> {
     let admission = super::status_admission::Admission::default();
     loop {
@@ -220,6 +232,7 @@ fn run_chain_status_server_loop(
                 let storage_metrics = Arc::clone(&storage_metrics);
                 let feedback_submit_signer = feedback_submit_signer.clone();
                 let runtime_authority_binding = runtime_authority_binding.clone();
+                let private_goal_store = private_goal_store.clone();
                 thread::spawn(move || {
                     let _permit = permit;
                     if let Err(err) = handle_chain_status_connection(
@@ -239,6 +252,7 @@ fn run_chain_status_server_loop(
                         storage_metrics,
                         &feedback_submit_signer,
                         runtime_authority_binding.as_ref(),
+                        private_goal_store,
                     ) {
                         let stderr_message =
                             format!("warning: chain status connection failed: {err}");
@@ -281,6 +295,7 @@ fn handle_chain_status_connection(
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: &FeedbackSubmitSigner,
     runtime_authority_binding: Option<&super::runtime_authority::RuntimeAuthorityBinding>,
+    private_goal_store: Option<Arc<oasis7::world_service::private_goal_store::PrivateGoalStore>>,
 ) -> Result<(), String> {
     stream
         .set_nonblocking(false)
@@ -317,6 +332,21 @@ fn handle_chain_status_connection(
     let target = parts.next().unwrap_or_default();
     let path = target.split('?').next().unwrap_or(target);
     let head_only = method.eq_ignore_ascii_case("HEAD");
+    if super::world_service_api::private_goal::maybe_handle(
+        &mut stream,
+        &request_bytes,
+        &runtime,
+        method,
+        target,
+        world_id,
+        execution_world_dir,
+        execution_records_dir,
+        execution_storage_root,
+        feedback_submit_signer,
+        private_goal_store.as_deref(),
+    )? {
+        return Ok(());
+    }
     if super::world_service_api::maybe_handle(
         &mut stream,
         &request_bytes,

@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "3eed72aa5f1fabb2ffea83e5ace5229460549a961b18cebf54eeb9ddf0ad2a18",
+    "content_sha256": "5f63bb5a2c1b51b194c5a60e4a0a8c74b28cfe6826c266a9e4ed7bd13029158a",
     "current_authority": "doc/playability_test_result/game-test.prd.md",
     "decision_owner": "gameplay_designer",
     "disposition": "retain_current_authority",
-    "note": "game-test design",
+    "note": "game-test design; reviewed #4438 release/UI and actual-session entry with existing RunResult/review contracts and paired validation mappings; current authority retained; planned scenarios are not executed proof",
     "path": "doc/playability_test_result/game-test.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

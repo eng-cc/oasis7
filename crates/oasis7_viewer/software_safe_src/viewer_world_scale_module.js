@@ -85,7 +85,7 @@ export function createViewerWorldScaleModule({
     return `${width} × ${depth} × ${height}`;
   }
 
-  function selectedWorldAnchor() {
+  function selectedWorldAnchor(locations) {
     const selected = state.selectedObject;
     if (selected && finitePositionComponents(selected.pos)) {
       return {
@@ -97,7 +97,6 @@ export function createViewerWorldScaleModule({
       };
     }
 
-    const locations = Object.values(state.snapshot?.model?.locations || {});
     const fallback = locations.find((location) => location?.pos);
     if (!fallback) {
       return null;
@@ -157,9 +156,9 @@ export function createViewerWorldScaleModule({
     const isZh = isLocaleZh(locale);
     const space = snapshotSpaceConfig();
     const worldBoundsLabel = formatWorldBoundsLabel(space, locale);
-    const anchor = selectedWorldAnchor();
-    const locations = Object.values(state.snapshot?.model?.locations || {})
-      .filter((location) => location?.id && location?.pos);
+    const allLocations = Object.values(state.snapshot?.model?.locations || {});
+    const anchor = selectedWorldAnchor(allLocations);
+    const locations = allLocations.filter((location) => location?.id && location?.pos);
 
     const nearestLocations = nearestLocationsForAnchor(anchor, locations, locale);
 

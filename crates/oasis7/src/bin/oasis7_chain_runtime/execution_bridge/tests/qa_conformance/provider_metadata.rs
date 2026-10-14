@@ -42,6 +42,38 @@ impl MetadataServer {
             delivered.len()
         );
     }
+
+    pub(super) fn assert_canonical_terminal_feedback_delivery(
+        &self,
+        fixture: &Fixture,
+        terminal_feedback_id: &str,
+    ) {
+        let delivered = self.feedback_payloads.lock().unwrap();
+        assert!(
+            !delivered.is_empty(),
+            "genuine Wait/wake must deliver Runtime feedback to its configured provider"
+        );
+        let driver = fixture.driver.lock().unwrap();
+        let records = driver.execution_world.runtime_feedback_outbox().unwrap();
+        for raw in delivered.iter() {
+            let record = records
+                .iter()
+                .find(|record| record.payload == *raw)
+                .expect("provider must receive exact canonical Runtime feedback");
+            record.validate().unwrap();
+        }
+        assert!(
+            delivered
+                .iter()
+                .any(|raw| { raw["feedback_id"].as_str() == Some(terminal_feedback_id) }),
+            "terminal Wait/wake feedback must reach the configured provider"
+        );
+        println!(
+            "actual_provider_feedback_delivery_count={} terminal_feedback_delivered=true exact_canonical_payload=true",
+            delivered.len()
+        );
+    }
+
     pub(super) fn start(
         gates: Option<std::path::PathBuf>,
         accounting_root: std::path::PathBuf,

@@ -2,57 +2,149 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORKFLOW="$ROOT_DIR/.github/workflows/release-packages.yml"
-
-python3 - "$WORKFLOW" <<'PY'
+python3 - "$ROOT_DIR" <<'PY'
 from pathlib import Path
+import os
 import re
+import subprocess
 import sys
+import tempfile
+import textwrap
 
-workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
-
-env = re.search(
-    r"^  TRUNK_VERSION: (?P<version>[0-9]+\.[0-9]+\.[0-9]+)$",
-    workflow,
-    re.MULTILINE,
-)
-assert env, "release workflow must pin TRUNK_VERSION"
-version = env.group("version")
+root = Path(sys.argv[1])
+workflow = (root / ".github/workflows/release-packages.yml").read_text()
+rust = (root / ".github/workflows/rust.yml").read_text()
+installer = (root / "scripts/install-ci-trunk.sh").read_text()
 
 
-def step(name: str) -> str:
+def job(source: str, name: str) -> str:
     match = re.search(
-        rf"^      - name: {re.escape(name)}\n(?P<body>.*?)(?=^      - name: |\Z)",
-        workflow,
+        rf"^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        source.split("\njobs:\n", 1)[1],
         re.MULTILINE | re.DOTALL,
     )
-    assert match, f"missing release workflow step: {name}"
+    assert match, f"missing workflow job: {name}"
     return match.group("body")
 
 
-cache = step("Restore pinned trunk binary")
-assert "uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" in cache
-assert "path: ~/.cargo/bin/trunk" in cache
-for key_part in (
-    "runner.os",
-    "runner.arch",
-    "env.RUST_TOOLCHAIN",
-    "env.TRUNK_VERSION",
-):
-    assert key_part in cache, f"trunk cache key must include {key_part}"
+def step(body: str, name: str) -> str:
+    matches = re.findall(
+        rf"^      - name: {re.escape(name)}\n(.*?)(?=^      - |\Z)",
+        body,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert len(matches) == 1, f"expected exactly one workflow step: {name}"
+    return matches[0]
 
-install = step("Install pinned trunk")
-assert 'if: steps.trunk-cache.outputs.cache-hit != \'true\'' in install
-assert 'cargo install trunk --locked --version "${TRUNK_VERSION}"' in install
 
-verify = step("Verify pinned trunk")
-assert 'trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"' in verify
+def field(body: str, name: str, indent: int = 8) -> str:
+    matches = re.findall(rf"^{' ' * indent}{re.escape(name)}: (.+)$", body, re.MULTILINE)
+    assert len(matches) == 1, f"expected exactly one {name} field"
+    return matches[0]
 
-build = step("Build web dists")
-assert "trunk build --release" in build
-assert workflow.index("Restore pinned trunk binary") < workflow.index("Build web dists")
 
-assert f'cargo install trunk --locked --version "${{TRUNK_VERSION}}"' in workflow
-assert "cargo install trunk --locked\n" not in workflow
-print(f"ok: release workflow caches and verifies pinned trunk {version} before web build")
+def run(body: str) -> str:
+    value = field(body, "run")
+    if value == "|":
+        return textwrap.dedent(body.split("        run: |\n", 1)[1])
+    return value
+
+
+versions = re.findall(r"^  TRUNK_VERSION: ([0-9]+\.[0-9]+\.[0-9]+)$", workflow, re.MULTILINE)
+assert len(versions) == 1, "release workflow must pin exactly one TRUNK_VERSION"
+version = versions[0]
+assert re.findall(r"^  TRUNK_VERSION: (.+)$", rust, re.MULTILINE) == versions
+assert re.findall(r"^version=(.+)$", installer, re.MULTILINE) == versions
+
+web = job(workflow, "build-web-dist")
+writer = job(rust, "full-regression")
+candidate = job(rust, "candidate-full-regression")
+preflight = step(web, "Verify release Trunk installer")
+cache = step(web, "Restore pinned Trunk release archive")
+install = step(web, "Install verified pinned Trunk")
+verify = step(web, "Verify pinned trunk")
+writer_cache = step(writer, "Cache pinned Trunk release archive")
+candidate_cache = step(candidate, "Cache pinned Trunk release archive")
+
+expected_action = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
+assert field(cache, "uses") == expected_action == field(candidate_cache, "uses")
+expected_path = "${{ runner.temp }}/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz"
+expected_key = (
+    "trunk-archive-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}-"
+    "${{ hashFiles('scripts/install-ci-trunk.sh') }}"
+)
+for body in (cache, writer_cache, candidate_cache):
+    assert field(body, "path", 10) == expected_path
+    assert field(body, "key", 10) == expected_key
+    assert "restore-keys:" not in body, "a different installer identity must stay cold"
+assert "cache-mode: write" in writer
+assert "github.ref == 'refs/heads/main'" in writer
+assert "actions/cache@" not in web and "actions/cache/save@" not in web
+assert "release-packages-trunk-" not in workflow and "~/.cargo/bin/trunk" not in workflow
+assert not re.search(r"\bcargo\s+install\s+trunk\b", workflow)
+
+# A cache hit must still call the verified installer; failures must stop the build.
+for body in (preflight, cache, install, verify):
+    assert not re.search(r"^        (?:if|continue-on-error):", body, re.MULTILINE)
+for body in (preflight, install, verify):
+    assert field(body, "shell") == "bash"
+expected_install = (
+    'bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" '
+    '"$RUNNER_TEMP/ci-tools/bin"'
+)
+assert run(install) == expected_install
+assert 'trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"' in run(verify)
+source = step(web, "Verify planned source HEAD")
+assert 'EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}' in source
+assert run(source) == 'test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"'
+assert 'ref: ${{ needs.plan.outputs.checkoutSha }}' in web
+assert "persist-credentials: false" in web
+order = (
+    "actions/checkout@", "Verify planned source HEAD", "Verify release Trunk installer",
+    "Restore pinned Trunk release archive", "Install verified pinned Trunk",
+    "Verify pinned trunk", "Build web dists",
+)
+assert [web.index(name) for name in order] == sorted(web.index(name) for name in order)
+assert "trunk build --release" in step(web, "Build web dists")
+
+# Exercise the actual workflow shell with a local installer spy, without downloads.
+with tempfile.TemporaryDirectory(prefix="release-trunk-contract-") as directory:
+    fixture = Path(directory)
+    scripts = fixture / "scripts"
+    scripts.mkdir()
+    helper = scripts / "install-ci-trunk.sh"
+    calls = fixture / "calls"
+    env = dict(os.environ, RUNNER_TEMP=str(fixture / "runner temp"), TEST_INSTALL_CALLS=str(calls))
+
+    def invoke(body: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", run(body)],
+            cwd=fixture, env=env, text=True, capture_output=True,
+        )
+
+    missing = invoke(preflight)
+    assert missing.returncode != 0 and "planned release source" in missing.stderr
+    helper.touch()
+    assert invoke(preflight).returncode != 0, "an empty helper must fail before cache restore"
+    helper.unlink()
+    target = fixture / "outside.sh"
+    target.write_text("exit 0\n")
+    helper.symlink_to(target)
+    assert invoke(preflight).returncode != 0, "source symlinks must fail before cache restore"
+    helper.unlink()
+    helper.write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\n'
+        'printf "%s\\n" "$@" > "$TEST_INSTALL_CALLS"\n'
+        'exit "${TEST_INSTALL_EXIT:-0}"\n'
+    )
+    assert invoke(preflight).returncode == 0
+    assert invoke(install).returncode == 0
+    assert calls.read_text().splitlines() == [
+        str(fixture / "runner temp/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz"),
+        str(fixture / "runner temp/ci-tools/bin"),
+    ]
+    env["TEST_INSTALL_EXIT"] = "42"
+    assert invoke(install).returncode == 42, "installer failure must propagate"
+
+print(f"ok: release restores the shared archive and always verifies Trunk {version}; source preflight and failure paths pass")
 PY

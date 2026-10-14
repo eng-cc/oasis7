@@ -1,4 +1,5 @@
 //! Transactional cleanup of a real provider Wait rejected before Runtime admission.
+use super::super::test_support::BuiltinWaitBehavior;
 use super::*;
 use crate::simulator::{
     ActionCatalogEntry, COGNITION_CAPABILITY_CATALOG_DOMAIN,
@@ -244,6 +245,7 @@ fn fixture() -> (
     ContinuationProposalV1,
     ContinuationCurrentContextV1,
     ContinuousAgentRequestContextV1,
+    std::sync::Arc<std::sync::Mutex<crate::simulator::MockDecisionProviderState>>,
 ) {
     let original = request_from_value(production_request_fixture(1, 60_000));
     let mut current = current_context();
@@ -269,6 +271,7 @@ fn fixture() -> (
         "rejected-wait",
         vec![Ok(DecisionResponse::wait("rejected-wait"))],
     );
+    let provider_state = provider.shared_state();
     let behavior = ProviderBackedAgentBehavior::new(
         "agent-1",
         provider,
@@ -278,6 +281,11 @@ fn fixture() -> (
     .with_execution_mode(ProviderExecutionMode::HeadlessAgent);
     let mut runner = AsyncAgentRunner::new(16).unwrap();
     runner.register(behavior).unwrap();
+    // This test exercises a production request, so install an explicitly
+    // host-validated empty feedback history before the first production turn.
+    runner
+        .restore_preverified_scoped_feedback_history(&[])
+        .unwrap();
     let id = runner
         .start_turn_with_request_context_and_observation(
             "agent-1",
@@ -310,7 +318,7 @@ fn fixture() -> (
     runner
         .submit_continuation_proposal_with_current_context("agent-1", proposal.clone(), &current)
         .unwrap();
-    (runner, proposal, current, original)
+    (runner, proposal, current, original, provider_state)
 }
 fn state(runner: &AsyncAgentRunner) -> String {
     format!(
@@ -319,12 +327,12 @@ fn state(runner: &AsyncAgentRunner) -> String {
         runner.continuations,
         runner.awaiting_runtime,
         runner.awaiting_outcomes,
-        runner.feedback_store
+        runner.harness.cognition_state_digest_for_test()
     )
 }
 #[test]
 fn real_wait_rejected_cleanup_releases_exact_turn() {
-    let (mut r, p, c, o) = fixture();
+    let (mut r, p, c, o, _) = fixture();
     let actors = r.actors.len();
     let rejected = r
         .with_rejected_unprojected_wait_cleanup("agent-1", &p, &c, &o, |h| {
@@ -343,7 +351,7 @@ fn real_wait_rejected_cleanup_releases_exact_turn() {
 }
 #[test]
 fn persist_failure_restores_five_collections_and_can_retry() {
-    let (mut r, p, c, o) = fixture();
+    let (mut r, p, c, o, provider_state) = fixture();
     let before = state(&r);
     assert!(
         r.with_rejected_unprojected_wait_cleanup("agent-1", &p, &c, &o, |_| Err(
@@ -352,17 +360,60 @@ fn persist_failure_restores_five_collections_and_can_retry() {
         .is_err()
     );
     assert_eq!(state(&r), before);
+    assert_eq!(
+        provider_state
+            .lock()
+            .expect("provider state lock")
+            .recorded_requests
+            .len(),
+        1,
+        "failed persistence must not dispatch a successor provider request"
+    );
     r.with_rejected_unprojected_wait_cleanup("agent-1", &p, &c, &o, |_| Ok(()))
         .unwrap();
     assert!(
         r.rejected_unprojected_wait_is_absent("agent-1", &p, &o)
             .unwrap()
     );
+    assert_eq!(
+        provider_state
+            .lock()
+            .expect("provider state lock")
+            .recorded_requests
+            .len(),
+        1,
+        "successful cleanup must not replay the predecessor provider request"
+    );
 }
+
+#[test]
+fn turn_release_rejects_mismatched_identity_before_persistence() {
+    let (mut runner, _, _, original, _) = fixture();
+    let before = state(&runner);
+    let persisted = std::cell::Cell::new(false);
+    assert!(
+        runner
+            .with_runtime_turn_release_for_continuation(
+                "agent-1",
+                &original.agent_session_id,
+                &original.agent_turn_id,
+                "different-request",
+                original.request_digest.as_str(),
+                |_| {
+                    persisted.set(true);
+                    Ok(())
+                },
+            )
+            .is_err()
+    );
+    assert!(!persisted.get());
+    assert_eq!(state(&runner), before);
+}
+
 #[test]
 fn identity_pristine_and_awaiting_tampering_never_persists() {
     for case in 0..8 {
-        let (mut r, mut p, c, mut o) = fixture();
+        let (mut r, mut p, c, mut o, _) = fixture();
         match case {
             0 => p.precondition_summary.push_str(" tamper"),
             1 => o.transport_attempt += 1,
@@ -400,7 +451,7 @@ fn identity_pristine_and_awaiting_tampering_never_persists() {
 }
 #[test]
 fn harness_disagreement_keeps_original_handle_and_turn() {
-    let (mut r, p, c, o) = fixture();
+    let (mut r, p, c, o, _) = fixture();
     r.continuation_harness = Default::default();
     let before = state(&r);
     assert!(
@@ -438,7 +489,7 @@ fn rejection_fixture() -> (
     RuntimeAgentContinuation,
     ContinuationCurrentContextV1,
 ) {
-    let (mut r, p, c, _) = fixture();
+    let (mut r, p, c, _, _) = fixture();
     let mut runtime = admitted_projection(&p);
     r.apply_runtime_continuation_projection_with_current_context("agent-1", runtime.clone(), &c)
         .unwrap();
@@ -501,7 +552,7 @@ fn resume_rejected_persist_failure_restores_all_five_ledgers_then_retries() {
 }
 #[test]
 fn resume_rejected_cleanup_never_releases_newer_or_inconsistent_turn() {
-    for case in 0..6 {
+    for case in 0..5 {
         let (mut r, mut runtime, c) = rejection_fixture();
         let old_id = *r.awaiting_runtime.get("agent-1").unwrap();
         match case {
@@ -521,13 +572,6 @@ fn resume_rejected_cleanup_never_releases_newer_or_inconsistent_turn() {
                 runtime.continuation_id = "other-continuation".into();
                 runtime.refresh_status_digest();
             }
-            4 => {
-                r.actors
-                    .get("agent-1")
-                    .unwrap()
-                    .active_turn
-                    .store(true, std::sync::atomic::Ordering::SeqCst);
-            }
             _ => {
                 runtime.wake_id = "other-wake".into();
                 runtime.refresh_status_digest();
@@ -540,13 +584,6 @@ fn resume_rejected_cleanup_never_releases_newer_or_inconsistent_turn() {
                 called.set(true);
                 Ok(())
             });
-        if case == 4 {
-            r.actors
-                .get("agent-1")
-                .unwrap()
-                .active_turn
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-        }
         assert!(result.is_err(), "case {case}");
         assert!(!called.get(), "case {case}");
         assert_eq!(r.rejected_wait_test_ledger_digests(), before, "case {case}");
@@ -556,7 +593,7 @@ fn resume_rejected_cleanup_never_releases_newer_or_inconsistent_turn() {
 #[test]
 fn restored_rejected_resume_absence_preserves_origin_and_fences_newer_state() {
     for case in 0..7 {
-        let (mut runner, mut proposal, current, mut request) = fixture();
+        let (mut runner, mut proposal, current, mut request, _) = fixture();
         let old_outcome = runner.awaiting_outcomes.values().next().unwrap().clone();
         runner
             .with_rejected_unprojected_wait_cleanup(
@@ -590,12 +627,12 @@ fn restored_rejected_resume_absence_preserves_origin_and_fences_newer_state() {
                     "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 )
             }
-            4 => runner
-                .actors
-                .get("agent-1")
-                .unwrap()
-                .active_turn
-                .store(true, std::sync::atomic::Ordering::SeqCst),
+            4 => {
+                // Exercise a real active turn in the shared actor, rather than
+                // mutating its internal association map. The reduced lane must
+                // still fence the production Resume absence check.
+                runner.start_turn("agent-1").unwrap();
+            }
             5 => {
                 runner
                     .awaiting_runtime
@@ -617,6 +654,56 @@ fn restored_rejected_resume_absence_preserves_origin_and_fences_newer_state() {
         }
         assert_eq!(state(&runner), before);
     }
+}
+
+#[test]
+fn combined_poll_preserves_production_and_compatibility_completions() {
+    let mut runner = AsyncAgentRunner::new(16).unwrap();
+    runner
+        .register(BuiltinWaitBehavior::new("agent-compat".to_string()))
+        .unwrap();
+    runner
+        .register(BuiltinWaitBehavior::new("agent-1".to_string()))
+        .unwrap();
+    runner
+        .restore_preverified_scoped_feedback_history(&[])
+        .unwrap();
+
+    let compatibility_turn = runner.start_turn("agent-compat").unwrap();
+    let request = request_from_value(production_request_fixture(1, 60_000));
+    let production_turn = runner
+        .start_turn_with_request_context("agent-1", production_turn_context(&request), request)
+        .unwrap();
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut completions = Vec::new();
+    while completions.len() < 2 {
+        completions.extend(runner.poll_completed().unwrap());
+        assert!(
+            std::time::Instant::now() < deadline,
+            "combined poll lost a production or compatibility completion: active={}, compat_in_flight={}, production_in_flight={}, outcomes={}",
+            runner.active_turn_count(),
+            runner.provider_is_still_in_flight("agent-compat"),
+            runner.provider_is_still_in_flight("agent-1"),
+            completions.len(),
+        );
+        if completions.len() < 2 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+
+    let compatibility = completions
+        .iter()
+        .find(|outcome| outcome.turn_id == compatibility_turn)
+        .expect("compatibility completion is returned");
+    assert!(compatibility.prepared_request_context.is_none());
+    let production = completions
+        .iter()
+        .find(|outcome| outcome.turn_id == production_turn)
+        .expect("production completion is returned");
+    assert!(production.prepared_request_context.is_some());
+    assert_eq!(runner.active_turn_count(), 0);
+    assert!(runner.poll_completed().unwrap().is_empty());
 }
 
 #[path = "async_agent_runner_terminal_budget_tests.rs"]

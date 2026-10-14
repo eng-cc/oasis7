@@ -1,5 +1,7 @@
 # P2P / 区块链签名策略与可恢复性硬化
 
+历史编辑/阶段边界：原 MIG/T0/Phase 批次尚未逐项匹配唯一实施 Task，故原记录与约束映射保留；文档人工重写、章节/引用检查和完成日期只证明原编辑或测试窗口，不生成当前排期、不代签机制、部署或 QA readiness。当前技术与安全合同继续由本文及配对设计持有；后续治理 Task 不冒充全部原实施者。
+
 > 历史整合说明：本专题整合 2026-02-16 至 2026-02-17 的 `blockchain-p2pfs-hardening-phase2` 至 `phase8`。它是这些已完成阶段的专业权威与追溯入口；阶段完成记录不构成当前 mainnet、生产恢复或 release readiness 结论。
 
 - 对应设计文档：`doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md`

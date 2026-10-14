@@ -29,7 +29,30 @@
 
 ## 接口 / 数据
 
-- 行为事实来自 `oasis7_client_launcher` 的语言状态、配置问题收集、launcher 状态、self-guided 组件及其既有 native/Web 表现层；具体字段、CTA 和存储细节仍以当前实现为真值。
+<a id="launcher-config-draft-truth"></a>
+### 配置草稿、最近成功画像与恢复
+
+既有 Restore Config 的本地画像是配置输入，不是已运行状态。本节承接 [#4406](https://github.com/eng-cc/oasis7/issues/4406)
+C1/C2 与 L5，细化[本地启动产品要求](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#23-设置与结果边界)，不新增画像系统或自动续跑。
+
+- 本地草稿、控制面接受的配置、实际对应运行实例的配置和 last-successful 画像必须可区分。
+  某进程仍 Running，不能证明当前可编辑草稿已被使用。
+- Restore 只把已存画像 normalize 后放入本地编辑态；若与当前已确认配置不同，dirty 必须保留。
+  后续旧配置 snapshot/poll 不得覆盖该编辑态；对应配置真正被控制面接受并确认后才可清 dirty。
+  Restore 不自动提交、不启动进程，也不改变仍在运行的 A 配置。
+- last-successful 只记录已确认用于成功运行的配置；native 文件和 Web storage 都不能在
+  A Running 时把未应用的 B 草稿存为成功画像。新配置 C 只有在实际被接受并进入相应运行状态后
+  才能替代 A；没有可靠关联时保留原画像，不猜成功。
+- 缺失 game binary 的修复只能指向已确认的 game 可执行文件或构建/安装/显式选择入口。
+  Autofill 不得把 launcher GUI 的 `current_exe` 当 game 程序，也不能据此解除缺失阻断。
+
+验收：A 已存、重开 idle B、Restore A、下一 poll B 后仍显示 A 草稿；A Running→编辑无效 B
+跨多帧仍只保存 A；C 实际接受后才保存 C。另测缺 game 而 GUI 存在时的 Autofill，以及有效
+game 的正常路径。按钮 handler→状态刷新→保存/展示分别贯通，单测赋值不代替这条链。
+
+### 接口与数据来源
+
+- 行为事实来自 `oasis7_client_launcher` 的语言状态、配置问题收集、launcher 状态、self-guided 组件及其既有 native/Web 表现层；具体字段、CTA 和存储细节保持现有兼容性，缺陷修复须满足上面的草稿/确认值边界。
 - 角色值中的 `observer` 仅表示当前配置/状态语义，不构成 node admission、验证者资格、公开链访问、结算或数据完整性证明。
 - 本文不新增 API、GUI Agent 动作、CLI 参数、遥测、DOM、轮询、数据保留或 runtime 接口。
 
@@ -47,7 +70,7 @@
 
 ## 不作出的承诺
 
-- 不主张日期化来源中的任务完成、测试、截图、默认值、脚本、端点、演示、自动补默认值、配置画像、计数或持久化仍是当前事实。
+- 除本文明确承接的 Restore/最近成功画像外，不从日期化来源推导任务完成、测试、截图、默认值、脚本、端点、演示、其他画像或持久化仍是当前事实。
 - 不主张玩家可玩性、hosted login、strong-auth、public join、node admission、chain/runtime readiness、mainnet、结算、最终性、公开服务或 release readiness。
 - 本轮不修改代码、UI、DOM、协议、runtime 或测试；S6 截图不适用。未来触达可见表面时必须重新取得 desktop/mobile 浏览器和视觉验收证据。
 

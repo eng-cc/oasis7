@@ -109,8 +109,12 @@ pub(super) fn submit(
         return Err("submit signed correlation mismatch".into());
     }
     let pinned = service.pin(None)?;
-    service.check_payload(&pinned, &request.signed_payload)?;
     let existing = outcome(service, &pinned, &correlation)?;
+    if matches!(existing, IntentOutcome::Unknown) {
+        service.check_payload(&pinned, &request.signed_payload)?;
+    } else {
+        service.check_replay_payload(&pinned, &request.signed_payload)?;
+    }
     let status = if matches!(existing, IntentOutcome::Unknown) {
         if let WorldServicePayloadV1::AgentChat(chat) = &request.signed_payload {
             agent_chat::validate_fresh(&pinned.world, chat)?;
@@ -166,7 +170,12 @@ pub(super) fn lookup(service: &Service<'_>, request: AuthenticatedLookup) -> Res
         return Err("lookup proof does not bind key".into());
     }
     let pinned = service.pin(None)?;
-    service.check_payload(&pinned, &request.original)?;
+    let existing = outcome(service, &pinned, &correlation)?;
+    if matches!(existing, IntentOutcome::Unknown) {
+        service.check_payload(&pinned, &request.original)?;
+    } else {
+        service.check_replay_payload(&pinned, &request.original)?;
+    }
     service.signed(
         LOOKUP_PATH,
         &request,
@@ -176,7 +185,7 @@ pub(super) fn lookup(service: &Service<'_>, request: AuthenticatedLookup) -> Res
                 oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
             }),
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
-            outcome: outcome(service, &pinned, &correlation)?,
+            outcome: existing,
             correlation,
         },
     )

@@ -46,6 +46,11 @@ impl ViewerRuntimeLiveServer {
             &payload,
         )
         .map_err(|reason| error("auth_invalid", reason))?;
+        let origin = self.reuse_pending_gameplay_feedback_origin(
+            &correlation,
+            self.active_gameplay_feedback_origin.clone(),
+        );
+        self.active_gameplay_feedback_origin = origin.clone();
         let observation = if let Some(prepared) = self.prepared_world_service_submission.take() {
             if prepared.correlation != correlation {
                 return Err(error(
@@ -71,8 +76,8 @@ impl ViewerRuntimeLiveServer {
         };
         let disposition = match observation {
             SubmitObservation::OutcomeUnknown(_) => {
-                self.pending_world_service_gameplay
-                    .push((correlation, payload));
+                self.pending_gameplay_feedback_origin(&correlation, origin);
+                self.remember_pending_world_service_gameplay(correlation, payload);
                 return Err(error(
                     "world_service_outcome_unknown",
                     "query the original signed request; do not change its nonce".into(),
@@ -86,8 +91,8 @@ impl ViewerRuntimeLiveServer {
                         })?,
                 ),
                 IntentOutcome::Received { .. } | IntentOutcome::Pending => {
-                    self.pending_world_service_gameplay
-                        .push((correlation, payload));
+                    self.pending_gameplay_feedback_origin(&correlation, origin);
+                    self.remember_pending_world_service_gameplay(correlation, payload);
                     None
                 }
                 _ => {

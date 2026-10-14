@@ -27,6 +27,17 @@ Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 so
 
 首次开放证据必须在副本写入中、正式证明/提交决定写入中、回应 committed 前分别注入故障，并实证单故障域恢复 root/receipt 对账与旧 writer 拒绝。普通单测不能替代实际故障域演练；本段是 target，不宣称现有 prototype 已满足。
 
+后继设计把这些义务具体落为 [原 candidate 恢复 v1](design.md#des-p2p-original-candidate-recovery-v1)、
+[正式激活与消费 v1](design.md#des-p2p-formal-controlled-authority-v1) 和
+[人工 epoch 接管 v1](design.md#des-p2p-controlled-epoch-takeover-v1)。完整 candidate 落盘前
+的恢复必须先核对原持久决定，再以执行前双端保存的原输入/版本/nonce 重建，不能重新
+admission 或替换身份；只有尚无固定决定的 pending 才按恢复后的当前条件重审。
+人工接管先隔离旧进程签写权限，由创世预授权且限定原请求的恢复器排空旧 epoch，再封旧
+epoch 并激活唯一后继；恢复 issuer 不获任意业务或 BFT 回退权。
+正式证明需贯通普通 Describe、Submit、Lookup、ReadView 和 Changes，不能仅移除工程 scope。
+这些是未实施的目标协议及 [验收计划](design.md#val-p2p-controlled-authority-v1)，现有工程入口
+拒绝边界、planned 配置与实际部署 hold 保持有效。
+
 <a id="p2p-authority-handoff"></a>
 ### 单权威到 BFT 的 H/H+1 交接（目标）
 
@@ -341,7 +352,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
   - AC-38: `hosted-public-join-managed-identity-custody` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-38A: 稳定权威 `mainchain-token-ideal-transaction` 承接 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)` 与 `PRD-P2P-ITX-001/002/003`：明确 signed metadata 字段、完整 JSON、签名域、回执与 Phase 1 最小升级集；fee quote 仍是 metadata-only，真实 fee/auth execution 属于独立 Phase 2+，不得误称当前实现真值。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`；这些是判定枚举，placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 必须保持阻断。
-  - AC-40: `formal-network-tiers-testnet-mechanism.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以 runbook/project 当前 verdict 约束 public claims。
+  - AC-40: `formal-network-tiers-testnet-mechanism.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以同候选、同窗口 readiness review 的实际 verdict 约束 public claims；历史验收见 [Task #2059](https://github.com/eng-cc/oasis7/issues/2059#issuecomment-4890065749)，不以历史 PASS 或 Task 状态代签当前 readiness。
   - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
   - AC-42: `subscribe-ack-udp-gossip-hardening` 必须让 `libp2p` `subscribe()` 只有在底层 gossipsub 真正订阅成功后才向调用方返回 `NetworkSubscription`；若后端拒绝订阅，调用方必须同步收到失败而不是拿到 dead subscription。与此同时，UDP gossip 路径必须显式拒绝超出 datagram 上限的 replication 消息、把接收缓冲提升到覆盖完整 UDP payload、并在 fan-out 遇到单点 `send_to` 失败时继续尝试其余 peer 后返回汇总错误，而不是靠 4KB 截断或“第一个错误即提前退出”的旧语义。
   - AC-43: `testing-manual.md` 必须明确“链上大世界状态底座”自闭环分层，并把 `module_required/module_full/integration_required/release_full` 的命令、最小指标、阻断签名、禁止 claim 与 real-env/public-testnet 边界写清，避免把底座自测误报为链上大世界或公开网络整体 ready。

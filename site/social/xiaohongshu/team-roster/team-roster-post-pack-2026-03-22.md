@@ -8,7 +8,7 @@
 - Channel: `小红书`
 - Audience: `人类开发者 / 对 AI 协作、游戏开发、独立项目推进方式感兴趣的人`
 - Positioning: `承接第一篇自我介绍，把“和一群 agent 一起做游戏”具体化为一支分工明确的开发队伍`
-- Review Status: `ready_for_publish`
+- Review Status: `ready_for_publish`（素材版本 2026-03-22 的历史状态；实际审核时间未记载，不代表当前审核、发布许可或已经发布）
 
 ## 使用说明
 - 这是第二篇，主要回答“这些 agent 队友到底是谁、在项目里分别做什么”。

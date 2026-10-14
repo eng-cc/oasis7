@@ -41,6 +41,8 @@ Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证�
 - 跨 worktree 的 registry 依赖编译结果复用由 sccache 提供，不共用 target artifacts。安装 `sccache`（macOS: `brew install sccache`）后，`cargo-dev.sh build/test/run` 自动启用它、通过参数传递 target（避免 `CARGO_TARGET_DIR` 污染缓存键）并关闭该调用的 Rust incremental；所有本地开发调用（含 `check/clippy`，以及没有 sccache 时）统一设置 dev/test debug=0、incremental=0。`OASIS7_CARGO_DEV_MODE=debug` 显式启用 debug=2、incremental=1 并关闭 sccache；不要在同一轮日常迭代反复切换模式，以免重编译。CI 保留原有配置。`OASIS7_CARGO_SCCACHE=0` 或 CI 可禁用，未安装时沿用 Cargo。用 `sccache --show-stats` 查看命中；首次编译填充缓存，workspace/path crates 的源码路径仍进入 Rust cache key，最终链接、proc-macro 和 check 不保证命中。wrapper 首次本地调用会为缺失的 `target` 建立当前 namespace 链接；已有工作区可执行 `./scripts/cargo-dev.sh --prepare-target`，之后直接 Cargo 也复用该目录。已有普通目录须确认未使用并清理后再准备，脚本不会自动删除它。Windows 缺少符号链接权限时，普通 wrapper 调用仍通过参数使用共享缓存；`--prepare-target` 则报告失败，直接 Cargo 的链接复用需先启用符号链接权限。
 - 磁盘有限时保留少量固定路径开发 worktree，串行任务在确认干净、独占且已保留未推送工作的工作区用 `git switch -c codex/<task> <base>` 切换独立分支；仅并行任务新建 worktree。不要编辑 main 或主工作区。`new-task-worktree.sh --with-harness` 是完整预热的显式选项，普通后端或文档任务不需要它。
 - 工作区选择先检查 `git worktree list --porcelain`，不能仅看当前聊天附件。新增使用 `./scripts/new-task-worktree.sh <module> <task> --base <ref>`；根目录由 `git config --local --get oasis7.task-worktrees-root` 指定，未配置时采用脚本默认值。复用或用户指定的外部工作区，首次本地编译前先运行 `./scripts/cargo-dev.sh --prepare-target`。入口选择规则见开发规范。
+- `python3 scripts/cargo-cache.py report --json` 按 native 及 target-triple 的 profile 列出 deps、incremental、build 的分配空间。日常关闭 incremental 不会删除历史状态；需要回收时用 `python3 scripts/cargo-incremental-clean.py --target <report 中的 target>` 预览，明确执行再加 `--apply`。仅接受有效托管标记；取得 wrapper、注册窗口及 Cargo 排他锁并检查进程占用后只删除 incremental，忙、未知归属、符号链接及不支持平台均保留。正式编译和验收参数不变。
+- `resource-cleanup-executor.py` 移除工作区后输出对应外部缓存、默认 7 天保留期和 GC 预览命令；缓存报告失败不否认已完成的 Git 清理，也不自动删除缓存。`runtime-module-routing-perf-harness.sh --profile dev` 使用开发 wrapper，默认 release 性能测量保留原入口。
 - 最小开发反馈示例：`./scripts/cargo-dev.sh check -p oasis7_proto`；`./scripts/cargo-dev.sh test -p oasis7_proto <test-filter>`；需要完整交互时才运行 `./scripts/worktree-harness.sh up`。不要用跳过必要验收来节省空间；正式范围仍由本手册与 CI 决定。
 - `build-game-launcher-bundle.sh --profile dev` 的 native 编译与读取目录使用相同开发缓存；默认玩家 bundle 不编译 operator binaries，只有显式 `--ops-out-dir` 才编译它们。packaging 和 wasm 构建保留原入口。
 - 本地 CI 验收和 launcher 打包入口会先准备上述链接；wasm Docker 构建会额外挂载已有链接的目标，容器宿主无需安装本地 Rust，首次构建前可手工准备链接，不修改正式 Cargo 参数或 profile；CI checkout 不建立链接。deterministic wasm / release 链路继续保持 `CARGO_TARGET_DIR` 为空；涉及 `scripts/build-wasm-module.sh`、release evidence 或 hash/receipt 对账时，不要改用 `scripts/cargo-dev.sh`。
@@ -123,6 +125,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
+  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support` 内实际受影响的 package profiles：API wire-contract 集成测试、Harness 单元测试及对应 strict Clippy；Cargo 依赖图仍保留 `oasis7` 消费者组。Launcher 代码变更保留 native profile 与 `launcher_web`。支持包清单位于 `plan-rust-required-scope.py`；驱动以 `--support-plan` 接收 trusted selector 的完整 JSON，不将 JSON 插入 shell 源码。
+  - profile 计划版本为 1；空、未知、重复 profile、未知版本或 full 计划漏项均拒绝。旧 trusted planner 没有 profile 版本字段时仍执行完整支持包库存，不提前缩测；控制/manifest/lockfile/未知输入及非包规则继续保守全量。每个 profile 的命令成功后才输出完成标记，任何失败退出仍由原 `required-gate` 聚合。直接本地 `required --group workspace_support` 不传计划时保留原完整入口。
   - planner 始终声明 `required_gate_baseline`：这是 required-gate 的普适治理/契约 authority，不等同于每个 Rust、Node、provider 或 P2P 套件都对所有路径执行。
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
@@ -166,6 +170,20 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - CI 控制改动的 PR 仍由可信 base selector 选择全部 24 组。候选 selector 的精确路由仅在合入后成为可信规则，required-gate 的组集合与失败判定保留。
 - 本地合同验证：`bash scripts/plan-wasm-determinism-scope.test.sh`、`bash scripts/ensure-wasm-bindgen-cli.test.sh`、`python3 scripts/ci-local-signer-tests.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`；前三项接入 workflow_governance。
 - net 的 libp2p/Python/WASM 检查、Viewer auth smoke 与 performance visual build 均通过 `ci-tests.sh --group` 执行一次；YAML 负责工具、浏览器和依赖准备。stable 安装使用 minimal 并显式安装 rustfmt/clippy，nightly、rust-src 与 WASM targets 保留。
+
+<a id="ci-dependency-installation-validation"></a>
+### CI 依赖安装与 Release 工具缓存核验
+
+要求与设计见 [CI 分级执行 PRD](doc/testing/ci/ci-tiered-execution.prd.md#ci-install-trunk)和[依赖准备设计](doc/testing/ci/ci-tiered-execution.design.md#ci-install-trunk-design)。本节给出验证方法；具体执行版本、结果和未覆盖范围记录在对应 PR 与 Actions 运行中。
+
+- 本地接线回归：`bash scripts/release-packages-trunk-cache-contract.test.sh`。检查 Release 使用计划源中的共享安装器、与 Rust CI/main writer 一致的归档身份、只恢复 action 和冷热均执行验证，必要失败不能变成成功。历史 tag 缺安装器时应在恢复前明确失败。
+- 安装器行为：`bash scripts/install-ci-trunk.test.sh` 覆盖冷下载、合法缓存、损坏缓存/下载、错误版本、错误 pin 及受支持宿主的真实 binary。此测试首次需要下载固定官方归档并核验摘要；缺网络时如实记录未执行，不能以离线接线测试代替。损坏归档不得先解压或执行。
+- hosted 功能：读取后续自然发生且已授权的 Release `build-web-dist`，确认工具验证后原有 Web 构建、source/BUILDINFO 与发布检查正常。不要为本节人为触发发布；未发生的发布保持待观察。
+- 真实跨 tag 缓存：关联 main `full-regression` 的实际归档保存记录和两个不同 tag 的 reader，记录 run/job URL、event/ref、请求/匹配 key、工具/安装器身份、路径及 cache version 兼容条件、恢复和摘要验证结果。同 tag rerun、仅配置相同或只有 cache-hit 输出均不足以确认 main seed 复用。
+- 冷暖量测：区分实际下载、跨 run 恢复、本地已有和恢复异常后下载；分别记录恢复、下载、验证安装、总准备及 writer 保存成本。日志只有 step 级时间时保持该粒度。附 runner image/OS/arch、source、Trunk 版本/摘要、helper 指纹、样本窗口与数量；失败和取消单列，排队和整个 Release 耗时另报。样本不足时报告原始观察，不预写提速百分比。
+- apt 先观察索引更新、下载、安装、锁等待和失败分布。本次没有新增 apt helper；后续确需预算治理时，使用假命令与临时进程 fixture 验证正常/瞬态/永久错误、总预算、挂起或忽略终止信号的子进程、父进程先退出、取消与无受控遗留进程。不得在真实 apt/dpkg 上故障注入；强制终止后的包状态不明确时应失败并使用新 runner。
+
+本地合同测试只证明其实际范围；main 合入、hosted 构建、跨 tag 恢复与性能收益分别核实，不新增通用 required check、预热工作流或验收回执。
 
 ### 当前 CI 未直接覆盖（需手册补齐）
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。
@@ -236,19 +254,43 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 ### L4A synthetic 内部闭环层（Web 为默认）
 - 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
 - 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-launcher-stack.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 与 `--with-harness` 预热都走 formal gameplay 的 active LLM path；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
-- 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 fail-fast。
+- 完整 `L4` scaffold：`./scripts/prepare-playability-l4-review.sh` 只准备当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/`，包含 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`；生成命令和模板不代表任何层已执行。显式加 `--with-l4a-stack` 才先启动 harness，并在 `evidence/` 下冻结当前 `L4A` state / URL；该启动继承 formal gameplay 的 active LLM provider preflight，缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml` 时会在 harness 启动前 fail-fast。离线 JSON、部分输出及重试规则见 [L4-C06](#l4-toolchain-validation)。
 - 最低完成定义：至少回填 review packet、`producer_system_designer` / `qa_engineer` 角色卡，以及命中的其余角色卡与 persona cards；只跑 harness / S6，不回填这些卡片，不算 `L4A` 完成。
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
 
 ### L4B 具身 agent 试玩层
 - 目标：验证 agent 实际进入 formal player surface、执行真实操作链路后，是否表现出可持续继续游玩的行为与可解释的玩家杠杆判断；这一层的设计目标是尽可能逼近真人评审“还想不想继续玩”的判断效果。
-- 默认：agent 试玩优先使用 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`。它会通过 `./scripts/run-producer-playtest.sh --open-headed` 拉起真实游玩入口、在同一浏览器 session 内执行最小真实操作链路（至少包含一步推进与一次玩法动作提交）、并把状态快照、截图、启动日志路径与 `L4B` summary 落到当前 artifact；只有启动脚本、没有实际 agent play session 与 summary/card 产物，不算 `L4B` 完成。
-- 与 `L4A` 的衔接：`./scripts/prepare-playability-l4-review.sh` 会在同一 artifact 目录里复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`、`manifest.json` 和可直接执行的 `commands.sh`；`commands.sh` 默认调用 `run-playability-l4b-agent.sh` 收口 `L4B` evidence。默认完整 `L4` 至少收口 `L4A` packet / cards、`L4B` agent 卡和最终 `l4-summary.md`；若还需要内部人类校准，只能作为 `L4B` 的可选佐证附录，不新增正式层。
-- 最低完成定义：脚本实际跑过、agent 实际游玩过、`evidence/l4b-agent-*/l4b-agent-summary.json` 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有 agent 主动操作或 summary，不算完整 `L4B`。
+- 默认目标：使用候选 release Viewer 产物，由 agent 经正式 UI 完成真实玩家动作、核对可归因世界结果，并根据结果作出下一步决策。URL 取自本次 harness/producer 的实际输出；登录、操作和采证绑定同一 owned browser session。独立试玩的输入、有限时长和结果合同沿用[自主试玩设计](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)。记录实际 `execution_mode`；固定脚本路线不能改名为自主规划证据。
+- 构建与驱动前置：release 不安装 `__AW_TEST__`，即使 URL 带 `test_api=1` 也不安装。需要测试 API 的受控回归必须显式使用 `build:viewer:visual-test` 的隔离产物，并启用测试查询参数；它只证明所声明的测试范围，不能代签 release UI。先核对实际产物和驱动能力，能力不匹配时在登录/玩法等待前停止并留痕；不要为通过测试给 release 注入测试 API。
+- 实际操作会话：默认 `hosted_public_join` 从 guest 识别开始，经正式登录/注册成为 authenticated；恢复会话也须核对当前 player 和 gameplay readiness 后再提交。准备者另开的 headed 窗口不能代签执行会话的登录。缺账号/配置、登录失败或 player 不一致分别记 blocker；不得自动签发 Hosted 身份或静默切换 `trusted_local_only`。凭据不进入日志、截图或卡片。
+- 当前工具差距：在 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对的 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 仍依赖测试 API、分开创建 producer/headed 与 automation session，并缺少实际操作会话的 Hosted 登录编排；其自动评分和早退结果也未满足下述合同。`commands.sh` 仍包含该旧入口，不能仅因生成成功就把它当作已验证的默认 L4B。实现与实际验收继续由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 承接，本次文档不增加尚未实现的 runner 参数。
+- 与 `L4A` 的衔接：scaffold 还复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`。完整 `L4` 至少收口 `L4A` packet / cards、当前尝试的 `L4B` agent 卡和最终 `l4-summary.md`。已有启动部件可用于准备 release 环境；能否形成 L4B 以实际会话和下述证据为准，不以启动器名称判定。
+- 执行结果：每次尝试独立保留 [RunResult](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)，summary 显式引用 `current_attempt`、结果和证据路径。沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`，阻断、取消和中断也记录已到阶段、停止原因、清理结果及未覆盖项；缺前置是 `blocked`，未知是 `inconclusive`，已执行且违反约定才是 `fail`。新尝试不能借旧成功产物通过。旧 runner 未完成该写出合同前，使用新 artifact 并保留已评审卡片，缺 RunResult 明确写缺失。
+- 最低完成定义：agent 实际游玩、具备当前尝试的动作/结果/后续决策证据，RunResult 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，再由 `producer_system_designer` / `qa_engineer` 审阅 `L4B` verdict。只有启动、截图、时间/进度增长或 ACK，不足以填写 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。五分项分别需要动作、可归因变化、结果解释、新决策与继续理由；缺观察保持未知。无实际试玩时 L4B 为 `missing`，不能把登录失败解释为 agent 不想玩。
+- 评审归属：runner 只追加当前尝试的事实；自动产物和旧 runner 导入默认 `unreviewed`，不能覆盖已经评审的最终 verdict。`unreviewed` 是评审占位状态，与执行 verdict、`go/watch/hold/block` 分开；重评须绑定当前候选和尝试，并保留旧结论。
 - 结论边界：这一层可以回答“agent 在真实操作链路里是否表现出继续玩的倾向”，并应尽量逼近真人评审效果，但仍不能自动等价于 `L5` 真实人类或外部市场验证。
 - 可选内部真人佐证：制作人试玩 / QA headed rerun 仍可沿用 `./scripts/run-producer-playtest.sh`；如执行，必须把结果写入 `optional-internal-human-corroboration.md` 或等价正式卡片，并在 `l4-summary.md` 里明确它是 `L4B` corroboration / contradiction，而不是新层级。只有人类试玩而没有对 `L4B` 的对照说明，不算合格佐证。
 - source-tree Viewer Web 开发态统一通过 `run-launcher-stack.sh`（通常由 `worktree-harness.sh` 或 `run-producer-playtest.sh` 调用）并走 freshness gate；当 `crates/oasis7_viewer/viewer.html`、`viewer.js`、`viewer_first_agent_claim_evidence.html`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist。重建时由 canonical `viewer.html` 与 claim fixture 生成 `dist/software_safe.html`、`software_safe.js` 和 `software_safe_first_agent_claim_evidence.html`；freshness / dist copy contract 会验证这些 outputs。
+
+<a id="l4-toolchain-validation"></a>
+
+### L4 工具链合同验收
+
+下表承接 [L4 工具链 PRD](doc/testing/prd.md#l4-build-driver)与 [testing design](doc/testing/design.md)。它是实现修复时的定向验收矩阵；文档链接/格式检查通过不表示这些运行场景已经执行。每个适用场景按[来源到场景记录](doc/testing/governance/agent-runtime-self-playtest.design.md#selftest-source-scene)绑定候选、实际产物、配置/会话、命令或 UI 动作、原始证据和逐项 verdict。Hosted、浏览器、真实 provider 及玩法采证只在对应执行任务授权的范围与预算内进行。
+
+| 场景 | 操作与正/负路径 | 必须核对的结果 | 执行范围与证据边界 |
+| --- | --- | --- | --- |
+| L4-C01 构建与驱动 | 分别检查 canonical/compat 页面 × release/visual-test；release 加 `test_api=1`，测试产物分别启用和省略/关闭测试参数；用要求 API 的驱动连接 release | 两种入口保留兼容语义；release 始终无 API，测试产物仅显式启用时安装；驱动不匹配在登录/玩法等待前停止并报告实际 profile | 定向构建/浏览器能力检查；只证明该产物与驱动合同，不形成继续游玩结论 |
+| L4-C02 Hosted 会话 | 在实际执行 session 测 clean guest、正式 UI 登录成功、已认证恢复、缺配置、登录失败和另一窗口已登录但执行 session 未登录；操作前比较 player | 仅同一实际 session 的 authenticated/player/readiness 可放行；失败分阶段留痕，不自动签发身份，不回退 trusted local | 使用获授权的测试账号/环境；W3/transport 诊断或另一会话不能替代 Hosted 产品链路，凭据不进入证据 |
+| L4-C03 执行终态 | 对可创建 artifact 的启动、能力检查、登录、操作及采证失败设置受控故障；另测取消、中断、清理失败和“旧成功后新阻断” | 每次保留独立结果和停止阶段，`current_attempt` 指向新尝试；缺前置/未知/违约分别归类，清理结果不伪装玩法结果；旧汇总不覆盖当前阻断 | 先用受控 fixture 检查结果写出与指针，再用适用环境验证真实故障；若输出目录本身不可写，stderr/退出结果明确说明无法落盘，不能声称有结果文件 |
+| L4-C04 事实与判断 | 提供只有 progress/ACK/player 一致的样本、完整五项观察样本、缺一项样本；对已评审卡片重跑事实采集 | 机械事实不自动产生继续结论、满分或非环境推进判断；五项逐项引用证据，缺项未知；自动采集不覆写已评审 verdict，固定脚本如实记录执行模式 | fixture 可检查写入归属；真实继续倾向、因果与理解必须来自实际会话和评审，不能由 fixture 代签 |
+| L4-C05 兼容产物与操作入口 | 对照本手册、game-test、Viewer entry compatibility；在 L4-C01 四格中分别执行 alias 生成、dist copy 与 stale-dist rebuild，并复核 opt-in 正负例；不同 worktree 使用各自实际 URL/session | 所有兼容产物保留，复制/重建前后类型一致且不覆盖另一类输出；无固定端口、跨会话假定或 release 测试 API 等待；错误 URL/session 明确阻断，原锚点保留 | 文档链接检查、alias/copy/freshness 定向回归与适用浏览器验证；历史 URL 保留为历史证据，不当当前默认 |
+| L4-C06 离线 scaffold | 不带 `--with-l4a-stack`，以普通、含空格、含单引号的合法新目录运行 `--json`；再用已存在目录重试，并模拟生成后失败 | 成功 stdout 为单个 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与 manifest 一致，`manifest_path` 指向它；已存在目录退出 2 且不改原文件，部分输出失败明确范围并非成功 | 纯离线产物验收，不启动游戏/模型。当前实现的 shell 到 Python 序列化缺陷仍待 #4438 修复，不能在本次文档验证中记为通过 |
+
+L4-C05 保留已有三条回归入口：[alias 生成](crates/oasis7_viewer/scripts/viewer-compat-aliases.test.mjs)、[dist copy](scripts/copy-viewer-web-dist.test.sh)、[stale-dist fallback](scripts/agent-browser-viewer-dist-freshness-test.sh)。在实现验收中还须补齐上述两类构建的类型保持断言与实际入口采证，不能把现有 fixture 通过直接当作全部四格已覆盖。
+
+Scaffold 操作语义：`--json` 是已有 CLI 选项，成功的五字段摘要应只占 stdout，诊断写 stderr。若命令非零退出，即使目录已有卡片或 manifest，也只算部分输出；保留现场、检查失败原因，并为新尝试选择新目录/`--run-id`，不要自动删除或覆盖旧证据。`commands.sh` 只记录待执行步骤，其存在和可执行位不证明 L4A/L4B 成功。
 
 ### L5 真实人类 / 受控线上验证层
 - 目标：验证真实人类或受控外部玩家在真实时间、注意力和机会成本约束下，是否仍愿意继续玩；这是 `L4B` 之上的正式验证层。
@@ -314,7 +356,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
   - release 关键脚本执行位前置校验，避免只在 `release-gate-web` / `package-native` runner 上才暴露 `Permission denied`
-  - full support-crate shard 覆盖 `pixel_world_bridge` lib tests；目标特定 wasm/build 检查仍按 S5 scoped required 触发
+  - full support-crate shard 覆盖 `pixel_world_bridge` lib tests；受影响时，`workspace_support` 还运行 agent API wire-contract 集成测试、agent harness 单元测试及两 crate 的 strict Clippy。目标特定 wasm/build 检查仍按 S5 scoped required 触发。
   - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 的改动
 
 ### S2：核心 full 套件（L1 + L2）
@@ -499,19 +541,22 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
 - 若用户反馈“Viewer 发卡 / 掉帧”，优先执行 `./scripts/viewer-performance-probe.sh --profile smoke --min-fps 55 --max-frame-p95-ms 20 --max-long-task-count 0`。该链路使用 `crates/oasis7_viewer/scripts/viewer-performance-probe.mjs` + `agent-browser` 直接采集 `requestAnimationFrame` frame timings / FPS、`PerformanceObserver` long tasks（浏览器支持时）、navigation DOM readiness、DOM 规模与截图，并输出 `output/playwright/viewer-performance/<run-id>/summary.json` 与 `summary.md`。
 - 若改动只触达 `software_safe` feedback 语义映射而不需要浏览器自举，优先执行 `npm --prefix crates/oasis7_viewer run test:feedback-contract`；该 deterministic contract regression 已纳入 `./scripts/ci-tests.sh required`。
 - 若改动触达 `crates/oasis7_viewer/software_safe_src/**` 的结构、Prompt/Chat surface、主入口锚点或移动端分区导航，优先执行 `npm --prefix crates/oasis7_viewer run test:ui`；这套 Vitest + `@solidjs/testing-library` 回归用于验证 repo-owned `World / Targets / Command` 锚点、`Runtime Diagnostics` 降级面、`Agent Chat` 与 `Prompt Overrides` 的 DOM 可达性，不替代 S6 headed browser 证据。
-- 只要改动触达可视化相关代码、样式、资源或可见输出，S6 截图采证后默认执行模型视觉评审；典型触发面包括 UI component / DOM / CSS / layout / responsive / canvas / WebGL / pixel-world renderer / visual DTO 映射 / screenshot fixture / 图片资产 / 可见状态文案。`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation`、`confidence=low` 或对外 claim 影响必须升级人类 owner。输出格式使用 `doc/testing/templates/model-visual-review-card-template.md`；只有明确不影响任何可见 surface 的改动才能豁免，并需在任务日志或 PR evidence 写明理由。
+- 只要改动触达可视化相关代码、样式、资源或可见输出，S6 截图采证后默认执行模型视觉评审；典型触发面包括 UI component / DOM / CSS / layout / responsive / canvas / WebGL / pixel-world renderer / visual DTO 映射 / screenshot fixture / 图片资产 / 可见状态文案。`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation`、`confidence=medium/low` 或对外 claim 影响必须升级人类 owner；首次 `watch` 即升级，不等待第二轮。各组合及证据要求统一按[视觉评审判定表](doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)执行。输出格式使用 `doc/testing/templates/model-visual-review-card-template.md`；只有明确不影响任何可见 surface 的改动才能豁免，并需在任务日志或 PR evidence 写明理由。
 - 若需要稳定触发一条标准 `AgentSpoke` 供消息流验收，在 source runtime 启动前显式设置 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`；该开关仅用于 Viewer / QA 测试态，默认产品路径必须保持关闭。
-- 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，必须查看 `window.__AW_TEST__.getState().lastError`；命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
-- `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
-  - `renderMode=viewer`（或兼容 alias `software_safe`）：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
+- 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，显式测试产物可查看 `window.__AW_TEST__.getState().lastError`；release 使用可见错误和 console 证据，不等待测试 API。命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
+<a id="testing-software-renderer-scope"></a>
+
+- `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先核对实际 `renderMode`；仅在显式测试产物中通过 `window.__AW_TEST__.getState().renderMode` 读取，release 使用可见入口与诊断证据。
+  - `renderMode=viewer`（或兼容 alias `software_safe`）：允许继续做最小 DOM 闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。同时保留实际 renderer 与目标范围；不据此证明 Bevy/WASM/GPU 场景渲染、完整 S6、producer 试玩或发布可玩性。
   - `renderMode` 既不是 `viewer` 也不是兼容 alias `software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
-- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 启动。
+- **原 lane 有限继续、另开调试、实际切换 lane 分别记账**：允许的软件 DOM 采样只收窄本次观察范围，保持原访问模式、身份与 execution lane。若另开受控调试会话，原尝试及其 blocker 保留，新会话按其实际配置和证据单独记录；若确需改变访问模式或 execution lane，须在既有授权范围内显式操作，记录能力/玩家可见差异、实际配置和新证据归属。`fallback_reason` 只是诊断，不授予切换权限，也不允许自动降到 trusted-local 或把 `headless_agent` 增强样本重标为 `player_parity`。
+- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，按本手册 L4B 的 release 正式 UI、实际 Hosted 会话和当前尝试结果合同执行，验收见 [L4-C01..06](#l4-toolchain-validation)。旧 `run-playability-l4b-agent.sh` 仍有上述实现差距，不能因自动生成 summary 就判定 L4B 完成。内部人类 spot-check 可用 `./scripts/run-producer-playtest.sh --open-headed`，结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 启动。
 - agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-launcher-stack.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。
 - 防误用约束：
   - `scripts/run-game-test-ab.sh` 仅用于自动化回归哨兵（TTFC/命中率/无进展窗口）；推荐与 `--bundle-dir <bundle>` 搭配做产物态 smoke，但仍不等价于“真实玩家长玩评测”。
-- `run-game-test-ab.sh --headless` 若命中 `SwiftShader` / software renderer，应先确认页面是否已自动切到 `software_safe`；只有未切入 safe-mode 时才按环境阻断处理，不得把 `connectionStatus=connecting` 误判为 fresh Web 构建或玩法回归；Viewer Web 默认继续使用 headed 模式。
+  - `run-game-test-ab.sh --headless` 若命中 `SwiftShader` / software renderer，核对实际目标 surface 与 `renderMode`；确认 `viewer`（compat alias `software_safe`）DOM 路径可用时，只继续该最小闭环。目标若为 Bevy/WASM/WebGL 场景层或真实 GPU 性能，则保留环境阻断与缺失范围，软件 DOM 通过不能填成 GPU/full/release/producer 通过。`connectionStatus=connecting` 本身不能区分图形、构建与 gameplay 失败；Viewer Web 默认继续使用 headed 模式。
   - 发布前若只要求 agent 可执行闭环，至少补齐 `L4B` agent 试玩与卡片填写；若要对“真实人类是否想继续玩”下结论，必须进入 `L5` 的真人 / 受控线上样本，内部真人试玩只能作为 `L4B` 的可选校准。
 - 若改动影响前期工业引导（`首个制成品 / 停机恢复 / 首座工厂单元`），必须补跑 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 中对应卡片，并把结论回写正式 playability 卡。
   - 对外样张链路需使用 strict 语义门禁，不得以 `off` / `soft` 结果作为发布判定证据。
@@ -557,7 +602,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ```bash
 ./scripts/run-local-letai-game-test.sh --local-world-playtest
 ```
-    常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh --local-world-playtest` 启动；这个入口只代表完全本地的 provider/runtime/viewer/local-standalone-chain 试玩，不连接 formal/public testnet。若目标是“本地入口读取/提交 formal `public_testnet` world state”，不要使用这个 preset，改走 `scripts/run-local-public-testnet-letai-test-environment.sh` 和对应 runbook。每次纯本地试玩都应优先使用这个 preset，而不是手工分别启动 provider bridge / launcher / viewer binary，或展开端口、detach、reuse、provider smoke、chain profile 等低层参数。该 preset 固化 playtest startup、provider smoke skip、reuse existing source build、后台启动、手动 Play、viewer/web/live 标准端口 `48420/48421/48422`、`--json-ready` 与 wrapper 默认的 local standalone chain。脚本仍默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，规范化临时 project token config，转发 `--auto-topup-usd`、`OASIS7_REMOTE_LLM_PLATFORM_KEY`、`OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 等真实 provider 必需环境，后台启动默认 `rust-direct-letai` 的 `127.0.0.1:5841` Rust provider bridge，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数仅在高级排障时放在 `--` 之后。该 wrapper 默认保持 `OASIS7_RUNTIME_AGENT_CHAT_ECHO` 关闭，使本地 playtest 遵循真实 provider-backed 路径；只有做低层 receipt/debug 验证时才显式传 `--chat-echo`。若直接跑已编译二进制或手工拼装脚本，操作者必须自行保证这些 env 与 wrapper 完全等价，否则可能出现不自动充值、token/project 绑定不一致、或 mock/receipt 路径误入本地试玩证据。需要查完整调试参数时，用 `./scripts/run-local-letai-game-test.sh --help-all`。
+    常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh --local-world-playtest` 启动；这个入口只代表完全本地的 provider/runtime/viewer/local-standalone-chain 试玩，不连接 formal/public testnet。若目标是“本地入口读取/提交 formal `public_testnet` world state”，不要使用这个 preset，改走 `scripts/run-local-public-testnet-letai-test-environment.sh` 和对应 runbook。每次纯本地试玩都应优先使用这个 preset，而不是手工分别启动 provider bridge / launcher / viewer binary，或展开端口、detach、reuse、provider smoke、chain profile 等低层参数。该 preset 固化 playtest startup、provider smoke skip、reuse existing source build、后台启动、默认自动 Play、viewer/web/live 标准端口 `48420/48421/48422`、`--json-ready` 与 wrapper 默认的 local standalone chain。脚本仍默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，规范化临时 project token config，转发 `--auto-topup-usd`、`OASIS7_REMOTE_LLM_PLATFORM_KEY`、`OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 等真实 provider 必需环境，后台启动默认 `rust-direct-letai` 的 `127.0.0.1:5841` Rust provider bridge，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数仅在高级排障时放在 `--` 之后。该 wrapper 默认保持 `OASIS7_RUNTIME_AGENT_CHAT_ECHO` 关闭，使本地 playtest 遵循真实 provider-backed 路径；只有做低层 receipt/debug 验证时才显式传 `--chat-echo`。若直接跑已编译二进制或手工拼装脚本，操作者必须自行保证这些 env 与 wrapper 完全等价，否则可能出现不自动充值、token/project 绑定不一致、或 mock/receipt 路径误入本地试玩证据。需要打开后手动 Play 时，执行 `./scripts/run-local-letai-game-test.sh --local-world-playtest --no-auto-play`；该选项只保持世界暂停，不表示跳过配置预检、provider/网络请求或停止后台栈。需要查完整调试参数时，用 `./scripts/run-local-letai-game-test.sh --help-all`。
   - 制作人 / 发布前人工验收：
 ```bash
 ./scripts/run-producer-playtest.sh --open-headed
@@ -635,9 +680,10 @@ npm --prefix crates/oasis7_viewer run build:viewer:visual-test
 ```
 - LLM gameplay 对照（bridge 开/关）：
 ```bash
-./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --runtime-gameplay-bridge
-./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --no-runtime-gameplay-bridge
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --runtime-gameplay-bridge --out-dir .tmp/llm_stress/<comparison-id>/bridge-on
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --no-runtime-gameplay-bridge --out-dir .tmp/llm_stress/<comparison-id>/bridge-off
 ```
+  将 `<comparison-id>` 替换为本次唯一标识，分别登记两侧候选版本、完整参数、wrapper 最终退出码/日志和原始工件路径。stress 会清理指定 out-dir；已有对照树后不得再用默认 `.tmp/llm_stress` 根目录命令，`--keep-out-dir` 也不避免同名文件覆盖。wrapper 日志放在其清理目录之外，按[Web/LLM 证据模板](doc/world-simulator/prd/acceptance/web-llm-evidence-template.md)判定；summary 存在不代表 gate 通过。
 - git 跟踪基线 fixture smoke（`test_tier_full`）：
 ```bash
 ./scripts/llm-baseline-fixture-smoke.sh

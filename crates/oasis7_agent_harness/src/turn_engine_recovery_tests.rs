@@ -99,6 +99,7 @@ fn runtime_history_is_restored_before_engine_dispatch_and_fences_sequence_collis
             provenance: "runtime_authoritative".into(),
         },
         acknowledged: true,
+        lineage: None,
     });
     let calls = Arc::new(AtomicUsize::new(0));
     let mut engine = TurnEngine::<serde_json::Value, serde_json::Value, ()>::new(1).unwrap();
@@ -184,6 +185,7 @@ fn blocked_runtime_history_fences_only_its_engine_session() {
             provenance: "runtime_authoritative".into(),
         },
         acknowledged: false,
+        lineage: None,
     });
     let calls = Arc::new(AtomicUsize::new(0));
     let mut engine = TurnEngine::<serde_json::Value, serde_json::Value, ()>::new(1).unwrap();

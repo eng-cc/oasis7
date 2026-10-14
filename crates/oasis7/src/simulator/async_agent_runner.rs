@@ -14,25 +14,27 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
-use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
-use std::thread::{self, JoinHandle};
+use std::sync::atomic::AtomicBool;
+use std::thread;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::runtime::{CognitionLeaseV1, RuntimeReceiptLineageV1};
 
+use self::agent_harness_adapter::{
+    AdapterControl, BehaviorCallback, BehaviorTurnResult, OasisBehaviorProvider,
+    production_key_from_context,
+};
 use super::Observation;
-use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
+use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery};
 use super::cognition_policy::{
     ContinuationHandle, ContinuationHarness, ContinuationInvalidationReason,
     MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1, MemoryWriteStore,
 };
 use super::continuous_agent_harness::{
-    AgentCognitionStore, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
+    ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
     ContinuousAgentTurnContextV1, Digest32, FeedbackEnvelopeV1, MemoryWriteIntentV1, h_v1,
 };
 use super::decision_provider::{
@@ -40,6 +42,20 @@ use super::decision_provider::{
 };
 use super::kernel::{WorldEvent, WorldKernel};
 use super::types::WorldTime;
+use oasis7_agent_harness::{
+    AsyncAgentRunner as HarnessRunner, AsyncAgentRunnerError as HarnessRunnerError,
+    AsyncAgentTurnOutcome as HarnessTurnOutcome, AsyncTurnId as HarnessTurnId,
+    CompatibilityTurnRequest as HarnessCompatibilityTurnRequest, RuntimeAuthority,
+};
+
+pub(crate) struct CommittedFeedbackMemoryInput<'a> {
+    pub(crate) agent: &'a str,
+    pub(crate) feedback: FeedbackEnvelopeV1,
+    pub(crate) receipt: &'a RuntimeReceiptLineageV1,
+}
+
+#[path = "agent_harness_adapter.rs"]
+mod agent_harness_adapter;
 
 #[path = "async_agent_runner_feedback.rs"]
 mod feedback;
@@ -51,7 +67,8 @@ pub(crate) use receipt_memory::project_receipt_memory;
 #[path = "async_agent_runner_outcome.rs"]
 mod outcome;
 use self::outcome::{
-    default_observation, outcome_from_completion, validate_cognition_lease_for_request,
+    compatibility_outcome_from_harness, default_observation, outcome_from_completion,
+    validate_cognition_lease_for_request,
 };
 #[path = "async_agent_runner_lease_view.rs"]
 mod lease_view;
@@ -203,31 +220,6 @@ impl fmt::Display for AsyncAgentRunnerError {
 
 impl std::error::Error for AsyncAgentRunnerError {}
 
-#[expect(
-    clippy::large_enum_variant,
-    reason = "Stable actor command channel preserves direct observation and action payloads."
-)]
-enum ActorCommand {
-    Decide {
-        turn_id: AsyncTurnId,
-        observation: Observation,
-        context: Option<ContinuousAgentTurnContextV1>,
-        request_context: Option<ContinuousAgentRequestContextV1>,
-    },
-    ActionResult(ActionResult),
-    Event(WorldEvent),
-    PromptOverrides {
-        system_prompt: Option<String>,
-        short_term_goal: Option<String>,
-        long_term_goal: Option<String>,
-    },
-    PlayerMessage {
-        world_time: WorldTime,
-        message: String,
-    },
-    Shutdown,
-}
-
 struct ActorCompletion {
     turn_id: AsyncTurnId,
     agent_id: String,
@@ -240,168 +232,113 @@ struct ActorCompletion {
     panicked: bool,
 }
 
-struct AgentActor {
-    sender: SyncSender<ActorCommand>,
-    completions: Receiver<ActorCompletion>,
-    active_turn: Arc<AtomicBool>,
-    accepting_commands: Arc<AtomicBool>,
-    shutdown: Arc<AtomicBool>,
-    join: Option<JoinHandle<()>>,
+fn map_harness_error(error: HarnessRunnerError) -> AsyncAgentRunnerError {
+    match error {
+        HarnessRunnerError::InvalidCapacity => AsyncAgentRunnerError::InvalidCapacity,
+        HarnessRunnerError::AgentAlreadyRegistered(agent) => {
+            AsyncAgentRunnerError::AgentAlreadyRegistered(agent)
+        }
+        HarnessRunnerError::AgentNotRegistered(agent) => {
+            AsyncAgentRunnerError::AgentNotRegistered(agent)
+        }
+        HarnessRunnerError::AgentBusy(agent) => AsyncAgentRunnerError::AgentBusy(agent),
+        HarnessRunnerError::MailboxFull => AsyncAgentRunnerError::MailboxFull,
+        HarnessRunnerError::ActorUnavailable(agent) => {
+            AsyncAgentRunnerError::ActorUnavailable(agent)
+        }
+        HarnessRunnerError::Cognition(error) => AsyncAgentRunnerError::Cognition(error.to_string()),
+    }
 }
 
-impl AgentActor {
-    fn new(
-        agent_id: String,
-        behavior: Box<dyn AgentBehavior + Send>,
-        capacity: usize,
-        shutdown: Arc<AtomicBool>,
-    ) -> Result<Self, AsyncAgentRunnerError> {
-        let (sender, receiver) = mpsc::sync_channel(capacity);
-        let (completion_sender, completions) = mpsc::channel();
-        let active_turn = Arc::new(AtomicBool::new(false));
-        let accepting_commands = Arc::new(AtomicBool::new(true));
-        let worker_accepting = Arc::clone(&accepting_commands);
-        let worker_shutdown = Arc::clone(&shutdown);
-        let worker_agent_id = agent_id.clone();
-        let worker = thread::Builder::new()
-            .name(format!("oasis7-agent-{agent_id}"))
-            .spawn(move || {
-                let mut behavior = behavior;
-                while let Ok(command) = receiver.recv() {
-                    match command {
-                        ActorCommand::Decide {
-                            turn_id,
-                            observation,
-                            context,
-                            request_context,
-                        } => {
-                            let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                                behavior.set_continuous_turn_context(context.as_ref());
-                                behavior.set_continuous_request_context(request_context.as_ref());
-                                let decision = behavior.decide(&observation);
-                                let trace = behavior.take_decision_trace();
-                                let memory_write_intents = behavior.take_memory_write_intents();
-                                let response_context = behavior.take_continuous_response_context();
-                                (decision, trace, memory_write_intents, response_context)
-                            }));
-                            let (
-                                decision,
-                                decision_trace,
-                                memory_write_intents,
-                                response_context,
-                                panicked,
-                            ) = match result {
-                                Ok((decision, trace, memory_write_intents, response_context)) => (
-                                    Some(decision),
-                                    trace,
-                                    memory_write_intents,
-                                    response_context,
-                                    false,
-                                ),
-                                Err(_) => (None, None, Vec::new(), None, true),
-                            };
-                            let completion = ActorCompletion {
-                                turn_id,
-                                agent_id: worker_agent_id.clone(),
-                                decision,
-                                decision_trace,
-                                prepared_context: context,
-                                prepared_request_context: request_context,
-                                prepared_response_context: response_context,
-                                memory_write_intents,
-                                panicked,
-                            };
-                            if completion_sender.send(completion).is_err() {
-                                break;
-                            }
-                        }
-                        ActorCommand::ActionResult(result) => {
-                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                                behavior.on_action_result(&result);
-                            }));
-                        }
-                        ActorCommand::Event(event) => {
-                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                                behavior.on_event(&event);
-                            }));
-                        }
-                        ActorCommand::PromptOverrides {
-                            system_prompt,
-                            short_term_goal,
-                            long_term_goal,
-                        } => {
-                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                                behavior.set_prompt_overrides(
-                                    system_prompt,
-                                    short_term_goal,
-                                    long_term_goal,
-                                );
-                            }));
-                        }
-                        ActorCommand::PlayerMessage {
-                            world_time,
-                            message,
-                        } => {
-                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                                behavior.on_player_message(world_time, message.as_str());
-                            }));
-                        }
-                        ActorCommand::Shutdown => break,
-                    }
-                    if worker_shutdown.load(Ordering::Acquire) {
-                        break;
-                    }
-                }
-                worker_accepting.store(false, Ordering::Release);
-            })
-            .map_err(|_| AsyncAgentRunnerError::ActorUnavailable(agent_id.clone()))?;
-        Ok(Self {
-            sender,
-            completions,
-            active_turn,
-            accepting_commands,
-            shutdown,
-            join: Some(worker),
-        })
+fn production_outcome_from_harness(
+    turn_id: AsyncTurnId,
+    completion: HarnessTurnOutcome<super::types::Action, AgentQuery>,
+    result: Option<BehaviorTurnResult>,
+    metadata: TurnMetadata,
+    cognition_lease: Option<CognitionLeaseV1>,
+) -> AsyncAgentTurnOutcome {
+    let panicked = completion
+        .provider_error
+        .as_ref()
+        .is_some_and(|error| error.code == "actor_panicked");
+    let provider_error = completion.provider_error.clone();
+    let result = result.unwrap_or(BehaviorTurnResult {
+        decision: AgentDecision::Wait,
+        decision_trace: None,
+        prepared_context: metadata.context.clone(),
+        prepared_response_context: None,
+        memory_write_intents: Vec::new(),
+    });
+    let mut outcome = outcome_from_completion(ActorCompletion {
+        turn_id,
+        agent_id: completion.agent_id,
+        decision: Some(result.decision),
+        decision_trace: result.decision_trace,
+        prepared_context: result.prepared_context.or(metadata.context),
+        prepared_request_context: metadata.request_context,
+        prepared_response_context: result.prepared_response_context,
+        memory_write_intents: result.memory_write_intents,
+        panicked,
+    });
+    if let Some(error) = provider_error {
+        outcome.lifecycle = AsyncTurnLifecycle::Failed;
+        outcome.feedback = if error.code == "actor_panicked" {
+            AsyncTurnFeedback::ActorPanicked
+        } else {
+            AsyncTurnFeedback::ProviderError { code: error.code }
+        };
+        outcome.world_effect = AsyncWorldEffect::NoEffect;
+        outcome.decision = None;
     }
+    outcome.cognition_lease = cognition_lease;
+    outcome
+}
 
-    fn try_send(&self, command: ActorCommand) -> Result<(), AsyncAgentRunnerError> {
-        self.sender.try_send(command).map_err(|error| match error {
-            TrySendError::Full(_) => AsyncAgentRunnerError::MailboxFull,
-            TrySendError::Disconnected(_) => AsyncAgentRunnerError::ActorUnavailable(String::new()),
-        })
-    }
-
-    fn try_completion(&self) -> Result<Option<ActorCompletion>, AsyncAgentRunnerError> {
-        match self.completions.try_recv() {
-            Ok(completion) => Ok(Some(completion)),
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => {
-                Err(AsyncAgentRunnerError::ActorUnavailable(String::new()))
-            }
-        }
-    }
+struct AgentActor {
+    control: AdapterControl,
+    cancel_on_drop: Option<std::sync::Arc<AtomicBool>>,
 }
 
 impl Drop for AgentActor {
     fn drop(&mut self) {
-        self.shutdown.store(true, Ordering::Release);
-        self.accepting_commands.store(false, Ordering::Release);
-        let shutdown_queued = self.sender.try_send(ActorCommand::Shutdown).is_ok();
-        // Never join a provider call from the world thread.  A cooperative
-        // actor joins when idle; a provider that ignores shutdown is detached
-        // so dropping the runner remains non-blocking as promised.
-        if self.active_turn.load(Ordering::Acquire) || !shutdown_queued {
-            let _ = self.join.take();
-        } else if let Some(join) = self.join.take() {
-            let _ = join.join();
+        if let Some(cancelled) = &self.cancel_on_drop {
+            cancelled.store(true, std::sync::atomic::Ordering::Release);
         }
     }
 }
 
+struct CompatibilityTurnRecord {
+    harness_turn_id: HarnessTurnId,
+}
+
+#[derive(Clone)]
+struct TurnMetadata {
+    context: Option<ContinuousAgentTurnContextV1>,
+    request_context: Option<ContinuousAgentRequestContextV1>,
+}
+
+const MAX_RUNTIME_FEEDBACK_REPLAY_ENTRIES: usize = 8;
+
+#[derive(Clone)]
+struct RuntimeFeedbackReplayMetadata {
+    receipt_lineage: Option<RuntimeReceiptLineageV1>,
+}
+
+type SharedHarnessRunner = HarnessRunner<
+    super::types::Action,
+    AgentQuery,
+    Observation,
+    BehaviorTurnResult,
+    BehaviorCallback,
+>;
+
 /// Bounded, non-blocking actor runner for simulator Agent behaviors.
 pub struct AsyncAgentRunner {
     actors: BTreeMap<String, AgentActor>,
+    harness: SharedHarnessRunner,
+    harness_turns: BTreeMap<AsyncTurnId, HarnessTurnId>,
+    compatibility_turns: BTreeMap<AsyncTurnId, CompatibilityTurnRecord>,
+    turn_metadata: BTreeMap<AsyncTurnId, TurnMetadata>,
     mailbox_capacity: usize,
     active_turns: usize,
     next_turn_id: u64,
@@ -414,7 +351,10 @@ pub struct AsyncAgentRunner {
     /// Leases are staged by turn until the actor returns. They are moved into
     /// the outcome before it is exposed to the world-facing queue.
     cognition_leases: BTreeMap<AsyncTurnId, CognitionLeaseV1>,
-    feedback_store: AgentCognitionStore,
+    /// Host receipt metadata for the same bounded envelope replay window the
+    /// Harness retains. This is correlation state only, never proof creation.
+    runtime_feedback_replays: BTreeMap<(String, String, String), RuntimeFeedbackReplayMetadata>,
+    runtime_feedback_replay_order: BTreeMap<(String, String), VecDeque<String>>,
     continuation_harness: ContinuationHarness,
     continuations: BTreeMap<String, ContinuationHandle>,
 }
@@ -426,6 +366,10 @@ impl AsyncAgentRunner {
         }
         Ok(Self {
             actors: BTreeMap::new(),
+            harness: HarnessRunner::new(mailbox_capacity).map_err(map_harness_error)?,
+            harness_turns: BTreeMap::new(),
+            compatibility_turns: BTreeMap::new(),
+            turn_metadata: BTreeMap::new(),
             mailbox_capacity,
             active_turns: 0,
             next_turn_id: 0,
@@ -434,7 +378,8 @@ impl AsyncAgentRunner {
             awaiting_runtime: BTreeMap::new(),
             awaiting_outcomes: BTreeMap::new(),
             cognition_leases: BTreeMap::new(),
-            feedback_store: AgentCognitionStore::default(),
+            runtime_feedback_replays: BTreeMap::new(),
+            runtime_feedback_replay_order: BTreeMap::new(),
             continuation_harness: ContinuationHarness::default(),
             continuations: BTreeMap::new(),
         })
@@ -459,26 +404,29 @@ impl AsyncAgentRunner {
         &mut self,
         behavior: Box<dyn AgentBehavior + Send>,
     ) -> Result<(), AsyncAgentRunnerError> {
-        let agent_id = behavior.agent_id().to_string();
-        if self.actors.contains_key(&agent_id) {
-            return Err(AsyncAgentRunnerError::AgentAlreadyRegistered(agent_id));
-        }
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let actor = AgentActor::new(agent_id.clone(), behavior, self.mailbox_capacity, shutdown)?;
-        self.actors.insert(agent_id, actor);
-        Ok(())
+        self.register_boxed_with_shutdown(behavior, None)
     }
 
     fn register_boxed_with_shutdown(
         &mut self,
         behavior: Box<dyn AgentBehavior + Send>,
-        shutdown: Arc<AtomicBool>,
+        cancel_on_drop: Option<std::sync::Arc<AtomicBool>>,
     ) -> Result<(), AsyncAgentRunnerError> {
         let agent_id = behavior.agent_id().to_string();
         if self.actors.contains_key(&agent_id) {
             return Err(AsyncAgentRunnerError::AgentAlreadyRegistered(agent_id));
         }
-        let actor = AgentActor::new(agent_id.clone(), behavior, self.mailbox_capacity, shutdown)?;
+        let control = AdapterControl::new();
+        self.harness
+            .register_dual(
+                agent_id.clone(),
+                OasisBehaviorProvider::new(behavior, control.clone()),
+            )
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        let actor = AgentActor {
+            control,
+            cancel_on_drop,
+        };
         self.actors.insert(agent_id, actor);
         Ok(())
     }
@@ -504,9 +452,7 @@ impl AsyncAgentRunner {
     }
 
     pub fn provider_is_still_in_flight(&self, agent_id: &str) -> bool {
-        self.actors
-            .get(agent_id)
-            .is_some_and(|actor| actor.active_turn.load(Ordering::Acquire))
+        self.harness.provider_is_still_in_flight(agent_id)
     }
 
     /// Legacy compatibility lane. Production cognition must use
@@ -537,6 +483,24 @@ impl AsyncAgentRunner {
             .validate_for_agent(agent_id)
             .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         let observation = default_observation(agent_id, self.logical_tick);
+        self.start_turn_with_context_and_observation(agent_id, observation, Some(context))
+    }
+
+    /// Start an explicitly reduced, non-production turn while preserving the
+    /// caller's simulator observation. This is the host adapter used by the
+    /// legacy native `TurnEngine` facade; it does not bind the outer request,
+    /// admit a Runtime lease, or imply that durable feedback history has been
+    /// restored. Committed memory feedback still requires the strict Runtime
+    /// readback path.
+    pub(crate) fn start_compatibility_turn_with_context_and_observation(
+        &mut self,
+        agent_id: &str,
+        observation: Observation,
+        context: ContinuousAgentTurnContextV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        context
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
         self.start_turn_with_context_and_observation(agent_id, observation, Some(context))
     }
 
@@ -718,7 +682,7 @@ impl AsyncAgentRunner {
         }
         let actor = self
             .actors
-            .get_mut(agent_id)
+            .get(agent_id)
             .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
         if observation.agent_id != agent_id {
             return Err(AsyncAgentRunnerError::AgentIdentityMismatch {
@@ -726,39 +690,60 @@ impl AsyncAgentRunner {
                 observed: observation.agent_id,
             });
         }
-        if actor.active_turn.load(Ordering::Acquire) {
+        if self.harness.provider_is_still_in_flight(agent_id) {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
-        }
-        if !actor.accepting_commands.load(Ordering::Acquire) {
-            return Err(AsyncAgentRunnerError::ActorUnavailable(
-                agent_id.to_string(),
-            ));
         }
         let turn_id = AsyncTurnId(self.next_turn_id);
         self.next_turn_id = self.next_turn_id.saturating_add(1);
-        if let Some(request_context) = request_context.as_ref() {
-            self.feedback_store
-                .begin_request(request_context.clone())
+        let harness_turn_id = if let Some(request_context) = request_context.as_ref() {
+            let key = production_key_from_context(request_context);
+            actor
+                .control
+                .install_production_input(
+                    key.clone(),
+                    observation,
+                    context.clone().ok_or_else(|| {
+                        AsyncAgentRunnerError::Cognition(
+                            "production turn context is missing".to_string(),
+                        )
+                    })?,
+                    request_context.clone(),
+                )
                 .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        } else if let Some(context) = context.as_ref() {
-            self.feedback_store
-                .begin_turn(context)
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+            match self
+                .harness
+                .start_turn(super::agent_api_compat::request_context_to_api(
+                    request_context,
+                )) {
+                Ok(harness_turn_id) => harness_turn_id,
+                Err(error) => {
+                    actor.control.clear_production_input(&key);
+                    return Err(map_harness_error(error).with_agent(agent_id));
+                }
+            }
+        } else {
+            self.harness
+                .start_compatibility_turn(HarnessCompatibilityTurnRequest {
+                    agent_subject: agent_id.to_string(),
+                    turn_context: context.clone(),
+                    input: observation,
+                })
+                .map_err(|error| map_harness_error(error).with_agent(agent_id))?
+        };
+        self.harness_turns.insert(turn_id, harness_turn_id);
+        self.turn_metadata.insert(
+            turn_id,
+            TurnMetadata {
+                context: context.clone(),
+                request_context: request_context.clone(),
+            },
+        );
+        if request_context.is_none() {
+            self.compatibility_turns
+                .insert(turn_id, CompatibilityTurnRecord { harness_turn_id });
         }
         if let Some(lease) = cognition_lease {
             self.cognition_leases.insert(turn_id, lease);
-        }
-        actor.active_turn.store(true, Ordering::Release);
-        if let Err(error) = actor.try_send(ActorCommand::Decide {
-            turn_id,
-            observation,
-            context,
-            request_context,
-        }) {
-            actor.active_turn.store(false, Ordering::Release);
-            self.cognition_leases.remove(&turn_id);
-            self.feedback_store.clear_agent(agent_id);
-            return Err(error.with_agent(agent_id));
         }
         self.active_turns = self.active_turns.saturating_add(1);
         Ok(turn_id)
@@ -767,23 +752,94 @@ impl AsyncAgentRunner {
     /// Poll all actor completion mailboxes without blocking.
     pub fn poll_completed(&mut self) -> Result<Vec<AsyncAgentTurnOutcome>, AsyncAgentRunnerError> {
         let mut outcomes = Vec::new();
-        for (agent_id, actor) in &mut self.actors {
-            let Some(completion) = actor
-                .try_completion()
-                .map_err(|error| error.with_agent(agent_id))?
+        // This compatibility poll advances the shared actor mailbox for both
+        // lanes. Drain its newly completed compatibility outcomes first, then
+        // drain the production queue below; a delta-only production poll would
+        // miss production completions already pumped by this call.
+        for completion in self
+            .harness
+            .poll_compatibility_completed()
+            .map_err(map_harness_error)?
+        {
+            let Some(main_turn_id) = self
+                .harness_turns
+                .iter()
+                .find_map(|(main, harness)| (*harness == completion.turn_id).then_some(*main))
             else {
-                continue;
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "Harness completed an unmapped compatibility turn".to_string(),
+                ));
             };
-            actor.active_turn.store(false, Ordering::Release);
             self.active_turns = self.active_turns.saturating_sub(1);
-            let cognition_lease = self.cognition_leases.remove(&completion.turn_id);
-            let mut outcome = outcome_from_completion(completion);
-            outcome.cognition_lease = cognition_lease;
+            let metadata = self
+                .turn_metadata
+                .get(&main_turn_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AsyncAgentRunnerError::Cognition(
+                        "Harness completed a compatibility turn without host metadata".to_string(),
+                    )
+                })?;
+            let outcome = compatibility_outcome_from_harness(main_turn_id, completion, metadata);
             if outcome.prepared_context.is_some() {
                 self.awaiting_runtime
-                    .insert(outcome.agent_id.clone(), outcome.turn_id);
-                self.awaiting_outcomes
-                    .insert(outcome.turn_id, outcome.clone());
+                    .insert(outcome.agent_id.clone(), main_turn_id);
+                self.awaiting_outcomes.insert(main_turn_id, outcome.clone());
+            } else {
+                self.compatibility_turns.remove(&main_turn_id);
+                self.harness_turns.remove(&main_turn_id);
+            }
+            self.turn_metadata.remove(&main_turn_id);
+            self.completed.push_back(outcome.clone());
+            outcomes.push(outcome);
+        }
+        // The compatibility poll above already pumps the shared Harness
+        // mailbox. Drain the accumulated production queue here rather than
+        // polling it for only newly pumped outcomes; otherwise a production
+        // completion observed during the compatibility pass is stranded.
+        for completion in self.harness.take_completed() {
+            let Some(main_turn_id) = self
+                .harness_turns
+                .iter()
+                .find_map(|(main, harness)| (*harness == completion.turn_id).then_some(*main))
+            else {
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "Harness completed an unmapped production turn".to_string(),
+                ));
+            };
+            self.active_turns = self.active_turns.saturating_sub(1);
+            let agent_id = completion.agent_id.clone();
+            let request_context = super::agent_api_compat::request_context_from_api(
+                completion.request_context.clone(),
+            );
+            let behavior_result = self.actors.get(&agent_id).and_then(|actor| {
+                actor
+                    .control
+                    .take_production_result(&production_key_from_context(&request_context))
+            });
+            let lease = self.cognition_leases.remove(&main_turn_id);
+            // Runtime may request a transport-only retry while this outcome is
+            // awaiting terminal feedback. Keep the host context with that
+            // lease so the retry completion can be projected identically.
+            let metadata = self
+                .turn_metadata
+                .get(&main_turn_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AsyncAgentRunnerError::Cognition(
+                        "Harness completed a production turn without host metadata".to_string(),
+                    )
+                })?;
+            let outcome = production_outcome_from_harness(
+                main_turn_id,
+                completion,
+                behavior_result,
+                metadata,
+                lease,
+            );
+            if outcome.prepared_context.is_some() {
+                self.awaiting_runtime.insert(agent_id.clone(), main_turn_id);
+                self.awaiting_outcomes.insert(main_turn_id, outcome.clone());
             }
             self.completed.push_back(outcome.clone());
             outcomes.push(outcome);
@@ -857,12 +913,14 @@ impl AsyncAgentRunner {
         agent_id: &str,
         result: ActionResult,
     ) -> Result<(), AsyncAgentRunnerError> {
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        actor
-            .try_send(ActorCommand::ActionResult(result))
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        self.harness
+            .notify_behavior_callback(agent_id, BehaviorCallback::ActionResult(Box::new(result)))
+            .map_err(map_harness_error)
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
 
@@ -871,27 +929,63 @@ impl AsyncAgentRunner {
         agent_id: &str,
         event: WorldEvent,
     ) -> Result<(), AsyncAgentRunnerError> {
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        actor
-            .try_send(ActorCommand::Event(event))
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        self.harness
+            .notify_behavior_callback(agent_id, BehaviorCallback::Event(Box::new(event)))
+            .map_err(map_harness_error)
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
 
-    /// Consume feedback accompanied by a Runtime-issued receipt lineage.
-    /// Caller-signed feedback remains useful for diagnostics, but cannot
-    /// promote provider memory intents without this projection.
-    pub fn consume_runtime_feedback_with_lineage(
+    fn remember_runtime_feedback_replay(
         &mut self,
+        feedback: &FeedbackEnvelopeV1,
+        receipt_lineage: Option<RuntimeReceiptLineageV1>,
+    ) {
+        let partition = (
+            feedback.agent_subject.clone(),
+            feedback.agent_session_id.clone(),
+        );
+        let replay_key = (
+            partition.0.clone(),
+            partition.1.clone(),
+            feedback.feedback_id.clone(),
+        );
+        let order = self
+            .runtime_feedback_replay_order
+            .entry(partition.clone())
+            .or_default();
+        if !order
+            .iter()
+            .any(|feedback_id| feedback_id == &feedback.feedback_id)
+        {
+            order.push_back(feedback.feedback_id.clone());
+        }
+        self.runtime_feedback_replays.insert(
+            replay_key,
+            RuntimeFeedbackReplayMetadata { receipt_lineage },
+        );
+        while order.len() > MAX_RUNTIME_FEEDBACK_REPLAY_ENTRIES {
+            let Some(expired_id) = order.pop_front() else {
+                break;
+            };
+            self.runtime_feedback_replays.remove(&(
+                partition.0.clone(),
+                partition.1.clone(),
+                expired_id,
+            ));
+        }
+    }
+
+    fn find_feedback_outcome(
+        &self,
         agent_id: &str,
-        feedback: FeedbackEnvelopeV1,
-        runtime_receipt: Option<&RuntimeReceiptLineageV1>,
-        store: &mut MemoryWriteStore,
-    ) -> Result<(), AsyncAgentRunnerError> {
-        let outcome = self
-            .awaiting_outcomes
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Option<AsyncAgentTurnOutcome> {
+        self.awaiting_outcomes
             .values()
             .find(|outcome| {
                 outcome.agent_id == agent_id
@@ -915,65 +1009,19 @@ impl AsyncAgentRunner {
                             })
                     })
                     .cloned()
-            });
-        let Some(outcome) = outcome else {
-            // A terminal feedback replay is intentionally idempotent even
-            // after the world-facing outcome queue has been drained.
-            if self.feedback_store.contains_feedback(
-                agent_id,
-                feedback.agent_session_id.as_str(),
-                feedback.feedback_id.as_str(),
-            ) {
-                return Ok(());
-            }
-            return Err(AsyncAgentRunnerError::Cognition(
-                "unknown actor outcome".to_string(),
-            ));
-        };
-        let context = outcome.prepared_context.as_ref().ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition("runtime feedback requires a host context".to_string())
-        })?;
-        validate_feedback(context, agent_id, &feedback)?;
-        if feedback.status != "committed" {
-            self.feedback_store
-                .accept_feedback(feedback.clone())
-                .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-            // Runtime `pending` is an in-flight disposition, not a terminal
-            // outcome. Keep the prepared turn occupied so a retry cannot
-            // invoke the provider a second time before Runtime resolves it.
-            if matches!(feedback.status.as_str(), "rejected" | "failed") {
-                self.invalidate_continuation_for_turn(
-                    agent_id,
-                    &feedback.agent_session_id,
-                    &feedback.agent_turn_id,
-                    &feedback.decision_request_id,
-                    ContinuationInvalidationReason::Rejected,
-                );
-                self.release_runtime_turn(agent_id, outcome.turn_id);
-            }
-            return Ok(());
-        }
-        let runtime_receipt = runtime_receipt.ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition(
-                "committed feedback requires a Runtime-issued receipt lineage".to_string(),
-            )
-        })?;
-        validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
-        project_receipt_memory(
-            context,
-            &feedback,
-            runtime_receipt,
-            &outcome.memory_write_intents,
-            store,
-        )?;
-        self.feedback_store
-            .accept_feedback(feedback)
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
-        self.release_runtime_turn(agent_id, outcome.turn_id);
-        Ok(())
+            })
     }
 
     fn release_runtime_turn(&mut self, agent_id: &str, turn_id: AsyncTurnId) {
+        self.turn_metadata.remove(&turn_id);
+        if let Some(record) = self.compatibility_turns.remove(&turn_id) {
+            let _ = self
+                .harness
+                .release_compatibility_turn(record.harness_turn_id);
+            self.harness_turns.remove(&turn_id);
+        } else if let Some(harness_turn) = self.harness_turns.get(&turn_id).copied() {
+            self.harness.release_turn(harness_turn);
+        }
         self.awaiting_runtime.remove(agent_id);
         self.awaiting_outcomes.remove(&turn_id);
     }
@@ -1007,7 +1055,7 @@ impl AsyncAgentRunner {
         let shutdown = Arc::new(AtomicBool::new(false));
         let behavior = BlockingProviderBehavior::new(agent_id.to_string(), Arc::clone(&shutdown));
         runner
-            .register_boxed_with_shutdown(Box::new(behavior), shutdown)
+            .register_boxed_with_shutdown(Box::new(behavior), Some(shutdown))
             .expect("fixture agent registration");
         runner
     }

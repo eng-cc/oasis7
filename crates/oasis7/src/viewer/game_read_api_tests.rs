@@ -443,3 +443,36 @@ fn task_control_read_binds_owner_agent_and_committed_world_fence() {
         worker.join().unwrap();
     }
 }
+
+#[test]
+fn task_control_metadata_read_accepts_only_matching_bound_executor_key() {
+    let caller = authority::sign_read_request("key", (), &hex::encode([8; 32])).unwrap();
+    let control = json!({"schema_revision":1,"task_id":"task-a","world_id":"world","genesis_digest":"genesis",
+        "branch_id":"branch","reorg_epoch":"0","agent_id":"a","owner_binding":"owner","owner_generation":"1",
+        "owner_public_key": "ab".repeat(32),"task_revision":"3","task_status":"active","latest_goal_revision":"1",
+        "active_goal_revision":"1","active_goal_reference":{"goal_revision":"1","goal_ref":"cd".repeat(32),
+            "prepare_operation_id":"prepare","publish_operation_id":"publish","activation_committed_height":"2"},
+        "executor_epoch":"1","executor_id":"executor","executor_binding":{"executor_id":"executor",
+            "executor_public_key":caller.subject_public_key,"delegation_generation":"1","executor_epoch":"1"},
+        "created_operation_id":"create"});
+    for tamper in [None, Some("executor_public_key"), Some("executor_epoch")] {
+        let mut value = control.clone();
+        if let Some(field) = tamper {
+            value["executor_binding"][field] = if field == "executor_epoch" {
+                json!("2")
+            } else {
+                json!("ef".repeat(32))
+            };
+        }
+        let (client, worker) = task_service(false, false, Some(value));
+        let mut req = request(Some(&proof(&client)));
+        *req.uri_mut() = "/v1/game/worlds/world/agents/a/task-control"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            handle(&req, Some(&client)).status(),
+            if tamper.is_none() { 200 } else { 503 }
+        );
+        worker.join().unwrap();
+    }
+}

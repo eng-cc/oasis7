@@ -14,22 +14,6 @@ use super::{
 };
 
 impl AgentCognitionStore {
-    pub(crate) fn feedback_recovery_initialized(&self) -> bool {
-        self.feedback_recovery_initialized
-    }
-
-    pub(crate) fn feedback_recovery_blocked(&self, agent: &str, session: &str) -> bool {
-        self.feedback_recovery_blocked
-            .contains_key(&(agent.to_string(), session.to_string()))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn agent_feedback_recovery_blocked(&self, agent: &str) -> bool {
-        self.feedback_recovery_blocked
-            .keys()
-            .any(|(subject, _)| subject == agent)
-    }
-
     /// Hydrate replay/collision metadata from the complete Runtime outbox.
     /// Invalid durable records fail closed; incomplete or unacknowledged
     /// histories fence only their own `(agent, session)` from fresh admission.
@@ -213,7 +197,6 @@ impl AgentCognitionStore {
                 );
             }
         }
-        self.feedback_recovery_initialized = self.feedback_recovery_blocked.is_empty();
         Ok(())
     }
 }

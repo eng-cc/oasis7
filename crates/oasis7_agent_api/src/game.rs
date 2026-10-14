@@ -13,11 +13,17 @@
 //! durable operation admission are not implemented by this module. In
 //! particular, an operation status is a wire value, never a finality proof.
 
+mod executor;
 mod goal;
+mod goal_prepare;
+mod goal_publish;
+pub use executor::*;
 mod json;
 mod task;
 pub use goal::*;
-pub use json::parse_request;
+pub use goal_prepare::*;
+pub use goal_publish::*;
+pub use json::{parse_bounded_json, parse_request};
 pub use task::*;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -26,7 +32,7 @@ pub const API_REVISION: u32 = 1;
 pub const MAX_REQUEST_BYTES: usize = 256 * 1024;
 pub const MAX_JSON_DEPTH: usize = 16;
 
-pub const READ_SCHEMA_REVISION: u32 = 2;
+pub const READ_SCHEMA_REVISION: u32 = 4;
 pub const READ_OPENAPI_PATH: &str = "/v1/game/openapi.json";
 pub const MAX_READ_PROOF_HEADER_BYTES: usize = 8192;
 pub const MAX_READ_HTTP_HEADER_BYTES: usize = 16384;

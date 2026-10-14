@@ -16,6 +16,7 @@
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`
 - 想先看主链安全、network tier、hosted player access / `hosted_public_join` 接入或托管身份/托管密钥：先读 `doc/p2p/blockchain/README.md`；mixed-topology reachability 再进入 `network/` 子域
+- 想核对 HTTP 提交身份、接受后处置、交易状态与 P0 查询：先读[链 HTTP / Explorer 专业需求](blockchain/chain-http-submit-explorer-contract.prd.md)和[系统设计](blockchain/chain-http-submit-explorer-contract.design.md)。
 - 想先看 Token 创世分配、交易授权、治理分发、理想化交易或服务额度 bridge：先读 `doc/p2p/token/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -24,7 +25,7 @@
 | --- | --- |
 | `node/` | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
 | `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成；默认先读 `doc/p2p/distfs/README.md` |
-| `blockchain/` | 主链安全、network tier、mainnet readiness、signer custody、hosted player access；默认先读 `doc/p2p/blockchain/README.md` |
+| `blockchain/` | 链 HTTP / Explorer、主链安全、network tier、mainnet readiness、signer custody、hosted player access；默认先读 `doc/p2p/blockchain/README.md` |
 | `observer/` | 观察者同步模式、指标与可观测性；默认先读 `doc/p2p/observer/README.md` |
 | `token/` | 创世分配、签名授权、治理分发与流通边界；默认先读 `doc/p2p/token/README.md` |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
@@ -76,6 +77,7 @@
 | 专题 PRD | 专题设计文档 | 任务追溯 |
 | --- | --- | --- |
 | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md` | GitHub Issue / GitHub Project |
+| [chain-http-submit-explorer-contract.prd.md](blockchain/chain-http-submit-explorer-contract.prd.md) | [chain-http-submit-explorer-contract.design.md](blockchain/chain-http-submit-explorer-contract.design.md) | [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450) |
 | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md` | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | GitHub Issue / GitHub Project |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | GitHub Issue / GitHub Project |

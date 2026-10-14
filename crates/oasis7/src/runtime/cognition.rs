@@ -282,10 +282,12 @@ impl AgentDecisionEnvelopeV1 {
     /// Agent-owned request digest.  The request digest itself remains opaque
     /// at this boundary; only this downstream binding is runtime-defined.
     pub fn derive_provider_invocation_key(&self) -> String {
-        h_v1(
-            "oasis7.cognition.provider-invocation.v1",
-            &self.request_digest,
-        )
+        Self::provider_invocation_key_for_request(&self.request_digest)
+    }
+
+    /// Public opaque request binding shared by capture and response dispatch.
+    pub fn provider_invocation_key_for_request(request_digest: &str) -> String {
+        h_v1("oasis7.cognition.provider-invocation.v1", &request_digest)
     }
 
     /// Derive the canonical decision binding for the request and action.

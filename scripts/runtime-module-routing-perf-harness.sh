@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
   cat <<'USAGE'
@@ -84,7 +85,11 @@ if [[ "$profile" == "release" ]]; then
   cargo_args+=(--release)
 fi
 
-env -u RUSTC_WRAPPER cargo "${cargo_args[@]}" 2>&1 | tee "$log_path"
+if [[ "$profile" == "dev" ]]; then
+  oasis7_cargo_dev "${cargo_args[@]}" 2>&1 | tee "$log_path"
+else
+  env -u RUSTC_WRAPPER cargo "${cargo_args[@]}" 2>&1 | tee "$log_path"
+fi
 
 python3 - "$log_path" "$summary_json" "$summary_md" "$profile" <<'PY'
 import json

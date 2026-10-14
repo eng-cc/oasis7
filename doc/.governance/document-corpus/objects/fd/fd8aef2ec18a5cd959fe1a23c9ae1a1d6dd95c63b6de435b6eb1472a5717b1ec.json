@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/engineering/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "00aeca08bb5788f774db2c39b1820615b571c5fce93c7d0240cc6be51fb1094f",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "landing",
+    "path": "doc/engineering/command-center/architecture/README.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "engineering-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "repository_health_engineer",
+    "structural_owner": "repository_health_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

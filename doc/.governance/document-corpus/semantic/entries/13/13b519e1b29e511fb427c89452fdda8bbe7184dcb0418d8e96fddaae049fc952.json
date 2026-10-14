@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a5252ceb3be7e61632f2f29acb9d8765688c007ccde80c552ae2b64f7d7e835d",
+    "content_sha256": "dbf67c410b7a54280d6e94abd2203a1a6e7f9a8e30d5ef10af6c6dd4434199e7",
     "current_authority": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current closure test design; developer workflow record projection updated, product authority retained",
+    "note": "current closure test design; developer workflow record projection updated, product authority retained Scoped document review for issue #4455 on 2026-10-12: AC-DCS-002/005 and the runtime suffix requirement now map to separate J1/J2 continuation obligations within SR2-RT-03; existing case counts, full service proof and unexecuted status are retained. This is document review only, not runtime execution or release acceptance; existing authority, decision owner and disposition are retained.",
     "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

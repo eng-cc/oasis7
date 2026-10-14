@@ -1,0 +1,15 @@
+{
+  "source": "52c136a7b0c628b551ab169594a19b0b55198d0b",
+  "base": "dbe03eda6e60444a69d57655a15709830660d288",
+  "files": {
+    "game-client": "17002e27c9b28d1362cf6213ad306546d7dfc3c863b6cae97211d54e4048faf6",
+    "host-test": "64767ed026ac846d81f3b7f552093489991d114a806b03235211b2fe65efbb76",
+    "SKILL.md": "2aa9a15a23b27ec63e10c03ce13cf4b0d4fcd225d0ad74f0ebdd876804f6317e",
+    "client": "03038fe1537ec1e9614cb24660eae2da585de1aad9d8ed20ad868b98dcffefcf"
+  },
+  "scope": "last explicitly authorized independent retry; preinitialized player before world/deadline start; no paid external Runtime/deployment",
+  "limit_calls": 20,
+  "limit_seconds": 360,
+  "runtime_tested_source": "0a97ad641440f11306076319f405b0f94cc5d1d1",
+  "runtime_patch_equivalent": true
+}

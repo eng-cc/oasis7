@@ -31,7 +31,21 @@ capability discovery 已落地”必须等自动 wiring 与真实 Agent E2E 通�
 - Memory / Trace 桥接层：把 provider transcript、tool trace、diagnostics、memory write intent 收敛到本地 `AgentMemory` 与 `AgentDecisionTrace`。
 - 验证与评估层：通过 golden fixtures、错误签名与 QoS 指标，对不同 provider 进行横向评估。
 
-### 2.1 目标 discovery / execution sequence
+### 2.1 需求承接与分配表
+
+本表只承接本次 §6 的 builtin 兼容合同；既有 discovery、外部 provider、Runtime 与持久化设计保持各自范围。
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Builtin 当前输入完整性](decision-provider-contract.prd.md#builtin-input-integrity) | 每次 builtin 请求保留必要 observation 和目标；已有查询时保留最新 reply；最小输入不可容纳则停止。 | [必要输入与预算流程](decision-provider-contract.design.md#des-builtin-input-integrity) | `agent_engineer` 的 profile/assembler/Responses adapter；Harness 的既有错误与 Wait 路径。 | 不扩展 ProviderBacked、C0 调用计数、retry/cache、付费 cognition 或持久化协议。 |
+| [输入完整性 AC](decision-provider-contract.prd.md#ac-builtin-input-integrity) | 以真实第二次 payload 和受阻请求无后续模型调用，独立证明输入保护。 | [输入完整性验证组](decision-provider-contract.design.md#ver-builtin-input-integrity) | `qa_engineer`；builtin behavior 与序列化后的请求捕获 seam。 | 不以 trace/History 代签，不证明真实模型质量或发布可用性。 |
+| [Builtin 参数说明一致性](decision-provider-contract.prd.md#builtin-parameter-consistency) | builtin 文字、tool schema、parser 和 Runtime 使用相同治理约束，保留合法端点和越界拒绝。 | [治理约束消费关系](decision-provider-contract.design.md#des-builtin-parameter-consistency) | `runtime_engineer` 与既有玩法治理参数 authority；`agent_engineer` 维护 builtin 消费者。 | 不扩大合法域、不修改主体/权限规则、不扩为全部工具 schema 重构。 |
+| [参数说明一致性 AC](decision-provider-contract.prd.md#ac-builtin-parameter-consistency) | 实际请求文字/schema 对账与 parser/Runtime 边界独立验证，保留 `6500` 正例和其它正常校验。 | [治理参数一致性验证组](decision-provider-contract.design.md#ver-builtin-parameter-consistency) | `qa_engineer`；参数生成、parser 与 Runtime 现有验证入口。 | schema 正确不代替文字断言；不重平衡玩法或调用真实模型。 |
+
+<a id="21-目标-discovery--execution-sequence"></a>
+<a id="21-目标-discovery-execution-sequence"></a>
+
+### 2.2 目标 discovery / execution sequence
 
 ```text
 WorldKernel live state
@@ -74,7 +88,9 @@ The current explicit `with_capability_context` constructor path is useful for fi
 host-loop experiments, but it is not the per-turn generator and must not be described as
 production auto-wiring.
 
-### 2.2 Continuous Harness compatibility
+<a id="22-continuous-harness-compatibility"></a>
+
+### 2.3 Continuous Harness compatibility
 
 The legacy `DecisionRequest/DecisionResponse/FeedbackEnvelope` DTOs are additive inner payloads,
 not a replacement for the Continuous Harness outer context. The target tagged
@@ -227,12 +243,30 @@ The successful unknown-Institution fixture reuses runtime
 outcomes debit nothing, one accepted effect has one debit and receipt, and
 retry/reconnect/restore/replay neither double-charge nor create replay credit.
 
+<a id="builtin-request-contract"></a>
+
 ## 6. 内置 provider 适配与诊断流
 
 - builtin Responses adapter 将感知、裁剪后的本地 memory、目标、有限工具 catalog 与 timeout budget 组装为 request；它只返回一个结构化候选。profile/provider 覆盖、endpoint 规范化、有限 retry 与错误分类属于 adapter 配置层，不能改变 world state 或 runtime 权威。
 - **Target closed-action safety flow** 固定为 `perceive/context/goal -> request -> one structured decision -> catalog/schema guard -> host adapter -> runtime validate/execute -> committed ActionResult feedback -> Agent memory`。当前 builtin `AgentRunner` 只产出 decision，`action_result=None`，没有内建 runtime executor callback；只有显式 loopback/host seam 能继续执行，因此 runner decision 或 parser 成功都不是 committed feedback 证据。无终态、超量 repair、非法动作、超时或 provider failure 收敛为可诊断的 `Wait`/`ActionRejected`；不执行多片段 completion。
 - Trace bridge 保存角色分离的 chat/tool trace、预算/latency/repair diagnostics、module-call intent/receipt 与 feedback。它裁剪和脱敏后供诊断使用；Viewer delivery、runtime event/replay 与玩家记忆纠正仍由各自专业 authority 负责。
 - receipt flow 是 `prompt module-call -> diagnostic intent/receipt -> journal/trace -> later reconciliation`。它保留上下文与兼容默认值，但并未证明 action-result 因果、重放不重调 provider 或恢复不重复外部副作用；这些 T4/T5 proof 必须由 runtime 设计与验证完成。
+
+<a id="des-builtin-default-system-prompt"></a>
+#### 默认配置到实际请求
+
+对应 [builtin 默认 prompt PRD](decision-provider-contract.prd.md#builtin-default-system-prompt)。本次选择保留现有策略，修正 PRD 把短样例误写成 fallback 的说法。默认值的两个现存位置为 `crates/oasis7/src/simulator/llm_defaults.rs` 与 `crates/oasis7/src/simulator/llm_agent.rs` 的 `DEFAULT_LLM_SYSTEM_PROMPT`；两者须与 PRD 独立文本一致。`LlmAgentConfig::from_env_with` 处理空值 fallback，TOML 读取沿原有效配置优先级，`effective_system_prompt` 再应用 runtime override，`PromptAssembler` 消费最终 `base_system_prompt`。
+
+检查默认值时分别捕获 env-only、合法 TOML 省略/空白字段且无其他有效配置来源的实际请求；检查覆盖时提供不同的 TOML/env/runtime 文本，并验证当前优先级及清除 runtime override 后回到解析配置。不能只测常量相等而绕开 assembler，也不能用 config.example 中显式短句证明默认值。复用离线 capture fixture 即可，不需要模型凭据或付费请求。这个文档决定不修改 prompt profile、ProviderBacked 配置或 local bridge 的独立 prompt，也不代签输入完整性和最终预算验收。
+
+<a id="des-builtin-concurrency-retry"></a>
+#### 结构化 concurrency-limit 分类
+
+对应 [builtin 有界恢复 PRD](decision-provider-contract.prd.md#builtin-concurrency-retry)。`openai_retry::is_concurrency_limit_error` 应解析已支持的 JSON error payload，在同一 error 对象内读取字符串 type/message；按既有文本匹配语义判断 `rate_limit_error` 与 `concurrency limit exceeded`，不依赖序列化空格、换行或 key order。不得从兄弟对象、其他 event 或普通文本凑齐两个条件；无法解析或字段不符时沿原 DecodeResponse/失败路径返回。
+
+重试仍受 `retry_attempts(max_model_calls)` 控制：None 最多额外一次，Some（含 0）不追加调用；原 250 ms 退避、上层预算及失败到 Wait/Rejected 映射不变。HTTP 状态码不是该 detector 的泛化条件，修复不启用所有 429 的额外 retry。
+
+离线 mock 经过真实 Responses/SSE 解析和 complete 路径，分别发送紧凑、含空格、合法多行的等价 error JSON：首错后成功断言恰好两次请求，重复错误断言最多两次；缺字段、其它 type、无关 message、坏 JSON、type/message 分处不同对象均不触发。budgeted Some 请求断言只有一次。对 native lane 检查一次 250 ms 退避边界，不通过增加预算或重试次数让格式样例通过；这些预期由独立 fixture 给出，不能只对 detector 自生成的紧凑 JSON 作自证。
 
 ### 6.1 验收证据分层
 
@@ -245,3 +279,98 @@ retry/reconnect/restore/replay neither double-charge nor create replay credit.
 只有 full 证据同时覆盖成功链路和上表负例，才可将 subject-bound discovery、semantic
 schema、typed args execution 标记为 `proven`；单独的 catalog DTO、schema parser、
 provider response validator 或诊断 trace 均只能保持 `partial`。
+
+### 6.2 Builtin 输入合同的基线与承接
+
+本节由 `agent_engineer` 维护，`runtime_engineer` 审读治理规则消费边界，`qa_engineer` 负责确定性验证。适用范围是 builtin `LlmAgentBehavior` 的 PromptAssembler、行为循环与 Responses adapter；独立 `ProviderBacked` 路径不由本节推定受影响。以下新增规则是待实现、待验证的 target 合同；文档收敛不表示缺陷已修复或实际 QA 已通过。
+
+审读基线为 `eng-cc/oasis7@e01e29064517f4bf375767a19a09802335828249`，日期为 2026-10-12。固定基线只用于解释差距；实际 profile、工具集和源码改变后应重新验证，不能把下表数值提升为永久默认值或模型真实 token 数。
+
+| 对象 | 固定基线事实与证据 | 目标与差距 |
+| --- | --- | --- |
+| 必要输入与有效预算 | [profile](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent.rs#L149-L161) 的 Balanced、Compact 有效文本预算分别为 `4608-896-480=3232`、`4096-768-352=2976`；按同基线估算器，required Tool Protocol 与 OutputSchema 合计 `3464`，尚未计入 Policy、Goals 和 Context。[现有裁剪](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent/prompt_assembly.rs#L412-L448) 会删除 History/Conversation 后继续处理 required Context。 | 以实际配置容纳必要输入；最小输入仍不可容纳则停止，不发出缺少当前反馈的下一次请求。 |
+| 最终发送内容 | [行为循环](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent/behavior_loop.rs#L213-L282) 在 assembler 后追加 Dialogue Constraints、guard 和 repair 文本；[Responses builder](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent/openai_payload.rs#L695-L718) 再加入 tools。 | 预算校验覆盖最终模型可见输入，中间 section 统计不能作为发送许可。 |
+| 治理参数说明 | [builtin 文字模板](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent/prompt_assembly.rs#L266) 与 [tool schema](https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/simulator/llm_agent/openai_payload.rs#L145-L154) 的范围不同；[玩法数值 authority](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002) 已定义合法范围。 | 修复说明消费关系，不重新决定治理合法域。 |
+
+<a id="des-builtin-input-integrity"></a>
+
+### 6.3 必要输入与预算流程
+
+#### 必要输入的来源和保护边界
+
+行为循环先按本 Agent、本次决定过程和当前工具调用关联取得输入，再交给 assembler。每次请求都保护当前 observation 和目标；已有查询时再保护最新 reply，首轮无查询不构造回复。必要性按数据语义确定，不能由 `Context`、`History`、`Conversation` 的容器名决定。最新 query reply 需从当前 `ModuleCallExchange` 的实际结果取得；`last_query_result` 是独立机制，不能假定它已经携带普通查询工具的结果。
+
+| 输入 | 必须保留的最小语义 | 可缩减范围与失败边界 |
+| --- | --- | --- |
+| 当前 observation | 现有 projection 的 `agent_id`、`time`、`pos`、`self_resources`；存在时保留最近动作的结果/拒绝原因，以及识别当前可见位置与相关前置条件所需的数据。 | 可按既有可见性权限缩减远处实体和重复详情；列表缩减保留省略/覆盖信息，不能把未展示解释成不存在。必要字段未知时保留显式未知语义，不构造值。 |
+| 当前目标 | 实际生效的短期、长期目标及其已有空值语义。 | 去除重复包装，不删减或改写目标含义；超长目标使最小输入不可容纳时走配置不足路径。 |
+| 最新 query-tool reply | 当前查询的工具名、关联输入、成功/错误状态与决定下一步所需的结果字段。对 `environment_current_observation`，保留查询实际提供的条件、缺失前置与阻断原因；字段不存在时不能补造。 | 可以去重以及采用确定性的字段投影；不能因其它历史被删除而丢掉最新结果，也不能只保留“查询已执行”。 |
+| 协议与约束 | 生效 system 指令、tool-only 约束、本次允许工具所需的参数合同，以及适用的 Dialogue/guard/repair 约束。 | 可合并重复说明或按需提供已有 schema 内容，但必须保持支持的合法输入和 required/type/bounds/enum 语义；不能靠删除有效约束获得空间。 |
+
+查询返回值是有来源的只读决策材料，无须等待世界动作 committed receipt 才能进入下一次 builtin 请求；查询成功也不表示动作已执行或目标完成。Runtime action feedback 的 receipt、memory 写入与世界效果合同仍按 [Harness feedback routing](continuous-agent-harness.design.md#7-feedback-routing-与污染防线) 执行，本节不把 query reply 转为权威 memory 或世界事实。
+
+压缩采用本地、确定性的结构化选择和序列化；相同输入、profile 和投影规则产生相同内容。先选择字段与条目，再输出可完整解析的 JSON/文本结构，不对必要 JSON、结果或目标做字符前缀截断。可选旧历史、memory digest 与重复 query 副本使用剩余空间；必要字段、身份和错误状态不能被软上限或 peak-budget 二次裁剪覆盖。无法从有界 projection 保留必要语义时明确失败，不调用另一模型生成摘要。
+
+#### 计算范围与发送前检查
+
+输入容量与 [C0 model/tool call budget](continuous-agent-harness.design.md#43-c0-request-bound-call-budget) 分开处理。本节不改 `BudgetContractV1` 字段、计数、重试或缓存语义。
+
+1. 从实际生效 profile 读取 context window、输出预留和 safety margin；不能用 `PromptBudget::default()` 代替 behavior 的实际配置。扣除预留后无有效容量应报告配置不足，不以最小值钳制制造容量。
+2. 在分配可选历史前构造必要输入，并去重重复协议/schema。预算清单必须覆盖 `instructions`、最终 `input` 的全部文本与封装，以及实际启用的 `tools`/参数 schema；assembler 之后追加的 Dialogue Constraints、Anti-Repetition Guard、final-turn 和 repair 文本同样计入。
+3. profile 的可用容量按 `context window - output reserve - safety margin` 计算。工具/schema 与协议封装可直接估算，或以对当前工具集有效且有 fixture 约束的显式上界预留；同一内容只计一次，不得省略，也不能在已用尽预算后再追加。若保留 assembler 文本子预算，它必须从该总容量扣除工具/封装成本后派生，并在诊断中与总量分列。
+4. 估算口径须在实现与 fixture 中明确；`chars/4` 一类估算不等同真实 tokenizer。安全余量保留其用途，不能通过重命名统计项隐藏超限。工具集、schema、后追加文本或估算器改变时重新计算，超出预留上界视为预算检查失败。
+5. 允许发出请求之前，对将要序列化发送的完整 payload 校验必要语义和最终估算/预留总量。校验应先于新的 `complete`/HTTP 调用；若 assembler 与 transport 分层，则最终校验必须覆盖两者所有新增内容。该路径只发送已通过检查的同一份 payload。
+
+必要最小输入超过容量时返回稳定的“输入配置不足”原因，并沿既有可诊断错误/无动作 `Wait` 路径结束当前决定过程。诊断至少包含 profile、窗口/预留/有效容量、必要输入和最终输入的估算或上界、失败原因；不记录敏感原文。错误原因与 C0 调用次数耗尽可区分，具体编码由实现映射到既有错误体系。不得再发起该次模型请求、自动扩大预算、静默切换 profile 或以缺反馈候选继续；此前已发生的只读查询与诊断可保留，不被宣称为回滚或 committed world effect。恢复需要明确修正输入/profile 后重新发起，不能无条件重试相同不可容纳输入。
+
+<a id="des-builtin-parameter-consistency"></a>
+
+### 6.4 治理约束消费关系
+
+合法范围由 [政治数值基线](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002) 与 Runtime 治理合同拥有；推荐参数模板不缩小合法域。builtin 的 `open_governance_proposal` 必须准确表达 `pass_threshold_bps=5000..=10000` 与 `voting_window_ticks=1..=1440`，保留端点；不支持 30% 门槛。
+
+目标实现为这两个治理字段提供一份共享约束数据/常量，由 Runtime、parser、tool schema 和文字说明共同消费：Runtime 与 parser 读取相同边界，schema 的 minimum/maximum 和文字范围由同源值生成。共享定义归既有治理规则层维护，LLM adapter 不拥有第二份业务范围。若层级依赖要求保留派生数据，必须机械生成并用一致性 fixture 阻止漂移，不能保留无人校验的四份手写数字。
+
+压缩 OutputSchema 时仍遵守该消费关系；同一次实际 Responses 请求中的文字与 tools 不得相互矛盾。合法范围的修复不跳过其它必填、选项、主体、权限、quorum 或 Runtime 校验，也不更改 tool-only 协议、动态 capability schema 或治理动作 ABI。
+
+### 6.5 本次独立验证设计
+
+以下是待实施的确定性验证计划。`builtin_input_integrity`、`builtin_governance_consistency` 是本节的验证组标识，尚不表示仓库中已有同名可执行测试；实现 PR 应把它们绑定到真实 test 名称和执行记录。使用固定候选源码、实际 profile/默认目标及离线 fake completion/HTTP transport，不调用真实模型。
+
+<a id="ver-builtin-input-integrity"></a>
+
+#### 输入完整性验证组
+
+`builtin_input_integrity` 由 `qa_engineer` 在 builtin behavior/transport 层执行，方法如下：
+
+1. 使用 Balanced/Compact × 短目标/默认目标四个组合。fake 首轮响应返回 `environment_current_observation` 调用，builtin 执行普通只读查询；在 [Responses payload builder](../../../crates/oasis7/src/simulator/llm_agent/openai_payload.rs) 之后捕获实际序列化 payload，解析第二次 `instructions/input/tools`，逐字段核对必要 observation、目标、查询状态和关键条件/缺失前置。同时覆盖可选历史被剪、最新 reply 保留；trace/History 保存或工具已执行不能代替 capture。
+2. 分别构造必要 observation/reply/目标超量、无有效容量、tools/schema 预留不足和 Dialogue/guard/repair 追加超量。检查稳定配置不足原因、profile/预算分项，以及受阻请求后 completion/HTTP 调用次数为零。可选内容缩减后恰好满足容量的对照应可发出；必要内容恰好超过容量的对照应停止。
+3. 为 [PromptAssembler](../../../crates/oasis7/src/simulator/llm_agent/prompt_assembly.rs) 的有界投影加入中文、嵌套 JSON、较长列表、普通查询错误和必要字段未知场景；核对确定性序列化、原始值/显式未知与省略标记，以及最新 reply 关联正确。投影无法保留必要语义时停止；首轮没有查询时不伪造 query reply。
+
+实现 PR 保存候选 SHA、实际 profile/工具集、固定输入/预期 projection、四组合 capture、call counter、错误/Wait 断言和执行结果。这些证据不证明真实 tokenizer 的精确 token 数、模型决策质量、C0 或付费资源计量，也不新增 observation wire 字段或长期 memory 合同。
+
+<a id="ver-builtin-parameter-consistency"></a>
+
+#### 治理参数一致性验证组
+
+`builtin_governance_consistency` 与输入完整性独立判定：
+
+1. 捕获真实组装并序列化的 Responses payload，检查两字段文字范围与 tools minimum/maximum 一致，排除 `1000..=9000`、`8..=256` 及等价旧范围说明；核对生成源与 parser/Runtime 的共享约束。tool schema 正确不能代替正文断言。
+2. 使用其它主体/权限/选项/quorum 均合法的固定输入；分别检查 parser 与 Runtime 的 `5000/10000`、`1/1440` 合法端点及其组合，`4999/10001`、`0/1441` 单字段越界拒绝。保留 [现有工具执行测试](../../../crates/oasis7/src/simulator/llm_agent/tests_tool_execution.rs) 的 `6500` 正例和原有正常校验负例，不以放宽 Runtime 达成提示一致。
+
+实现 PR 保存候选 SHA、payload/schema 对账、parser/Runtime/工具路径的边界断言及实际执行记录。该组无需真实模型，不重平衡治理规则，也不证明模型会选择某个参数。
+
+两个验证组独立完成后才支持本 builtin 输入修复的完成结论；本地确定性证据不替代既有真实 provider、full/parity、部署或发布验证。此次只收敛 §6 的兼容专业合同，未重写动态 capability、异步调度、存储或世界权限设计。保留的风险是估算与模型真实计量差异、未来工具/schema 增长和投影规则变化；分别由 `agent_engineer` 在 profile/工具/后追加文本变更时复核，由 `qa_engineer` 重新运行以上针对性 fixture，不以历史样本维持通过结论。
+
+## 11. 本次兼容合同的验证追溯
+
+本次按系统设计写作规范的小型兼容编辑范围，只更新 §2.1、§6 与本节的承接/验证关系；无关的生命周期、部署和迁移设计继续由原章节与配对专业文档拥有。下表 `N/A` 只表示本次文档提交没有实施或运行行为测试，目标验证义务仍完整保留。`evidence_ref` 指向待实施验证设计的定位，不是已通过测试的证据；实际测试名称、固定候选与输出由实现 PR 记录，届时替换为真实测试源。
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Builtin 当前输入完整性](decision-provider-contract.prd.md#builtin-input-integrity) | [必要输入与预算流程](decision-provider-contract.design.md#des-builtin-input-integrity) | 最终请求保护当前必要输入，所有新增内容计入实际 profile 容量，配置不足不调用。 | N/A: reason=本PR仅冻结合同且行为修复未实施; scope=builtin输入保护与发送前容量验证待实施; owner_role=agent_engineer/qa_engineer; evidence_ref=decision-provider-contract.design.md#ver-builtin-input-integrity; re-evaluate=实现PR引入请求捕获fixture时替换为真实测试源 | 实现 PR 的 profile/工具集、最终 payload、预算分项和无调用断言。 | 文档检查不证明实现修复、真实 token 数或模型质量。 |
+| [输入完整性 AC](decision-provider-contract.prd.md#ac-builtin-input-integrity) | [输入完整性验证组](decision-provider-contract.design.md#ver-builtin-input-integrity) | 四组合第二次实际请求、必需输入不足与结构化投影边界独立验收。 | N/A: reason=本PR未新增或运行行为fixture; scope=builtin四组合与不足配置验收待实施; owner_role=qa_engineer; evidence_ref=decision-provider-contract.design.md#ver-builtin-input-integrity; re-evaluate=实现PR完成fixture后记录实际测试源和输出 | 实现 PR 的候选 SHA、四组合 capture、错误/Wait、调用计数与投影断言。 | 不代替真实 provider/full/parity，不声称测试已存在或通过。 |
+| [Builtin 参数说明一致性](decision-provider-contract.prd.md#builtin-parameter-consistency) | [治理约束消费关系](decision-provider-contract.design.md#des-builtin-parameter-consistency) | prompt/schema/parser/Runtime 共享治理约束，合法域与主体规则保持。 | N/A: reason=本PR仅定义同源消费合同且代码未改; scope=builtin治理参数四方一致性待实施; owner_role=agent_engineer/runtime_engineer/qa_engineer; evidence_ref=decision-provider-contract.design.md#ver-builtin-parameter-consistency; re-evaluate=实现PR建立共享来源与一致性fixture时替换为真实测试源 | 实现 PR 的共享来源审读、payload/schema 对账和边界验证输出。 | 文档不证明四方代码已同源，不调整玩法数值。 |
+| [参数说明一致性 AC](decision-provider-contract.prd.md#ac-builtin-parameter-consistency) | [治理参数一致性验证组](decision-provider-contract.design.md#ver-builtin-parameter-consistency) | 正确正文和schema、合法端点、相邻越界、6500及其它正常校验分别证明。 | N/A: reason=本PR未新增或运行边界fixture; scope=builtin治理参数独立验收待实施; owner_role=qa_engineer/runtime_engineer; evidence_ref=decision-provider-contract.design.md#ver-builtin-parameter-consistency; re-evaluate=实现PR完成参数fixture后记录实际测试源和输出 | 实现 PR 的正文/工具 schema 断言、parser/Runtime 边界与6500回归结果。 | 不以单层成功代签整体，不证明真实模型选择或治理平衡。 |

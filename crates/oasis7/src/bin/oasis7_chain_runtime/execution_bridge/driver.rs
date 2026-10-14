@@ -18,14 +18,11 @@ use oasis7_wasm_abi::ModuleSandbox;
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 
 use super::checkpoint::{
-    begin_execution_bridge_retention_transaction, complete_execution_bridge_retention_transaction,
-    execution_bridge_record_path, execution_checkpoint_root_dir,
-    fail_execution_bridge_retention_transaction, list_execution_bridge_record_heights,
+    begin_execution_bridge_retention_transaction, execution_bridge_record_path,
+    execution_checkpoint_root_dir, list_execution_bridge_record_heights,
     load_execution_bridge_record, load_execution_checkpoint_manifest,
     maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
     promote_interrupted_execution_bridge_retention,
-    run_execution_bridge_incremental_retention_maintenance,
-    run_execution_bridge_retention_maintenance,
 };
 use super::driver_observability::{
     CommitObservation, SimulatorMirrorCommitObservation, emit_commit_observation,
@@ -1017,68 +1014,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             }
             self.pending_product_validation_intent = None;
         }
-        let retention_started_at = Instant::now();
-        let reconcile_due = self.retention_reconcile_pending
-            && self
-                .retention_reconcile_next_height
-                .is_none_or(|height| context.height >= height);
-        let retention_result = if reconcile_due {
-            run_execution_bridge_retention_maintenance(
-                self.records_dir.as_path(),
-                &self.execution_store,
-                self.hot_window_heights,
-            )
-        } else {
-            run_execution_bridge_incremental_retention_maintenance(
-                self.records_dir.as_path(),
-                &self.execution_store,
-                &record,
-                self.hot_window_heights,
-                self.checkpoint_interval_heights,
-                self.checkpoint_keep_latest,
-            )
-        };
-        let retention_result = retention_result.and_then(|freed_bytes| {
-            complete_execution_bridge_retention_transaction(self.records_dir.as_path())?;
-            Ok(freed_bytes)
-        });
-        if let Err(err) = retention_result {
-            let was_pending = self.retention_reconcile_pending;
-            self.retention_reconcile_pending = true;
-            if reconcile_due || !was_pending {
-                self.retention_reconcile_next_height = Some(
-                    context
-                        .height
-                        .saturating_add(self.checkpoint_interval_heights.max(1)),
-                );
-            }
-            if let Err(marker_err) =
-                fail_execution_bridge_retention_transaction(self.records_dir.as_path())
-            {
-                oasis7::observability::emit_stderr_or_event(
-                    tracing::Level::ERROR,
-                    format!(
-                        "execution driver failed to publish retention degradation at height {}: {}",
-                        context.height, marker_err
-                    )
-                    .as_str(),
-                    "execution bridge retention degradation publication failed",
-                );
-            }
-            oasis7::observability::emit_stderr_or_event(
-                tracing::Level::WARN,
-                format!(
-                    "execution driver retention pin-set sync failed at height {}: {}",
-                    context.height, err
-                )
-                .as_str(),
-                "execution bridge retention maintenance failed",
-            );
-        } else if reconcile_due || !self.retention_reconcile_pending {
-            self.retention_reconcile_pending = false;
-            self.retention_reconcile_next_height = None;
-        }
-        let retention_ms = retention_started_at.elapsed();
+        let retention_ms = self.maintain_committed_retention(context.height, &record);
         super::record_execution_bridge_module_tick_routing_metrics(
             self.execution_world.module_tick_routing_metrics_snapshot(),
         );
@@ -1189,3 +1125,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         super::driver_checkpoint_install::install_checkpoint_bundle(self, context, bundle)
     }
 }
+
+#[path = "driver_retention.rs"]
+mod retention;

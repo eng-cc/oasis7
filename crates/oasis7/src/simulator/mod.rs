@@ -11,7 +11,7 @@
 //! - `power`: Power system (M4 social system)
 
 mod agent;
-mod agent_api_compat;
+pub(crate) mod agent_api_compat;
 mod agent_intent_summary;
 mod asteroid_fragment;
 #[cfg(not(target_arch = "wasm32"))]
@@ -70,6 +70,8 @@ pub use agent_intent_summary::{
     AgentIntentSummaryV1, canonical_agent_intent_summary,
 };
 pub use asteroid_fragment::generate_fragments;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use async_agent_runner::CommittedFeedbackMemoryInput;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use async_agent_runner::project_receipt_memory;
 #[cfg(not(target_arch = "wasm32"))]

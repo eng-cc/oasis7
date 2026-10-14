@@ -1,0 +1,227 @@
+[
+  {
+    "id": 27,
+    "time": 27,
+    "caused_by": {
+      "type": "Action",
+      "data": 3
+    },
+    "body": {
+      "kind": "Domain",
+      "payload": {
+        "type": "FactoryBuildStarted",
+        "data": {
+          "job_id": 3,
+          "builder_agent_id": "agent-a",
+          "site_id": "starter-site",
+          "spec": {
+            "factory_id": "factory.smelter.mk1",
+            "display_name": "Smelter MK1",
+            "tier": 2,
+            "tags": [
+              "smelter",
+              "thermal"
+            ],
+            "build_cost": [
+              {
+                "kind": "structural_frame",
+                "amount": 12
+              },
+              {
+                "kind": "heat_coil",
+                "amount": 4
+              },
+              {
+                "kind": "refractory_brick",
+                "amount": 6
+              }
+            ],
+            "build_time_ticks": 1,
+            "base_power_draw": 20,
+            "recipe_slots": 2,
+            "throughput_bps": 10000,
+            "maintenance_per_tick": 1
+          },
+          "consume_ledger": "agent:agent-a",
+          "ready_at": 28,
+          "contract_version": 1,
+          "site_authority_revision": 1,
+          "site_location_id": "starter-location",
+          "location_anchor_revision": 1,
+          "construction_power_obligation": {
+            "payer_agent_id": "agent-a",
+            "profile_key": "factory.smelter.mk1",
+            "profile_revision": 1,
+            "electricity_amount": 6,
+            "mode": "start_only_sink",
+            "material_ledger": "agent:agent-a",
+            "electricity_before": 100,
+            "electricity_after": 94,
+            "material_balances_before": {
+              "heat_coil": 4,
+              "refractory_brick": 6,
+              "structural_frame": 12
+            },
+            "material_balances_after": {
+              "heat_coil": 0,
+              "refractory_brick": 0,
+              "structural_frame": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": 29,
+    "time": 28,
+    "caused_by": null,
+    "body": {
+      "kind": "Domain",
+      "payload": {
+        "type": "FactoryBuilt",
+        "data": {
+          "job_id": 3,
+          "builder_agent_id": "agent-a",
+          "site_id": "starter-site",
+          "spec": {
+            "factory_id": "factory.smelter.mk1",
+            "display_name": "Smelter MK1",
+            "tier": 2,
+            "tags": [
+              "smelter",
+              "thermal"
+            ],
+            "build_cost": [
+              {
+                "kind": "structural_frame",
+                "amount": 12
+              },
+              {
+                "kind": "heat_coil",
+                "amount": 4
+              },
+              {
+                "kind": "refractory_brick",
+                "amount": 6
+              }
+            ],
+            "build_time_ticks": 1,
+            "base_power_draw": 20,
+            "recipe_slots": 2,
+            "throughput_bps": 10000,
+            "maintenance_per_tick": 1
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": 53,
+    "time": 45,
+    "caused_by": {
+      "type": "Action",
+      "data": 6
+    },
+    "body": {
+      "kind": "Domain",
+      "payload": {
+        "type": "RecipeStarted",
+        "data": {
+          "job_id": 6,
+          "requester_agent_id": "agent-a",
+          "factory_id": "factory.smelter.mk1",
+          "recipe_id": "recipe.smelter.iron_ingot",
+          "accepted_batches": 1,
+          "consume": [
+            {
+              "kind": "carbon_fuel",
+              "amount": 1
+            },
+            {
+              "kind": "iron_ore",
+              "amount": 4
+            }
+          ],
+          "produce": [
+            {
+              "kind": "iron_ingot",
+              "amount": 3
+            }
+          ],
+          "byproducts": [
+            {
+              "kind": "slag",
+              "amount": 1
+            }
+          ],
+          "power_required": 8,
+          "power_owner_agent_id": "agent-a",
+          "duration_ticks": 1,
+          "consume_ledger": "site:starter-site",
+          "output_ledger": "site:starter-site",
+          "bottleneck_tags": [],
+          "market_quotes": [
+            {
+              "kind": "carbon_fuel",
+              "requested_amount": 1,
+              "local_available_amount": 2,
+              "world_available_amount": 0,
+              "local_deficit_amount": 0,
+              "transit_loss_bps": 5,
+              "governance_tax_bps": 500,
+              "effective_cost_index_ppm": 1050500
+            },
+            {
+              "kind": "iron_ore",
+              "requested_amount": 4,
+              "local_available_amount": 8,
+              "world_available_amount": 0,
+              "local_deficit_amount": 0,
+              "transit_loss_bps": 5,
+              "governance_tax_bps": 500,
+              "effective_cost_index_ppm": 1050500
+            }
+          ],
+          "logistics_route_ids": [],
+          "logistics_path_ids": [],
+          "ready_at": 46
+        }
+      }
+    }
+  },
+  {
+    "id": 56,
+    "time": 46,
+    "caused_by": null,
+    "body": {
+      "kind": "Domain",
+      "payload": {
+        "type": "RecipeCompleted",
+        "data": {
+          "job_id": 6,
+          "requester_agent_id": "agent-a",
+          "factory_id": "factory.smelter.mk1",
+          "recipe_id": "recipe.smelter.iron_ingot",
+          "accepted_batches": 1,
+          "produce": [
+            {
+              "kind": "iron_ingot",
+              "amount": 3
+            }
+          ],
+          "byproducts": [
+            {
+              "kind": "slag",
+              "amount": 1
+            }
+          ],
+          "output_ledger": "site:starter-site",
+          "bottleneck_tags": [],
+          "logistics_route_ids": [],
+          "logistics_path_ids": []
+        }
+      }
+    }
+  }
+]

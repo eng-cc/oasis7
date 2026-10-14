@@ -45,7 +45,7 @@
   - SC-10: the durable authority defines a simulated-player persona panel as an internal hypothesis input to standard-role review, not a formal `player` role.
   - SC-11: the durable authority separates `L4A synthetic internal playability review` from `L4B embodied agent playtest`; internal human play is only optional L4B calibration and never L5.
   - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
-  - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，能够实际启动 producer playtest、执行最小真实操作链路、并把状态快照/截图/日志路径/summary 回填到同一 artifact 目录，而不是只留下手工提示。
+  - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，按 [L4 构建与驱动](#l4-build-driver)选择产物，在[实际 hosted 操作会话](#l4-hosted-session)完成合法登录后执行真实操作，并把成功、失败或阻断的 [RunResult](#l4-execution-result) 留在同一 artifact；自动采集事实与[继续游玩/玩家杠杆评审](#l4-evidence-judgment)分开。
   - SC-14: testing 模块具备一份 canonical 模型视觉评审 SOP，使截图/布局/遮挡/层级/可读性等常规视觉 review 默认由模型完成，并明确何时必须升级人工 owner。
   - SC-15: QA infrastructure verification has a finite, reusable source-to-scene method that binds each accepted product and professional clause to its environment, oracle, artifact, evidence tier, and retained gap; it preserves the distinction between designed coverage and executed proof.
 
@@ -94,7 +94,11 @@
   10. Flow-TST-010: `组装 review packet -> 按 changed surface 拉起标准角色 subagent -> 回收 review card -> producer/qa 汇总内部结论`
   11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
   12. Flow-TST-012: `若先做高强度内部模拟 -> 形成 L4A；若需要 agent 实际进游戏操作且尽量逼近真人评审效果的结论 -> 升级到 L4B；若仍需真实人类 / 真实环境结论 -> 再升级到 L5；内部真人试玩只作为 L4B 可选校准`
-  13. Flow-TST-013: `识别可视化相关改动 -> 采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> verdict=pass 且 confidence=high 替代 routine 人工视觉 review，verdict=watch/block/human_escalation 或 confidence=low 升级人工`
+  13. Flow-TST-013: `识别可视化相关改动 -> 采集 desktop/mobile 截图 -> 附自动化摘要与视觉 contract -> 模型输出 visual review card -> verdict=pass 且 confidence=high 替代 routine 人工视觉 review，verdict=watch/block/human_escalation 或 confidence=medium/low 升级人工`
+<a id="visual-review-product-contract"></a>
+
+视觉验收以[模型视觉评审判定表](manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)为唯一 verdict/confidence 口径：仅 `pass + high` 且无独立升级条件可替代 routine review，首次 `watch` 与 `medium/low` 都升级；必需截图不能被 DOM 或 smoke 文本替代。该规则不替代 GitHub required review、发布 owner 放行、视觉方向裁决、对外 claim 审批或 L5。
+
 - Durable Playability Evidence Governance:
   - `L1` automation proves reproducibility and regressions; `L2` controlled probe proves reachability, pacing or response; `L3` telemetry/experiment compares variants or exit points. None proves fun alone. `L4A` is standard-role/persona/surface-based synthetic review, `L4B` requires an agent to execute a real minimum play loop with session evidence, and `L5` is real-player or controlled external evidence. `L4A != L4B != L5`.
   - Every playability packet records formal surface, `player_action`, `world_change_due_to_player`, `player_leverage_score` and `world_activity_only`. A world-moving sample with no player-caused change is `world_activity_only=yes` and cannot support meaningful participation or a continue claim.
@@ -105,7 +109,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面通用闭环默认走 `agent-browser`；真实本地栈 + 玩家 UI 操作流程回归走 Playwright 实跑系列；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样；Playwright 实跑用例按 `PWT-###` 编号管理 | QA/发布与产品 owner 共同遵循 |
-| 模型视觉评审 | `visual_change_trigger`、`screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 任何可视化相关代码、样式、资源或可见输出改动默认触发截图评审；对截图执行固定 rubric，输出 visual review card；`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation` 或 `confidence=low` 必须写明 owner action | `visual_change_detected -> captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；只有明确不影响任何可见 surface 的改动才能豁免且需记录理由；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
+| 模型视觉评审 | `visual_change_trigger`、`screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 任何可视化相关代码、样式、资源或可见输出改动默认触发截图评审；对截图执行固定 rubric，输出 visual review card；`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation` 或 `confidence=medium/low` 必须升级人类 owner，并写明 owner action | `visual_change_detected -> captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；只有明确不影响任何可见 surface 的改动才能豁免且需记录理由；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
 | Viewer release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `viewer` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定；`software_safe` 仅作为 compat alias 覆盖 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
 | 缺陷回归闭环 | 缺陷ID、触发条件、修复提交、复测结论 | 缺陷关闭前必须绑定回归记录 | `opened -> fixed -> regressed -> closed` | 高风险缺陷优先回归 | QA/维护者可更新状态 |
@@ -120,6 +124,44 @@
 | 好玩性 subagent 评审系统 | `review_packet`、`requested_roles`、`role_review_card`、`aggregated_review_summary` | 按 changed surface 拉起标准角色 subagent，收集 review card，并汇总成内部结论 | `packet_ready -> parallel_review -> aggregated -> escalated/closed` | 默认必开 `producer + qa`；其余按 surface 触发；缺 L5 时不得越权宣称真实外部验证完成 | `producer_system_designer` 编排，`qa_engineer` 守门 |
 | 模拟玩家 persona 面板 | `selected_personas`、`persona_card`、`persona_divergence_summary`、`handoff_recommended_to` | 按主观体验风险选择多个 simulated personas，生成风格化体验假设，再回流标准角色 review | `selected -> simulated -> handed_off -> absorbed` | 不新增正式 `player` 角色；persona 只能补内部假设，不能替代 agent 实操试玩、真人试玩或外部验证 | `producer_system_designer` 决定是否开启，命中的标准角色负责收口 |
 | L4 synthetic/agent 分层 | `synthetic_playability_verdict`、`agentic_playtest_verdict`、`optional_internal_human_corroboration`、`calibration_status` | 先区分当前结论属于 `L4A` 还是 `L4B`，再决定是否可以升级 claim | `synthetic_ready -> agent_ready -> external_ready` | `L4A` 不得冒充 `L4B`；内部真人佐证只可作为 `L4B` 校准，不得伪装成 `L5`；无 calibration 时不得宣称低层已替代高层 | `producer_system_designer` 定义边界，`qa_engineer` 守门 |
+
+### L4 工具链合同（SC-12/13、AC-20/21）
+
+本节规定 L4 工具链的目标行为和验收范围。引入本合同的文档修复不表示旧 `run-playability-l4b-agent.sh` 的 build/session 编排、评分预填或 scaffold 输出已修复；这些实现与执行义务仍由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 逐项验收，不能仅因文档合入而关闭。系统承接见 [testing design](design.md)，各项验证见[总手册 L4-C01..06](../../testing-manual.md#l4-toolchain-validation)。
+
+<a id="l4-build-driver"></a>
+#### L4 构建与驱动
+
+默认 L4B 目标采用 release 产物与正式 UI 操作，证明该候选真实玩家入口的行为。`visual-test` 必须显式选择、隔离产物，并记录实际构建与驱动；其测试 API 自动化只证明声明的受控范围，不能代签 release UI 或自主试玩。release 不安装 `__AW_TEST__`，追加 `test_api=1` 不能改变构建 profile；要求测试 API 的驱动遇到缺 API 时必须在登录/玩法等待前明确报告构建能力不匹配。对应验证：L4-C01。
+
+<a id="l4-hosted-session"></a>
+#### L4 hosted 会话
+
+默认 `hosted_public_join` 的干净操作会话必须先识别 guest，再经受支持的登录/注册成为 authenticated，确认同一执行 session 的 player 身份和 gameplay readiness 后才能提交动作。已认证恢复须重新核对当前 session/player；另一个 headed 窗口的登录状态不能代签。缺账号配置、登录失败和身份不一致分别记录 blocker；不得通过 Hosted 自动签发或静默切换 `trusted_local_only` 通过。对应验证：L4-C02。
+
+<a id="l4-execution-result"></a>
+#### L4 执行结果与当前尝试
+
+沿用 [RunResult 与逐项 verdict](governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)及[来源到场景记录](governance/agent-runtime-self-playtest.design.md#selftest-source-scene)，记录真实 `execution_mode`、`current_attempt`、候选/实际 build、执行 session、已到阶段、停止原因、证据、清理结果与未覆盖项。运行阶段沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`；任一阶段的阻断或取消都要保留当前尝试的结果，不依赖成功路径才写 summary。缺前置记 `blocked`，证据或结果未知记 `inconclusive`，只有已执行且违反约定才记 `fail`；未执行不写玩法失败或成功。
+
+每次尝试独立保留，source/build/Skill 变化另建 attempt；汇总必须指向 `current_attempt`，旧成功不能遮蔽新阻断。阶段、逐项执行 verdict 和体验判断分别记录；这只复用 L4 artifact 的运行记录，不新增通用准入或合入回执。对应验证：L4-C03。
+
+<a id="l4-evidence-judgment"></a>
+#### L4 自动事实与体验判断
+
+runner 只自动填写实际动作、状态/进度变化、返回结果、时间与证据路径。时间推进、progress 增长、ACK 或 player 一致性不能直接生成 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。继续结论和[玩家杠杆五分项](../playability_test_result/playability_test_card.md#30-玩家杠杆汇总)由 `producer_system_designer` / `qa_engineer` 逐项核对动作、可归因变化、结果解释、新决策与继续理由后填写；缺观察记未知，不能自动填 0 或 5。固定脚本路线保留实际 `execution_mode`，不能改名为自主规划证据。
+
+模板和旧 runner 导入的产物默认为 `unreviewed`；缺实际试玩证据时 L4B 保持 `missing`，证据不足时不推断“agent 不愿继续”。自动事实追加到本次 attempt，不自动覆盖已经评审的最终 verdict；复核须绑定当前候选和尝试，保留旧结论。对应验证：L4-C04。
+
+<a id="l4-entry-compatibility"></a>
+#### L4 入口兼容与执行说明
+
+[Viewer entry compatibility PRD](../world-simulator/viewer/viewer-web-entry-compatibility.prd.md)、[配套 design](../world-simulator/viewer/viewer-web-entry-compatibility.design.md)、[game-test design](../playability_test_result/game-test.design.md)和[总手册](../../testing-manual.md#l4-toolchain-validation)必须使用同一构建/驱动边界。保留 canonical/compat alias 与原有 anchors；API 一致性仅适用于显式测试产物。浏览器 URL/session 取自本次 harness/producer 输出，不能用固定端口或另一会话替代。锁定 game-test 原文的适用范围由其配套 design 明确，不以旧 `test_api=1` 示例恢复 release 测试接口。对应验证：L4-C05。
+
+<a id="l4-scaffold-output"></a>
+#### L4 scaffold 输出
+
+scaffold 必须支持普通、含空格和含单引号的合法输出目录。离线 `--json` 成功时 stdout 是一个可解析 JSON 对象；`run_id`、`output_dir`、`packet_path`、`summary_path` 与写出的 manifest 一致，`manifest_path` 指向该 manifest，命令退出 0。诊断不混入 JSON。保留已存在目录的拒绝和原文件；生成后发生错误时明确报告已生成范围，不能静默覆写重试。scaffold 成功只证明离线产物合同，不代表 L4A/L4B 已执行。对应验证：L4-C06。
 
 ### QA infrastructure receiver
 
@@ -138,7 +180,7 @@ Evaluate in this order: (1) pin the current accepted source clauses and candidat
 | Scene | Source clauses and accepted coverage | Required oracle / evidence boundary |
 | --- | --- | --- |
 | `V-FINALITY` | Product SC-1/2; DCS-001/003/004 and DC-1/3/4; current topology, authority roles, proof, and ordering. | P2P owns certificate, signer-set, round, and storage oracles; runtime binds execution; Ops establishes actual topology. Reject wrong signature, threshold, set, round, non-authoritative write, and role expansion. A single-node fixture is not full finality proof. |
-| `V-RECOVERY` | SC-3/6/7; DCS-002/005, DC-2/5, DE-3; GWSC DC5-01..05 and SR2-RT-01/03/09. | Join genesis/manifest/certificate/snapshot/log/root and same-candidate service state. Missing/conflicting proof stays isolated or blocked; preserve confirmed history; a closed commit gate yields zero new receipt, while restored pending work is rejudged under current conditions and may take effect at most once. Retain actual blocker and next step. |
+| `V-RECOVERY` | SC-3/6/7; DCS-002/005, DC-2/5, DE-3; GWSC DC5-01..05 and SR2-RT-01/03/09, including the separate [J1/J2 continuation obligations](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-journal-suffix-recovery). | Join genesis/manifest/certificate/snapshot/log/root and same-candidate service state. Missing/conflicting proof stays isolated or blocked; preserve confirmed history; a closed commit gate yields zero new receipt, while restored pending work is rejudged under current conditions and may take effect at most once. Under fixed valid authority, manifest, permissions, resources, and ordered inputs, compare a finalized checkpoint C<T plus a real nonempty WorldJournal suffix with uninterrupted control at T and after the same future actions/ticks. Independently verify J1 fresh-request completion and J2 successful-tick consumption/wake/suspend continuity; at least one valid new recipe must complete once. Root equality or a receipt upper bound alone cannot pass this positive result. Retain actual blocker and next step. |
 | `V-EXECUTION` | SC-4/5; DWE-001..004 and DE-1..4; all 17 QA negative cases and 10 runtime groups in the GWSC design. | Runtime/WASM owns determinism, ordering, migration, meter, and activation oracles; P2P owns canonical inclusion. Join both request orders, duplicates, crashes, replay, version selection, canonical bytes, and no-partial-mutation results. A local fixture does not prove canonical inclusion or recovery. |
 | `V-INDUSTRIAL` | SC-8 plus §4 industrial narrative and §5.2 allocation in the world-infrastructure PRD; gameplay SC-20/21/28/31 and stable-line clauses in [`world-rules-core-gameplay`](../product/world-rules-core-gameplay/prd.md). | Gameplay owns recipe, quantity, capacity, reservation, handoff, sink, and W/window meaning; runtime supplies journal/root facts. Distinguish accepted from held, produced, or delivered; prove conservation, once-only release/effect, and retained residuals. Keep each consumer's actual clause and evidence owner. |
 | `V-OUTAGE` | SC-9 outage narrative and exactly the eight named cells in GWSC `#sr2-sc9-eight-cells`: authority/read × stage_finish/transit/buffer_admission/terminal_settlement. | Fix one same-world baseline and retain before/outage/fresh/recovery/retry/replay values. Every authority cell includes root-absent pre-finality and root-present post-commit/pre-child specimens within that cell; do not add a ninth cell. Gameplay owns W/window disposition; Ops classifies the actual dependency; read outages never mutate world state. |
@@ -146,6 +188,8 @@ Evaluate in this order: (1) pin the current accepted source clauses and candidat
 | `V-CONSUMER` | SC-5/7/8/9/10; Agent PC-4 in [`provider-agent-experience-continuity`](../product/agents-world-simulation/provider-agent-experience-continuity.prd.md); cross-module FE-6/FE-7 in [`free-entry-world-progression-and-recognition`](../product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md); Agent harness §13 and Viewer control/readback contracts. | API, Viewer, and Agent observations must refer to the same candidate and agree on canonical state, status/blocker, root/lineage, quantities/window, receipt, progression, and next action. Prompt acknowledgement, provider prose, debug state, or a goal/memory entry is not world authority. Require actual surface/provenance evidence at the selected tier. |
 
 The source receiver preserves distinct upstream axes: product SC clauses and narratives, DCS/DWE REQ/AC, P2P/runtime DC/DE, and the GWSC QA cases are mapped independently. The complete path-level retention disposition is in [the 89-object consumption matrix](design.md#qa-infrastructure-89-consumption-matrix); it records retained source/evidence, actual consumer clause, domain owner, and remaining proof gap for every frozen object.
+
+For J1/J2, consume the [runtime journal-suffix contract](../world-runtime/prd.md#runtime-journal-suffix-recovery) and [validation design](../world-runtime/design.md#runtime-journal-suffix-validation). Full-snapshot roundtrip, canonical event-suffix replay, and ordered committed-input re-execution are separate evidence lanes; one cannot replace another. Journal replay must use recorded facts without rerunning historical WASM or charging again. These are planned deterministic runtime obligations within `V-RECOVERY` and SR2-RT-03; they add no provider or model-playtest requirement. Existing full service, topology, and consumer evidence remains independently required for those claims, and document checks do not prove runtime behavior.
 
 <a id="qa-infrastructure-tier-boundaries"></a>
 #### Tier boundary and claim limits
@@ -184,8 +228,8 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - AC-17: durable root authority defines standard roles, review packet/card contract, triggers, sequencing and stop conditions.
   - AC-18: durable root authority defines the fixed persona catalog, packet/card, role handoff, and non-role/non-human-validation boundary.
   - AC-19: durable root authority defines L4A/L4B/L5, operator entrypoints, claim boundary and non-substitution commitment.
-  - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成一套完整 `L4` scaffold，至少包含 review packet、role review cards、persona cards、summary、`L4B` agent 卡副本、可选内部真人佐证 notes 和推荐命令文件。
-  - AC-21: `scripts/run-playability-l4b-agent.sh` 必须能消费上述 `manifest.json` 或 artifact 目录，实际完成一次 `L4B` embodied-agent run，并落盘 `L4B` summary、关键 state snapshots、截图、启动日志路径以及对 copied `l4b-agent-playtest-card.md` / `l4-summary.md` 的自动预填。
+  - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成完整 `L4` scaffold，保留 review packet、role/persona cards、summary、`L4B` agent 卡副本、可选内部真人佐证 notes、manifest 和推荐命令；按 [L4 scaffold 输出](#l4-scaffold-output)验收 JSON、合法路径和目录重试保护，生成文件不构成试玩完成。
+  - AC-21: `scripts/run-playability-l4b-agent.sh` 消费 `manifest.json` 或 artifact 目录时，必须满足 [build/driver](#l4-build-driver)、[actual hosted session](#l4-hosted-session)、[执行结果](#l4-execution-result)、[事实与判断分离](#l4-evidence-judgment)及[入口一致性](#l4-entry-compatibility)；落盘本次 summary、已采集 state/截图/日志路径，copied card 与总 summary 只自动预填事实。各层是否完成按实际执行和评审证据判定，缺前置亦保留阻断结果。验证入口为[总手册 L4-C01..05](../../testing-manual.md#l4-toolchain-validation)。
   - AC-22: `model-visual-review-sop-2026-05-29.manual.md` 与 `model-visual-review-card-template.md` 必须定义截图输入、rubric、verdict、confidence、人类升级条件与正式 sink，使模型视觉评审能替代 routine 人工视觉 review。
   - AC-23: `scripts/ci-tests.sh full-support` 必须直接执行 workspace support crates 的 Rust 测试入口，至少覆盖 `oasis7_client_launcher`、`oasis7_launcher_ui`、`oasis7_proto`、`oasis7_wasm_abi`、`oasis7_wasm_build`、`oasis7_wasm_executor`、`oasis7_wasm_router`、`oasis7_wasm_sdk`、`oasis7_wasm_store` 与 `pixel_world_bridge`，避免这些 crate 只被间接编译或 release 阶段暴露回归。
 - Non-Goals:

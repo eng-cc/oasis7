@@ -8,6 +8,8 @@ use serde_json::json;
 
 #[path = "agent_delegation/dissent.rs"]
 mod dissent;
+#[path = "agent_delegation/factory.rs"]
+mod factory;
 
 fn fixture() -> World {
     let mut world = World::new();
@@ -119,22 +121,22 @@ fn recipe_fixture() -> World {
     });
     world.step().unwrap();
     world.step().unwrap();
+    let input = world.state().factories["factory"].input_ledger.clone();
+    world
+        .set_ledger_material_balance(input.clone(), "iron_ore", 8)
+        .unwrap();
+    world
+        .set_ledger_material_balance(input, "carbon_fuel", 2)
+        .unwrap();
     world
 }
 
-fn recipe(power: i64) -> Action {
+fn recipe() -> Action {
     Action::ScheduleRecipe {
         requester_agent_id: AGENT_ID.into(),
         factory_id: "factory".into(),
-        recipe_id: "recipe".into(),
-        plan: oasis7_wasm_abi::RecipeExecutionPlan::accepted(
-            1,
-            vec![],
-            vec![oasis7_wasm_abi::MaterialStack::new("widget", 1)],
-            vec![],
-            power,
-            10,
-        ),
+        recipe_id: "recipe.smelter.iron_ingot".into(),
+        plan: builtin_recipe_plan("recipe.smelter.iron_ingot", 1).unwrap(),
         logistics_route_ids: vec![],
         logistics_path_ids: vec![],
     }
@@ -205,17 +207,83 @@ fn prepare(
 }
 
 #[test]
+fn agent_delegation_rejects_forged_builtin_recipe_plans() {
+    for field in [
+        "produce",
+        "consume",
+        "byproducts",
+        "power",
+        "duration",
+        "recipe_id",
+        "batches",
+        "reject_reason",
+    ] {
+        let mut world = fixture();
+        let mut allowance = grant();
+        allowance.object_id = "factory".into();
+        allowance.action_kinds = vec!["ScheduleRecipe".into()];
+        allowance.limit_units = 1000;
+        world.install_agent_delegation_grant(allowance).unwrap();
+        let mut plan = builtin_recipe_plan("recipe.smelter.iron_ingot", 1).unwrap();
+        let mut recipe_id = "recipe.smelter.iron_ingot";
+        match field {
+            "produce" => plan.produce[0].amount += 1,
+            "consume" => plan.consume.clear(),
+            "byproducts" => plan.byproducts.clear(),
+            "power" => plan.power_required = 0,
+            "duration" => plan.duration_ticks += 1,
+            "recipe_id" => recipe_id = "unknown",
+            "batches" => plan.accepted_batches = 2,
+            "reject_reason" => plan.reject_reason = Some("forged".into()),
+            _ => unreachable!(),
+        }
+        let quoted_units = u64::try_from(plan.power_required).unwrap();
+        let action = Action::ScheduleRecipe {
+            requester_agent_id: AGENT_ID.into(),
+            factory_id: "factory".into(),
+            recipe_id: recipe_id.into(),
+            plan,
+            logistics_route_ids: vec![],
+            logistics_path_ids: vec![],
+        };
+        let before = serde_json::to_value(world.snapshot()).unwrap();
+        let decision = AgentDelegationDecisionV1 {
+            decision_request_id: format!("forged.{field}"),
+            agent_id: AGENT_ID.into(),
+            action_digest: cognition_digest_v1(
+                "oasis7.cognition.action.v1",
+                &serde_json::to_value(&action).unwrap(),
+            ),
+            grant_id: Some("grant".into()),
+            grant_revision: Some(1),
+            quote_id: Some(format!("quote.{field}")),
+            quoted_units,
+            quote_valid_until_tick: 100,
+            context: Default::default(),
+        };
+        assert!(
+            world
+                .bind_agent_delegation_decision(decision, &action)
+                .is_err(),
+            "accepted forged {field}"
+        );
+        assert_eq!(serde_json::to_value(world.snapshot()).unwrap(), before);
+    }
+}
+
+#[test]
 fn agent_delegation_atomic_commit_retry_and_shared_budget() {
     let mut world = recipe_fixture();
     let mut allowance = grant();
     allowance.object_id = "factory".into();
     allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
     world.install_agent_delegation_grant(allowance).unwrap();
     let prepared = prepare(
         &mut world,
         "one",
-        recipe(2),
-        2,
+        recipe(),
+        8,
         AgentDecisionCausalContextV1 {
             expected_consequence: json!({"x_cm":10}),
             alternative: json!({"wait":true}),
@@ -232,7 +300,7 @@ fn agent_delegation_atomic_commit_retry_and_shared_budget() {
     assert!(!receipts[0].domain_event_refs.is_empty());
     assert_eq!(
         receipts[0].authorization.as_ref().unwrap().remaining_units,
-        1
+        4
     );
     assert_eq!(
         world
@@ -242,10 +310,10 @@ fn agent_delegation_atomic_commit_retry_and_shared_budget() {
     );
     assert_eq!(
         world.agent_delegation_authorizations(AGENT_ID).unwrap()[0].spent_units,
-        2
+        8
     );
     let mut next = envelope(&world);
-    next.action = serde_json::to_value(recipe(2)).unwrap();
+    next.action = serde_json::to_value(recipe()).unwrap();
     let decision = AgentDelegationDecisionV1 {
         decision_request_id: "request.two".into(),
         agent_id: AGENT_ID.into(),
@@ -253,7 +321,7 @@ fn agent_delegation_atomic_commit_retry_and_shared_budget() {
         grant_id: Some("grant".into()),
         grant_revision: Some(1),
         quote_id: Some("quote.two".into()),
-        quoted_units: 2,
+        quoted_units: 8,
         quote_valid_until_tick: 100,
         context: Default::default(),
     };
@@ -261,7 +329,7 @@ fn agent_delegation_atomic_commit_retry_and_shared_budget() {
         format!(
             "{:?}",
             world
-                .bind_agent_delegation_decision(decision, &recipe(2))
+                .bind_agent_delegation_decision(decision, &recipe())
                 .unwrap_err()
         )
         .contains("budget_exhausted")
@@ -429,8 +497,9 @@ fn agent_delegation_provider_cannot_omit_grant_or_forge_zero_quote() {
     let mut allowance = grant();
     allowance.object_id = "factory".into();
     allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
     world.install_agent_delegation_grant(allowance).unwrap();
-    let action = recipe(2);
+    let action = recipe();
     let mut decision = AgentDelegationDecisionV1 {
         decision_request_id: "request.forged".into(),
         agent_id: AGENT_ID.into(),
@@ -471,7 +540,7 @@ fn agent_delegation_provider_cannot_omit_grant_or_forge_zero_quote() {
         .unwrap();
     assert_eq!(
         world.cognition()["agent_delegation"]["decisions"]["request.real"]["quoted_units"],
-        2
+        8
     );
 }
 
@@ -481,28 +550,29 @@ fn agent_delegation_concurrent_prepared_actions_cannot_duplicate_allowance() {
     let mut allowance = grant();
     allowance.object_id = "factory".into();
     allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
     world
         .install_agent_delegation_grant(allowance.clone())
         .unwrap();
     let first = prepare(
         &mut world,
         "concurrent-one",
-        recipe(2),
-        2,
+        recipe(),
+        8,
         Default::default(),
     );
     let second = prepare(
         &mut world,
         "concurrent-two",
-        recipe(2),
-        2,
+        recipe(),
+        8,
         Default::default(),
     );
     world.finalize_cognition_commit(&first.commit_id).unwrap();
     assert!(world.finalize_cognition_commit(&second.commit_id).is_err());
     assert_eq!(
         world.agent_delegation_authorizations(AGENT_ID).unwrap()[0].spent_units,
-        2
+        8
     );
     assert_eq!(world.agent_causal_receipts(AGENT_ID).unwrap().len(), 1);
     allowance.revision = 2;
@@ -511,7 +581,7 @@ fn agent_delegation_concurrent_prepared_actions_cannot_duplicate_allowance() {
     let restored = World::from_snapshot(world.snapshot(), world.journal().clone()).unwrap();
     assert_eq!(
         restored.agent_delegation_authorizations(AGENT_ID).unwrap()[0].remaining_units,
-        1
+        4
     );
 }
 
@@ -807,4 +877,122 @@ fn agent_delegation_unsupported_scope_cannot_install_or_publish_effects() {
         world.ledger_material_balance(&MaterialLedgerId::agent(AGENT_ID), "iron"),
         0
     );
+}
+
+#[test]
+fn builtin_recipe_quote_is_read_only_and_matches_native_production() {
+    let mut world = recipe_fixture();
+    let mut allowance = grant();
+    allowance.object_id = "factory".into();
+    allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
+    world.install_agent_delegation_grant(allowance).unwrap();
+    let before = serde_json::to_value(world.snapshot()).unwrap();
+    let journal = world.journal().clone();
+    let quote = world
+        .builtin_recipe_quote(AGENT_ID, "factory", "recipe.smelter.iron_ingot", 1)
+        .unwrap();
+    assert_eq!(
+        world
+            .builtin_recipe_quote(AGENT_ID, "factory", "recipe.smelter.iron_ingot", 1)
+            .unwrap(),
+        quote
+    );
+    assert_eq!(serde_json::to_value(world.snapshot()).unwrap(), before);
+    assert_eq!(world.journal(), &journal);
+    assert!(quote.rejection.is_none(), "{:?}", quote.rejection);
+    assert_eq!(quote.authorization.cost_units, 8);
+    assert_eq!(quote.electricity_after, Some(quote.electricity_before - 8));
+    let preview = quote.preview.unwrap();
+    assert_eq!(
+        preview.produce,
+        vec![oasis7_wasm_abi::MaterialStack::new("iron_ingot", 3)]
+    );
+    assert_eq!(
+        preview.byproducts,
+        vec![oasis7_wasm_abi::MaterialStack::new("slag", 1)]
+    );
+    let prepared = prepare(
+        &mut world,
+        "quoted-production",
+        quote.action,
+        8,
+        Default::default(),
+    );
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .unwrap();
+    assert_eq!(
+        world.agent_delegation_authorizations(AGENT_ID).unwrap()[0].spent_units,
+        8
+    );
+}
+
+#[test]
+fn builtin_recipe_quote_rejects_authority_and_reports_domain_shortage_without_mutation() {
+    let mut world = recipe_fixture();
+    assert!(
+        world
+            .builtin_recipe_quote(AGENT_ID, "factory", "recipe.smelter.iron_ingot", 1)
+            .is_err()
+    );
+    let mut allowance = grant();
+    allowance.object_id = "factory".into();
+    allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
+    world.install_agent_delegation_grant(allowance).unwrap();
+    let input = world.state().factories["factory"].input_ledger.clone();
+    world
+        .set_ledger_material_balance(input, "iron_ore", 0)
+        .unwrap();
+    let before = serde_json::to_value(world.snapshot()).unwrap();
+    let quote = world
+        .builtin_recipe_quote(AGENT_ID, "factory", "recipe.smelter.iron_ingot", 1)
+        .unwrap();
+    assert!(quote.rejection.is_some());
+    assert!(quote.preview.is_none());
+    assert!(quote.electricity_after.is_none());
+    assert_eq!(serde_json::to_value(world.snapshot()).unwrap(), before);
+    assert!(
+        world
+            .builtin_recipe_quote(AGENT_ID, "factory", "iron_ingot", 1)
+            .is_err()
+    );
+    assert!(
+        world
+            .builtin_recipe_quote(AGENT_ID, "factory", "recipe.smelter.iron_ingot", 0)
+            .is_err()
+    );
+}
+
+#[test]
+fn trusted_custom_recipe_plan_keeps_legacy_execution_and_receipt_recovery() {
+    let mut world = recipe_fixture();
+    let action = Action::ScheduleRecipe {
+        requester_agent_id: AGENT_ID.into(),
+        factory_id: "factory".into(),
+        recipe_id: "trusted.custom".into(),
+        plan: oasis7_wasm_abi::RecipeExecutionPlan::accepted(
+            1,
+            vec![],
+            vec![oasis7_wasm_abi::MaterialStack::new("custom_product", 1)],
+            vec![],
+            2,
+            1,
+        ),
+        logistics_route_ids: vec![],
+        logistics_path_ids: vec![],
+    };
+    let prepared = prepare(&mut world, "trusted-custom", action, 0, Default::default());
+    world
+        .finalize_cognition_commit(&prepared.commit_id)
+        .unwrap();
+    let receipts = world.agent_causal_receipts(AGENT_ID).unwrap();
+    assert_eq!(receipts[0].disposition, "applied");
+    assert!(receipts[0].authorization.is_none());
+    let mut restored = World::from_snapshot(world.snapshot(), world.journal().clone()).unwrap();
+    restored
+        .finalize_cognition_commit(&prepared.commit_id)
+        .unwrap();
+    assert_eq!(restored.agent_causal_receipts(AGENT_ID).unwrap(), receipts);
 }

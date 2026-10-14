@@ -28,23 +28,19 @@
 | WASM 执行器 / module cache 热点 | 仓库里已有 ignored perf probes，如 `oasis7_wasm_executor` / `oasis7_wasm_abi` 的 local perf probe | 这些 probe 没有进入标准回归，热点退化更依赖手工意识 | 把 ignored probe 收敛成可复用的本地 perf checklist，先作为诊断手册，不急着进默认 CI | `on-demand` | P3 |
 | 跨 surface 统一预算口径 | 局部有 compile closure/size、Viewer probe、release soak 阈值 | 缺少统一的 surface budget 表，导致哪些指标算退化依赖人记忆 | 建一份 repo-level perf budget 表，只维护少量核心指标：Viewer FPS/frame p95、runtime tick p95、launcher build/size、soak stall/lag | 先文档化，后逐步接 gate | P2 |
 
-## 建议优先顺序
-1. 继续收敛 Viewer changed-path scoped 性能 gate，因为 report-only 入口已经存在，下一步风险在阈值、噪音与 blocking rollout。
-2. 再补 runtime tick/step 的轻量 deterministic perf harness，减少只能靠长跑发现性能退化的问题。
-3. 然后补 P2P/存储/共识的短窗 scoped soak，把一部分 release 才暴露的问题前移。
-4. 最后再考虑 launcher runtime startup perf、LLM/provider latency 预算和 WASM ignored probes 的标准化。
+<a id="建议优先顺序"></a>
+<a id="实施顺序建议"></a>
+## 历史补测排序
 
-## 先做哪三项
-| Rank | Item | Why now | Minimum deliverable | Gate recommendation | Rollout caution |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Viewer changed-path scoped 性能 gate | Viewer 是最直接的用户面，掉帧/卡顿最容易被感知；性能专用输入已有 required-gate report-only smoke | Planner 对一般 Viewer 改动选择 JS required；仅命中性能专用路径时运行 `./scripts/viewer-performance-probe.sh --profile smoke` 并产出 `summary.json` / `summary.md`。任意结构有效的 `status=fail`（包括 runtime/source/canvas/fallback gate 失败）均为 warning/exit 0；缺失或无效 summary/产物、`web-dist` 缺失或 pass summary 下的 probe failure 仍阻断。当前 summary 不发布原始 `readyMs`，也没有 interaction latency 样本 | `required-scoped` report-only，blocking 仍待决策 | 先为已发布指标积累基线和噪音样本；补齐 ready 与真实交互采样后再纳入这些指标；未稳定前不要升级 blocking |
-| 2 | Runtime tick/step 轻量 deterministic perf harness | 当前 runtime 性能更多靠 longrun/stress 暴露，反馈太晚；需要一条能日常回归的热路径预算 | 第一阶段已落 `./scripts/runtime-module-routing-perf-harness.sh`，固定输入输出 `event/action avg ms`；首个 `release` baseline 为 `event_avg_ms=5.591`、`action_avg_ms=6.992`；后续再扩到更接近 tick/step 的稳定指标 | 先保持本地/reporting 入口，再评估 `required-scoped` 候选 | 不要一开始就拿整场景总耗时做 gate，优先选最稳定的内环指标，避免 flaky；冷 `release` 编译成本也要一起纳入 gate 设计 |
-| 3 | P2P/存储/共识短窗 scoped soak | 这类退化现在太容易拖到 release soak 才暴露，修复成本高；需要前移一条便宜但有代表性的短窗检查 | 为 `oasis7_node/**`、`oasis7_net/**`、复制/存储高风险改动准备一个 reduced-duration soak 命令和统一 summary 判读 | 开发期先 `on-demand`，高风险合流或 release 前强制 | 必须按 changed paths 和风险等级触发，不能把 release 级长跑成本扩散到普通 PR |
+当次排序与交付建议见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4065#issuecomment-6162417589)；这是矩阵权威修订来源，不冒充所有原 perf harness 的实施 Task。持续 tier、报告/阻断、预算和有效比较条件由下表与测试入口持有，不由旧 Rank 产生新排期。
 
-## 实施顺序建议
-1. 继续推进第 1 项，因为脚本、指标基础和 report-only scoped gate 已存在，最需要补的是基线样本与 blocking 决策。
-2. 再做第 2 项，因为 runtime 缺的不是“有没有长跑”，而是“有没有日常可回归的小预算”。
-3. 第 3 项随后做，因为它收益很高，但执行成本和 CI 时长影响也更大，需要在 scoped 触发条件上更谨慎。
+<a id="先做哪三项"></a>
+## 性能验证合同（不表达排期）
+| Surface | 设计依据 | 验证要求与历史样本 | Gate boundary | Rollout caution |
+| --- | --- | --- | --- | --- |
+| Viewer changed-path scoped 性能 gate | Viewer 是最直接的用户面，掉帧/卡顿最容易被感知；性能专用输入已有 required-gate report-only smoke | Planner 对一般 Viewer 改动选择 JS required；仅命中性能专用路径时运行 `./scripts/viewer-performance-probe.sh --profile smoke` 并产出 `summary.json` / `summary.md`。任意结构有效的 `status=fail`（包括 runtime/source/canvas/fallback gate 失败）均为 warning/exit 0；缺失或无效 summary/产物、`web-dist` 缺失或 pass summary 下的 probe failure 仍阻断。当前 summary 不发布原始 `readyMs`，也没有 interaction latency 样本 | `required-scoped` report-only，blocking 仍待决策 | 先为已发布指标积累基线和噪音样本；补齐 ready 与真实交互采样后再纳入这些指标；未稳定前不要升级 blocking |
+| Runtime tick/step 轻量 deterministic perf harness | 当前 runtime 性能更多靠 longrun/stress 暴露，反馈太晚；需要一条能日常回归的热路径预算 | `./scripts/runtime-module-routing-perf-harness.sh` 固定历史样本，固定输入输出 `event/action avg ms`；首个 `release` baseline 为 `event_avg_ms=5.591`、`action_avg_ms=6.992`；该样本不证明其他 tick/step 热路径已有稳定基线 | 先保持本地/reporting 入口，再评估 `required-scoped` 候选 | 不要一开始就拿整场景总耗时做 gate，优先选最稳定的内环指标，避免 flaky；冷 `release` 编译成本也要一起纳入 gate 设计 |
+| P2P/存储/共识短窗 scoped soak | 这类退化现在太容易拖到 release soak 才暴露，修复成本高；需要前移一条便宜但有代表性的短窗检查 | 为 `oasis7_node/**`、`oasis7_net/**`、复制/存储高风险改动准备一个 reduced-duration soak 命令和统一 summary 判读 | 开发期先 `on-demand`，高风险合流或 release 前强制 | 必须按 changed paths 和风险等级触发，不能把 release 级长跑成本扩散到普通 PR |
 
 ## 每项完成定义
 - Viewer changed-path scoped 性能 gate:

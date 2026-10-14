@@ -1,0 +1,10 @@
+{
+  "schema": "oasis7/disposable-logistics-world-cleanup/v1",
+  "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+  "owned_pid": 3925,
+  "process_exit_verified": true,
+  "private_realm_removed": true,
+  "ready_removed": true,
+  "canonical_authority_cleanup": "cleanup.json contains committed Stop and revoked delegation",
+  "ordinary_failed_fixture_cleanup": "three own failed roots and two ready files removed after process verification; public cleanup receipts retained in local artifact"
+}

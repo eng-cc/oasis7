@@ -1,0 +1,36 @@
+{
+  "source_head": "7959443225200c9d3595bbcb47365662e88df787",
+  "verdict": "passed_targeted_native_production_and_original_recovery",
+  "budget_verdict": "passed",
+  "guarded_client_calls": 7,
+  "reported_entry_invocations_including_rejected_bare_help": 8,
+  "last_client_completion_elapsed": 207.93614999996498,
+  "report_completion_elapsed_seconds": 233.339406,
+  "report_time_validation": "report file mtime minus initial witness mtime, independently agrees with current wall/monotonic correlation within 0.02 seconds",
+  "hard_deadline_seconds": 240,
+  "hard_deadline_enforced": true,
+  "action_id": 3,
+  "job_id": 3,
+  "started_tick": 52,
+  "completed_tick": 53,
+  "receipt_id": "blake3:3f94fc539d70abc6650ccfbad1c7b9b123596bfd404b1bfb28ccab7893c0e109",
+  "single_cognition_row": true,
+  "duplicate_response_bytes_identical": true,
+  "materials_delta": {
+    "iron_ore": -4,
+    "carbon_fuel": -1,
+    "iron_ingot": 3,
+    "slag": 1,
+    "electricity": -8
+  },
+  "pending_jobs": 0,
+  "retained_gaps": [
+    "cold entry",
+    "full starter chain",
+    "OpenClaw/two runtime parity",
+    "model process restart",
+    "GUI",
+    "deployment"
+  ],
+  "help_refusals": "bare help rejected by configuration guard; configured --help rejected by shipped CLI; production remained usable"
+}

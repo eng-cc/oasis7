@@ -15,7 +15,7 @@ use std::thread::{self, JoinHandle};
 
 use oasis7_agent_api::{
     CognitionError, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1,
-    FeedbackEnvelopeV1, ProviderDecision,
+    ContinuousAgentTurnContextV1, FeedbackEnvelopeV1, ProviderDecision,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -23,6 +23,16 @@ use serde_json::Value;
 use crate::authority::RuntimeAuthority;
 use crate::cognition::AgentCognitionStore;
 use crate::provider::{DecisionProvider, DecisionProviderError};
+
+#[path = "actor_feedback_transaction.rs"]
+mod feedback_transaction;
+use self::feedback_transaction::{AbortOnDrop, FeedbackDeliveryGate};
+#[path = "actor_runner_dispatch.rs"]
+mod runner_dispatch;
+#[path = "actor_runner_feedback.rs"]
+mod runner_feedback;
+#[path = "actor_runner_handoff.rs"]
+mod runner_handoff;
 
 const DEFAULT_MAILBOX_CAPACITY: usize = 16;
 
@@ -63,6 +73,211 @@ pub enum AsyncTurnFeedback {
 pub enum AsyncWorldEffect {
     NoEffect,
     Proposal,
+}
+
+/// Explicit non-production admission input for callers that still use the
+/// reduced, pre-outer-request compatibility contract. This request has no
+/// Runtime binding, lease, or response-readback identity.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompatibilityTurnRequest<I> {
+    pub agent_subject: String,
+    pub turn_context: Option<ContinuousAgentTurnContextV1>,
+    pub input: I,
+}
+
+/// Result of a compatibility-lane decision. It intentionally exposes only
+/// the reduced turn context; production request, lease, receipt, and readback
+/// fields are absent from this type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompatibilityTurnOutcome<O> {
+    pub turn_id: AsyncTurnId,
+    pub agent_id: String,
+    pub lifecycle: AsyncTurnLifecycle,
+    pub turn_context: Option<ContinuousAgentTurnContextV1>,
+    pub result: Result<O, DecisionProviderError>,
+}
+
+/// Host adapter for old/reduced turn callers. The compatibility result and
+/// callbacks are distinct from production request/feedback DTOs and do not
+/// produce a Runtime binding or readback proof.
+pub trait CompatibilityDecisionProvider<I, O, F>: Send {
+    fn decide_compatibility(
+        &mut self,
+        request: CompatibilityTurnRequest<I>,
+    ) -> Result<O, DecisionProviderError>;
+
+    fn push_compatibility_feedback(&mut self, feedback: F) -> Result<(), DecisionProviderError>;
+}
+
+/// Internal shared actor vtable. A single mailbox and worker serialize both
+/// lanes; adapters select the lane explicitly for every decision and feedback
+/// command.
+trait RunnerDecisionProvider<A, Q, I, O, F>: Send {
+    fn decide_production(
+        &mut self,
+        request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError>;
+
+    fn push_production_feedback(
+        &mut self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError>;
+
+    fn push_production_callback(&mut self, callback: F) -> Result<(), DecisionProviderError>;
+
+    fn decide_compatibility(
+        &mut self,
+        request: CompatibilityTurnRequest<I>,
+    ) -> Result<O, DecisionProviderError>;
+
+    fn push_compatibility_feedback(&mut self, feedback: F) -> Result<(), DecisionProviderError>;
+}
+
+struct ProductionOnly<P: ?Sized>(Box<P>);
+
+impl<A, Q, I, O, F, P: ?Sized> RunnerDecisionProvider<A, Q, I, O, F> for ProductionOnly<P>
+where
+    A: Serialize + Send + 'static,
+    Q: Serialize + Send + 'static,
+    I: Send + 'static,
+    O: Clone + Send + 'static,
+    F: Send + 'static,
+    P: DecisionProvider<A, Q> + Send,
+{
+    fn decide_production(
+        &mut self,
+        request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError> {
+        self.0.decide_checked(request)
+    }
+
+    fn push_production_feedback(
+        &mut self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
+        self.0.push_feedback(feedback)
+    }
+
+    fn push_production_callback(&mut self, _callback: F) -> Result<(), DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "production_callback_unavailable",
+            "provider was registered without a production host-callback adapter",
+            false,
+        ))
+    }
+
+    fn decide_compatibility(
+        &mut self,
+        _request: CompatibilityTurnRequest<I>,
+    ) -> Result<O, DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "compatibility_lane_unavailable",
+            "provider was registered for production requests only",
+            false,
+        ))
+    }
+
+    fn push_compatibility_feedback(&mut self, _feedback: F) -> Result<(), DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "compatibility_lane_unavailable",
+            "provider was registered for production requests only",
+            false,
+        ))
+    }
+}
+
+struct CompatibilityOnly<P>(P);
+
+impl<A, Q, I, O, F, P> RunnerDecisionProvider<A, Q, I, O, F> for CompatibilityOnly<P>
+where
+    A: Serialize + Send + 'static,
+    Q: Serialize + Send + 'static,
+    I: Send + 'static,
+    O: Clone + Send + 'static,
+    F: Send + 'static,
+    P: CompatibilityDecisionProvider<I, O, F>,
+{
+    fn decide_production(
+        &mut self,
+        _request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "production_lane_unavailable",
+            "provider was registered for compatibility requests only",
+            false,
+        ))
+    }
+
+    fn push_production_feedback(
+        &mut self,
+        _feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "production_lane_unavailable",
+            "provider was registered for compatibility requests only",
+            false,
+        ))
+    }
+
+    fn push_production_callback(&mut self, _callback: F) -> Result<(), DecisionProviderError> {
+        Err(DecisionProviderError::new(
+            "production_lane_unavailable",
+            "provider was registered for compatibility requests only",
+            false,
+        ))
+    }
+
+    fn decide_compatibility(
+        &mut self,
+        request: CompatibilityTurnRequest<I>,
+    ) -> Result<O, DecisionProviderError> {
+        self.0.decide_compatibility(request)
+    }
+
+    fn push_compatibility_feedback(&mut self, feedback: F) -> Result<(), DecisionProviderError> {
+        self.0.push_compatibility_feedback(feedback)
+    }
+}
+
+struct DualLane<P>(P);
+
+impl<A, Q, I, O, F, P> RunnerDecisionProvider<A, Q, I, O, F> for DualLane<P>
+where
+    A: Serialize + Send + 'static,
+    Q: Serialize + Send + 'static,
+    I: Send + 'static,
+    O: Clone + Send + 'static,
+    F: Send + 'static,
+    P: DecisionProvider<A, Q> + CompatibilityDecisionProvider<I, O, F>,
+{
+    fn decide_production(
+        &mut self,
+        request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError> {
+        self.0.decide_checked(request)
+    }
+
+    fn push_production_feedback(
+        &mut self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
+        self.0.push_feedback(feedback)
+    }
+
+    fn push_production_callback(&mut self, callback: F) -> Result<(), DecisionProviderError> {
+        self.0.push_compatibility_feedback(callback)
+    }
+
+    fn decide_compatibility(
+        &mut self,
+        request: CompatibilityTurnRequest<I>,
+    ) -> Result<O, DecisionProviderError> {
+        self.0.decide_compatibility(request)
+    }
+
+    fn push_compatibility_feedback(&mut self, feedback: F) -> Result<(), DecisionProviderError> {
+        self.0.push_compatibility_feedback(feedback)
+    }
 }
 
 /// A provider result retained for the host's Runtime decision and readback
@@ -149,38 +364,56 @@ impl From<CognitionError> for AsyncAgentRunnerError {
     }
 }
 
-enum ActorCommand {
-    Decide {
+enum ActorCommand<I, F> {
+    DecideProduction {
         turn_id: AsyncTurnId,
         request: Box<ContinuousAgentRequestContextV1>,
     },
-    Feedback(Box<FeedbackEnvelopeV1>),
+    DecideCompatibility {
+        turn_id: AsyncTurnId,
+        request: Box<CompatibilityTurnRequest<I>>,
+    },
+    ProductionFeedback(Box<FeedbackEnvelopeV1>),
+    ProductionFeedbackTransaction(Arc<FeedbackDeliveryGate>),
+    ProductionCallback(F),
+    CompatibilityCallback(F),
     Shutdown,
 }
 
-struct ActorCompletion<A, Q> {
-    turn_id: AsyncTurnId,
-    result: Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError>,
-    panicked: bool,
+enum ActorCompletionResult<A, Q, O> {
+    Production(Result<Box<ContinuousAgentResponseContextV1<A, Q>>, DecisionProviderError>),
+    Compatibility(Result<O, DecisionProviderError>),
 }
 
-struct AgentActor<A, Q> {
-    sender: SyncSender<ActorCommand>,
-    completions: Receiver<ActorCompletion<A, Q>>,
+struct ActorCompletion<A, Q, O> {
+    turn_id: AsyncTurnId,
+    result: ActorCompletionResult<A, Q, O>,
+}
+
+struct AgentActor<A, Q, I, O, F> {
+    sender: SyncSender<ActorCommand<I, F>>,
+    completions: Receiver<ActorCompletion<A, Q, O>>,
     active_turn: Arc<AtomicBool>,
     accepting_commands: Arc<AtomicBool>,
+    supports_production: bool,
+    supports_compatibility: bool,
     join: Option<JoinHandle<()>>,
 }
 
-impl<A, Q> AgentActor<A, Q>
+impl<A, Q, I, O, F> AgentActor<A, Q, I, O, F>
 where
     A: Serialize + Send + 'static,
     Q: Serialize + Send + 'static,
+    I: Send + 'static,
+    O: Clone + Send + 'static,
+    F: Send + 'static,
 {
     fn new(
         agent_id: String,
-        provider: Box<dyn DecisionProvider<A, Q> + 'static>,
+        provider: Box<dyn RunnerDecisionProvider<A, Q, I, O, F> + 'static>,
         capacity: usize,
+        supports_production: bool,
+        supports_compatibility: bool,
     ) -> Result<Self, AsyncAgentRunnerError> {
         let (sender, receiver) = mpsc::sync_channel(capacity);
         let (completion_sender, completions) = mpsc::channel();
@@ -193,35 +426,71 @@ where
                 let mut provider = provider;
                 while let Ok(command) = receiver.recv() {
                     match command {
-                        ActorCommand::Decide { turn_id, request } => {
+                        ActorCommand::DecideProduction { turn_id, request } => {
                             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                                provider.decide_checked(&request)
+                                provider.decide_production(&request)
                             }));
-                            let (result, panicked) = match result {
-                                Ok(result) => (result, false),
-                                Err(_) => (
-                                    Err(DecisionProviderError::new(
+                            let result = match result {
+                                Ok(Ok(response)) => {
+                                    ActorCompletionResult::Production(Ok(Box::new(response)))
+                                }
+                                Ok(Err(error)) => ActorCompletionResult::Production(Err(error)),
+                                Err(_) => ActorCompletionResult::Production(Err(
+                                    DecisionProviderError::new(
                                         "actor_panicked",
                                         "provider panicked while handling a decision request",
                                         false,
-                                    )),
-                                    true,
-                                ),
+                                    ),
+                                )),
                             };
                             if completion_sender
-                                .send(ActorCompletion {
-                                    turn_id,
-                                    result,
-                                    panicked,
-                                })
+                                .send(ActorCompletion { turn_id, result })
                                 .is_err()
                             {
                                 break;
                             }
                         }
-                        ActorCommand::Feedback(feedback) => {
+                        ActorCommand::DecideCompatibility { turn_id, request } => {
+                            let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                                provider.decide_compatibility(*request)
+                            }));
+                            let result = match result {
+                                Ok(result) => ActorCompletionResult::Compatibility(result),
+                                Err(_) => ActorCompletionResult::Compatibility(Err(
+                                    DecisionProviderError::new(
+                                        "actor_panicked",
+                                        "provider panicked while handling a compatibility turn",
+                                        false,
+                                    ),
+                                )),
+                            };
+                            if completion_sender
+                                .send(ActorCompletion { turn_id, result })
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        ActorCommand::ProductionFeedback(feedback) => {
                             let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                                let _ = provider.push_feedback(&feedback);
+                                let _ = provider.push_production_feedback(&feedback);
+                            }));
+                        }
+                        ActorCommand::ProductionFeedbackTransaction(gate) => {
+                            if let Some(feedback) = gate.wait() {
+                                let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                                    let _ = provider.push_production_feedback(&feedback);
+                                }));
+                            }
+                        }
+                        ActorCommand::ProductionCallback(callback) => {
+                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                                let _ = provider.push_production_callback(callback);
+                            }));
+                        }
+                        ActorCommand::CompatibilityCallback(callback) => {
+                            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                                let _ = provider.push_compatibility_feedback(callback);
                             }));
                         }
                         ActorCommand::Shutdown => break,
@@ -235,11 +504,17 @@ where
             completions,
             active_turn,
             accepting_commands,
+            supports_production,
+            supports_compatibility,
             join: Some(worker),
         })
     }
 
-    fn try_send(&self, command: ActorCommand, agent_id: &str) -> Result<(), AsyncAgentRunnerError> {
+    fn try_send(
+        &self,
+        command: ActorCommand<I, F>,
+        agent_id: &str,
+    ) -> Result<(), AsyncAgentRunnerError> {
         self.sender.try_send(command).map_err(|error| match error {
             TrySendError::Full(_) => AsyncAgentRunnerError::MailboxFull,
             TrySendError::Disconnected(_) => {
@@ -251,7 +526,7 @@ where
     fn try_completion(
         &self,
         agent_id: &str,
-    ) -> Result<Option<ActorCompletion<A, Q>>, AsyncAgentRunnerError> {
+    ) -> Result<Option<ActorCompletion<A, Q, O>>, AsyncAgentRunnerError> {
         match self.completions.try_recv() {
             Ok(completion) => Ok(Some(completion)),
             Err(TryRecvError::Empty) => Ok(None),
@@ -262,7 +537,7 @@ where
     }
 }
 
-impl<A, Q> Drop for AgentActor<A, Q> {
+impl<A, Q, I, O, F> Drop for AgentActor<A, Q, I, O, F> {
     fn drop(&mut self) {
         self.accepting_commands.store(false, Ordering::Release);
         let shutdown_queued = self.sender.try_send(ActorCommand::Shutdown).is_ok();
@@ -284,37 +559,103 @@ struct RunnerTurn<A, Q> {
     last_outcome: Option<AsyncAgentTurnOutcome<A, Q>>,
 }
 
+struct CompatibilityTurnRecord {
+    agent_id: String,
+    turn_context: Option<ContinuousAgentTurnContextV1>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ActorLane {
+    Production,
+    Compatibility,
+}
+
 /// Bounded per-provider actor runner. It tracks request single-flight and
 /// transport retries but delegates durable admission, lease settlement,
 /// world effects, and receipt readback to the host.
-pub struct AsyncAgentRunner<A = Value, Q = Value> {
-    actors: BTreeMap<String, AgentActor<A, Q>>,
+pub struct AsyncAgentRunner<A = Value, Q = Value, I = Value, O = Value, F = FeedbackEnvelopeV1> {
+    runner_identity: Arc<()>,
+    actors: BTreeMap<String, AgentActor<A, Q, I, O, F>>,
     mailbox_capacity: usize,
     active_turns: usize,
     next_turn_id: u64,
     turns: BTreeMap<AsyncTurnId, RunnerTurn<A, Q>>,
     awaiting_runtime: BTreeMap<String, AsyncTurnId>,
+    compatibility_turns: BTreeMap<AsyncTurnId, CompatibilityTurnRecord>,
+    awaiting_compatibility: BTreeMap<String, AsyncTurnId>,
+    actor_lanes: BTreeMap<String, ActorLane>,
     completed: VecDeque<AsyncAgentTurnOutcome<A, Q>>,
+    compatibility_completed: VecDeque<CompatibilityTurnOutcome<O>>,
+    reported_completed: usize,
+    reported_compatibility_completed: usize,
     cognition: AgentCognitionStore,
 }
 
-impl<A, Q> AsyncAgentRunner<A, Q>
+/// A one-shot capability for handing one exact completed actor turn to its
+/// successor. Its fields are private: callers can only obtain it from the
+/// runner that currently owns the awaiting turn.
+pub struct TurnHandoff {
+    runner_identity: Arc<()>,
+    turn_id: AsyncTurnId,
+    lane: ActorLane,
+    agent_id: String,
+    session_id: String,
+    turn_identity: String,
+    request_id: String,
+    request_digest: oasis7_agent_api::Digest32,
+}
+
+/// The successor dispatch is typed by lane so a reduced compatibility handoff
+/// cannot be mistaken for a production Runtime request (or vice versa).
+// Keep the established public enum constructors source-compatible. Boxing
+// these variants would be a breaking API change solely to optimize stack size.
+#[allow(clippy::large_enum_variant)]
+pub enum TurnHandoffDispatch<I> {
+    Production(ContinuousAgentRequestContextV1),
+    Compatibility(CompatibilityTurnRequest<I>),
+}
+
+#[derive(Clone)]
+enum HandoffPredecessor {
+    Production(Box<ContinuousAgentRequestContextV1>),
+    Compatibility(Box<ContinuousAgentTurnContextV1>),
+}
+
+fn handoff_stale() -> AsyncAgentRunnerError {
+    CognitionError::new(
+        "handoff_identity_stale",
+        "handoff capability no longer matches the active awaiting turn",
+    )
+    .into()
+}
+
+impl<A, Q, I, O, F> AsyncAgentRunner<A, Q, I, O, F>
 where
     A: Serialize + Send + 'static,
     Q: Serialize + Send + 'static,
+    I: Send + 'static,
+    O: Clone + Send + 'static,
+    F: Send + 'static,
 {
     pub fn new(mailbox_capacity: usize) -> Result<Self, AsyncAgentRunnerError> {
         if mailbox_capacity == 0 {
             return Err(AsyncAgentRunnerError::InvalidCapacity);
         }
         Ok(Self {
+            runner_identity: Arc::new(()),
             actors: BTreeMap::new(),
             mailbox_capacity,
             active_turns: 0,
             next_turn_id: 1,
             turns: BTreeMap::new(),
             awaiting_runtime: BTreeMap::new(),
+            compatibility_turns: BTreeMap::new(),
+            awaiting_compatibility: BTreeMap::new(),
+            actor_lanes: BTreeMap::new(),
             completed: VecDeque::new(),
+            compatibility_completed: VecDeque::new(),
+            reported_completed: 0,
+            reported_compatibility_completed: 0,
             cognition: AgentCognitionStore::default(),
         })
     }
@@ -335,7 +676,12 @@ where
     where
         P: DecisionProvider<A, Q> + 'static,
     {
-        self.register_boxed(agent_id, Box::new(provider))
+        self.register_boxed_adapter(
+            agent_id,
+            Box::new(ProductionOnly(Box::new(provider))),
+            true,
+            false,
+        )
     }
 
     pub fn register_boxed(
@@ -343,11 +689,49 @@ where
         agent_id: impl Into<String>,
         provider: Box<dyn DecisionProvider<A, Q> + 'static>,
     ) -> Result<(), AsyncAgentRunnerError> {
+        self.register_boxed_adapter(agent_id, Box::new(ProductionOnly(provider)), true, false)
+    }
+
+    pub fn register_compatibility<P>(
+        &mut self,
+        agent_id: impl Into<String>,
+        provider: P,
+    ) -> Result<(), AsyncAgentRunnerError>
+    where
+        P: CompatibilityDecisionProvider<I, O, F> + 'static,
+    {
+        self.register_boxed_adapter(agent_id, Box::new(CompatibilityOnly(provider)), false, true)
+    }
+
+    pub fn register_dual<P>(
+        &mut self,
+        agent_id: impl Into<String>,
+        provider: P,
+    ) -> Result<(), AsyncAgentRunnerError>
+    where
+        P: DecisionProvider<A, Q> + CompatibilityDecisionProvider<I, O, F> + 'static,
+    {
+        self.register_boxed_adapter(agent_id, Box::new(DualLane(provider)), true, true)
+    }
+
+    fn register_boxed_adapter(
+        &mut self,
+        agent_id: impl Into<String>,
+        provider: Box<dyn RunnerDecisionProvider<A, Q, I, O, F> + 'static>,
+        supports_production: bool,
+        supports_compatibility: bool,
+    ) -> Result<(), AsyncAgentRunnerError> {
         let agent_id = agent_id.into();
         if self.actors.contains_key(&agent_id) {
             return Err(AsyncAgentRunnerError::AgentAlreadyRegistered(agent_id));
         }
-        let actor = AgentActor::new(agent_id.clone(), provider, self.mailbox_capacity)?;
+        let actor = AgentActor::new(
+            agent_id.clone(),
+            provider,
+            self.mailbox_capacity,
+            supports_production,
+            supports_compatibility,
+        )?;
         self.actors.insert(agent_id, actor);
         Ok(())
     }
@@ -357,22 +741,19 @@ where
     }
 
     pub fn active_turn_count(&self) -> usize {
-        self.active_turns + self.awaiting_runtime.len()
+        self.active_turns + self.awaiting_runtime.len() + self.awaiting_compatibility.len()
     }
 
     /// Restore replay and collision metadata from the host's validated durable
     /// feedback history before the runner dispatches its first provider turn.
-    /// A complete restore is idempotent. A fenced partition can be refreshed
-    /// while idle, but never while a provider turn or Runtime handoff is active.
+    /// A complete restore is idempotent, but a newer authenticated snapshot
+    /// must still be compared with the live replay verifier. A fenced partition
+    /// can be refreshed while idle, but never while a provider turn or Runtime
+    /// handoff is active.
     pub fn restore_feedback_history<H: RuntimeAuthority>(
         &mut self,
         authority: &H,
     ) -> Result<(), AsyncAgentRunnerError> {
-        if self.cognition.feedback_recovery_loaded()
-            && self.cognition.feedback_recovery_initialized()
-        {
-            return Ok(());
-        }
         if self.active_turn_count() > 0 {
             return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
                 "feedback_recovery_active_turn",
@@ -384,13 +765,21 @@ where
             .map_err(AsyncAgentRunnerError::Cognition)
     }
 
-    pub(crate) fn feedback_recovery_loaded(&self) -> bool {
+    pub fn feedback_recovery_loaded(&self) -> bool {
         self.cognition.feedback_recovery_loaded()
     }
 
-    pub(crate) fn needs_feedback_history_refresh(&self) -> bool {
+    pub fn needs_feedback_history_refresh(&self) -> bool {
         !self.cognition.feedback_recovery_loaded()
             || !self.cognition.feedback_recovery_initialized()
+    }
+
+    pub fn feedback_recovery_blocked(&self, agent: &str, session: &str) -> bool {
+        self.cognition.feedback_recovery_blocked(agent, session)
+    }
+
+    pub fn agent_feedback_recovery_blocked(&self, agent: &str) -> bool {
+        self.cognition.agent_feedback_recovery_blocked(agent)
     }
 
     pub fn provider_is_still_in_flight(&self, agent_id: &str) -> bool {
@@ -399,259 +788,17 @@ where
             .is_some_and(|actor| actor.active_turn.load(Ordering::Acquire))
     }
 
-    pub fn start_turn(
-        &mut self,
-        request: ContinuousAgentRequestContextV1,
-    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
-        request.validate_production_lane()?;
-        if !self.cognition.feedback_recovery_loaded() {
-            return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
-                "feedback_recovery_required",
-                "restore host-validated feedback history before dispatching a provider turn",
-            )));
-        }
-        let agent_id = request.agent_subject.clone();
-        if self.awaiting_runtime.contains_key(&agent_id)
-            || self
-                .actors
-                .get(&agent_id)
-                .is_some_and(|actor| actor.active_turn.load(Ordering::Acquire))
-        {
-            return Err(AsyncAgentRunnerError::AgentBusy(agent_id));
-        }
-        let actor = self
-            .actors
-            .get(&agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.clone()))?;
-        if !actor.accepting_commands.load(Ordering::Acquire) {
-            return Err(AsyncAgentRunnerError::ActorUnavailable(agent_id));
-        }
-        self.cognition.begin_request(request.clone())?;
-        let turn_id = AsyncTurnId(self.next_turn_id);
-        self.next_turn_id = self.next_turn_id.checked_add(1).ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition(CognitionError::new(
-                "turn_id_exhausted",
-                "process-local turn identity space is exhausted",
-            ))
-        })?;
-        if let Err(error) = actor.try_send(
-            ActorCommand::Decide {
-                turn_id,
-                request: Box::new(request.clone()),
-            },
-            &agent_id,
-        ) {
-            self.cognition.clear_agent(&agent_id);
-            return Err(error);
-        }
-        actor.active_turn.store(true, Ordering::Release);
-        self.active_turns += 1;
-        self.turns.insert(
-            turn_id,
-            RunnerTurn {
-                agent_id,
-                request,
-                awaiting_runtime: false,
-                last_outcome: None,
-            },
-        );
-        Ok(turn_id)
-    }
-
-    /// Poll every actor without blocking for provider work.
-    pub fn poll_completed(
-        &mut self,
-    ) -> Result<Vec<AsyncAgentTurnOutcome<A, Q>>, AsyncAgentRunnerError> {
-        let mut outcomes = Vec::new();
-        for (agent_id, actor) in &mut self.actors {
-            let Some(completion) = actor.try_completion(agent_id)? else {
-                continue;
-            };
-            actor.active_turn.store(false, Ordering::Release);
-            self.active_turns = self.active_turns.saturating_sub(1);
-            let turn = self.turns.get_mut(&completion.turn_id).ok_or_else(|| {
-                AsyncAgentRunnerError::Cognition(CognitionError::new(
-                    "unknown_actor_completion",
-                    "actor completed an unknown process-local turn",
-                ))
-            })?;
-            let (lifecycle, feedback, world_effect, response_context, provider_error) =
-                match completion.result {
-                    Ok(response) => {
-                        let (feedback, effect) =
-                            classify_decision(&response.base_decision_response.decision);
-                        (
-                            AsyncTurnLifecycle::Completed,
-                            feedback,
-                            effect,
-                            Some(Arc::new(response)),
-                            None,
-                        )
-                    }
-                    Err(error) if completion.panicked => (
-                        AsyncTurnLifecycle::Failed,
-                        AsyncTurnFeedback::ActorPanicked,
-                        AsyncWorldEffect::NoEffect,
-                        None,
-                        Some(error),
-                    ),
-                    Err(error) => (
-                        AsyncTurnLifecycle::Failed,
-                        AsyncTurnFeedback::ProviderError,
-                        AsyncWorldEffect::NoEffect,
-                        None,
-                        Some(error),
-                    ),
-                };
-            let outcome = AsyncAgentTurnOutcome {
-                turn_id: completion.turn_id,
-                agent_id: turn.agent_id.clone(),
-                lifecycle,
-                feedback,
-                world_effect,
-                request_context: turn.request.clone(),
-                response_context,
-                provider_error,
-            };
-            turn.awaiting_runtime = true;
-            turn.last_outcome = Some(outcome.clone());
-            self.awaiting_runtime
-                .insert(turn.agent_id.clone(), completion.turn_id);
-            self.completed.push_back(outcome.clone());
-            outcomes.push(outcome);
-        }
-        Ok(outcomes)
-    }
-
-    pub fn take_completed(&mut self) -> Vec<AsyncAgentTurnOutcome<A, Q>> {
-        self.completed.drain(..).collect()
-    }
-
-    /// Retry only a Runtime-awaiting turn and only from its exact last
-    /// accepted request. The request digest and retry sequence remain stable;
-    /// the transport attempt is the sole incremented field.
-    pub fn retry_awaiting_turn(
-        &mut self,
-        turn_id: AsyncTurnId,
-        expected_request: &ContinuousAgentRequestContextV1,
-    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
-        let turn = self.turns.get(&turn_id).ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition(CognitionError::new("unknown_turn", "turn is unknown"))
-        })?;
-        if !turn.awaiting_runtime || &turn.request != expected_request {
-            return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
-                "retry_identity_mismatch",
-                "retry must use the exact last Runtime-awaiting request",
-            )));
-        }
-        let mut retry_request = expected_request.clone();
-        retry_request.transport_attempt = retry_request
-            .transport_attempt
-            .checked_add(1)
-            .ok_or_else(|| {
-                AsyncAgentRunnerError::Cognition(CognitionError::new(
-                    "transport_attempt_exhausted",
-                    "transport attempt identity cannot be incremented",
-                ))
-            })?;
-        retry_request.validate_production_lane()?;
-        let agent_id = turn.agent_id.clone();
-        let actor = self
-            .actors
-            .get(&agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.clone()))?;
-        if actor.active_turn.load(Ordering::Acquire) {
-            return Err(AsyncAgentRunnerError::AgentBusy(agent_id));
-        }
-        if !actor.accepting_commands.load(Ordering::Acquire) {
-            return Err(AsyncAgentRunnerError::ActorUnavailable(agent_id));
-        }
-        actor.try_send(
-            ActorCommand::Decide {
-                turn_id,
-                request: Box::new(retry_request.clone()),
-            },
-            &agent_id,
-        )?;
-        actor.active_turn.store(true, Ordering::Release);
-        self.active_turns += 1;
-        let turn = self.turns.get_mut(&turn_id).expect("turn checked above");
-        turn.request = retry_request;
-        turn.awaiting_runtime = false;
-        turn.last_outcome = None;
-        self.awaiting_runtime.remove(&agent_id);
-        self.completed.retain(|outcome| outcome.turn_id != turn_id);
-        Ok(turn_id)
-    }
-
-    pub fn awaiting_request(
-        &self,
-        turn_id: AsyncTurnId,
-    ) -> Option<&ContinuousAgentRequestContextV1> {
-        self.turns
-            .get(&turn_id)
-            .filter(|turn| turn.awaiting_runtime)
-            .map(|turn| &turn.request)
-    }
-
-    pub fn awaiting_outcome(&self, turn_id: AsyncTurnId) -> Option<&AsyncAgentTurnOutcome<A, Q>> {
-        self.turns
-            .get(&turn_id)
-            .filter(|turn| turn.awaiting_runtime)
-            .and_then(|turn| turn.last_outcome.as_ref())
-    }
-
-    pub fn notify_runtime_feedback(
-        &self,
-        agent_id: &str,
-        feedback: FeedbackEnvelopeV1,
-    ) -> Result<(), AsyncAgentRunnerError> {
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        actor.try_send(ActorCommand::Feedback(Box::new(feedback)), agent_id)
-    }
-
-    pub(crate) fn accept_feedback(
-        &mut self,
-        turn_id: AsyncTurnId,
-        feedback: FeedbackEnvelopeV1,
-    ) -> Result<(), AsyncAgentRunnerError> {
-        let turn = self.turns.get(&turn_id).ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition(CognitionError::new("unknown_turn", "turn is unknown"))
-        })?;
-        let request = &turn.request;
-        if !turn.awaiting_runtime
-            || feedback.agent_subject != request.agent_subject
-            || feedback.agent_session_id != request.agent_session_id
-            || feedback.agent_turn_id != request.agent_turn_id
-            || feedback.decision_request_id != request.decision_request_id
-            || feedback.request_digest != request.request_digest
-        {
-            return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
-                "feedback_correlation_mismatch",
-                "feedback does not match an awaiting turn",
-            )));
-        }
-        feedback.validate()?;
-        let agent_id = request.agent_subject.clone();
-        self.cognition.accept_feedback(feedback.clone())?;
-        if matches!(
-            feedback.status.as_str(),
-            "committed" | "rejected" | "failed"
-        ) {
-            self.release_turn(turn_id);
-        }
-        self.notify_runtime_feedback(&agent_id, feedback)?;
-        Ok(())
-    }
-
+    /// Bind a one-shot handoff capability to the exact request currently
+    /// awaiting the host. The process-local turn ID is the request version;
+    /// the capability is also tied to this runner instance.
     /// Release local single-flight correlation only after the host has
     /// accepted authoritative terminal feedback or a continuation handoff.
-    pub(crate) fn release_turn(&mut self, turn_id: AsyncTurnId) {
+    pub fn release_turn(&mut self, turn_id: AsyncTurnId) {
         if let Some(turn) = self.turns.remove(&turn_id) {
             self.awaiting_runtime.remove(&turn.agent_id);
+            if self.actor_lanes.get(&turn.agent_id) == Some(&ActorLane::Production) {
+                self.actor_lanes.remove(&turn.agent_id);
+            }
             self.cognition.clear_agent(&turn.agent_id);
         }
     }
@@ -685,6 +832,10 @@ fn classify_decision<A, Q>(
 #[cfg(test)]
 #[path = "actor_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "actor_compatibility_tests.rs"]
+mod compatibility_tests;
 
 #[cfg(test)]
 pub(crate) mod tests {

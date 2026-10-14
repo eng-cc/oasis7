@@ -942,29 +942,28 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                                 error.to_string()
                             })?;
                     }
-                    runner
-                        .release_runtime_turn_for_continuation(
-                            &request.agent_subject,
-                            &request.agent_session_id,
-                            &request.agent_turn_id,
-                            &request.decision_request_id,
-                            request.request_digest.as_str(),
-                        )
-                        .map_err(|error| {
-                            #[cfg(any(test, feature = "test_tier_required"))]
-                            if matches!(
-                                &error,
-                                crate::simulator::AsyncAgentRunnerError::Cognition(reason)
-                                    if reason == "unknown pending Runtime turn"
-                            ) {
-                                static REPORTED: std::sync::atomic::AtomicBool =
-                                    std::sync::atomic::AtomicBool::new(false);
-                                if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                                    eprintln!("hosted_wait_missing_awaiting_runtime_turn");
-                                }
+                    let prior_wait = self.llm_sidecar.hosted_wait.clone();
+                    wait.stage = "settle".into();
+                    self.llm_sidecar.hosted_wait = Some(wait.clone());
+                    if let Err(error) = self.llm_sidecar.with_runtime_turn_release_for_continuation(
+                        &request.agent_subject,
+                        &request.agent_session_id,
+                        &request.agent_turn_id,
+                        &request.decision_request_id,
+                        request.request_digest.as_str(),
+                        |sidecar| sidecar.persist_provider_lineage(),
+                    ) {
+                        self.llm_sidecar.hosted_wait = prior_wait;
+                        #[cfg(any(test, feature = "test_tier_required"))]
+                        if error.contains("unknown pending Runtime turn") {
+                            static REPORTED: std::sync::atomic::AtomicBool =
+                                std::sync::atomic::AtomicBool::new(false);
+                            if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                                eprintln!("hosted_wait_missing_awaiting_runtime_turn");
                             }
-                            error.to_string()
-                        })?;
+                        }
+                        return Err(error);
+                    }
                 }
                 wait.stage = "settle".into();
             } else {

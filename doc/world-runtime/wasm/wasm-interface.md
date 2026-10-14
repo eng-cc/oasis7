@@ -30,6 +30,7 @@
 | [E13](wasm-executor.prd.md#sr2-obligation-e13) | E13**：将磁盘编译缓存从“原始 wasm 回盘”修正为“序列化 compiled artifact 回盘”，补齐 round-trip 与损坏恢复回归。 | [本域合同](wasm-interface.md#sr2-execution-contract) | paired专业owner与runtime/QA；具体跨域依赖见本域合同 | 下方原文限定范围不扩张，未执行能力不升级 |
 | [E14](wasm-executor.prd.md#sr2-obligation-e14) | E14**：将 agent-os 对齐增强与 sandbox 安全硬化的永久契约并入本稳定权威，退役重复专题文档。 | [本域合同](wasm-interface.md#sr2-execution-contract) | paired专业owner与runtime/QA；具体跨域依赖见本域合同 | 下方原文限定范围不扩张，未执行能力不升级 |
 | [PRD-ENGINEERING-006](wasm-executor.prd.md#sr2-obligation-prd-engineering-006) | &#124; PRD-ENGINEERING-006 &#124; 文档内既有任务条目 &#124; test_tier_required &#124; ./scripts/doc-governance-check.sh + 引用可达性扫描 &#124; 迁移文档命名一致性与可追溯性 &#124; | [本域合同](wasm-interface.md#sr2-execution-contract) | paired专业owner与runtime/QA；具体跨域依赖见本域合同 | 下方原文限定范围不扩张，未执行能力不升级 |
+| [journal suffix recovery](../prd.md#runtime-journal-suffix-recovery) | 成功 tick 的 wake/clear 可由较早 checkpoint 加非空 suffix 恢复，旧输出缺省不代替历史证据 | [tick 合同](#wasm-tick-journal-replay) | [runtime 宿主记录与验证](../runtime/runtime-integration.md#module-tick-journal-replay)；WASM/QA | 新宿主记录为 target，保持当前 ABI 与失败策略 |
 ## 3. 当前状态、目标状态与差距
 
 | 对象 | 当前状态 / 基线 | 目标 | 差距与证据边界 |
@@ -120,6 +121,7 @@ ModuleStateMigratedCoreV1 是上方事件排除 containing-block hash/height 的
 | [E13](wasm-executor.prd.md#sr2-obligation-e13) | [本域合同](wasm-interface.md#sr2-execution-contract) | E13**：将磁盘编译缓存从“原始 wasm 回盘”修正为“序列化 compiled artifact 回盘”，补齐 round-trip 与损坏恢复回归。 | [现有partial ABI source](../../../crates/oasis7_wasm_abi/tests/open_module_commands.rs)；按原条款输入/阈值及本页domain cases验证，required兼容/codec/build/窗口fixture，full仅真实同candidate跨宿主/authority proof；原文manual/run来源仍适用 | 本文档采纳；真实implementation task evidence记录input/candidate/environment/exit/artifact | existing source仅partial，本次未运行；原有full/provider/headed义务保留 |
 | [E14](wasm-executor.prd.md#sr2-obligation-e14) | [本域合同](wasm-interface.md#sr2-execution-contract) | E14**：将 agent-os 对齐增强与 sandbox 安全硬化的永久契约并入本稳定权威，退役重复专题文档。 | [现有partial ABI source](../../../crates/oasis7_wasm_abi/tests/open_module_commands.rs)；按原条款输入/阈值及本页domain cases验证，required兼容/codec/build/窗口fixture，full仅真实同candidate跨宿主/authority proof；原文manual/run来源仍适用 | 本文档采纳；真实implementation task evidence记录input/candidate/environment/exit/artifact | existing source仅partial，本次未运行；原有full/provider/headed义务保留 |
 | [PRD-ENGINEERING-006](wasm-executor.prd.md#sr2-obligation-prd-engineering-006) | [本域合同](wasm-interface.md#sr2-execution-contract) | &#124; PRD-ENGINEERING-006 &#124; 文档内既有任务条目 &#124; test_tier_required &#124; ./scripts/doc-governance-check.sh + 引用可达性扫描 &#124; 迁移文档命名一致性与可追溯性 &#124; | [现有partial ABI source](../../../crates/oasis7_wasm_abi/tests/open_module_commands.rs)；按原条款输入/阈值及本页domain cases验证，required兼容/codec/build/窗口fixture，full仅真实同candidate跨宿主/authority proof；原文manual/run来源仍适用 | 本文档采纳；真实implementation task evidence记录input/candidate/environment/exit/artifact | existing source仅partial，本次未运行；原有full/provider/headed义务保留 |
+| [journal suffix recovery](../prd.md#runtime-journal-suffix-recovery) | [tick 合同](#wasm-tick-journal-replay) | 成功 tick 的 wake/clear、失败 route 保留原 schedule；C<T 恢复和后续调用等价 | [现有 tick 事务测试](../../../crates/oasis7/src/runtime/tests/module_tick_routing_transaction_regressions.rs) 扩展宿主 TICK-JOURNAL-01..05；required、真实 WASM、固定 world/manifest/C/T 与非空 suffix | planned/未运行；schedule、调用、费用与兼容负例对照 | 现有 snapshot/mock 不证明该矩阵，不升级整体 capability |
 现有partial/unrun来源：`crates/oasis7_wasm_executor/src/tests.rs`（output/fuel/memory/cache），`crates/oasis7_wasm_abi/tests/open_module_commands.rs`（legacy/envelope），`crates/oasis7/src/runtime/world/module_runtime_tests.rs`（metrics/due-preflight），`scripts/oasis7-node-wasm-metrics-monitor.test.sh`（window summary），`scripts/ci-verify-m1-wasm-summaries.py`（build对账）。这些不是新target receipt/migration/DC5已覆盖证据。GWSC [negative matrix](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-qa-negative-matrix) 接收全部17QA cases，[runtime scenarios](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-runtime-scenarios) 接收10组runtime；本页domain rows为具体输入/assertion分配。
 ## 12. 决策、长期风险与未决问题
 选择单authority typedtarget而非重复wire，是为避免scope/hash/版本漂移。已知风险是implementation缺失、proof不可读、U64/UTF8投影误读、递归hash与历史误作新候选证据；WASM/runtime/QA分别按本页case和runtimereceiver解除。触发器为新ABI/schedule/schema、trust epoch、activation或consumer变更；需重新冻结合同与专业联审。SC9八fullcells及activeLLM/provider API parity、真实desktop+narrow/headed证据保持产品/QAauthority，不因本页文档完成消除。
@@ -128,8 +130,7 @@ ModuleStateMigratedCoreV1 是上方事件排除 containing-block hash/height 的
 SDK 的默认 no_std、共享 Canonical-CBOR wire 类型、codec 错误与 builtin 兼容 evidence 由 `doc/world-runtime/wasm/wasm-sdk.prd.md` 承载；本文继续作为 runtime ABI/reference 入口，不承担 SDK 实现任务账本。
 `crates/oasis7_wasm_abi` 是 `ModuleManifest`、ABI contract、artifact identity 与 limits 类型的单一代码来源；net/proto/viewer 不得维护重复定义。历史 distributed Phase 7 移除 `oasis7_net` 重复 manifest 属于已完成 crate-boundary provenance，不构成第二套现行规范。
 ## 状态与证据等级
-本文用 `current`（现行 wire/行为）、`partial`（已有受限路径但未闭环）、`target`
-（待冻结合同）和 `proven`（有实现与回归证据的边界）四个标签，避免把接口存在
+本文用 `current`（现行 wire/行为）、`partial`（已有受限路径但未闭环）、`target`（待冻结合同）和 `proven`（有实现与回归证据的边界）四个标签，避免把接口存在
 误读为端到端能力。`proven` 只能外推到同一 ABI/版本/路径，不能外推到相邻目标能力。
 - **Proven foundation：** 版本化 command 声明/admission、active-module 确定性 catalog、Canonical-CBOR envelope byte-exact 校验、sandbox 前的 active/module/schema/hash/大小检查和既有计量链。
 - **Partial bridge/schema：** `CapabilityCatalogSnapshot`、`AgentCommandResponse`、subject-bound context 和 provider/loopback 校验已存在；自动生产接线、真实 Agent E2E、caller capability、最终 receipt 及 payload 语义解码仍未闭合。当前 `schema_hash` 只绑定声明/envelope 标识，payload 仍是 opaque byte string。
@@ -172,10 +173,11 @@ struct ModuleManifest {
 - `action_kinds`: Vec<String>（可选，订阅的动作类型）
 - `stage`: `"pre_action" | "post_action" | "post_event" | "tick"`（动作/事件/周期路由阶段）
 - `filters`: 可选过滤条件（例如仅关注某类 owner/地点）
+<a id="wasm-tick-journal-replay"></a>
 **Tick 生命周期调度（执行器合同）**
-- 只有激活且订阅 `tick` 的模块实例进入调度表；激活时初次安排在当前 logical tick。调度表以 `instance_id -> next_wake_tick` 持久化在世界 snapshot 中，因此 restart/replay 不得把尚未到期的唤醒丢失或提前。
+- 只有激活且订阅 `tick` 的实例进入调度表，激活时初排于当前 logical tick。`instance_id -> next_wake_tick` 随 snapshot 持久化；restart/replay 不得提前唤醒、丢失未来 wake 或复活 suspend。较早 checkpoint 的 suffix 恢复依 [宿主调度结果合同](../runtime/runtime-integration.md#module-tick-journal-replay)。
 - `step_with_modules` 每次推进 logical time 后只调用到期实例。tick 调用的 `ctx.stage` 为 `"tick"`，`event` 与 `action` 均省略；reducer 仍携带其受限 `state`，pure 模块不携带 `state`。
-- 执行器在调用前移除该实例的旧 schedule。调用成功后，只有 `tick_lifecycle.wake_after_ticks` 才写入下一次 schedule；`ticks=0` 按 `1` clamp。`tick_lifecycle.suspend` 或字段缺省均不重排。调用失败同样不会自动恢复已消费的 schedule，宿主必须返回结构化失败而不能静默重试。
+- 执行器在暂存视图中移除旧 schedule；成功 route 原子发布最终 wake/clear。只有 `tick_lifecycle.wake_after_ticks` 写入下一次 schedule，`ticks=0` 按 `1` clamp；`tick_lifecycle.suspend` 或字段缺省均 clear。整条 route 失败不安装暂存结果，保留 route 前 schedule，并沿既有结构化错误与失败审计规则返回，不在失败返回前静默重试。
 - 这一定时语义不改变模块权限、artifact identity 或 manifest hash 规则；新增/变更 tick subscription 仍按普通 manifest 和 artifact 校验链处理。
 **ModuleLimits（示意字段）**
 ```rust
@@ -248,7 +250,6 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 - `event`/`action` 字段均为 canonical CBOR bytes。
 - reducer 调用会携带 `state`（空字节串代表无历史状态），pure 调用省略 `state`。
 - `pre_action` 阶段仅提供 `action`；`post_action` 阶段提供 `action` + `event`（动作落盘后的结果事件）；`post_event` 阶段仅提供 `event`。
-- `tick` 阶段不提供 `event` 或 `action`；其 schedule/重排语义以上述执行器合同为准。
 **ModuleOutput（CBOR Map）**
 ```
 {
@@ -262,7 +263,7 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 - 当 `new_state` 为非空时，运行时记录 `ModuleStateUpdated` 事件并更新模块状态。
 - Pure 模块不得返回 `new_state`，否则视为 InvalidOutput。
 - `tick_lifecycle` 是 ABI 的可选、serde-defaulted 扩展：旧模块输出省略该字段仍可解码，且其既有非-tick 调用行为不变；若该输出来自 tick 调用，缺省的兼容含义是 suspend（不再调度），而不是隐式每 tick 重试。
-- 回归至少覆盖：激活初排、仅到期调用、`wake_after_ticks` 重排、`suspend`/缺省不重排、零 ticks clamp、调用失败不重排，以及 schedule 的 snapshot round-trip。
+- 回归至少覆盖初排、到期、wake、成功 route 的 suspend/缺省、零 ticks clamp，以及失败 route 丢弃业务与 wake 暂存、保留原 schedule 并返回既有结构化错误/失败审计；不承诺自动重试。另覆盖 snapshot round-trip 和 [非空 suffix 与恢复后续跑验证](../runtime/runtime-integration.md#module-tick-journal-replay-validation)。
 **错误约定**
 - 模块返回非规范 CBOR、输出超限或字段缺失时，宿主记录 `ModuleCallFailed` 事件并拒绝输出。
 ## 开放制度扩展合同（试点，非全面迁移）
@@ -702,16 +703,16 @@ AgentCommandResponse = {
 module_id, instance_id)`; a governed non-instance command uses an explicit variant, never global
 fallback. Snapshot hash and bound nonce/context/receipt cover world, branch, finality block/epoch,
 policy hash/epoch, revocation epoch, subject/audience, entries and validity.
-The host builds a catalog by intersecting active module declarations with the current
-subject's non-revoked grants and policy for the requested audience. Entries must be
-sorted and bound to the snapshot's `module_registry_hash`, policy hash, branch,
-finality epoch and revocation epoch. `eligible_grant_ids` is a discovery hint for
-auditability, not a bearer token; exposing it does not confer authority. Provider code
-may turn entries into dynamic tool schemas and return one candidate response, but it
-cannot add a command, alter the subject, substitute a grant, alter the audience, or
-issue a new scope. The response is invalid if its selected entry, envelope schema,
-subject, presenter binding, audience, snapshot id or response nonce does not match the
-request.
+Catalog entries intersect active declarations, the subject's grants and audience policy.
+Verified revoked/superseded grants are excluded without hiding unrelated valid grants;
+history remains persisted. Corrupt signature/authority/proof or unexplained conflicts
+still fail closed; see [discovery validation](../module/module-lifecycle.md#revoked-grant-discovery).
+Sorted entries bind `module_registry_hash`, policy hash, branch, finality and revocation
+epochs. `eligible_grant_ids` is an audit hint, not a bearer token or new authority.
+Providers may derive dynamic schemas and propose a response, but cannot add commands,
+change subject/audience, substitute grants or issue scope. Selected entry, envelope
+schema, subject, presenter binding, audience, snapshot id and response nonce must all
+match the request; execution independently rechecks live authority below.
 The current response may carry a raw `ModuleCommandEnvelope`; the trusted host treats it
 as compatibility input and re-runs declaration/hash/size checks. Once `typed_args` exists,
 only the host encoder produces payload bytes. Provider cannot choose another descriptor,
@@ -955,7 +956,7 @@ ModuleStateMigrated { // target shape; not a current event type
 | `ModuleManifest` / `ModuleAbiContract` | 缺省 ABI contract、declarations 与可选 artifact identity 可读取历史 manifest；未知字段不能改变既有 hash/admission 语义。 | 用旧 manifest fixture 做 decode、canonical re-encode、admission 和 snapshot/replay，证明 `module_id`、version、`wasm_hash` 与 manifest hash 不漂移。 |
 | `ModuleContext` / `ModuleOutput` | 缺失 host caller 与可选 `tick_lifecycle` 的旧 wire 仍可解码；legacy caller 不能被当作新 subject 授权，tick 缺省按 suspend 处理。 | 旧模块 golden bytes 在新 host 上得到同一结果；新字段只在明确的 ABI version/manifest admission 下启用。 |
 | `ModuleCommandEnvelope` | 外层 Canonical-CBOR、声明 identity 和 payload bound 有 proven 检查；payload 内容仍是 opaque，raw envelope 是兼容路径。 | descriptor registry、typed-args host encoder、semantic decode 与 schema hash 绑定必须有正反 fixture；未知 schema/version/encoding 一律拒绝。 |
-| module lifecycle / state | install、activate、upgrade、deactivate 基础事件与 instance/tick persistence 已有实现切片；完整 migration atomicity 与 receipt 仍 partial/target。 | 从 `base_manifest_hash` 到 from/to schema、migration `wasm_hash`、新 manifest hash 的单 journal 证明；失败注入后旧 registry/state/artifact 完整保留。 |
+| module lifecycle / state | install、activate、upgrade、deactivate 与 instance/tick snapshot persistence 已有切片；成功 tick suffix replay 依 [宿主合同](../runtime/runtime-integration.md#module-tick-journal-replay)，完整 migration atomicity 与 receipt 仍 partial/target。 | 从 `base_manifest_hash` 到 from/to schema、migration `wasm_hash`、新 manifest hash 的单 journal 证明；失败注入后旧 registry/state/artifact 完整保留；tick 另验非空 suffix 与续跑。 |
 下列身份不可互换：`wasm_hash` 是工件 bytes 内容地址，`manifest_hash` 是 manifest 控制面 hash；当前 `schema_hash` 只是 declaration marker，target registry 落地后才是 descriptor bytes 内容地址；`artifact_identity` 绑定
 source/build manifest/signer/signature。任一 identity、ABI version、权限、limits 或
 metering schedule 变化都必须重新 admit；不能同名覆盖、只改版本字符串或依赖 provider

@@ -1,3 +1,4 @@
+import PrivateContextInput from './PrivateContextInput';
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { acceptsEnter, connected, errorMessage, observedTime, runtimeBridge, subscribeRuntime } from './bridge';
 import { canContinue, canInterrupt, canStart, canSteer, capabilityLabel, fitsUtf8, isRuntimeSnapshot, ownsCurrent, requestKey, runtimeLabel, sessionKey, targetOf, unresolved, unresolvedFor, visibleOperations } from './runtimeState';
@@ -67,8 +68,12 @@ export default function RuntimePanel(props: Props) {
       if (generation === epoch && !disposed) apply(next);
     } catch (e) {
       if (generation === epoch && !disposed) {
-        setUncertainSend(true);
-        setError(`操作未取得成功回执：${errorMessage(e)}。请核对下方持久操作记录；结果核对前发送入口保持关闭，不会自动重发。`);
+        if (typeof e === 'object' && e !== null && 'effect' in e && e.effect === 'none' && 'message' in e && typeof e.message === 'string') {
+          setError(e.message);
+        } else {
+          setUncertainSend(true);
+          setError(`操作未取得成功回执：${errorMessage(e)}。请核对下方持久操作记录；结果核对前发送入口保持关闭，不会自动重发。`);
+        }
       }
     } finally { setBusy(false); void read(); }
   };
@@ -185,6 +190,8 @@ function SessionCard(props: { data: () => RuntimeSession; snapshot: () => Runtim
   return <div class="row"><div class="row-content"><h3>{session().purpose}</h3><p class="muted">范围：{session().scope}</p><div class="metadata"><span>会话 {session().threadId}</span><span>实例 {session().instanceId}</span><span>本轮 {session().turnId ?? '尚未开始'}</span><span>模型 {session().model ?? '运行时默认 / 未取得'}</span><span>依据 {session().basisRevision}</span></div><div class="metadata"><span>本轮：{runtimeLabel(session().state)}</span><span>后台：{runtimeLabel(session().backgroundState)}</span><span>{session().owned ? '本客户端自管' : '外部所有权 / 仅观察'}</span></div>
     <Show when={!current()}><p class="notice">原运行实例当前未取得控制能力。相同 thread 或分支不自动转移控制。{session().restorableHistory ? '来源保存了此前已核实的空闲退出；可明确恢复原历史会话，收到真实 resume 回执后才重绑新实例。' : '此前活跃或未知结果尚未核实，不能恢复或重发，请核对原记录。'}</p></Show>
     <Show when={unresolvedFor(props.snapshot(), session())}><p class="notice">此目标有尚未核实的发送记录，追加/启动入口暂不可用，不会自动重发。</p></Show>
+    <Show when={session().privateSources?.length}><p class="notice">此会话含私有资料来源；后续轮次、请求与恢复持续按私有会话处理。</p></Show>
+    <PrivateContextInput threadId={session().threadId} input={input} disabled={() => composing() || props.busy() || props.blocked() || !canStart(props.snapshot(),session())} send={props.run} />
     <label class="runtime-path">向此原始会话发送明确输入<textarea disabled={!current()} value={input()} maxLength={32768} onInput={e => setInput(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && acceptsEnter(e, composing())) { e.preventDefault(); send(); } }} /></label>
     <div class="actions runtime-controls"><button disabled={props.busy() || props.blocked() || composing() || !input().trim() || !fitsUtf8(input(),32768) || (!canStart(props.snapshot(), session()) && !canSteer(props.snapshot(), session()))} onClick={send}>{session().state === 'active' ? '追加到当前运行' : '启动明确本轮任务'}</button><button disabled={props.busy() || props.blocked() || !canContinue(props.snapshot(),session())} onClick={() => void props.run(() => props.api.continue(session().threadId))}>{current() ? '核实并继续原会话' : '明确核实并恢复历史会话'}</button><button disabled={props.busy() || !canInterrupt(props.snapshot(), session())} onClick={() => void props.run(() => props.api.interrupt(targetOf(session())!), true)}>明确请求中断本轮</button></div><p class="muted small">普通 Enter 保留换行；⌘/Ctrl + Enter 明确发送。中文候选组合期间不发送。输入草稿保留，按钮回执不代表任务完成。</p>
   </div></div>;
@@ -198,7 +205,7 @@ function RequestCard(props: { data: () => RuntimeRequest; snapshot: () => Runtim
   const affectedWork = () => props.snapshot().sessions.find(s => s.instanceId === request().instanceId && s.threadId === request().threadId);
   const questionIds = createMemo(() => request().questions.map(q => q.id));
   createEffect(() => { if (['answered','resolved','confirmed'].includes(request().state)) { setAnswers({}); setDecision(''); } });
-  const current = () => ['ready','degraded'].includes(props.snapshot().state) && props.snapshot().instanceId === request().instanceId && props.snapshot().capabilities.includes('answerRequest') && request().state === 'pending' && props.snapshot().sessions.some(s => s.owned && s.instanceId === request().instanceId && s.threadId === request().threadId) && !props.snapshot().operations.some(op => op.instanceId === request().instanceId && op.threadId === request().threadId && op.turnId === request().turnId && (op.method === `answerRequest:${request().requestId}` && op.state !== 'failed'));
+  const current = () => !props.snapshot().exitWaiting && ['ready','degraded'].includes(props.snapshot().state) && props.snapshot().instanceId === request().instanceId && props.snapshot().capabilities.includes('answerRequest') && request().state === 'pending' && props.snapshot().sessions.some(s => s.owned && s.instanceId === request().instanceId && s.threadId === request().threadId) && !props.snapshot().operations.some(op => op.instanceId === request().instanceId && op.threadId === request().threadId && op.turnId === request().turnId && (op.method === `answerRequest:${request().requestId}` && op.state !== 'failed'));
   const eligible = () => current() && !props.busy() && !composing() && (request().allowedDecisions.length ? request().allowedDecisions.includes(decision()) : request().questions.every(q => !!answers()[q.id]?.trim() && fitsUtf8(answers()[q.id],8192)));
   function submit() {
     if (!eligible()) return;
@@ -208,7 +215,7 @@ function RequestCard(props: { data: () => RuntimeRequest; snapshot: () => Runtim
   }
   const impacts: Record<string,string> = { accept:'允许此请求继续；按来源提供的实际范围执行。', acceptForSession:'允许范围可能覆盖本会话后续同类请求；请核对来源范围。', decline:'拒绝此请求；上游可能停止对应步骤。', cancel:'取消此次请求；后续状态按来源回执核实。' };
   return <div class="row"><div class="row-content"><h3>{request().summary}</h3><p class="muted">受影响工作：{affectedWork()?.purpose ?? '来源未提供关联目的'} · 范围：{affectedWork()?.scope ?? '未知'}</p><div class="metadata"><span>请求 {request().requestId}</span><span>实例 {request().instanceId}</span><span>thread {request().threadId}</span><span>turn {request().turnId}</span><span>{request().method} · {runtimeLabel(request().state)}</span></div>
-    <Show when={!current()}><p class="notice">此请求当前不可回复：原实例未核实、能力不可用或已有处理记录。不会迁移至另一个运行目标。</p></Show>
+    <Show when={!current()}><p class="notice">此请求当前不可回复：正在等待退出、原实例未核实、能力不可用或已有处理记录。不会迁移至另一个运行目标。</p></Show>
     <form class="editor runtime-controls" onSubmit={e => e.preventDefault()}>
       <For each={questionIds()}>{id => { const q = () => request().questions.find(question => question.id === id)!; return <label>{q().header} · {q().question}<Show when={q().options.length}><select value={answers()[id] ?? ''} onChange={e => setAnswers({...answers(),[id]:e.currentTarget.value})}><option value="">选择来源提供的回答</option><For each={q().options}>{option => <option value={option}>{option}</option>}</For></select></Show><input type={q().isSecret ? 'password' : 'text'} aria-label={`回答 ${id}`} value={answers()[id] ?? ''} maxLength={8192} onInput={e => setAnswers({...answers(),[id]:e.currentTarget.value})} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (e.key === 'Enter' && !e.isComposing && !composing()) e.preventDefault(); }} /></label>; }}</For>
       <Show when={request().allowedDecisions.length}><label>仅选择运行时实际支持的决定<select value={decision()} onChange={e => setDecision(e.currentTarget.value)}><option value="">尚未选择</option><For each={request().allowedDecisions}>{value => <option value={value}>{value}</option>}</For></select><span class="muted small">{impacts[decision()] ?? '先核对请求背景与实际权限范围；不提供任意协议方法或参数。'}</span></label></Show>

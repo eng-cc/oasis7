@@ -158,6 +158,7 @@ impl ViewerRuntimeLiveServer {
                 self.confirm_player_gameplay_progress();
             }
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
+            self.update_gameplay_feedback_from_runtime_events(&new_events);
             runtime_events_for_feedback.extend(new_events.iter().cloned());
             let mut mapped_events = Vec::new();
             for runtime_event in &new_events {
@@ -248,7 +249,7 @@ impl ViewerRuntimeLiveServer {
             if session.explicitly_subscribed_to(ViewerStream::Snapshot)
                 && should_emit_runtime_advance_snapshot(session, action, emit_while_paused)
             {
-                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                let snapshot = self.compat_snapshot_for_session(session);
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
 
@@ -293,7 +294,7 @@ impl ViewerRuntimeLiveServer {
                 player_gameplay_causality_from_runtime_events(&runtime_events_for_feedback);
             self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
             if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                let snapshot = self.compat_snapshot_for_session(session);
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;

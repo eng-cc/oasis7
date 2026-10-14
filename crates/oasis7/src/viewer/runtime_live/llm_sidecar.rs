@@ -149,7 +149,7 @@ use self::runtime_support::{
     runtime_provider_check_cache_key, runtime_provider_check_now_unix_ms,
 };
 pub(in crate::viewer::runtime_live) use self::runtime_support::{
-    simulator_action_label, simulator_action_to_runtime,
+    resolve_runtime_live_llm_timeout_ms, simulator_action_label, simulator_action_to_runtime,
 };
 use self::stale_replan::{
     MAX_PROVIDER_STALE_REPLANS, ProviderStaleReplanCause, ProviderStaleReplanState,
@@ -179,18 +179,6 @@ pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
     pub(in crate::viewer::runtime_live) error: Option<String>,
     checked_at_unix_ms: u64,
     cache_key: String,
-}
-
-pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
-    configured_timeout_ms: u64,
-) -> u64 {
-    let configured_timeout_ms = configured_timeout_ms.max(1);
-    let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1))
-        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
 }
 
 enum RuntimeDecisionRunner {
@@ -436,7 +424,8 @@ impl RuntimeLlmSidecar {
     #[cfg(any(test, feature = "test_tier_required"))]
     pub(in crate::viewer::runtime_live) fn queue_service_test_response(
         &mut self,
-        cognition: RuntimeProviderActionContext,
+        world: &mut RuntimeWorld,
+        mut cognition: RuntimeProviderActionContext,
         _action: crate::simulator::Action,
     ) -> Result<(), String> {
         self.ensure_canonical_agent_durable_admission()?;
@@ -447,10 +436,6 @@ impl RuntimeLlmSidecar {
             .ok_or("test requires authenticated projection observation")?
             .observe(&agent_id)
             .map_err(|error| format!("{error:?}"))?;
-        let lease = cognition
-            .cognition_lease
-            .clone()
-            .ok_or("test requires committed canonical lease")?;
         let provider = crate::simulator::MockDecisionProvider::with_scripted_responses(
             "canonical-test-provider",
             vec![Ok(cognition.response.base_decision_response.clone())],
@@ -464,16 +449,76 @@ impl RuntimeLlmSidecar {
         .require_continuous_request_context();
         let registered = self.service_test_actor_agents.contains(&agent_id);
         let mut runner = match self.runner.take() {
-            Some(RuntimeDecisionRunner::ProviderBacked(runner)) if registered => runner,
-            _ => crate::simulator::AsyncAgentRunner::with_default_capacity(),
+            Some(RuntimeDecisionRunner::ProviderBacked(runner))
+                if registered || !runner.has_agent(&agent_id) =>
+            {
+                runner
+            }
+            Some(RuntimeDecisionRunner::Builtin(runner))
+                if !registered && !runner.has_agent(&agent_id) =>
+            {
+                runner
+            }
+            Some(runner) => {
+                self.runner = Some(runner);
+                return Err(format!(
+                    "test provider runner cannot replace existing actor for {agent_id}"
+                ));
+            }
+            None if !registered => crate::simulator::AsyncAgentRunner::with_default_capacity(),
+            None => {
+                return Err(format!(
+                    "test provider actor runner is unavailable for {agent_id}"
+                ));
+            }
         };
+        // Keep this exact Runner on the host side while validating its durable
+        // history, before either lease reservation or provider dispatch. Idle
+        // runners are revalidated even when already loaded; active runners
+        // follow the production no-refresh rule and must already be recovered.
+        if runner.active_turn_count() == 0 {
+            if let Err(error) =
+                crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
+                    restore_agent_feedback_history(world, &mut runner)
+            {
+                self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+                return Err(error);
+            }
+        } else if !runner.runtime_feedback_history_loaded() {
+            self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+            return Err(format!(
+                "active provider runner has no host-validated feedback history for {agent_id}"
+            ));
+        }
+        let session_id = cognition.request.request_context.agent_session_id.as_str();
+        if crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
+            feedback_history_blocks_dispatch(&runner, &agent_id, session_id)
+        {
+            self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+            return Err(format!(
+                "Runtime feedback history fences provider test dispatch for {agent_id}/{session_id}"
+            ));
+        }
+        // A successfully restored history can still fence this exact Agent
+        // session. Do not register the test actor or publish its bookkeeping
+        // until that recovery fence has been checked.
         if !registered {
+            if let Err(error) = runner.register(behavior) {
+                self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+                return Err(format!("{error:?}"));
+            }
             self.service_test_model_calls
                 .insert(agent_id.clone(), model_state);
-            runner
-                .register(behavior)
-                .map_err(|error| format!("{error:?}"))?;
+            self.service_test_actor_agents.insert(agent_id.clone());
         }
+        self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+        let lease = self.reserve_provider_lease_at_authority(world, &cognition.request)?;
+        self.provider_prefix_at_authority(world, &cognition.request)?;
+        cognition.cognition_lease = Some(lease.clone());
+        let mut runner = match self.runner.take() {
+            Some(RuntimeDecisionRunner::ProviderBacked(runner)) => runner,
+            _ => return Err("test provider runner unavailable after lease reservation".into()),
+        };
         runner.sync_logical_tick(cognition.request.request_context.runtime_binding.base_tick);
         let started = runner
             .start_turn_with_request_context_and_observation_and_lease(
@@ -980,12 +1025,8 @@ impl RuntimeLlmSidecar {
                 wake.validate()
                     .map_err(|error| format!("canonical wake invalid: {error:?}"))?;
             }
-            self.pending_runtime_wakes = view
-                .scheduler_wakes
-                .iter()
-                .cloned()
-                .map(|wake| (wake.wake_id.clone(), wake))
-                .collect();
+            self.pending_runtime_wakes =
+                self.reconcile_projected_service_wakes(view.scheduler_wakes.clone())?;
             return self.persist_provider_lineage();
         }
         let wakes = world

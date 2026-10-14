@@ -775,27 +775,161 @@ impl RuntimeLlmSidecar {
         })
     }
 
-    pub(in crate::viewer::runtime_live) fn handoff_committed_service_wake(
+    pub(in crate::viewer::runtime_live) fn committed_service_wake_handoff(
         &mut self,
         cognition: &RuntimeProviderActionContext,
-    ) -> Result<(), String> {
+    ) -> Result<
+        Option<(
+            crate::runtime::SchedulerWakeV1,
+            crate::world_service::wire::SchedulerOperationV1,
+        )>,
+        String,
+    > {
         let request = &cognition.request.request_context;
-        let wakes = self
+        let binding = &request.runtime_binding;
+        let projection = self
             .provider_service_projection
             .as_ref()
-            .ok_or("canonical wake projection missing")?
+            .ok_or("canonical wake projection missing")?;
+        let current_binding = projection
+            .runtime_binding
+            .as_ref()
+            .ok_or("canonical wake projection runtime binding missing; fenced")?;
+        if !lineage_persistence::runtime_binding_advances_same_lineage(binding, current_binding) {
+            return Err(
+                "canonical wake projection/runtime binding changed lineage or regressed; fenced"
+                    .into(),
+            );
+        }
+        let wake_matches_request = |wake: &&crate::runtime::SchedulerWakeV1| {
+            lineage_persistence::provider_context_matches_wake(&cognition.request, wake)
+                && wake.world_id == binding.world_id
+                && wake.branch_id == binding.branch_id
+                && wake.finality_epoch == binding.finality_epoch
+                && wake.finality_block_hash
+                    == binding
+                        .finality_block_hash
+                        .as_ref()
+                        .map(ToString::to_string)
+                && wake.finality_status == binding.finality_status
+                && wake.reorg_epoch == binding.reorg_epoch
+                && wake.runtime_manifest_hash == binding.runtime_manifest_hash.to_string()
+        };
+        let projection_wakes = projection
             .scheduler_wakes
             .iter()
-            .filter(|wake| wake.agent_id == request.agent_subject)
+            .filter(wake_matches_request)
             .cloned()
             .collect::<Vec<_>>();
+        let mirrored_wakes = self
+            .pending_runtime_wakes
+            .values()
+            .filter(wake_matches_request)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut wakes: Vec<crate::runtime::SchedulerWakeV1> = Vec::new();
+        for wake in projection_wakes.iter().chain(mirrored_wakes.iter()) {
+            if let Some(existing) = wakes
+                .iter()
+                .find(|existing| existing.wake_id == wake.wake_id)
+            {
+                if existing != wake {
+                    return Err("canonical wake projection and recovery identity conflict".into());
+                }
+            } else {
+                wakes.push(wake.clone());
+            }
+        }
         if wakes.is_empty() {
-            return Ok(());
+            let checkpoint_prefix = format!("{}:handoff:", request.provider_invocation_key());
+            if self
+                .provider_scheduler_pending
+                .keys()
+                .any(|key| key.starts_with(&checkpoint_prefix))
+            {
+                return Err(
+                    "canonical handoff checkpoint lacks its exact wake identity; fenced".into(),
+                );
+            }
+            return Ok(None);
         }
         if wakes.len() != 1 {
-            return Err("canonical wake projection is ambiguous for Agent".into());
+            return Err("canonical wake projection is ambiguous for cognition".into());
         }
+        self.ensure_canonical_agent_durable_admission()?;
         let wake = &wakes[0];
+
+        let checkpoint_id = format!(
+            "{}:handoff:{}",
+            request.provider_invocation_key(),
+            wake.wake_id
+        );
+        if let Some(checkpoint) = self.provider_scheduler_pending.get(&checkpoint_id) {
+            let expected_world = self
+                .provider_service_config
+                .as_ref()
+                .ok_or("canonical provider service missing")?
+                .expected_world
+                .clone();
+            Self::validate_scheduler_checkpoint_integrity(
+                &expected_world,
+                &checkpoint_id,
+                checkpoint,
+            )?;
+            let crate::world_service::wire::WorldServicePayloadV1::Scheduler(signed) =
+                &checkpoint.payload
+            else {
+                return Err("canonical wake handoff checkpoint codec mismatch".into());
+            };
+            let crate::world_service::wire::SchedulerOperationV1::HandoffWake {
+                wake_id: saved_wake_id,
+                disposition: crate::runtime::CognitionWakeDispositionV1::Terminal { status, reason },
+                ..
+            } = &signed.request.operation
+            else {
+                return Err("canonical wake handoff checkpoint operation mismatch".into());
+            };
+            let signer = self
+                .provider_service_signer
+                .as_ref()
+                .ok_or("explicit canonical Agent signer missing")?;
+            let signer_key: [u8; 32] = hex::decode(&signer.private_key_hex)
+                .map_err(|_| "invalid canonical Agent signer key")?
+                .try_into()
+                .map_err(|_| "invalid canonical Agent signer key")?;
+            let signer_public_key = hex::encode(
+                ed25519_dalek::SigningKey::from_bytes(&signer_key)
+                    .verifying_key()
+                    .to_bytes(),
+            );
+            if saved_wake_id != &wake.wake_id
+                || *status != crate::runtime::ContinuationStatusV1::Completed
+                || reason != "provider_action_committed"
+                || signed.request.agent_id != request.agent_subject
+                || signed.subject_public_key != signer_public_key
+                || !lineage_persistence::handoff_checkpoint_matches_verified_binding(
+                    binding,
+                    wake,
+                    &signed.request.captured_base_binding,
+                    current_binding,
+                )
+                || signed.request.delegation_generation != signer.delegation_generation
+            {
+                return Err("canonical wake handoff checkpoint identity conflict; fenced".into());
+            }
+            return Ok(Some((wake.clone(), signed.request.operation.clone())));
+        }
+
+        if !projection_wakes
+            .iter()
+            .any(|projected| projected.wake_id == wake.wake_id)
+        {
+            return Err(
+                "durable cognition wake is absent from verified projection without its signed handoff checkpoint; fenced"
+                    .into(),
+            );
+        }
+
         let observation = self
             .shadow_kernel
             .as_mut()
@@ -808,9 +942,8 @@ impl RuntimeLlmSidecar {
             provider_policy_context_digest(request),
             provider_wait_precondition_digest(&observation),
         );
-        self.provider_scheduler_operation(
-            request,
-            &format!("handoff:{}", wake.wake_id),
+        Ok(Some((
+            wake.clone(),
             crate::world_service::wire::SchedulerOperationV1::HandoffWake {
                 wake_id: wake.wake_id.clone(),
                 disposition: crate::runtime::CognitionWakeDispositionV1::Terminal {
@@ -824,11 +957,112 @@ impl RuntimeLlmSidecar {
                     precondition_digest: current.authority.precondition_digest,
                 },
             },
+        )))
+    }
+
+    pub(in crate::viewer::runtime_live) fn complete_committed_service_wake_handoff(
+        &mut self,
+        cognition: &RuntimeProviderActionContext,
+        wake_id: &str,
+    ) -> Result<(), String> {
+        let request = &cognition.request.request_context;
+        self.ensure_canonical_agent_durable_admission()?;
+        let checkpoint_id = format!("{}:handoff:{wake_id}", request.provider_invocation_key());
+        let checkpoint = self
+            .provider_scheduler_pending
+            .get(&checkpoint_id)
+            .ok_or("canonical handoff checkpoint missing before durable cleanup; fenced")?;
+        let original_correlation = checkpoint.correlation.clone();
+        let expected_world = self
+            .provider_service_config
+            .as_ref()
+            .ok_or("canonical provider service missing")?
+            .expected_world
+            .clone();
+        Self::validate_scheduler_checkpoint_integrity(&expected_world, &checkpoint_id, checkpoint)?;
+        let crate::world_service::wire::WorldServicePayloadV1::Scheduler(signed) =
+            &checkpoint.payload
+        else {
+            return Err("canonical handoff checkpoint codec mismatch".into());
+        };
+        let crate::world_service::wire::SchedulerOperationV1::HandoffWake {
+            wake_id: saved_wake_id,
+            disposition: crate::runtime::CognitionWakeDispositionV1::Terminal { status, reason },
+            ..
+        } = &signed.request.operation
+        else {
+            return Err("canonical handoff checkpoint operation mismatch".into());
+        };
+        let pending_wake = self.pending_runtime_wakes.get(wake_id);
+        let current_binding = self
+            .provider_service_projection
+            .as_ref()
+            .and_then(|projection| projection.runtime_binding.as_ref())
+            .ok_or("canonical handoff cleanup lacks verified runtime binding; fenced")?;
+        let signer = self
+            .provider_service_signer
+            .as_ref()
+            .ok_or("explicit canonical Agent signer missing")?;
+        let signer_key: [u8; 32] = hex::decode(&signer.private_key_hex)
+            .map_err(|_| "invalid canonical Agent signer key")?
+            .try_into()
+            .map_err(|_| "invalid canonical Agent signer key")?;
+        let signer_public_key = hex::encode(
+            ed25519_dalek::SigningKey::from_bytes(&signer_key)
+                .verifying_key()
+                .to_bytes(),
+        );
+        if saved_wake_id != wake_id
+            || *status != crate::runtime::ContinuationStatusV1::Completed
+            || reason != "provider_action_committed"
+            || signed.request.agent_id != request.agent_subject
+            || signed.subject_public_key != signer_public_key
+            || !pending_wake.is_some_and(|wake| {
+                lineage_persistence::handoff_checkpoint_matches_verified_binding(
+                    &request.runtime_binding,
+                    wake,
+                    &signed.request.captured_base_binding,
+                    current_binding,
+                )
+            })
+            || signed.request.delegation_generation != signer.delegation_generation
+        {
+            return Err(
+                "canonical handoff checkpoint identity conflict before cleanup; fenced".into(),
+            );
+        }
+        let operation = signed.request.operation.clone();
+        let (checked_checkpoint, existed) = self.prepare_service_scheduler_checkpoint(
+            request,
+            &format!("handoff:{wake_id}"),
+            operation,
+            None,
         )?;
-        self.pending_runtime_wakes.remove(&wake.wake_id);
-        self.persist_provider_lineage()
+        if !existed || checked_checkpoint.correlation != original_correlation {
+            return Err(
+                "canonical handoff checkpoint changed before durable cleanup; fenced".into(),
+            );
+        }
+
+        let previous_wake = self.pending_runtime_wakes.remove(wake_id);
+        let previous_checkpoint = self.provider_scheduler_pending.remove(&checkpoint_id);
+        if let Err(error) = self.persist_provider_lineage() {
+            if let Some(wake) = previous_wake {
+                self.pending_runtime_wakes.insert(wake_id.to_string(), wake);
+            }
+            if let Some(checkpoint) = previous_checkpoint {
+                self.provider_scheduler_pending
+                    .insert(checkpoint_id, checkpoint);
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "llm_sidecar_service_wake_handoff_tests.rs"]
+mod service_wake_handoff_tests;
 
 #[cfg(test)]
 mod service_wait_checkpoint_tests {

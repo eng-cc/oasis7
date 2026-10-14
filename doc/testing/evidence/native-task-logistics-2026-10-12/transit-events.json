@@ -1,0 +1,63 @@
+{
+  "schema": "oasis7/native-logistics-domain-events/v1",
+  "collector": "parent read of owned original persisted world journal after canonical cleanup",
+  "original_journal_sha256": "97917157fdf195ab6c6dbeafeb9cec7003bc262397871348de675fc91f63c76f",
+  "original_journal_bytes": 58294,
+  "events": [
+    {
+      "id": 26,
+      "time": 41,
+      "caused_by": {
+        "type": "Action",
+        "data": 3
+      },
+      "body": {
+        "kind": "Domain",
+        "payload": {
+          "type": "MaterialTransitStarted",
+          "data": {
+            "job_id": 3,
+            "requester_agent_id": "agent-a",
+            "from_ledger": "agent:agent-a",
+            "to_ledger": "site:logistics-site",
+            "kind": "iron_ingot",
+            "amount": 10,
+            "distance_km": 1,
+            "loss_bps": 5,
+            "ready_at": 42,
+            "priority": "standard",
+            "route_ids": [],
+            "tariff_electricity_total": 0,
+            "reroute_count": 0
+          }
+        }
+      }
+    },
+    {
+      "id": 28,
+      "time": 42,
+      "caused_by": null,
+      "body": {
+        "kind": "Domain",
+        "payload": {
+          "type": "MaterialTransitCompleted",
+          "data": {
+            "job_id": 3,
+            "requester_agent_id": "agent-a",
+            "from_ledger": "agent:agent-a",
+            "to_ledger": "site:logistics-site",
+            "kind": "iron_ingot",
+            "sent_amount": 10,
+            "received_amount": 10,
+            "loss_amount": 0,
+            "distance_km": 1,
+            "priority": "standard",
+            "route_ids": [],
+            "tariff_electricity_total": 0,
+            "reroute_count": 0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -19,6 +19,10 @@ mod body;
 mod bootstrap_economy;
 mod bootstrap_gameplay;
 mod bootstrap_power;
+mod builtin_factory_quote;
+pub use builtin_factory_quote::{BuiltinFactoryStartPreview, NativeBuiltinFactoryQuote};
+mod builtin_recipe_quote;
+pub use builtin_recipe_quote::{BuiltinRecipeStartPreview, NativeBuiltinRecipeQuote};
 mod capability_authorization;
 mod capability_authorization_admin;
 mod capability_authorization_command;
@@ -187,20 +191,6 @@ pub use transition::{
     TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
 };
 
-#[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
-pub(crate) use bootstrap_economy::m4_bootstrap_module_ids;
-pub use bootstrap_power::M1ScenarioBootstrapConfig;
-use module_tick_runtime::ModuleTickRoutingMetrics;
-pub use module_tick_runtime::{
-    ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
-    ModuleTickRoutingMetricsSnapshot,
-};
-
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::{cell::RefCell, path::PathBuf, sync::Arc};
-
 use super::CrisisStatus;
 use super::capability_authorization::{
     CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
@@ -227,6 +217,30 @@ use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 use crate::simulator::ModuleVisualEntity;
+#[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
+pub(crate) use bootstrap_economy::m4_bootstrap_module_ids;
+pub use bootstrap_power::M1ScenarioBootstrapConfig;
+use module_tick_runtime::ModuleTickRoutingMetrics;
+pub use module_tick_runtime::{
+    ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
+    ModuleTickRoutingMetricsSnapshot,
+};
+#[cfg(test)]
+use oasis7_wasm_router::PreparedSubscription;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::{cell::RefCell, path::PathBuf, sync::Arc};
+
+#[derive(Debug, Clone)]
+pub(super) struct PreparedSubscriptionCacheEntry {
+    #[cfg(test)]
+    pub(super) subscriptions: Vec<ModuleSubscription>,
+    pub(super) _subscription_fingerprint: String,
+    #[cfg(test)]
+    pub(super) prepared: Arc<[PreparedSubscription]>,
+}
+
 const DEFAULT_MAX_PENDING_ACTIONS: usize = 8_192;
 const DEFAULT_MAX_PENDING_EFFECTS: usize = 8_192;
 const DEFAULT_MAX_INFLIGHT_EFFECTS: usize = 8_192;

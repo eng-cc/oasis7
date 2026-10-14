@@ -7,6 +7,26 @@ pub(super) fn driver_fixture() -> (
     String,
     String,
 ) {
+    fixture(false)
+}
+pub(super) fn driver_fixture_with_verified_authority() -> (
+    PathBuf,
+    NodeRuntimeExecutionDriver,
+    WorldIdentity,
+    String,
+    String,
+) {
+    fixture(true)
+}
+fn fixture(
+    verified_authority: bool,
+) -> (
+    PathBuf,
+    NodeRuntimeExecutionDriver,
+    WorldIdentity,
+    String,
+    String,
+) {
     let dir = temp_dir("world-service-owner-chat");
     let owner = hex::encode([7u8; 32]);
     let public = sign_read_request("owner", (), &owner)
@@ -33,11 +53,26 @@ pub(super) fn driver_fixture() -> (
         .install_capability_agent_identity("agent-a", "owner-a", 1)
         .unwrap();
     world
-        .bind_cognition_runtime("w1", "main", 0, None, "pending", 0)
+        .bind_cognition_runtime(
+            "w1",
+            "main",
+            0,
+            verified_authority.then(|| {
+                format!(
+                    "blake3:{}",
+                    blake3::hash(b"native-task-finalized-provider-fixture:w1:main:0")
+                )
+            }),
+            "pending",
+            0,
+        )
         .unwrap();
     world
         .install_test_provider_capability_fixture_without_cognition_balance("agent-a")
         .unwrap();
+    if verified_authority {
+        assert!(world.promote_cognition_runtime_finality().unwrap());
+    }
     world
         .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
         .unwrap();

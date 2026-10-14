@@ -1,7 +1,9 @@
 # CI 分级执行
 
 - 状态：active
+- 专业 owner：`repository_health_engineer`；验证范围由 `qa_engineer` 协作审读
 - 通用规则：[开发流程规范](../../engineering/workflow/source-of-truth.md)
+- 配对系统设计：[CI 分级执行设计](ci-tiered-execution.design.md)
 - 可执行测试命令和平台限制：[testing-manual.md](../../../testing-manual.md)
 
 ## 测试范围
@@ -22,6 +24,90 @@ select 先产生明确的非空矩阵，按资源组并行执行。最终唯一 
 
 缺测试先补普通 CI。只有普通 runner 难以提供的真实长期状态、专用硬件或受控环境才使用专项验证，说明具体不足、环境、版本、通过标准和实际结果。阻塞专项纳入同一 PR 最终汇总；调试 dispatch 不能替代 PR 检查。
 
-main 前进按原生 up-to-date 保护更新分支并重新执行必要普通 CI，不创建 Task、epoch、receipt 或第二条通用严格集成流程。产品层的签名、checkpoint 和状态一致性证明仍按专业合同验证。
+CI 结果对应实际 source HEAD。main 前进或分支显示 `BEHIND` 本身不使该结果失效；只有合并冲突或 main 的相关变化带来明确集成风险时，才按需更新分支并验证实际组合。source HEAD 变化后重新运行必要普通 CI，复审实际变化与受影响部分；具体合入规则遵循开发流程规范。产品层的签名、checkpoint 和状态一致性证明仍按专业合同验证。
 
 CodeQL 技术扫描见 [CodeQL 设计](codeql-integration.design.md)，实际 required/advisory 按 GitHub CI 与生效保护执行。
+
+## 依赖准备目标与当前边界
+
+本节面向开发者、CI 维护者和 Release 维护者，目标是减少重复工具准备、准确识别外部依赖耗时，并使必要安装的失败可诊断、可结束。它属于 testing 专业域，不增加玩家层承诺，不改变已有必要测试和发布验证范围。
+
+2026-10-12 审读基线为 `fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e`。下表固定描述该基线，区分当时的实现与本次目标；`active`、文档合入和旧 Issue 关闭都不代表优化已实现或已验收。
+
+| 对象 | 审读基线事实 | 本节承接的目标与证据缺口 |
+| --- | --- | --- |
+| Trunk 安装 | [基线安装器](https://github.com/eng-cc/oasis7/blob/fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e/scripts/install-ci-trunk.sh)已为 Linux x86_64 固定预编译包、校验摘要与版本；[基线 Rust CI](https://github.com/eng-cc/oasis7/blob/fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e/.github/workflows/rust.yml)的相关路径已使用它。[基线 Release Web 构建](https://github.com/eng-cc/oasis7/blob/fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e/.github/workflows/release-packages.yml)仍在 binary 缓存未命中时执行源码安装。 | Release 复用现有经过验证的预编译安装路径；真实安装、构建与失败行为仍需实现后验收。 |
+| 工具缓存 | Rust CI 与 Release 使用不同的 Trunk 缓存对象和 key。 | 明确 Release 的可信写入来源、实际 ref/scope 和消费者；当前审读未建立跨 tag 命中及节省时间的实测结论。 |
+| apt 依赖 | 当前 workflow 多处直接执行 `apt-get update/install`。 | 先核实实际耗时与失败分布；是否需要统一安装预算或重试实现，由观察到的问题决定。 |
+
+<a id="ci-install-trunk"></a>
+### Release 复用经过验证的 Trunk
+
+**目标**：在现有安装器支持的 Linux x86_64 环境，Release Web 构建复用经过固定摘要和版本验证的预编译 Trunk，不因冷缓存而重复源码编译同一工具。工具版本与支持平台由安装器及配对设计维护，升级时同步审读来源、摘要、兼容性和调用方。
+
+**本次实现合同**：Release 只读恢复预编译 archive，再调用[共享验证安装器](../../../scripts/install-ci-trunk.sh)准备工具；冷未命中按同一安装器下载与校验，不增加 Release 缓存 writer。此处说明候选接线范围，main 合入、hosted 运行及实际耗时仍以各自记录为准。
+
+**验收**：
+
+- 冷路径取得正确工具后能继续执行原有 Web 构建与验证；热路径使用同一验证合同，不以缓存命中跳过摘要或版本检查。
+- 不支持的平台、版本不符、摘要不符、下载或提取失败必须有明确的失败结果，不得继续执行未验证工具或静默降级到另一种来源。
+- 工具准备成功、Web 构建成功和 Release 完成分别记录，不互相代替；真实 Release 验证由实际运行结果证明。
+
+<a id="ci-install-cache-evidence"></a>
+### 缓存复用与真实证据
+
+**目标**：缓存是可以丢弃的加速层。未命中、被回收或首次使用时，冷安装仍应正确、安全且可观察。可信 writer 与普通 PR/候选消费者的权限边界遵循[包来源与缓存安全规则](../../engineering/workflow/package-source-security.md)，不为提高命中率扩大写权限。
+
+**验收**：
+
+- 区分未命中、命中后校验成功、缓存损坏和恢复错误；只有验证合格的工具可进入构建。损坏缓存不得作为成功的冷/热样本，也不得回退到未经验证的 binary。
+- 描述实际生产者与消费者的 workflow、事件、ref/scope、平台、架构、工具版本和安装策略。若跨 tag 复用需要默认分支 seed，必须确认有效 main writer、实际保存结果及后续消费者可达性；不能仅凭 key 不含 tag 或名称相同宣称可跨 tag 复用。
+- 跨 tag 命中须有真实 writer 和 reader 的运行记录；尚未 seed、没有可达缓存或未执行 reader 时如实记为未验证，允许通过正确的冷路径完成必要工作。
+- 冷/热对比包含恢复、准备/验证和保存成本，不能只统计省去的安装时间。
+
+<a id="ci-install-apt-budget"></a>
+### apt 安装预算与故障处置
+
+**目标**：先从实际 job 日志核实 apt 耗时、锁等待、网络失败和重试频率，再决定是否改造。若进入实现，安装必须有覆盖命令执行、等待、退避、重试及清理的有限总预算；具体参数由观测数据和运行环境决定，不建立仓库统一的固定全局 SLO。
+
+**实施后的验收**：
+
+- 仅对已识别的可重试临时错误进行有限重试，次数和退避计入总预算；永久错误、权限/配置错误和未知失败保留诊断并失败，不无条件重跑。
+- 超时或取消应终止安装启动的受控进程组，必要的终止宽限也受预算约束；返回时不得遗留继续持锁、下载或安装的受控进程。不得为此终止其他任务或宿主的无关进程。
+- 分别验证正常完成、短暂失败后恢复、重试耗尽、永久失败、子进程超时及取消；父 shell 退出不能单独证明子进程已结束。
+- 必要依赖未就绪时不运行依赖它的测试，不将失败改写成跳过或成功；结果沿现有 job 与 required 汇总传播。
+
+<a id="ci-install-measurement"></a>
+### 量测与交付判定
+
+**目标**：以实际数据判断优化是否减少关键路径耗时，同时保持原有构建、测试、权限与失败语义。记录固定源提交、workflow/job 与运行链接、平台和工具版本、缓存状态、样本窗口与样本数；安装、缓存恢复、校验、构建和保存分别计时，失败与取消样本单独保留。
+
+**验收**：可比较的冷/热样本需具有一致的工具与平台范围，并说明 runner、网络和其他并发差异。没有足够样本时只报告观察值及限制，不设默认性能门槛或宣称稳定收益；Cargo cold/no-op 编译指标不能替代依赖准备和跨 tag 缓存量测。
+
+本次交付包含需求与系统设计的整理、Release archive 恢复与共享安装器接线；候选实现、本地合同验证、main 合入、hosted 构建、缓存 writer/reader 运行和冷/热收益分别以实际记录证明，不互相代替。apt 本次仅承接观察与条件实施要求，不宣称已改造或完成故障验收。结构检查、本地 fixture、旧绿色 CI 和文档状态不能证明未执行的 hosted 或量测结果。本节不新增通用检查名称、审批链或强制性能门禁。
+
+<a id="ci-real-coverage"></a>
+## 真实覆盖与执行结果合同
+
+本节是测试专业要求，不新增玩家产品承诺或另一条合入审批链。实施状态仍由实际候选与运行记录证明。
+
+**required/full 包含关系**：对同一 source、平台、features、target 和适用范围，`full` 的实际检查集合必须包含对应的 `required` 集合。不能仅因函数名为 full 或总测试数更多就视为满足；Clippy、独立 Viewer browser smoke 等 required 检查不能被另一项编译/测试成功替代。平台不适用项有明确原因及受支持平台入口，缺依赖、缺 target、命令未执行不是“不适用”。每个适用检查失败都传播到 suite 和已有最终汇总。
+
+**native/WASM**：稳定工具链 smoke、需要确定性工具链的真实 builtin 构建/hash 和容器接线测试分别取证。维护实际消费者到构建入口、产物和验证命令的映射；缺少必要 WASM target 或全局设置 `BUILD_STD=0` 不能把 required 验证变成空执行。fake Docker 只证明调用/参数合同，不证明真实容器编译、产物或 hash；已明确退役且没有消费者的旧 lane 不重新变成必跑现场。
+
+**构建 wrapper**：wrapper 保留被包装命令的退出结果、参数边界和有效 target 选择。子命令正常删除 target 并返回 0 后，退出记账不能为更新 `last_used` 等元数据重建 target 或制造失败；lease 释放和 GC 占用保护仍成立。多个互相冲突的 target-dir 必须归一为唯一有效值或明确拒绝，不能靠不同层解析出不同路径。原生 Windows 的跨进程等待/取消与 I/O 故障必须在原生 Windows 分别验证，WSL 或短于系统重试窗口的样本不能代签。
+
+**扫描与证据**：CodeQL 每种声称支持的语言及 default/extended 组合分别记录执行、分析上传和 finding 处置。结果集合不完整、API 后页失败、run/attempt/source/category/App 不匹配时保留未知，不以当前零条结果认定零 finding。具体扫描和启用仍归 [CodeQL 设计](codeql-integration.design.md)；本节不启用 observe、不增加 required check、不改变查询集合或超时。
+
+验收至少包含：故意从 full 漏掉一项 required 被识别；各选中命令返回非零使 suite 失败；真实消费者路径未执行时不能报通过；wrapper 删除 target/非零退出/带空格参数/`--` 应用参数/环境覆盖/原生 Windows 长等待与取消分别保持合同。已合入依赖升级只复核剩余兼容边界，不无条件重复历史版本或完整 fleet 验收。
+
+<a id="ci-advisory-baseline"></a>
+## RustSec 例外基线与到期处置
+
+依赖例外不是永久批准。`deny.toml` 与 [直接依赖基线](../../../scripts/rustsec-ignore-direct-dependency-baseline.json) 继续保存实际条目、owner、依赖范围、理由、验证方法及有效期；文档不得自动刷新日期、增加 advisory 或放宽直接依赖名单。每项到期前独立完成移除、替代或有明确证据和有限新期限的续验；不能被 CodeQL 或其他 CI 子项的排期推迟，也不能以相关文档合入视为续验完成。
+
+[基线检查器](../../../scripts/check-rustsec-ignore-baseline.sh) 必须检查 TOML 语义中完整的 `advisories.ignore` 集合，而非正则偶然识别的部分文本。所有实际启用的 advisory 与批准集合、元数据一一对应；未批准项、重复项、缺元数据/多余元数据以及无效类型/语法均被拒绝。单引号、引号表名、同行多个元素及注释不能导致条目漏检或将注释中的 ID 算作启用项。不支持的元数据布局可明确报错，但不能静默跳过相应 ignore。
+
+`reviewed_at`、`expires`、每条 expiry 和测试注入日期须以真实日历日期解析，再作现有有效期比较；匹配 `YYYY-MM-DD` 字符串不等于日期有效。保留既有到期日包含关系，不通过解析修复隐式提前或延后有效期。续验应重新核对实际依赖路径和 direct manifest 范围，不仅替换日期。
+
+验收必须覆盖不存在的日期、闰年边界、到期日及次日、各合法 TOML 字符串/表名形态、同行重复或隐藏未批准项、注释中的 advisory、空/坏配置和依赖范围漂移。解析/校验失败沿现有治理检查传播；不新设独立审批系统，也不将 report-only 扫描自动升级为另一项 required gate。

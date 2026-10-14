@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 - 保持当前 `pixel_world_bridge` 的 wasm-only 宿主合同不变，优先收口 Bevy 内核的首轮性能债。
-- 将当前“每帧全量 despawn/spawn 全部 grid/location/agent”的实现改为增量更新，降低 ECS churn、命令提交和 wasm CPU 开销。
+- 最初的优化对象是“每帧全量 despawn/spawn 全部 grid/location/agent”；当前已采用增量 reconcile 与响应式调度，剩余局部目标见[增量与回归要求](#render-reconcile-and-visual-regression-requirements)。
 - 第一轮只做低风险 P0 优化：常驻网格、实体池、按需重建 hit region，不同时改宿主 API、world DTO 或页面交互语义。
 
 ## 目标
@@ -42,13 +42,13 @@
 
 ## 4. Technical Specifications
 
-### 4.1 Current Bottlenecks
-- `render_scene` 当前每帧都会：
+### 4.1 Historical Bottlenecks
+- 以下记录最初优化前的基线，不代表当前 main。历史 `render_scene` 每帧都会：
   - 遍历并 `despawn` 所有 `PixelWorldVisual`
   - 重建 grid 线条 sprite
   - 重建全部 location / agent sprite
   - 重新分配 `hit_regions`
-- `render_state` 只在 `render_version` 变化时替换，但平移/缩放动画仍会触发整场景重建。
+- 当时 `render_state` 只在 `render_version` 变化时替换，但平移/缩放动画仍会触发整场景重建。
 
 ### 4.2 P0 Optimization Slice
 - 场景实体分层：
@@ -94,6 +94,24 @@
   - `location_id -> Entity` / `agent_id -> Entity`
   - `hit_regions`
 - 本轮不新增任何 world DTO、宿主事件字段或 JS 世界渲染协议。
+
+<a id="render-reconcile-and-visual-regression-requirements"></a>
+## 增量更新与视觉回归的剩余目标
+
+以下要求来源于 [#2116](https://github.com/eng-cc/oasis7/issues/2116) 的局部效率与验证条目，审读基线为 `fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e`（2026-10-12）。它们是局部优化与回归测试的验收要求；实现、测试通过及真实性能证据分别核实，不承诺已测量的帧率收益，不改宿主 API、世界真值或玩家命中语义。对应[局部设计与验证](viewer-pixel-world-bridge-rendering.design.md#render-reconcile-and-visual-regression-target)。
+
+| 来源 | 保留的专业要求 | 当前边界与完成条件 |
+| --- | --- | --- |
+| #2116 | 同一次 world-scale surface 构建复用 locations 的一次枚举；保持锚点 fallback、nearest 顺序、距离及显示输出。 | 审读基线仅回退锚点路径重复枚举。必须保留无 id 地点等旧输入语义；等价输出与枚举次数回归通过，并按 canonical Viewer build 更新产物。 |
+| #3006 | depot 的服务范围圈按 depot/segment 复用实体，静态 reconcile 更新几何并回收失效段。 | 已有响应式调度，纯动画不触发该重建。相同输入、仅其他对象变化和 camera/viewport/location/radius 变化分别验证实体身份、几何与清理；不把旧重复工作直接判作当前性能瓶颈。 |
+| #2442、#3035 | 加强现有 selected-location/agent raster 与真实浏览器 location-frame crop 的判定，能检出目标提示缺失或偏移。 | 保留已有 Rust 几何、角框像素和 hit-region 断言。采用确定性局部基线或形状/颜色/位置比较，浏览器允许受控容差；非黑或亮度检查不能单独代替目标可见性。复用现有测试入口，不新增通用 CI gate。 |
+
+本组只承接这些明确的局部要求，不复活已交付任务的全部历史 AC。#3017 对真实连线世界的 desktop/narrow S6 义务仍由[独立入口](https://github.com/eng-cc/oasis7/issues/3017)承接，fixture 或软件 raster 不能代替它。
+
+<a id="claim-evidence-classification"></a>
+### 已覆盖的 evidence fixture 归属
+
+#2701 的 claim evidence 页面归属已由[Viewer 前端结构标准](viewer-frontend-structure-standard.prd.md#接口--数据)和[构建真值](viewer-web-build-truth.prd.md#42-generated-artifact-single-source-of-truth)承接：`viewer_first_agent_claim_evidence.html` 是 canonical claim fixture，`dist/software_safe_first_agent_claim_evidence.html` 是生成的兼容测试页。它们不是新增玩家产品页。保留该导航即可，不再把旧文件名的负向检索或整批迁移核证作为当前未完成项；此分类不证明真实浏览器或产品验收完成。
 
 ## 5. Risks & Roadmap
 - M1：完成专题 PRD / Project 建模，冻结 P0 优化边界。

@@ -15,15 +15,27 @@
 - **信息层级**：`World / Targets / Command` 为主路径；`Search` 是 Targets 内的
   `#entity-search` 兼容过滤/导航能力，`Diagnostics` 次级；`Quote` 属于 Command/Console 上下文。
 - **反馈**：`Action Receipt` 负责玩家因果，已实现的 `world_feed/v1` 仅是环境上下文投影。
-- **Fullscreen HUD**：桌面默认以 `Objective / Next Move / Player Leverage` 三个紧凑卡片并列；
-  移动端为 `Objective + Player Leverage` 紧凑首行、`Next Move` 第二行，`More / Diagnostics`
-  仍从次级入口可达。
+- **Fullscreen HUD**：桌面以 `Next Move` 主动作区和 `Objective / Player Leverage` 从属
+  上下文区并列；窄屏把主动作放在第一行、上下文放在第二行，保持 DOM 与键盘顺序一致。
+  `More / Diagnostics` 仍从次级入口可达。
+
+### 2.1 需求承接与分配表
+
+本表限定首局方案、分支指引和吸引力样例的兼容修改；既有 shell、渲染、权限及发布条款保持其原有适用范围。
+
+| 上游 requirement / acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | 当前区域专业化的主指引与完整分支承诺同义，保留真实可用工业动作 | [分支投影职责](#branch-stage-projection) | gameplay / runtime 发布动作；Viewer 消费 | 不新增治理或冲突机制，不重排 shell |
+| [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | 回退报价和样例 gate 在截止前、边界及恢复后保持同一窗口判断 | [吸引力样例回退窗口](#fixture-rollback-window) | gameplay 样例阶段；Viewer / QA 结构回归 | 不新增真实 Runtime 回退，不代签真人可玩性 |
+| [REQ-FIRST-INDUSTRIAL-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-002) | 查看、查询、提交及成果表达同一对象和实际方案。 | [当前方案交互](#starter-plan-interaction) | gameplay/M4 参数与报价；Runtime 因果；Viewer/QA 入口验证。 | 不重建 Shell/Inspector，不由 UI 补算成本。 |
+| [REQ-FIRST-INDUSTRIAL-005](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-005) | 报价失效、迟到响应和未知结果保留原请求语义，不重复提交或误归因。 | [当前方案交互](#starter-plan-interaction) | M4/Runtime identity 与重验；Viewer/QA 时序验证。 | 不新增恢复权限，不以退出界面取消已提交动作。 |
+| [REQ-FIRST-INDUSTRIAL-008](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-008) | 首产物成果连接真实后继目标与自然离场，重入保留既有成果和未决义务。 | [当前方案交互](#starter-plan-interaction) | gameplay 后继条件；Runtime 结算；Viewer/QA 续玩验证。 | 不把候选当建成，不扩张 Agent 授权或生成离线收益。 |
 
 ## 3. 当前实现与目标边界
 - 当前 `main` 的 Player 是 fullscreen、world-first 单舞台：世界棋盘为首屏主体，
   `Objective / Next Move / Player Leverage` 是叠加 HUD，`World / Targets / Command`
   由按需 drawer 提供。旧“左侧/中间/右侧”三栏只适用于显式、能力门控的 Director
-  工具密度，不能作为 Player 的当前 IA；三卡 HUD 也不等于旧三栏。
+  工具密度，不能作为 Player 的当前 IA；主动作及从属上下文也不是常驻工具栏。
 - 当前实现保留 focus/right-panel 兼容 hooks，且 `#entity-search` 仍是 Targets
   过滤入口；这些是实现基线/债务，不是第二产品模式或终端 authority。
 - 当前页面仍以 Recent Events/Gameplay Feedback 等现有投影为准；它们不能被重命名为
@@ -36,13 +48,47 @@
   已实现安全边界而非已放行的 operator 能力。目标实现仍须由 Viewer/QA 以真实桌面、移动、
   键盘和空/不可用状态验证。
 
+<a id="shell-interaction-recovery"></a>
+### Shell 交互与恢复实现边界
+
+本节对应配对 PRD 的 Shell 局部合同。2026-10-12 基准 `5e930fa` 已有路由、Prompt 草稿、
+列表/舞台投影、Feed state 和 renderer loader 接点；待修的具体时序按 #3425 独立验收，
+不因同一文件已有功能就宣称该路径通过。
+
+- 路由切换在一个 transition 内协调受管理浮层、disclosure、aria 与 focus。离开 Diagnostics
+  时关闭实际 fixed 面板，而非仅改 hash；只管理注册的 shell surface，保留普通 disclosure。
+  Escape 使用实际打开状态和既有 IME 优先级，返回入口仍可获得焦点。
+- 选择模型与草稿模型分离：同 Agent 重选只刷新 selected object；dirty 草稿继续引用原编辑
+  baseline。显式 reload 或对应 Apply 的权威确认才按原规则刷新草稿；新的授权失效仍优先
+  进入安全 blocked，不借“保护草稿”显示无权读取的新值。
+- Targets filter 在列表 projection 上执行。host/bridge 输入使用同一快照中受会话可见性约束、
+  未被关键词裁剪的实体/地点/设施集合；真实删除和权限变化在源集合生效，不用旧场景缓存补回。
+- Feed transport 的 page 状态与合并后的显示状态分开。state reducer 在同 world/epoch 的
+  连续 cursor 上保留/去重已有窗口，空增量不清空也不覆盖为 empty；replay 未追平前仍保留
+  replay 语义。panel 与 HUD 共用这一结果；gap/reorg/unavailable 按原恢复边界处理。
+- renderer loader 区分未初始化、在途、成功和失败。失败 promise 不得永久缓存为后续 Retry
+  的结果；只清除该失败 attempt 的引用，避免迟到失败清掉较新的初始化。每次重试重新走
+  descriptor、bytes、size/hash 与 init；当前在途请求共享，成功实例复用，持续失败保持
+  unavailable。Host Retry 不触发整页刷新、测试模块重置或另一 renderer 的隐式切换。
+
+| 独立场景 | 最小有效验证与现有接点 | 不能证明 |
+| --- | --- | --- |
+| S3 导航/浮层 | `viewer_terminal_shell` 路由及相关 UI 测试；实际 1440×1000、390×844 下 More→World/Back/Forward、Targets/Command→World，核 geometry/visibility/focus 与 IME | hash 或 DOM attribute 单独正确不证明舞台可操作 |
+| S4 同 Agent 草稿 | 实际 selection→state→Prompt panel 路径，覆盖 dirty/clean、成功 Apply、明确 reload、跨对象、control-lost/stale | 草稿存在不证明授权或应用成功 |
+| S5 搜索与舞台 | `pixel_world_host` 及列表集成测试：输入关键词、再接收 snapshot，核列表裁剪而世界 entity/fragment/facility 不受裁剪，另核删除/不可见 | mock 列表结果不证明真实渲染 |
+| S7 Feed 空增量 | `world_feed_transport`→`world_feed_state`→`world_feed_panel` 与 HUD；非空→同 cursor 空、多页 replay、追平、首次空、gap/unavailable | reducer 单测不代签 transport/panel；空页不证明 LIVE |
+| G3 页面内 Retry | `pixel_world_runtime_module_wasm` 和 Host 集成：同模块首次 503、下一次正确 bytes、连续失败、成功复用和并发 single-flight；可见变化再做 S6 | 测试 reset/重载不证明页面内恢复；mock bytes 不证明 GPU readiness |
+
+这些都是后续行为验证的选择规则；本次只修改合同，不启动 Runtime/provider 或宣称浏览器验收。
+
 ### Expanded visual contract (target handoff)
 - Player HUD 的层级固定为条件性 attention、`Objective`、一个主导性的 `Next Move`
   动作、`Player Leverage`/selection context、`Action Receipt`；World Feed 仍是收起的
   ambient chip。`world_read` 的 `tick/agents/routes/fragments/hotspots` 只有在既有
   projection 明确发布时才可作为次级摘要，不能假设 Power/Data/Consensus 等字段存在。
-- `Next Move` 目标是单一 CTA + 内联 blocker；不要复制 Stage Hero 文案或让 World Feed
-  代替 receipt。该层级是待实现的视觉目标，当前三卡 HUD 的实现边界仍以上文为准。
+- `Next Move` 使用单一 CTA + 内联 blocker；不要复制 Stage Hero 文案或让 World Feed
+  代替 receipt。主动作/从属上下文的结构已实现；剩余视觉和交互验收按当前候选、场景及
+  受影响表面记录，不能把结构存在当作整个视觉目标已通过。
 - Agent Console 默认先显示 selected context、授权 command/chat、blocker 与 receipt；
   raw snapshot/JSON、auth/capability、prompt override、world-scale 和 Director 工具
   默认收起到 `Diagnostics / More`，不改变控制权或 fail-closed 语义。
@@ -52,15 +98,16 @@
 - 这些约束不新增协议/runtime 字段，不改变仿真、replay、renderer、Director capability、
   ownership、经济或玩家权限；真实 headed 证据必须覆盖 `1440x1000` 与 `390x844`。
 
-### Next optimization visual handoff (target; pending implementation)
+### Player visual handoff（既有结构与持续验收边界）
 
 The next bounded visual pass uses this reading order:
 
 `connection/renderer/blocker attention → Objective → one dominant Next Move → selected Agent context / Player Leverage → Action Receipt → collapsed World Feed`.
 
 - Objective and Next Move must not repeat the same instruction. Objective and Player Leverage
-  may become typographic context; only Next Move needs the dominant actionable surface. This is a
-  target, not evidence that the current three-cell responsive HUD has already been flattened.
+  share the supporting context; only Next Move has the dominant actionable surface. The current
+  `PixelWorldCommercialHud` and terminal-shell CSS implement that structure, with Next Move first
+  on narrow screens. Geometry, input and accessibility acceptance remain candidate-specific.
 - Action Receipt outranks ambient events and helper copy whenever present. Player and Cinematic
   must not show duplicate causal receipts; first verify the current normal/compact overlay geometry
   in a headed browser, then make presentation ownership explicit rather than masking overlap.
@@ -92,7 +139,7 @@ relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs,
 verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
 idempotency, and receipt semantics before visual design is treated as implementable.
 
-#### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
+#### P1-A Agent Context Lite（既有实现与分项验收边界）
 
 P1-A 先实现一个 Agent-only composition，作为后续实体 Inspector 的窄入口；Location、
 Facility、Territory、Organization、Depot、Module 的 generalized Inspector 明确是 post-P1-A。
@@ -130,15 +177,16 @@ Facility、Territory、Organization、Depot、Module 的 generalized Inspector �
 P1-A 的视觉验收只针对 selected Agent、缺失/陈旧/不可用态和非 Agent honest-unavailable 态；
 必须覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME/CJK/长文本、Focus 返回
 路径和单一正式 Receipt，并覆盖 current、last-known/stale、reconnecting、unknown、conflict、
-replay、gap、reorg、unavailable 与 control/permission lost。当前源码与聚焦自动化已完成；headed
-证据仅覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
-WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，因此当前
-只维持 technical preview；本节不单独构成完整 headed 验收或发行放行结论。
+replay、gap、reorg、unavailable 与 control/permission lost。Context Lite 源码与聚焦自动化已经
+存在。早期外部 Chrome 样本只覆盖 GPU-unavailable fallback（`1440x1000`、`390x844`），
+不能据此给 `ready=true` WebGL2/Cinematic、probe 后异步失败或 tablet `641–1240` 放行。
+后续 #3624/#3638/#3668 的证据按各自候选、场景与表面范围保留；旧 fallback 样本不再表示
+全部后续工作未验收。本节不单独构成完整 headed 验收或发行放行结论。
 
 P1-A 的 canonical acceptance crosswalk 为：`P1A-CTX-01 → ENT-01/CTX-01/EMP-01`、
 `P1A-CTX-02 → STA-01/CTX-01/FED-01/FED-02`、`P1A-CTX-03 → INT-01/REC-01/REC-02`、
 `P1A-CTX-04 → CAP-01/CON-01`、`P1A-CTX-05 → IA-01/HUD-01/TXT-01/FOC-01/FOC-02`。
-这些是当前实现与 QA 的证据映射；发行放行仍服从仓库 terminal gates。
+这些是分项实现与 QA 的证据映射；发行判断仍需适用的当前候选证据，不恢复已退休的历史回执流程。
 
 #### P1-B World semantic presentation（当前切片源码与 headed 验收已完成）
 
@@ -233,7 +281,7 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
 ## 4. 约束与边界
 - 本设计只重排 Viewer 的视觉/交互，不改网络协议、仿真核心逻辑和 `third_party`。
 - Search/selection 只导航、居中和打开上下文；执行只能从已授权 Command/Console 路径发生。
-- queued/accepted 不等于完成；无 receipt 时显示明确的 `No action receipt yet`。
+- queued/accepted 不等于完成；无适用 receipt 时明确显示结果尚未确认，`No action receipt yet` 不能解释成世界未生效或确定失败。
 - 所有实现必须保留键盘焦点、关闭/`Escape`、CJK/长文案和无横向溢出的可读性契约。
 
 ## 5. 设计演进计划
@@ -261,12 +309,11 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
   contextual Command；选择只导航/高亮，不执行。
 - Escape 先关闭局部 surface/drawer，再退出 Focus/presentation；IME composition
   期间由 IME 消费 Escape，关闭后焦点回到 invoker。
-- 实施顺序固定为 anchors/tests → shell layout → console/receipt → focus/a11y →
-  World Feed v1 → headed QA；当前 P1 切片已有源码/协议实现与聚焦自动化，headed 证据仅覆盖
-  外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
-  WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
-  因此当前只维持 technical preview。issuer-backed Director allowed path 和仓库级 runtime/QA
-  release verdict 仍是独立终端证据，不由这部分 headed 结果替代。
+- 实施顺序为 anchors/tests → shell layout → console/receipt → focus/a11y →
+  World Feed v1 → headed QA。已有源码/协议实现和历史分项证据不作为未做事项重跑；新修改按
+  实际命中的表面、renderer 与时序补验证。GPU-unavailable fallback 证据不覆盖 GPU 正常路径，
+  后续 GPU/headed 结果也只证明自己的范围。issuer-backed Director allowed path 和仓库级
+  runtime/QA release verdict 仍需各自适用证据。
 
 World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedup 为
 `(world_id,reorg_epoch,event_seq)`，source order ascending；nullable receipt link
@@ -277,21 +324,85 @@ unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fu
 
 ### 已知 feed/readout 缺陷的修复状态（#3315）
 
-- **P1 cursor continuation：已修复。** `world_feed_transport.js` 会按返回 cursor
-  异步继续请求，并在世界活动后刷新最新 cursor；对应测试为
-  `world_feed_transport.test.js` 中的
-  `continues an initial page asynchronously from the returned cursor` 与
-  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`。
-- **P2 gap/reorg 旧事件保留：已修复。** `consumeWorldFeed()` 在 gap 时清空旧
-  `events`，再要求权威 snapshot reload；对应测试为
-  `world_feed_state.test.js` 的
-  `stops appending on gap/reorg and requires authoritative snapshot reload`。
-- **P2 多资源 raw fallback：已修复。** 资源 formatter 逐项解析 Host 以 ` · ` 拼接的
-  条目；对应 Rust 测试为
-  `render_selected_resource_readout.rs` 的
-  `resource_readout_formats_each_structured_entry_without_raw_json`。
+历史实施、测试与 headed 观察见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/3315#issuecomment-6162410991)。该窗口只复核 GPU-unavailable fallback 的 `1440x1000` / `390x844`；不覆盖 `ready=true` WebGL2/Cinematic、probe 后异步 GPU failure、tablet `641–1240`，不构成发行放行。#3248 的浏览器结果仍是自己的历史窗口。
 
-这些是 #3315 的 focused implementation/test evidence；外部 Chrome 另在 headed
-`1440x1000` 与 `390x844` 复核了 GPU 不可用 fallback。该浏览器证据不覆盖
-`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
-宽度，也不是发行放行结论；#3248 浏览器证据仍是历史记录。
+持续验收分别核对 initial-page cursor continuation、gap/reorg 后清空旧 events 再 reload，以及多资源逐项格式化，不能将 reconnect 连续性外推为已覆盖。测试定位为 `world_feed_transport.test.js`、`world_feed_state.test.js` 和 `render_selected_resource_readout.rs`；当前合同和后续验证要求继续由本文件持有。
+
+<a id="branch-preview-consistency"></a>
+## 7. 分支指引与回退预览的一致性
+
+本节承接首局产品合同的 [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) / [AC-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#ac-first-branch-001) 和 [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) / [AC-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#ac-first-branch-002)。它限定既有 gameplay projection 与吸引力样例的解释，不新增真实世界回退动作、协议字段、结算或持久化语义。
+
+<a id="branch-stage-projection"></a>
+### 7.1 分支投影职责
+
+- `crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs` 发布当前主目标、阶段和主指引；`runtime_live/branch_commitment.rs` 依据同次投影的 `available_actions` 选择分支，只推荐已发布且未禁用的动作。
+- `IndustryStage::Governance` 是现有内部阶段，不单独证明治理、投票、领土、安全或冲突玩法开放。其 `regional_specialist` 路径的 route label、immediate gain、future beats、risk 和 return hook 继续解释本地生产与专业化用途。
+- 模块、工厂核心和合金仍是合法工业候选；其对应需求、产出和下一用途沿现有 `first_delivery_preview` 发布。修正文案不改变配方、材料、动作过滤、完成边界或区域需求的地理含义。
+- Viewer 消费发布的承诺并保留不可用状态，不从内部 enum、历史说明或客户端推断额外能力。更换目标或刷新后以当前快照重读；旧推荐不能作为执行授权。
+
+验证时，`branch_commitment.rs` 内的 `regional_specialist_recommendations_keep_enabled_industrial_routes` 单元样例同时启用模块、工厂核心与合金，逐条核对承诺，再禁用模块候选检查过滤；下表的真实 Runtime 场景补充主指引与合金路线投影。两者组合，避免仅凭一条已启用路线推断所有分支文案均已覆盖。
+
+<a id="fixture-rollback-window"></a>
+### 7.2 吸引力样例的回退窗口
+
+`crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js` 的 `TASK-GAME-076` 样例自有 route phase 决定 `rollback_quote`。报价生成与证据 gate 共用同一窗口判断；仅检查非空文案不能证明可回退。规则只作用于该样例版本的 `accelerate` / `stabilize` 路线，不把样例阶段解释为真实 Runtime 的世界状态。
+
+| 样例时点 | 回退含义 | 必须保留的后果与下一步 |
+| --- | --- | --- |
+| incident recovery 尚未开始 | 窗口内可回退；截止条件、代价、保留和失去价值均可读 | 已兑现的结果与既有约束仍可追踪 |
+| incident recovery 开始的边界 | 窗口立即关闭，不等待后续订单或交付 | 明确截止原因；保留当前合法恢复选择 |
+| repair / replan 及之后的完成态 | 原回退继续不可用，恢复完成不重开旧窗口 | 保留恢复收益、已形成能力、义务和回访动作 |
+| route phase 缺失、未知或与样例状态冲突 | 不承诺可回退，相关样例不能获得窗口一致性通过 | 给出资料缺失或冲突原因，不能用旧 quote 补齐 |
+
+修复不清空已提交结果，不改变 `production_only` 的首产物边界，也不把后续交付变成隐藏前置。样例可同时具有“已完成恢复”和“仍有后续用途”，但不能因此恢复已截止的回退能力。真实入口若将来发布回退动作，仍由其专业合同独立判断当前窗口和实际执行结果。
+
+<a id="starter-plan-interaction"></a>
+## 8. 当前首局方案与成果的交互
+
+本节落实[首局具体样本](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#des-first-concrete-sample)，复用现有 Next Move、Gameplay Details 和唯一 Action Receipt。它不是新控制台、通用实体 Inspector 或新的导航路线；当前 Agent-only context 边界不变，工厂方案只在已有 gameplay 操作上下文表达。
+
+### 8.1 从 Next Move 完成这一次决定
+
+默认阅读顺序是：**当前对象与目标 → 本次实际方案 → 主要成本/阻塞 → 明确下一动作 → 可展开依据与诊断**。对象、方案、提交范围及返回路径在进入详情后仍可辨认；原始 JSON、内部 ID 和次要诊断默认收起。影响损失、权限或不可逆承诺的信息不能折叠到玩家无法发现的位置。
+
+查看对象只导航，请求预览只读取，提交才进入执行链；动作名称与 pending 反馈必须表达这一区别。固定方案的 factory/recipe/batches 与实际提交同源；可编辑但未接入提交的查询明确标为独立查询，不能让玩家以为编辑了 Next Move。保留现行 direct 动作白名单的合法行为，不把非 direct 入口仅靠文案变成提交；同一动作不保留两份竞争的 submit 控件，也不用 CSS 视觉移位造成与 DOM/键盘不同的顺序。完整成本从 [M4 同方案报价](../m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)读取；缺失字段保留未确认，不由前端常量或另一账本补齐。
+
+### 8.2 状态、合法操作与焦点
+
+下表是现有状态的交互映射，不要求新的 runtime enum。查询 attempt、方案适用性和原提交结果分开；具体身份与失效规则遵循 M4/Runtime，而非用一个 loading 布尔值覆盖全部。
+
+| 触发状态 | 保留的信息与合法操作 | 返回、焦点与禁止行为 |
+| --- | --- | --- |
+| 打开详情 / 返回世界 | 保留当前目标、对象和本次规范方案；查看/查询/提交入口明确 | 返回原 invoker；关闭不提交、不取消、不重置世界 |
+| 查询中 | 保留方案和查询归属，明确尚无可用报价；允许退出或受支持的重新选择 | 不把 pending 当成零成本或可执行；异步响应不夺焦点 |
+| 参数或对象改变 | 旧报价失去提交资格，保留可解释的变化原因；新查询绑定新方案 | 旧响应不得覆盖新对象；无需因更新世界快照清空全部上下文 |
+| 报价失效 / snapshot 更新 | 禁用旧方案提交；保留原查询关联并待复核，或显式废弃该 attempt 并提供重查 | 不无声转 idle 丢弃在途结果，不用旧 allowed 恢复提交按钮 |
+| 提交中 / 结果未知 | 保留原请求身份与已知范围，提供真实的核对/安全重试能力或限制说明 | 不显示确定失败/未生效，不以新身份重提；退出不取消旧请求 |
+| 权限失效 | 当前权限决定脱敏；保留允许读取的已知结果和恢复说明，执行按当前授权重验 | 不借保留草稿/请求泄露数据，不继承旧授权 |
+| 部分或完整成果到达 | 实际所得、已确认范围与尚待决范围分别可读；引用唯一 Receipt，再展示真实后继条件 | 无关旧结果不替换当前方案；不强制弹窗领奖、不夺焦点、不把部分成功合成全目标完成 |
+| 离场 / 重新进入 | 恢复成果摘要、当前目标、待决请求与有效委托；核对当前条件后提供第一动作 | 不重复播报旧成功、不产生离线收益；焦点回可用主入口而不是已失效按钮 |
+
+正常更新使用非打断式状态播报；仍可从同一 Receipt 入口主动回看详情。不要为了只保留一个主 CTA 而隐藏合法返回、暂停未来委托或核对原请求的入口；这些是上下文恢复，不是第二条主线。
+
+### 8.3 成果与后继目标的阅读边界
+
+先显示已被领域结果证明的实际投入/所得，再在原意图—action/job—settlement 精确关联成立时解释本次玩家贡献，最后说明当前真实用途与剩余条件。只有同 owner、最近结果或同名材料时可显示归属成果，但不称为当前决定的功劳；预览不是实际结果，Agent 解释不是归因证据。
+
+成果摘要引用同一 Action Receipt，不建立第二份回执或重复浮层。Assembler 候选可被查看、比较并显示已满足条件与缺口，即使当前不能建设；只有实际可执行动作使用提交型 CTA。候选未知时诚实解释，不把不可用候选包装成正式可行推荐。首产物、持续能力、建成 Assembler 和交付保持独立，首产物后可自然离场。
+
+### 8.4 该操作链的入口验收
+
+针对同一候选，在现有 quote state/response、gameplay action 提交、Gameplay Details 与 Receipt 路径验证正常提交、对象/参数改变、报价在途失效、迟到旧响应、权限失效和未知结果恢复；不能只测 reducer 或静态按钮存在。图形验证按既有矩阵覆盖桌面和窄屏，特别检查中文 IME composition、Tab/Shift+Tab、Escape/返回焦点、长文本和文字放大后的主要成本/动作/关闭入口可达；成果播报不夺焦点。具体验证版本、运行命令与证据留在 Task/PR；本节不声明实际 GUI 或真人体验已通过。
+
+### 11.1 验证映射表
+
+| 上游 requirement / acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法与 test/manual source | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | [分支投影职责](#branch-stage-projection) | 当前区域专业化不发布未开放的阶段承诺，并保留合法合金路线 | [industrial_progression.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs) 的 `runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready`；当前候选 `test_tier_required` | PR 中的聚焦回归结果；主指引、全部承诺及可执行工业路线 | 普通合同回归，实际入口体验另验 |
+| [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | [吸引力样例回退窗口](#fixture-rollback-window) | 同一路线截止前、incident 开始、修复后及完成态；拒绝反向 available、缺失或冲突 phase | [gameplay-attraction-scenario.test.mjs](../../../crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs)；当前候选 `node` 结构正反例 | PR 中的样例测试结果；报价与 gate 窗口一致 | `fixture_structure_only`，不证明真实回退或 human playability |
+| [REQ-FIRST-INDUSTRIAL-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-002) | [当前方案交互](#starter-plan-interaction) | 查看/查询/提交分开，同参数与实际成果可读；承接 AC-FIRST-INDUSTRIAL-001。 | 待执行：按 [测试手册](../../../testing-manual.md) 选择当前 candidate 的适用 S6 场景，沿 §8.1/8.4 的 quote→submit→receipt 真实消费者核对对象、参数、成本和反馈；覆盖桌面/窄屏、IME、键盘、文字放大与非打断播报。 | PR 中的实际参数、权威结果与 headed captures；记录缺失前置。 | 单元/组件测试不代签 GUI；图形正确不证明真人理解、主体感或留存。 |
+| [REQ-FIRST-INDUSTRIAL-005](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-005) | [当前方案交互](#starter-plan-interaction) | 失效/迟到结果不污染当前方案，原请求未知与已结算范围分开；承接 AC-FIRST-INDUSTRIAL-003。 | 待执行：按 [测试手册](../../../testing-manual.md) 在当前 candidate 的适用 S6 场景执行 §8.2 的参数/对象改变、报价在途失效、旧响应迟到、权限失效及未知结果恢复；核对实际提交、焦点和原请求身份，缺恢复入口记录 blocked。 | PR 中的消息时序、原请求与领域结果、无重复效果证据及 headed captures。 | reducer 或固定脚本不代签真实消费者、GUI 或自主试玩。 |
+| [REQ-FIRST-INDUSTRIAL-008](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-008) | [当前方案交互](#starter-plan-interaction) | 单一成果回执、可见后继目标和自然离场分别成立；承接 AC-FIRST-INDUSTRIAL-004。 | 待执行：按 [测试手册](../../../testing-manual.md) 在当前 candidate 的适用 S6 场景验证 §8.2/8.3 的成果到达、后继不可执行、自然离场和重入；检查旧成果不误归给新意图、不重复播报、不复活失效授权；无提示续玩观察单独记录。 | PR 中的成果/后继条件、离场与重入状态、headed captures 和提示介入记录。 | 图形与恢复正确不证明 Agent 主体感或真人留存，未覆盖窗口保持未验证。 |
+
+本节定义实现与验收边界；具体候选、执行过的测试和未覆盖入口记录在对应 PR。代码或样例回归成功不能升级为真实自主试玩、图形交互或发行验收通过。

@@ -14,6 +14,7 @@ export function createFragmentRefillPreviewStateModule({ clone, state }) {
   function handleFragmentRefillPreviewError(error) {
     if (String(error?.action_id || "").trim() !== "preview_fragment_replenishment") return false;
     if (state.fragmentRefillPreviewRequest?.status === "pending") {
+      state.fragmentRefillPreview = null;
       state.fragmentRefillPreviewRequest = { status: "error", error: String(error?.message || error?.code || "fragment refill preview request failed") };
     }
     return true;

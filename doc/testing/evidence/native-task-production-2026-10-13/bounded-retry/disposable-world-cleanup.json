@@ -1,0 +1,9 @@
+{
+  "host_exited": true,
+  "owned_realm_removed": true,
+  "signer_private_goals_cache_removed": true,
+  "local_raw_context_and_quote_outputs_removed": true,
+  "canonical_stop_height": 62,
+  "canonical_delegation_revocation_height": 63,
+  "watchdog_completed": true
+}

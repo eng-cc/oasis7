@@ -19,6 +19,8 @@
 - 测试与发布参考: `testing-manual.md`
 
 ## 里程碑
+
+M1–M3 仅是 2026-03 的历史建档/同步记录，未核到唯一原执行 Task，原文保留，不视为当前进度；长期追踪按实际 PR、CI 与评审执行，Issue/Project 按需。
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
 - M2 (2026-03-07): 完成站点手册镜像语义同步与状态文档回写。
 - M3 (2026-03-07): 完成对外“可玩状态”口径与真实产品状态对齐。
@@ -44,6 +46,7 @@
   - SC-11: 移动端首页在脚本失效时仍保留可达导航入口，且键盘用户进入页面后可直接跳过顶栏进入正文。
   - SC-12: `site/doc/{cn,en}/index.html` 必须明确定位为首页之后的次级深读入口，不得继续充当第一次对外介绍项目的主宣传面，也不得指向缺失的首页锚点。
 
+<a id="site-page-requirements"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - 新访问者：需要快速理解项目价值与安装入口。
@@ -115,7 +118,24 @@
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
-  - 本轮不重做 deck、story、manual 或 docs hub，不引入 SPA/构建系统，不新增概念图，也不改变 runtime、installer 或 release 能力。
+  - 不重做 deck、story、manual 或 docs hub，不引入 SPA/构建系统，不新增概念图，也不改变 runtime、installer 或 release 能力；现有故事入口和章节状态的有界正确性修复按下节合同执行。
+
+<a id="story-entry-and-state-contract"></a>
+### 故事首访与章节状态合同
+
+承接 PRD-SITE-002 的公开入口可用性；设计见 [故事路由与状态机](design.md#story-reader-design)。
+本节只修现有故事页的入口和阅读行为，不要求翻译正文、新增英文故事页、重写小说或引入 SPA。
+
+| 专业验收 | 用户可观察结果 |
+| --- | --- |
+| STORY-AC-1 | 干净英文首选浏览器直达 `/story/` 或 `/story/index.html` 时，保留有内容的中文页面并可加载章节；只对明确有对应语言页面的入口自动选语言 |
+| STORY-AC-2 | 手动选择优先并持久化；首页双语、文档路径排除、根域/项目子路径及 query/hash 均保持，单语言页面不消耗首页首次语言判断 |
+| STORY-AC-3 | 页面只显示当前章节的真实 `loading/ready/error/empty` 状态；生产页面不显示状态示例集合，不虚构阅读进度同步故障 |
+| STORY-AC-4 | 404/网络失败进入 error，提供当前章节重试或实际原文入口；200 空串/全空白进入 empty，不宣告正文已加载；正常内容进入 ready |
+| STORY-AC-5 | 快速切章时，旧请求的成功或失败都不能覆盖最新章节、选中项、状态或 aria-busy；重试仍针对当前选择 |
+
+以同一候选从干净英文直达故事入口后继续覆盖延迟、失败、空白、正常与快速切换矩阵，回归首页和文档入口。
+静态链接检查和 Pages CI 只证明各自静态合同，不能替代上述行为及适用浏览器/视觉验证；未运行的场景保持未验证。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 静态站构建链路、链接检查、截图/视觉基线流程。

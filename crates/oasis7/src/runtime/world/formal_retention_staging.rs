@@ -223,6 +223,17 @@ pub(super) fn world_service_candidates(
         if key_digest != *map_key {
             return Err("WorldService result map key/correlation mismatch".into());
         }
+        // These revision-chain receipts do not yet have a retained task lookup index.
+        // Keep them hot: archiving them would silently lose task predecessors.
+        // TODO: account for protected receipts when selecting the eligible suffix;
+        // the planner's final count/byte checks intentionally fail closed meanwhile.
+        if matches!(
+            &result.request.signed_payload,
+            crate::world_service::WorldServicePayloadV1::GameGoalPublish(_)
+                | crate::world_service::WorldServicePayloadV1::GameExecutorControl(_)
+        ) {
+            continue;
+        }
         let canonical_result_cbor = serde_cbor::to_vec(&result).map_err(|e| e.to_string())?;
         if canonical_result_cbor.len() > MAX_RESULT_BYTES_IN_LEAF {
             return Err("WorldService result exceeds retained-history leaf bound".into());

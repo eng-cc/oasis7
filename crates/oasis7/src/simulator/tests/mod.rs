@@ -5,6 +5,26 @@ use crate::geometry::GeoPos;
 use crate::models::DEFAULT_AGENT_HEIGHT_CM;
 use std::fs;
 
+fn restore_runner_feedback_history(
+    runner: &mut crate::simulator::AsyncAgentRunner,
+    world: &crate::runtime::World,
+) {
+    let history = world
+        .runtime_feedback_outbox()
+        .expect("read host-validated Runtime feedback history");
+    runner
+        .restore_runtime_feedback_outbox(&history)
+        .expect("restore Runner replay fence from Runtime history");
+}
+
+fn provider_backed_runner_with_empty_runtime_history(
+    agent_id: &str,
+) -> crate::simulator::AsyncAgentRunner {
+    let mut runner = crate::simulator::AsyncAgentRunner::provider_backed_fixture(agent_id);
+    restore_runner_feedback_history(&mut runner, &crate::runtime::World::new());
+    runner
+}
+
 fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,

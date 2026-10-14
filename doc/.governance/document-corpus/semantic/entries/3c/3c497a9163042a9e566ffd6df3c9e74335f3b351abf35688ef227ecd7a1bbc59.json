@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a62dd3c2b587f19bb2f2dd1d9030e5ca0a41a07a5802558c1c18cc0858d24314",
+    "content_sha256": "8b59b454bca9c1925a2f2547e5dea38fdaea5d1a6c46dad323a66cac411f1034",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current testing domain requirements authority; developer workflow record projection updated, product authority retained",
+    "note": "current testing domain requirements authority; reviewed #4438 L4 build/driver, actual Hosted session, per-attempt result, judgment ownership and scaffold output contracts; existing QA receiver and evidence boundaries retained; not execution evidence. Scoped document review for issue #4455 on 2026-10-12: V-RECOVERY now requires independent action and successful-tick continuation evidence from a real nonempty event suffix; full-snapshot loading and committed-input re-execution remain separate evidence lanes. This is document review only, not runtime execution or release acceptance; existing authority, decision owner and disposition are retained. Integration review with main #4641 on 2026-10-12: the L4 requirements remain intact and the original J1/J2 additions are unchanged; deterministic recovery evidence does not establish L4 gameplay acceptance or waive existing service/provider/topology/consumer evidence.",
     "path": "doc/testing/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

@@ -68,6 +68,36 @@ pub fn validate_signing_payload(
     Ok(envelope)
 }
 
+/// Verify the domain-separated envelope against an independently expected public key.
+pub fn verify_file_signature(
+    context: &SignContext,
+    file: &[u8],
+    public_key: &[u8; 32],
+    signature: &[u8; 64],
+) -> Result<(), SignerError> {
+    verify_file_digest_signature(
+        context,
+        &sha256_hex(file),
+        file.len() as u64,
+        public_key,
+        signature,
+    )
+}
+
+pub fn verify_file_digest_signature(
+    context: &SignContext,
+    digest: &str,
+    size: u64,
+    public_key: &[u8; 32],
+    signature: &[u8; 64],
+) -> Result<(), SignerError> {
+    let payload = signing_payload_from_digest(context, digest, size)?;
+    let key = ed25519_dalek::VerifyingKey::from_bytes(public_key)
+        .map_err(|_| SignerError::CryptoOrBindingInvalid)?;
+    key.verify_strict(&payload, &ed25519_dalek::Signature::from_bytes(signature))
+        .map_err(|_| SignerError::CryptoOrBindingInvalid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,6 +116,26 @@ mod tests {
                 nonce: "nonce-01".into(),
             },
         }
+    }
+    #[test]
+    fn verifies_envelope_with_independently_expected_key() {
+        use ed25519_dalek::Signer;
+        let signing = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let c = context();
+        let sig = signing
+            .sign(&signing_payload(&c, b"file").unwrap())
+            .to_bytes();
+        assert!(
+            verify_file_signature(&c, b"file", &signing.verifying_key().to_bytes(), &sig).is_ok()
+        );
+        assert!(
+            verify_file_signature(&c, b"changed", &signing.verifying_key().to_bytes(), &sig)
+                .is_err()
+        );
+        let wrong = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);
+        assert!(
+            verify_file_signature(&c, b"file", &wrong.verifying_key().to_bytes(), &sig).is_err()
+        );
     }
     #[test]
     fn canonical_file_payload_binds_digest_size_and_complete_context() {

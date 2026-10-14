@@ -126,6 +126,76 @@ Action/Event 从 envelope/ctx.stage 输入，按 instance_id 确定排序/隔离
 reducer state/new_state、module instance/registry、scheduler wake、pending effect 是不同持久事实；输入输出是候选，Kernel apply 后才为 canonical。目标统一 buffer 同时 prepare module state、费用、effects/emits、allocator/queue/journal/consensus，publish 前不改 live state；当前 direct/trusted 和 governed proposal typed stages 已有有界保证，step cloned boundary/其他生命周期/receipt/outbox/generation 整体仍 partial。事务失败不能消费 queue/费用/ID，infrastructure failure 不伪装业务拒绝。持久化用 [root generation/replay 合同](../design.md#runtime-pending-design) 及 ModuleStore integrity；replay 原事件/state 不重新调用 LLM，外部 effect 由目标 durable outbox postcommit 投递。通用 signed pending/lineage/service schemas 未完成，现有 effect queue 不能代签。
 LLM observation/decision/provider/context/memory/goal 依赖原 cognition/harness authority，推理失败/accepted acknowledgement 不产生世界效果。消费者受 [pending](../design.md#runtime-pending-design)、[lineage](../design.md#runtime-lineage-design)、[service](../design.md#runtime-recovery-design)、[world scope](../design.md#runtime-world-scope-design) 约束，只以 committed receipt 改结论，本节不新增 DTO/UI。
 
+<a id="module-tick-journal-replay"></a>
+### 成功 module tick 的 journal 结果与恢复
+
+本节承接 [journal suffix 恢复需求](../prd.md#runtime-journal-suffix-recovery) 与
+[WASM tick ABI](../wasm/wasm-interface.md#wasm-tick-journal-replay)。审读基线为
+`27db6f894bd106e9a4fee9ee3062cd8fd86e1056`：成功 tick 已暂存并发布 schedule，
+snapshot 已携带 schedule，但其 wake/clear 尚无完整的 WorldJournal 结果记录。
+以下为 target；局部 prepared publication、post-route snapshot round-trip 均不证明
+较早已完成 checkpoint C 加非空 suffix 能恢复到 T，整体能力仍为 `partial`。
+
+#### 宿主记录与发布顺序
+
+每次成功 tick 必须产生一条宿主拥有的 canonical 调度结果。记录沿用所属世界及
+WorldJournal 的 event id/era、logical time 与顺序约束，不新增 guest `ModuleOutput`
+字段；具体宿主事件编码随 [版本与旧历史合同](../design.md#runtime-journal-suffix-compatibility)
+冻结。最小语义如下，不能从 trace 字符串或 `new_state` 猜测其中任何结果：
+
+| 信息 | 约束 |
+| --- | --- |
+| 实例与调用关联 | 稳定 `module_id`、`instance_id` 及该次调用 identity；绑定同位置的历史 module version/artifact。仅明确的 legacy singleton 使用既有 module-id fallback。 |
+| 消费依据 | 记录调用 logical tick 和被消费的旧 wake tick；旧 wake 必须到期，实例须与该历史位置的激活记录、tick subscription 相符。 |
+| 最终调度结果 | 明确的 `wake_at(absolute_tick)` 或 `clear`，不能用字段缺失表达未知结果。WakeAfterTicks 沿用零 tick clamp 与当前饱和加法；Suspend 和已解码输出的缺省都产生 `clear`。 |
+
+live 继续按确定的实例顺序执行、校验和计费；宿主先在同一暂存视图消费旧 schedule，
+再计算最终 wake/clear，并把结果记录放在该次调用既有费用、state、effects/emits
+事件之后。同次调用的旧事件相对顺序不变，调度记录不计作 guest emit 或新增费用。
+Pure、`new_state=None` 和无 effects/emits 的成功调用也必须记录，不能依赖
+`ModuleStateUpdated` 是否出现。消费与重排作为一次最终替换/删除发布，不暴露中间空表。
+
+调度结果、业务事件、费用、队列与 allocator 共享既有 route/root 暂存发布边界；
+全部 prepare 成功才安装，final tick record 仍由 `run_modules_for_current_tick()` 拥有。
+模块失败继续按既有规则丢弃业务输出并形成 `ModuleCallFailed`；infrastructure failure
+继续不发布暂存结果、不追加成功记录；route 失败保留 route 前 schedule，原有错误优先级与审计策略不变。
+本合同仅补成功路径，不把失败调用转换成成功 `clear`，也不新增静默重试。
+
+#### Replay 与旧历史
+
+replay 从 C 的完整 schedule 出发，按 canonical 顺序读取结果，校验实例/调用 tick、
+旧 wake 与历史绑定，再直接替换该实例的 wake 或删除条目。绝对 wake 不以恢复时刻
+重新相加；记录不触发模块、subscription 路由、重新计量或外部 effect。费用只归约
+既有 charge 事件一次；整个 suffix 的校验、提交与失败丢弃依
+[共用恢复设计](../design.md#runtime-journal-suffix-recovery-design)。
+
+旧 WASM 输出省略 `tick_lifecycle` 的含义仍是 suspend；旧 journal 没有调度结果则是
+证据缺失，不能据此推定 suspend、每 tick wake 或从旧 state 反推。缺字段的 snapshot
+也不能靠 serde 默认空 map 证明所有实例已 suspend。能否从完整基线及保留记录恢复、
+缺记录区间的拒绝/诊断读取、新旧 reader 激活边界，统一依
+[旧历史兼容合同](../design.md#runtime-journal-suffix-compatibility)，不重写历史 bytes。
+
+<a id="module-tick-journal-replay-validation"></a>
+#### 有界验证映射
+
+下表是 `test_tier_required` 的 planned 确定性 fixture，文档变更未运行行为验证。
+沿用 [共用验证口径](../design.md#runtime-journal-suffix-validation)，固定 candidate、
+world、manifest/artifact、C/T 和原始 journal；live 使用真实 WASM 的最小模块，
+replay 路径设置 sandbox 调用为零的断言。mock 的局部 route 测试只能作辅助证据。
+
+| 验证 ID | 输入与路径 | 必须断言 |
+| --- | --- | --- |
+| TICK-JOURNAL-01 | 已完成 C，真实 WASM 在 C<T 的非空 suffix 中分别返回 WakeAfterTicks、Suspend、缺省；覆盖零 ticks、Pure 与 `new_state=None` | C+suffix 恢复出的 schedule 与 live T 相同；未来 wake 不提前，suspend 不复活；replay 不调 guest，费用/state/events 与 live 一致。 |
+| TICK-JOURNAL-02 | 同 module 两个实例，一个 wake、一个 clear；另设仅 A 到期、B 仍在未来的样例。两边从 T 继续相同输入和 ticks，越过下一次 wake | 调用实例、tick、顺序及后续 journal、费用、状态一致，实例间不串 schedule；B 未到期时无调用/新增收费，原 wake 保持，到其原 wake 才执行；不能只比较 T 的 state root。 |
+| TICK-JOURNAL-03 | 成功 route 在记录/业务 prepare 后注入失败；并保留既有模块失败、infrastructure failure 与 post-route/pre-finalization snapshot 负例 | route 失败保留 route 前 schedule，未安装半个结果或收费；不把半 tick snapshot 当 checkpoint，不借新成功记录改变既有失败与审计策略。 |
+| TICK-JOURNAL-04 | 旧输出缺省、旧 snapshot 缺 schedule、旧 suffix 缺记录、新版本缺/冲突结果与跨版本恢复 | 已知输出按 suspend；不可证明的历史不能伪装完整恢复；保留旧 bytes，按共用兼容合同处置。 |
+| TICK-JOURNAL-05 | 将同一 C<T tick fixture 交给既有有效签名 governed rollback v2 入口 | 沿用签名、nonce 与 C/T 校验；恢复后续跑等价，重复请求沿既有 nonce 规则处置且无额外费用/业务效果；不新增签名格式或共识能力。 |
+
+现有定位：`modules_permissions.rs` 的 live tick 用例、
+`module_tick_routing_transaction_regressions.rs` 的局部原子性及 T snapshot round-trip；
+它们尚未承接上述完整矩阵。新 fixture 与结果由实际实现任务落到相应测试入口，
+未执行前不得据此宣称 J2 已修复、governed recovery 已通过或整体 capability 升级。
+
 <a id="integration-governance-api"></a>
 ### 当前入口、失败与兼容
 接口表的 World::apply_proposal(id) 是现有 local-policy-gated wrapper；explicit certificate API 是 World::apply_proposal_with_finality(proposal_id,&certificate)，见 [治理设计](../governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md#hardening-governance-boundary)。旧零信任两参数 apply_proposal 是历史 proposal spelling。Manifest version/content/module_changes 与 Applied 现有字段保持不变。signature/threshold/artifact/output 错误保留优先级、HMAC/legacy replay 及 ABI 默认兼容；不得隐式降级 missing authority/artifact。容量由 ModuleLimits/queue/profile authority 控制，cache eviction 不驱动世界进度，审计 errors 不包含额外敏感 payload。target 接口/activation/full durable 迁移需要 runtime/WASM/Agent 联审与 replay/failure evidence；风险是旧 draft 与 current 入口混淆，输入/ABI/消费者变更触发复核。
@@ -140,6 +210,7 @@ LLM observation/decision/provider/context/memory/goal 依赖原 cognition/harnes
 | [条款](../prd.md#runtime-version-acceptance) | 历史governing version/artifact输入不可由cache/client选择 | [设计](#integration-module-boundary) | WASM compatibility与P2P proof | activation历史未proved |
 | [条款](../prd.md#runtime-pending-acceptance) | LLM/effect候选不等于world effect，no recall replay及pending真实处置 | [设计](#integration-state-persistence) | Agent cognition/harness；P2P/consumer | 通用pending DTO未落地 |
 | [条款](../prd.md#module-store-persistence-and-recovery-contract) | module state/registry/artifact/cache完整 hydration，mixed generation拒绝 | [设计](#integration-state-persistence) | runtime storage；WASM identity | whole root/outbox仍partial |
+| [journal suffix recovery](../prd.md#runtime-journal-suffix-recovery) | 成功 tick 的稳定实例、消费与最终 wake/clear 同批记录；较早 C 加非空 suffix 恢复及续跑等价 | [调度结果合同](#module-tick-journal-replay) | runtime journal/reducer；WASM executor；QA；共用兼容合同 | target；不改变 guest ABI、失败策略或签名/共识 |
 | [条款](../governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md#retained-active-hardening-contract-与历史-provenance) | wrapper与explicit finality API区分，ordered module→manifest→Applied | [设计](#integration-governance-api) | runtime governance；P2P finality；WASM | 历史两参数spelling非current API |
 
 ### 11.1 验证映射表
@@ -152,4 +223,5 @@ LLM observation/decision/provider/context/memory/goal 依赖原 cognition/harnes
 | [条款](../prd.md#runtime-version-acceptance) | [设计](#integration-module-boundary) | 历史governing version/artifact输入不可由cache/client选择 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/module_action_loop_release_controls.rs)；full target activation窗口+missing历史工件，局部release control定义，不执行 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | activation历史未proved |
 | [条款](../prd.md#runtime-pending-acceptance) | [设计](#integration-state-persistence) | LLM/effect候选不等于world effect，no recall replay及pending真实处置 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required局部queue/ingest rollback；target provider outage/restart/replay无调用/费用/效果及committed-only consumer | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 通用pending DTO未落地 |
 | [条款](../prd.md#module-store-persistence-and-recovery-contract) | [设计](#integration-state-persistence) | module state/registry/artifact/cache完整 hydration，mixed generation拒绝 | [现行 manual](../../../testing-manual.md)；精确局部 source ../../../crates/oasis7/src/runtime/world/module_store_load_transaction_regressions.rs（定义/入口，非执行证据）；required late record/missing/tamper/no-store兼容局部定义；full target generation/crash/历史binding | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | whole root/outbox仍partial |
+| [journal suffix recovery](../prd.md#runtime-journal-suffix-recovery) | [调度结果合同](#module-tick-journal-replay) | wake/clear、Pure/无 state、双实例、费用、原子性、兼容与恢复后续跑 | [现有 tick 事务测试](../../../crates/oasis7/src/runtime/tests/module_tick_routing_transaction_regressions.rs) 扩展本页 TICK-JOURNAL-01..05；required、真实 WASM 与既有 rollback v2 入口；同候选 C<T 非空 suffix | planned/未运行；schedule 与调用序列、journal、费用、状态及结构化拒绝的对照 | 已有 live/mock/T snapshot 用例不证明该矩阵，整体仍 partial |
 | [条款](../governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md#retained-active-hardening-contract-与历史-provenance) | [设计](#integration-governance-api) | wrapper与explicit finality API区分，ordered module→manifest→Applied | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/governance.rs)；required governance_policy_blocks_local_apply_proposal_path 定义；target复核调用边界/invalid certificate零部分apply | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 历史两参数spelling非current API |

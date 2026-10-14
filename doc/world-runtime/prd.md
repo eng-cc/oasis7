@@ -143,6 +143,11 @@ become visible or all remain absent. Cache capacity, registry, instances, and
 tick schedules MUST remain unchanged; action validation priority and supplied
 reason bytes remain compatible.
 
+This publication boundary alone does not establish recoverable retirement.
+The [module persistence contract](#module-store-persistence-and-recovery-contract)
+also requires the accepted retired state to remain readable without making
+unrelated live modules unavailable or deleting historical registry records.
+
 The standalone multi-module change API MUST commit its sorted register,
 upgrade, activate, and deactivate events as one failure boundary. A validation,
 publication, retention, allocator, schedule, cache-invalidation, or consensus
@@ -178,9 +183,11 @@ deterministic routing metrics, module output, cache-miss additions, allocators, 
 backpressure together. Its prepared envelope deliberately carries no
 consensus candidate; `run_modules_for_current_tick()` owns the single final
 tick record. A snapshot taken after direct routing but before that finalization
-is therefore not a replayable canonical checkpoint, and a pre-route snapshot
-plus the later journal cannot reconstruct schedule/metric sidecars absent from
-that snapshot. Only a finalized-tick snapshot is a replay/restore boundary.
+is not a replayable canonical checkpoint. A finalized checkpoint is a valid
+starting cut, but does not by itself prove that a later event suffix reconstructs
+schedule/metric sidecars. That reconstruction remains a current limitation;
+the [event-suffix recovery target](#runtime-journal-suffix-recovery) requires a
+complete recorded path from an earlier finalized checkpoint to the target.
 Due-record preflight errors retain the compatibility exception of recording
 metrics directly while leaving the schedule unchanged.
 
@@ -238,7 +245,7 @@ agent-claim epoch 不能从同一个 base snapshot 整轮预生成，因为同�
 
 gameplay cycle 采用 stage-scoped preparation，而不是从 tick 初始态生成一个跨阶段 vector。当前 economic-contract expiry stage 已从 immutable view 固定到期 atomic contracts、contract-id 顺序、status-derived reputation delta 与 event bodies；governance proposal finalization 随后从 immutable post-economic state 固定排序后的到期 proposal keys，以及由 votes、quorum 和 threshold 推导的 winner、weight、passed 与 event bodies。crisis lifecycle 再从 post-governance state 准备至多一个 deterministic auto-spawn event，发布后才从 resulting state 固定按 crisis-id 排序的 timeout event vector；不得让 timeout preparation 绕过 spawn 的顺序边界。war conclusion 使用更窄的 one-event decision：每次从当前 post-crisis state 准备 `war_id` 最小的到期 active war，发布后重读 resources/reputation，再准备下一场，以保证 contract expiry 与较早 war outcome 都进入后续 scoring/settlement。active gameplay-module lifecycle directive 在 envelope decode 后也逐条从当前 immutable state 转换为 zero-or-one domain event，发布后才处理下一条；`WarConclude` loser fallback 在该 preparation 时解析，zero-point `MetaGrant` 继续无事件，malformed envelope 继续走既有 module failure。这些 stage-local prepared decisions/vectors 的多事件失败仍由外层 cloned-step rollback 收口，不构成 whole-cycle 或 root transaction 原子性证明。
 
-目标实现必须以一个显式的 staged transition boundary（可称 `ExecutionTransaction` / `TransitionBuffer`，具体类型由 runtime 实现决定）承载 parent state、logical time、资源 reservation、module state、pending effect、tick schedule、journal/event 与 sequence counters 的暂存值。module call、Kernel preflight 和 output/schema/capability 校验只能读写这个暂存视图；不得在 commit 前直接修改 canonical `WorldState`、canonical journal 或外部 effect 队列。所有成功 event/effect/state 变更与 execution commitment 在一个 commit 点原子发布；任一 invariant、预算、artifact、receipt 或持久化失败都丢弃暂存值，并只留下一个稳定的 rejected/fault disposition（若需要审计记录，也必须与该 disposition 同一原子提交，不能留下半个业务效果）。
+目标实现必须以一个显式的 staged transition boundary（可称 `ExecutionTransaction` / `TransitionBuffer`，具体类型由 runtime 实现决定）承载 parent state、logical time、资源 reservation、module state、pending effect、tick schedule、journal/event 与 sequence counters 的暂存值。module call、Kernel preflight 和 output/schema/capability 校验只能读写这个暂存视图；不得在 commit 前直接修改 canonical `WorldState`、canonical journal 或外部 effect 队列。所有成功 event/effect/state 变更与 execution commitment 在一个 commit 点原子发布；invariant、预算、artifact、receipt 或持久化失败只有在确认业务候选未提交时才丢弃暂存值，并只留下一个稳定的 rejected/fault disposition（若需要审计记录，也必须与该 disposition 同一原子提交，不能留下半个业务效果）。已提交与提交未知的结果遵守[普通 generation 合同](#runtime-generation-persistence-contract)，不得追加与持久结果矛盾的无效果终态。
 
 这样可以让 module 成为一等执行负载，同时保留现有 `WorldState`、legacy event 和 snapshot 的兼容读取；本节不要求立即把当前 struct 改造成传统 ECS。原子边界落地前，Alliance/EconomicContract 试点只能作为 target migration work，不得把现有逐事件实现包装为已完成的原子 receipt 合同。
 
@@ -265,7 +272,7 @@ gameplay cycle 采用 stage-scoped preparation，而不是从 tick 初始态生�
 
 1. 模块具有受治理的 manifest、artifact hash、schema/version、稳定 `instance_id` 和 activation 状态；缺失或不匹配时不得执行。
 2. command 经过同一权限、预算、quote/resolution、最终 affordability 和 Kernel apply 管线；module 不得直接写 canonical `WorldState`、journal 或外部 effect。
-3. accepted outcome、事件、module state、receipt 与 checkpoint 使用同一 root/commitment；任一校验、预算、持久化或 artifact 失败都产生稳定 reject/fault，且不留下部分业务效果。
+3. accepted outcome、事件、module state、receipt 与 checkpoint 使用同一 root/commitment；提交前的校验、预算、持久化或 artifact 失败，在确认未提交时产生稳定 reject/fault，且不留下部分业务效果。持久提交结果未知时先核对原候选；已提交结果不得因后续维护失败改判为无效果。
 4. snapshot restore、canonical journal replay、restart/recovery 和跨 adapter conformance 对同一 accepted input 产生相同 state root/receipt；旧 compatibility shape 仍可显式读取或通过 adapter 迁移。
 5. 至少建立两个同 artifact、不同 `instance_id` 的实例，证明 direct/trusted command、state update、event、receipt 和 catalog 不以全局 `module_id` 串写或覆盖。
 6. preview、stale provider response、deny 与 no-effect 失败不 debit；accepted effect、debit 与 receipt 同一次且仅一次结算；retry/reconnect/restore/replay 不重复扣费、不发放 replay credit，并保留 owner/payer 可读性和旧玩家结果。
@@ -277,11 +284,11 @@ Migration Test 未通过前，native vertical slice 只能标为 `current`/`comp
 
 统一 `ExecutionTransaction` 是 runtime 架构 **P0**：这里的 P0 表示必须先确立统一状态转换边界，不等同于已经发生线上事故或要求一次性重写所有状态结构。它的范围包括 `step()`、`step_with_modules()`、native compatibility action、WASM/module command、tick directive、direct/trusted command、module install/upgrade 以及任何会改变 canonical world 的恢复/迁移写入。只读 quote/resolve 可以在 transaction 之前运行，但必须绑定 parent、manifest、input root 和 freshness，且不得产生 world effect。
 
-Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt 与 durable outbox records；失败路径丢弃暂存值，只发布稳定的 rejected/fault disposition。外部不可回滚副作用只能在 commit 后由 outbox 按 receipt 驱动；必须有持久幂等键、dispatch/ack 状态、crash-safe 重投和 replay 不重执行合同。该边界不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
+Transaction 的最小职责是暂存 parent state、logical time、resource reservation/debit、module instance state、pending effect、tick schedule、journal/event 和 sequence counters；module call、Kernel preflight、schema/capability/output 校验只读写暂存视图。成功路径在一个 commit point 原子发布 state/event/receipt 与 durable outbox records；只有确认未跨相应提交点（持久路径为 `NotCommitted`）的失败路径才能丢弃暂存值并发布稳定的 rejected/fault disposition。已提交或提交未知时按[普通 generation 合同](#runtime-generation-persistence-contract)安装或核对原结果，不恢复旧 World 的写能力。外部不可回滚副作用只能在 commit 后由 outbox 按 receipt 驱动；必须有持久幂等键、dispatch/ack 状态、crash-safe 重投和 replay 不重执行合同。该边界不要求本轮引入 ECS、shard、动态 World Database 或替换现有 snapshot shape。
 
-目标实现固定为显式 `ExecutionTransaction` + typed `TransitionBuffer`，而不是把 cloned `World` 固化为生产事务。每个 world-effecting public entrypoint 建立一个 root transaction；nested event、module routing 与 reducer 共享同一 buffer，只能用 savepoint 局部回滚，不能 inner commit。Buffer 至少覆盖 canonical state/runtime authority、所有 rolling sequence 与 era、journal batch、pending/inflight queue、receipt link、schedule、capability authorization/budget、commitment/consensus、replay-deterministic metrics、idempotency 与 durable outbox record。prepare 必须完成所有可能失败的校验、容量、commitment、serialization 与 persistence staging，并绑定当前 state/manifest/registry/journal/queue/consensus/authorization head；只有不可失败的 `PreparedCommit` install 可以越过 commit seam。失败不得产生 event-id 空洞、消费 pending action，或污染任何 deterministic projection。
+目标实现固定为显式 `ExecutionTransaction` + typed `TransitionBuffer`，而不是把 cloned `World` 固化为生产事务。每个 world-effecting public entrypoint 建立一个 root transaction；nested event、module routing 与 reducer 共享同一 buffer，只能用 savepoint 局部回滚，不能 inner commit。Buffer 至少覆盖 canonical state/runtime authority、所有 rolling sequence 与 era、journal batch、pending/inflight queue、receipt link、schedule、capability authorization/budget、commitment/consensus、replay-deterministic metrics、idempotency 与 durable outbox record。prepare 必须完成所有可能失败的校验、容量、commitment、serialization 与 persistence staging，并绑定当前 state/manifest/registry/journal/queue/consensus/authorization head；只有不可失败的 `PreparedCommit` install 可以越过 commit seam。提交前且确认未提交的失败不得产生 event-id 空洞、消费 pending action，或污染任何 deterministic projection；持久提交结果未知不能以保留旧内存作为未提交证明。
 
-执行结果区分 `Accepted`、`Rejected` 与 `Faulted`。`Rejected` 只表示确定性输入、权限、预算、资源或 freshness 拒绝；`Faulted` 表示 trap、artifact/schema、invariant、serialization、persistence 或 commit uncertainty，不得伪装成可继续的业务拒绝。若协议要求审计拒绝或 fault，该 disposition 必须在丢弃业务 delta 后作为同一 root commit 的唯一无业务效果记录；若连稳定 disposition 也无法形成，则返回 infrastructure error，并保证 canonical state、journal、sequence、queue/schedule、receipt、commitment 与 deterministic metrics 完全不变。迁移不得改变现有入口在多错误同时存在时的对外错误优先级。
+执行结果区分 `Accepted`、`Rejected` 与 `Faulted`。`Rejected` 只表示确定性输入、权限、预算、资源或 freshness 拒绝；`Faulted` 表示 trap、artifact/schema、invariant、serialization 或 persistence fault，不得伪装成可继续的业务拒绝。执行 disposition 与持久发布结果分别判定：commit uncertainty 必须保留为 `StatusUnknown`，不能仅凭 `Faulted` 或 infrastructure error 推断无效果。只有确认业务候选 `NotCommitted` 后，协议要求的拒绝或 fault 才能在丢弃业务 delta 后作为同一 root commit 的唯一无业务效果记录；若连该稳定 disposition 也无法形成，且确认其同样未提交，则返回 infrastructure error，并保证 canonical state、journal、sequence、queue/schedule、receipt、commitment 与 deterministic metrics 完全不变。任何已提交的业务或 disposition 均保留原结果；未知结果先核对，不追加矛盾终态。迁移不得改变现有入口在多错误同时存在时的对外错误优先级。
 
 Phase 1 的首个 stateful queue 切片固定 `emit_effect` 语义：capability missing/expired/kind-not-allowed 在 intent/event 分配前拒绝且不写 audit；确定性 policy deny 只原子提交一个 `PolicyDecisionRecorded(Deny)`，intent 与 event allocator 各前进一步，不产生 `EffectQueued`；policy allow 后的 hard queue-full 或 post-prepare infrastructure failure 必须整体丢弃 allow audit、effect event、intent/event sequence 与 era、queue/eviction metrics、journal 和 consensus。满队列仍保留既有的“可确定性驱逐未绑定 intent”兼容规则，authorization-linked intent 不可驱逐。通用 raw `append_event` 的 `EffectQueued` 与 `ReceiptAppended` 也已进入 typed sidecar replacement：pending/inflight queue 与 eviction counter 在 owned projection 上先完成，unknown-intent 仍先于 post-prepare failpoint，随后才与 event allocator、journal retention 和 consensus 一次安装；失败不消费或驱逐 live intent。该切片仍不代表 durable outbox 或 replay allocator 已迁移完成。
 
@@ -291,15 +298,24 @@ Phase 1 的首个 stateful queue 切片固定 `emit_effect` 语义：capability 
 
 每个可重试 root operation 必须用稳定 operation id 绑定 world、parent、canonical input/intent hash、manifest/activation 与 target。同 identity/同 binding 返回原 disposition，不再分配 event、扣费、入队或发出 outbox；同 identity/不同 binding 以 idempotency conflict fail closed。临时 event id 不是重试身份。外部 effect 仍以 `(world_id, execution_receipt_id, effect_id)` 去重，只承诺 durable outbox + at-least-once dispatch + stable idempotency，不承诺外部系统物理 exactly-once。
 
-Replay 使用同一 reducer 和 typed buffer，但只能应用 canonical event，必须整体校验并一次发布 journal suffix；它不得生成 event 或调用 sandbox、LLM、adapter、dispatcher，只能重建 ledger/outbox 状态。持久化以完整 immutable generation 为单位，在 snapshot、journal、module store、sidecars、outbox、manifest 和 hashes 全部 stage/fsync/validate 后原子切换 latest-generation pointer；该 pointer switch 是 durable commit point。切换前失败保留旧 generation，切换后崩溃以新 generation 恢复，禁止拼接 mixed generation。receipt ingestion 是独立 root transaction，必须原子完成 receipt 校验、authorization/intent link closure、queue/outbox 更新、业务 apply、receipt event 与 commitment/sequence 更新。
+Replay 使用同一 reducer 和 typed buffer，但只能应用 canonical event，必须整体校验并一次发布 journal suffix；它不得生成 event 或调用 sandbox、LLM、adapter、dispatcher，只能重建 ledger/outbox 状态。持久化以完整 immutable generation 为单位，在 snapshot、journal、module store、sidecars、outbox、manifest 和 hashes 全部 stage/fsync/validate 后原子切换 latest-generation pointer；该 pointer switch 连同其承诺的持久化确认构成 durable commit point，替换可见但目录同步等持久条件未确认时仍是 `StatusUnknown`。确认未提交的失败保留旧 generation；确认已提交后以新 generation 恢复，后续镜像、GC 或 metrics 维护失败不撤销提交，禁止拼接 mixed generation。receipt ingestion 是独立 root transaction，必须原子完成 receipt 校验、authorization/intent link closure、queue/outbox 更新、业务 apply、receipt event 与 commitment/sequence 更新。
 
 实施按 Phase 0 加五个可独立验收的迁移阶段推进：Phase 0 冻结 typed delta/savepoint/disposition、deterministic projection、failpoint 与 test-only clone oracle；Phase 1 迁移通用 `append_event` 及 reducer/sequence/journal/schedule/queue/consensus；Phase 2 迁移 step/action/direct/trusted/lifecycle/module/tick/observation/capability；Phase 3 迁移 receipt/outbox/idempotency；Phase 4 迁移 replay/restore；Phase 5 建立 generation persistence/crash recovery。任何 public mutation surface 尚未迁移时能力仍为 `partial`；全部入口实现但完整 crash/replay/ABI 证据未闭合时只能称 `target-implemented`；只有执行、拒绝、fault、幂等、回放、恢复、outbox、持久化、legacy serde 与 WASM compatibility gate 全部通过后才能称 `proven`。
+
+<a id="runtime-generation-persistence-contract"></a>
+#### 普通 generation 保存与恢复合同（目标）
+
+普通 runtime 保存必须向调用方区分 `NotCommitted`、`Committed` 与 `StatusUnknown`，并独立表达提交后的维护降级。候选绑定稳定操作身份、原 base generation 与完整持久内容；确认已提交时安装或恢复该候选，未知时禁止旧 World 再发布，按同一身份核对后才解除写入隔离。此处描述本地 generation 的持久结果，不代替[合法 authority profile 的正式提交证明和独立故障域条件](#runtime-authority-profile-commit)。
+
+专业要求和独立验收由存储专题的 [G1 提交判定与调用方一致性](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g1)、[G2 当前 index 引用闭包保护](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g2)、[G3 完整同代候选恢复](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g3)及[提交判定与恢复选择边界](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-cross-boundary)承接，技术映射见[根设计](design.md#runtime-generation-persistence-design)。健康旧候选不证明新代未提交，也不自行恢复当前写权；涉及事件后缀时，完整候选还须满足 [J1/J2 恢复与续跑合同](#runtime-journal-suffix-recovery)，不能仅由同代材料可读推断控制状态已正确重建。重新服务仍受[恢复闸门](#runtime-recovery-acceptance)约束。文档采纳不证明普通保存入口或这些故障验收已实现。
 
 #### Command-path module-instance completeness
 
 实例的稳定逻辑主键是 `(world_id, module_id, instance_id)`；`artifact_hash/schema_version/activation_epoch` 是该主键在某一 execution height 的 active binding，不重定义逻辑实例。当前安装、升级、tick、event routing 与恢复已携带部分实例信息；仍需补齐 direct/trusted command 的 target、state lookup、更新事件、receipt linkage 与 catalog target。
 
 目标路径必须验证逻辑主键与当前 artifact/schema/activation binding，再把 target 与 binding digest 固定进 staged command、event、receipt、snapshot 和 replay input。升级必须产生按 execution height 可回放的 version-lineage record；restore/replay 使用历史 binding，不以当前 artifact 覆盖历史。任何不一致在 first effect 前拒绝，禁止 fallback 到另一个同 `module_id` 实例。
+
+具体入口解析、单实例兼容与双实例拒绝/隔离验证由 [实例命令设计](design.md#module-instance-command-design) 承接；实现与验收继续在 [#3555](https://github.com/eng-cc/oasis7/issues/3555) 独立跟进。文档补齐保留本能力的 `partial` 状态，不把原子发布、历史局部测试或汇总 Issue 关闭视为实例隔离已经完成。
 
 ### 单一内部 execution pipeline
 
@@ -340,6 +356,25 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
 - replay 以 checkpoint + canonical journal 重建，在每个 receipt 边界比较 action/event/next-state commitment；遇到首个差异、缺失 artifact 或旧 schema 不可解释时返回结构化 mismatch/fault，保留原始证据并阻止不一致状态重新对外暴露。
 - retry、restart、restore、GC 后恢复与跨 adapter replay 必须对同一 accepted input 生成同一 receipt/state root；被拒绝 action 也必须有稳定 disposition，不能静默丢失。v2 restore 在重新对外暴露 state 前必须比较 snapshot root、replay root 与 next state root；legacy adapter 也必须产出同等比较证据，否则只允许诊断读取，不允许继续提交新效果。
 - 当前产品与 runtime 仍只有一条 `world_id` 对应的 canonical world timeline。dev/local 或测试 world 必须使用独立 `world_id`，不得把离线历史合并回 global world。region/partition 先作为逻辑 scope 或存储/调度边界，独立 shard finality、跨 shard commit 与动态 World Database 均暂缓，不构成当前实现承诺。
+
+<a id="runtime-journal-suffix-recovery"></a>
+### 事件后缀恢复与续跑（目标）
+
+本条承接产品 [恢复可服务验收](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005)。
+合法 finalized checkpoint `C<T` 加完整、非空的 `WorldJournal` 事件后缀恢复到 T 后，必须保留决定后续执行的控制状态。
+完整 T snapshot 往返、WorldJournal 事件归约、committed-input 重执行是三种独立验证路径；后两者的输入与执行边界见 [系统设计](design.md#runtime-journal-suffix-recovery-design)。
+
+- **J1 — action allocator：**恢复 `next_action_id` 与 `action_id_era` 及相关预分配队列边界，接续分配与不中断对照一致；下一合法 recipe 不得复用后缀中已 settled 的 job identity。
+  记录来源、单动作多事件、业务拒绝、显式/预分配 ID 与 rollover 由 [数值恢复合同](runtime/runtime-numeric-safety.prd.md#numeric-action-allocator-replay) 承接；HTTP producer 的独立命名空间不在本条范围。
+- **J2 — module tick schedule：**每次成功 tick 的消费、重排或停止调度结果须可由记录重建；恢复后的 schedule、下次调用时点与不中断对照一致。
+  WakeAfterTicks、Suspend、缺省、Pure/无 new_state 与双实例隔离由 [宿主 tick 重放设计](runtime/runtime-integration.md#module-tick-journal-replay) 承接。
+- **正向续跑：**同候选、同 world、相同合法 authority/manifest/权限/资源及后续输入下，两分支比较 disposition、动作/job identity、唤醒次序、状态与费用；至少一个合法新 recipe 正常完成一次。
+  单独的 WorldState/root 一致或“效果至多一次”不代替该结果；这不是无条件成功或完成时限承诺。
+- **恢复边界：**普通加载、既有 signed rollback v2 的 C→T 路径及 repair 的 source-journal 重建采用同一控制状态语义；保留既有签名、artifact、finality、服务闸门及失败原子性。
+  恢复结果需要持久保存时，提交结果按[普通 generation 合同](#runtime-generation-persistence-contract)安装或核对；只有确认未提交才允许丢弃该候选并继续使用旧 World，未知结果保持写入隔离。
+  event replay 只应用已记录事实，不重新执行 action/WASM、不重新推导费用或派发外部效果；J1/J2 独立验收，不互相代签。
+- **旧历史：**可反序列化不代表可继续执行；必要控制记录缺失时采用 [显式兼容矩阵](design.md#runtime-journal-suffix-compatibility)，不得把无记录解释为未分配或 suspend。
+  本条和 [验证矩阵](design.md#runtime-journal-suffix-validation) 是目标合同，现有 snapshot/局部事务测试不构成非空 suffix 已通过的证据。
 
 ### Consumer compatibility: industrial profile and stage execution
 
@@ -411,12 +446,12 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 - Gameplay 生命周期沿用 `validated Action -> DomainEvent -> WorldState` 的 runtime 权威链；动作校验与路由以 `crates/oasis7/src/runtime/world/event_processing.rs` 为准，事件与持久状态以 `crates/oasis7/src/runtime/events.rs` 及 state apply 路径为准。
 - 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；存在激活的 Gameplay tick module 时先校验并应用其 directive，只有没有激活 Gameplay tick module 时才整体使用 native fallback，激活模块后不会因某类 directive 缺失而逐项回退。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。
 - 内建 Gameplay 模块的注册、`ModuleRole::Gameplay` 绑定与 readiness 由 `crates/oasis7/src/runtime/world/bootstrap_gameplay.rs` 和当前回归测试承接。模块存在或 readiness 通过不替代 gameplay 专业域的可玩性与后果可读性验收。
-- Gameplay manifest 必须使用 `ModuleRole::Gameplay` 并携带合法 contract：mode 非空、去空白后唯一，`min_players >= 1`，设置 `max_players` 时必须满足 `max_players >= min_players`；非 Gameplay manifest 不得携带该 contract。register、activate、deactivate、upgrade 都必须对变更后的 active set 预检，同一 `(mode, GameplayModuleKind)` 最多只能有一个 active module。
+- Gameplay manifest 必须使用 `ModuleRole::Gameplay` 并携带合法 contract：mode 非空、去空白后唯一，`min_players >= 1`，设置 `max_players` 时必须满足 `max_players >= min_players`；非 Gameplay manifest 不得携带该 contract。register、activate、deactivate、upgrade 都必须对变更后的 active set 预检，同一 `(mode, GameplayModuleKind)` 最多只能有一个 active module；mode 判等统一按[派生 mode key 合同](#gameplay-mode-identity-contract)，不能只在输入校验时 trim。
 - `gameplay_modules()` 与 `gameplay_mode_readiness(mode)` 返回确定排序的 active-set / coverage snapshot；readiness 只表示 runtime operational coverage，不是玩家体验、视觉或发布验收。
 - Base module governance 负责通用 identity、version、artifact、interface/export、subscription、capability 与 limit 校验，只把 Gameplay contract 和变更后 active-set slot 冲突交给 gameplay layer。这是内部实现职责拆分，不创建新的 ABI 或规则语义边界；公开协议仍以本页和 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 发生 tick-consensus drift 时，runtime 恢复必须让受影响 action 得到显式处置（保留、replay，或带恢复路径的拒绝），不得静默丢失。可执行 governed rollback v2 的 custody、C/T reconciliation、nonce、journal/root 校验与 all-clear 流程仍由现行 rollback runbook 承载；历史 release `Go`、RTO/RPO 或一次性 soak 结果不得充当当前 release authority。
 - 生命周期事件与状态仍受本 PRD 的确定性、receipt、replay、恢复与 ABI 兼容合同约束；持久化保留和恢复细则见 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`。历史 closure 的实现过程从 Git history 与 PR 与实际验证记录 追溯，不再作为长期 runtime 权威入口。
-- 对激活且订阅 `tick` 的模块，runtime 只在 logical time 到期时调用，并将 schedule 随 snapshot/replay 持久化；一次 tick 调用先消费旧 schedule，只有模块明确请求 wake 才建立下一次调度，`suspend` 或缺省指令不再调度。ABI wire shape、最小 wake clamp、tick context 与结构化失败约定以 `doc/world-runtime/wasm/wasm-interface.md` 为准。
+- 对激活且订阅 `tick` 的模块，runtime 只在 logical time 到期时调用，并将 schedule 随 snapshot/replay 持久化；一次 tick 调用在暂存视图消费旧 schedule，成功时只有模块明确请求 wake 才建立下一次调度，`suspend` 或缺省指令不再调度。整条 route 失败丢弃暂存、保留原 schedule，并返回既有结构化错误/失败审计，不承诺自动重试。ABI wire shape、最小 wake clamp、tick context 与失败约定以 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 链 PoS 的时间锚、slot/tick 相位、严格滞后恢复、控制面参数、status 与 restart/replay 边界由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 唯一承接；它不定义 validator 经济、节点运维或发布结论。
 
 ## 接口 / 数据
@@ -524,6 +559,7 @@ Site registration、location anchor、Agent location assignment、ownership/acce
   - PRD-WORLD_RUNTIME-038: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status.traffic.libp2p_replication` to expose real substream wire-byte totals plus derived control-plane wire bytes, so that control-plane overhead can be estimated from runtime truth instead of only host NIC totals or event-count heuristics.
   - PRD-WORLD_RUNTIME-039: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status` to expose commit freshness, pending proposal progress, pending consensus action queue pressure, recent finality latency, transfer lifecycle and confirmation latency summaries, plus inbound timing reject counters, so that common chain stalls can be classified directly from status truth instead of ad hoc log grep.
   - PRD-WORLD_RUNTIME-040: As a 新账号玩家 / `liveops_community`, I want the first `slot-1` claim to auto-draw startup restricted funding from the dedicated pool when runtime says the pool can cover it, so that onboarding no longer depends on operator review queues or undocumented manual grants.
+  - <a id="prd-world-runtime-041"></a>PRD-WORLD_RUNTIME-041: 作为 Runtime、consensus、node 与网络维护者，我需要算术越界、整数窄化及批量状态转移遵循明确的 checked failure、协议 rollover 或 observable clamp 合同；可失败路径在写入前拒绝，显式 clamp 保留确定边界和可重跑测试，避免部分状态与不可重放结果。专业语义与实现映射由 [数值安全 PRD](runtime/runtime-numeric-safety.prd.md) 和 [数值安全设计](runtime/runtime-numeric-safety.design.md) 维护。
   - PRD-WORLD_RUNTIME-043: As a Runtime 维护者 / QA / 审计者, I want every authoritative accepted industrial outcome to receive one immutable root operation identity with persisted revision/segment, direct parent/child and terminal-disposition links, so that stage/join/bundle/transit/terminal effects remain attributable and retry, recovery or replay cannot duplicate sink, credit, progress, receipt or reward.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
@@ -706,6 +742,7 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 | PRD-WORLD_RUNTIME-039 | task_f15a1d9ea3194c39aa35158bf93d8ff1 | `test_tier_required` | `/v1/chain/status.consensus` commit freshness / pending proposal / queue pressure / inbound timing reject 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | 节点共识堵塞分类、提交停滞与队列压力真值补齐 |
 | PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
 | PRD-WORLD_RUNTIME-040 | task_313368c409c54cc2bcf8ef4f47919b65 | `test_tier_required` | 首个 claim auto-funding / claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` claim submit API 回归、viewer claim snapshot 自动资助字段回归、`software_safe` 正式摘要去审批化回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、专用池自动资助真值、slot-1 restricted funding 直连 claim 闭环 |
+| [PRD-WORLD_RUNTIME-041](#prd-world-runtime-041) | [数值安全专业合同](runtime/runtime-numeric-safety.prd.md) | `test_tier_required` + 受影响边界回归 | [数值设计验证映射](runtime/runtime-numeric-safety.design.md#numeric-safety-validation)：需求与实现回链、checked failure/rollover/clamp；`cargo test -p oasis7_net --lib duration_millis_to_i64_saturating` 定位现有 clock 边界测试；文档修补不代表本轮执行或全域数值审计完成 | world、consensus、node、replication、membership 与 net clock 的既有数值合同 |
 | PRD-WORLD_RUNTIME-043 | task_bb59399112634bdb994530662adfdc4b | `test_tier_required` + `test_tier_full` | schema round-trip、相同 intent 不同 root、fan-in/fan-out parent linkage、wrong/missing-root fail-closed、terminal-late、retry/recovery/replay idempotency、snapshot+journal state-root equivalence | 工业 action/event schema、apply paths、persistence/replay 与 Viewer/API projection |
 | PRD-WORLD_RUNTIME-044 | task_35b6789c87be4eaca9d39182663728c9 | `test_tier_required`（current，AC-42；AC-44 partial evidence） | `cargo test -p oasis7 --lib execution_transaction_regressions -- --nocapture`；覆盖普通 tick、真实 module state write 后的后续失败、committed-context tick 的失败不发布，以及成功 snapshot/journal replay 等价；只证明公开 tick staged publication boundary，不代表 AC-44 的所有 world-effect 入口已统一 | 当前 Kernel/Institution 分类与公开 tick staged publication boundary |
 | PRD-WORLD_RUNTIME-045 | task_35b6789c87be4eaca9d39182663728c9 | `test_tier_full`（target，AC-42/43/44/45/46） | 计划中的 canonical fixture `tests/fixtures/world_runtime/institution-migration-v1/` 与目标入口 `cargo test -p oasis7 institution_migration_v1 -- --nocapture`；该 fixture、runner 与 `report.schema.json` 在目标实现落地前不存在，不得作为 current/proven 证据；完成后须产出 manifest/input-root、execution receipt、snapshot/replay/recovery、legacy-conformance 与 outbox crash/conflict reports，并验证同 root/receipt、双实例隔离、失败零扣费、accepted exactly-once debit/effect/receipt、same-key 去重、different-payload `effect_id_conflict`、restart/replay 不重复外部效果 | 目标 Kernel/Institution migration、统一 transaction、module instance、economy 与 external-effect recovery |
@@ -757,6 +794,30 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 
 <a id="module-store-persistence-and-recovery-contract"></a>
 本锚点是旧 ModuleStore persistence and recovery contract 的兼容定位，原有 load/save/late-record/error/cache/instance 条款保持原节全文，接受关系消费该节而非通用工业矩阵。
+
+### 合法退休、实例升级与共享内容的可恢复性
+
+以下补齐 [#4417](https://github.com/eng-cc/oasis7/issues/4417) 的独立验收边界，是应满足的合同；既有局部原子发布、普通 round-trip 或文档通过不等于这些实现已完成。存储、兼容与测试设计见[模块生命周期分册](module/module-lifecycle.md#module-retirement-and-shared-content)。
+
+- **合法退休仍可读**：通过真实安装形成 registry 的 inactive artifact，在没有任何 active instance 或 legacy active 引用时合法销毁，必须保留历史 registry、实例身份和原有审计，并使销毁后的 `snapshot/from_snapshot`、`save/load` 与 canonical CAS restart 得到一致可读结果。退休模块不能恢复执行；其他模块正常。不能删历史 registry、把所有缺 bytes 都视为退休，或等重启失败后才承认该已提交状态不完整。
+- **退休与损坏分开**：当前可执行集合、历史 registry 与可恢复的工件闭包是三种信息。只有受支持持久格式中可验证的退休事实，才允许对应历史记录缺少当前执行 bytes；active 引用或未退休记录缺 bytes 仍拒绝。保留中的历史 checkpoint/replay 所需 bytes 继续由既有保留合同管理，不能随当前 artifact 销毁一起误删。
+- **退休可由 journal 重建**：成功销毁的退休事实必须与销毁事件在同一提交中持久记录，绑定具体 artifact 生命周期；从销毁前 checkpoint 重放成功动作 tail，与直接恢复销毁后 snapshot/目录/CAS 得到同一结果。旧的单条 raw destroyed event 保持 state-only 兼容，不能作为动作退休的充分证据；新格式缺失、截断或错配的退休记录不能恢复出合法退休。具体记录及原子边界见[动作退休 journal 设计](module/module-lifecycle.md#module-artifact-retirement-journal)。
+- **实例升级可复用版本**：A/B 两实例从 v1 依次正常升级到同一 v2 时，目标已注册且完整 manifest 一致即可复用，不能重复注册或覆盖它；源版本依据被升级实例的历史绑定，不依据另一个实例已改变的全局 active 指针。每次保留该实例 ID、owner、target 与独立 state，且不改变另一实例。错误 owner/from/manifest、冻结、不兼容或无效 finality 继续拒绝且不扣升级费；不能用 rollback 事件或冻结正常 v1 代替 upgrade。
+- **共享内容不丢 manifest**：`wasm_hash` 只标识内容，同模块不同 version、不同模块可以共享 bytes，但各自完整 manifest identity 必须保留。标准保存后的 Observer 与普通恢复均能读取全部合法记录，包括 inactive 记录；不以最后写入的 `<hash>.meta.json` 覆盖结果当作唯一 manifest。坏 bytes、错误 manifest identity 仍拒绝，Observer 不写源目录。
+
+| 独立验收 | 最小可判定场景 | 不足以代签的样例 |
+| --- | --- | --- |
+| 退休闭包（P1） | 真实安装 inactive A，保留另一合法模块 B，销毁 A 后分别做 snapshot、目录、canonical CAS restart；核对历史记录、A 不可执行和 B 正常，再验证 active 销毁与未退休 missing bytes 负例。 | registry 为空的 artifact fixture、只有销毁前 baseline+tail、单独缓存读取。 |
+| 动作退休 tail 恢复（P1） | 由销毁前 checkpoint 重放已成功提交的销毁事件及绑定退休记录，再保存/恢复并与直接销毁后状态比较；A 不可执行、B 正常，重放不重复收费。 | 单条 raw destroyed event、手填退休字段、缺失/错配/截断的新格式单元、只测试销毁后 snapshot。 |
+| 多实例升级 | A 升级 v2 后保存/恢复，再升级仍在 v1 的 B；比较两者身份/state、收费与 upgrade 事件，并覆盖上述拒绝路径。 | 单实例升级成功、用 rollback 或重装生成新实例。 |
+| 共享内容 | 同模块两版本及不同模块共用 H，标准 writer 保存后通过真实 Observer 加载；单 active/全 inactive 与受支持 inline/non-inline 各测一次，覆盖错误 hash/identity。 | 仅普通 inline round-trip、新 service 旁路不读该格式。 |
+
+<a id="gameplay-mode-identity-contract"></a>
+### Gameplay mode 的统一判等
+
+补齐 [#4497](https://github.com/eng-cc/oasis7/issues/4497) 所承接的 mode 边界：manifest 原文及其 hash 保持不变，所有 mode 校验、active-slot 冲突检查、readiness 查询与恢复后投影使用同一派生 key `mode.trim()`；不额外做大小写或其他字符归一化。manifest 声明的空 key 拒绝，单 manifest 中派生 key 重复拒绝；查询保留现有空输入行为，不由此新增错误返回。同 kind 的 `sandbox` 与 ` sandbox ` 占用同一槽，不得双重激活，也不得出现激活成功却查询不到的覆盖。
+
+这是现行合同的一致性目标，不声称当前所有消费者已经统一。register/activate/deactivate/upgrade 及 snapshot/replay 后以相同输入判定；旧合法原文字节可读，恢复不得静默改写 manifest、覆盖冲突或任选一个 active record。测试分别覆盖单条带空白的合法声明、单 manifest 重复、跨 manifest 同槽冲突、不同 kind 合法覆盖和恢复后的相同 readiness；设计接线见[派生 mode key](module/module-lifecycle.md#gameplay-mode-key-design)。
 
 ## 基础设施专业接受与事实边界
 

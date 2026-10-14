@@ -76,7 +76,7 @@
 | `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.prd.md` | `doc/world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.prd.md` | `doc/world-simulator/launcher/game-client-launcher-control-plane-and-machine-interface.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md` | `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/llm/decision-provider-contract.prd.md` | `doc/world-simulator/llm/decision-provider-contract.design.md` | GitHub Issue / Project evidence |
+| `doc/world-simulator/llm/decision-provider-contract.prd.md`；[builtin 输入](llm/decision-provider-contract.prd.md#builtin-input-integrity)与[参数一致性](llm/decision-provider-contract.prd.md#builtin-parameter-consistency) | `doc/world-simulator/llm/decision-provider-contract.design.md`；[builtin 请求设计](llm/decision-provider-contract.design.md#builtin-request-contract) | GitHub Issue / Project evidence；两项独立验收，文档不代签实现 |
 | `doc/world-simulator/llm/continuous-agent-harness.prd.md` | `doc/world-simulator/llm/continuous-agent-harness.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/provider-loopback-http-contract.prd.md` | `doc/world-simulator/llm/provider-loopback-http-contract.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/llm/provider-agent-experience-parity.prd.md` | `doc/world-simulator/llm/provider-agent-experience-parity.design.md` | GitHub Issue / Project evidence |

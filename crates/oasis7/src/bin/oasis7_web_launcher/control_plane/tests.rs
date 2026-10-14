@@ -350,3 +350,129 @@ fn resolve_viewer_static_env_override_rejects_blank_value() {
     let resolved = super::resolve_viewer_static_env_override(Some("   ".to_string()));
     assert!(resolved.is_none());
 }
+
+fn state_with_previous_chain_identity() -> ServiceState {
+    let mut state = ServiceState::new(
+        "launcher".into(),
+        "missing-runtime".into(),
+        ".".into(),
+        LauncherConfig {
+            deployment_mode: "trusted_local_only".into(),
+            chain_enabled: true,
+            ..LauncherConfig::default()
+        },
+    );
+    state.chain_identity = Some(super::ChainIdentitySnapshot {
+        chain_id: "old-chain".into(),
+        network_id: "old-network".into(),
+    });
+    state.chain_replication_status = Some(super::ChainReplicationSnapshot {
+        local_peer_id: "old-peer".into(),
+        connected_peers: vec![],
+        peer_healths: vec![],
+        request_peer_scores: std::collections::BTreeMap::new(),
+    });
+    state
+}
+
+#[test]
+fn session_stop_discards_previous_chain_evidence() {
+    let mut state = state_with_previous_chain_identity();
+    state.chain_runtime_status = super::ChainRuntimeStatus::Unreachable("probe failed".into());
+    super::stop_chain_process(&mut state).expect("stop no-op");
+    assert!(
+        state.chain_replication_status.is_none(),
+        "retained old replication evidence"
+    );
+    assert!(
+        state.chain_identity.is_none(),
+        "stopped session retained old authority"
+    );
+    assert!(matches!(
+        state.chain_runtime_status,
+        super::ChainRuntimeStatus::Unreachable(_)
+    ));
+}
+
+#[test]
+fn session_failed_start_discards_previous_chain_evidence() {
+    let mut state = state_with_previous_chain_identity();
+    let config = state.config.clone();
+    assert!(start_chain_process(&mut state, config).is_err());
+    assert!(
+        state.chain_replication_status.is_none(),
+        "retained old replication evidence"
+    );
+    assert!(
+        state.chain_identity.is_none(),
+        "failed new session retained old authority"
+    );
+}
+
+#[test]
+fn session_without_process_discards_previous_chain_evidence() {
+    let mut state = state_with_previous_chain_identity();
+    state.chain_runtime_status = super::ChainRuntimeStatus::StaleExecutionWorld("stale".into());
+    super::update_chain_runtime_status(&mut state);
+    assert!(
+        state.chain_replication_status.is_none(),
+        "retained old replication evidence"
+    );
+    assert!(
+        state.chain_identity.is_none(),
+        "stale session retained old authority"
+    );
+    assert!(matches!(
+        state.chain_runtime_status,
+        super::ChainRuntimeStatus::StaleExecutionWorld(_)
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn session_process_exit_discards_previous_chain_evidence() {
+    let mut state = state_with_previous_chain_identity();
+    let mut child = std::process::Command::new("/bin/sh")
+        .args(["-c", "exit 0"])
+        .spawn()
+        .expect("spawn child");
+    child.wait().expect("wait exit");
+    let (_, log_rx) = std::sync::mpsc::channel();
+    state.chain_running = Some(super::RunningProcess { child, log_rx });
+    super::poll_chain_process_state(&mut state);
+    assert!(state.chain_identity.is_none());
+    assert!(state.chain_replication_status.is_none());
+    assert!(state.chain_running.is_none());
+    assert!(matches!(
+        state.chain_runtime_status,
+        super::ChainRuntimeStatus::Unreachable(_)
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn session_duplicate_start_keeps_running_process_and_evidence() {
+    let mut state = state_with_previous_chain_identity();
+    let child = std::process::Command::new("/bin/sh")
+        .args(["-c", "exit 0"])
+        .spawn()
+        .expect("spawn child");
+    let (_, log_rx) = std::sync::mpsc::channel();
+    state.chain_running = Some(super::RunningProcess { child, log_rx });
+    let mut config = state.config.clone();
+    config.chain_enabled = false;
+    let result = start_chain_process(&mut state, config);
+    let mut running = state
+        .chain_running
+        .take()
+        .expect("running process preserved");
+    let _ = running.child.kill();
+    running.child.wait().expect("reap child");
+    assert_eq!(
+        result.expect_err("duplicate start rejected"),
+        "oasis7_chain_runtime is already running"
+    );
+    assert!(state.config.chain_enabled);
+    assert!(state.chain_identity.is_some());
+    assert!(state.chain_replication_status.is_some());
+}

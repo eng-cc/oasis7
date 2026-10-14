@@ -117,6 +117,66 @@ class Selection(unittest.TestCase):
         tested = self.commit()
         plan = selector.select(self.config, self.base, source, tested)
         self.assertIn('other', plan['groups'])
+        self.assertEqual(plan['scope'], 'full')  # unverifiable merge topology
+
+    def merge_fixture(self, target_path='Cargo.lock', resolution=None, target_content='// target advance'):
+        self.git('checkout', '-qb', 'source', self.base)
+        self.write('doc/readme.md', 'source doc')
+        source = self.commit()
+        self.git('checkout', '-qb', 'target', self.base)
+        self.write(target_path, target_content)
+        target = self.commit()
+        self.git('merge', '--no-ff', '-qm', 'merge fixture', source)
+        if resolution:
+            self.write(*resolution)
+            self.git('add', '-A')
+            self.git('commit', '--amend', '-qm', 'merge resolution')
+        return source, target, self.git('rev-parse', 'HEAD')
+
+    def test_target_lock_advance_does_not_expand_docs_merge(self):
+        source, target, tested = self.merge_fixture()
+        for base in (self.base, target):
+            with self.subTest(base=base):
+                plan = selector.select(self.config, base, source, tested)
+                self.assertEqual(plan['scope'], 'targeted')
+                self.assertEqual(plan['groups'], ['baseline'])
+
+    def test_merge_resolution_keeps_extra_consumer(self):
+        source, target, tested = self.merge_fixture(
+            resolution=('crates/core/src/lib.rs', '// resolution'))
+        plan = selector.select(self.config, self.base, source, tested)
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline', 'core', 'consumer'})
+
+    def test_merge_resolution_lock_change_still_full(self):
+        source, target, tested = self.merge_fixture(resolution=('Cargo.lock', '// resolution'))
+        self.assertEqual(selector.select(self.config, self.base, source, tested)['scope'], 'full')
+
+    def test_wrong_merge_source_and_unrelated_base_fail_closed(self):
+        source, target, tested = self.merge_fixture()
+        self.assertEqual(selector.select(self.config, self.base, target, tested)['scope'], 'full')
+        self.git('checkout', '-qb', 'unrelated', self.base)
+        self.write('doc/unrelated.md', 'unrelated event base')
+        unrelated = self.commit()
+        self.assertEqual(selector.select(self.config, unrelated, source, tested)['scope'], 'full')
+
+    def test_target_graph_keeps_new_reverse_consumer(self):
+        source, target, tested = self.merge_fixture(
+            'crates/other/Cargo.toml', ('crates/core/src/lib.rs', '// resolution'),
+            '[package]\nname="other"\nversion="0.1.0"\n[dependencies]\ncore={path="../core"}\n')
+        plan = selector.select(self.config, self.base, source, tested)
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertIn('other', plan['groups'])
+
+    def test_source_lock_change_still_full_on_advanced_target(self):
+        source, target, tested = self.merge_fixture('crates/other/src/lib.rs')
+        self.git('checkout', 'source')
+        self.write('Cargo.lock', '// source lock')
+        source = self.commit()
+        self.git('checkout', 'target')
+        self.git('merge', '--no-ff', '-qm', 'merge fixture', source)
+        tested = self.git('rev-parse', 'HEAD')
+        self.assertEqual(selector.select(self.config, target, source, tested)['scope'], 'full')
 
     def test_additions_only_expand_and_groups_only(self):
         self.write('doc/readme.md', 'changed')
@@ -137,7 +197,8 @@ class Selection(unittest.TestCase):
             selector.main()
         outputs = dict(line.split('=', 1) for line in Path('outputs.txt').read_text().splitlines())
         plan = json.loads(outputs['plan'])
-        self.assertEqual(set(plan), {'groups', 'resources', 'reasons', 'scope'})
+        self.assertEqual(set(plan), {'groups', 'resources', 'reasons', 'scope',
+                                    'workspace_support_profiles', 'workspace_support_profile_version'})
         self.assertEqual(outputs['run_baseline'], 'true')
         self.assertEqual(outputs['run_other'], 'false')
         self.assertFalse(any(name.startswith('matrix') for name in outputs))
@@ -216,6 +277,65 @@ class Selection(unittest.TestCase):
         self.assertEqual(set(selector.select(config, self.base, self.commit())['groups']),
                          {'baseline', 'packaging_contracts', 'macos_package_contract', 'fleet_health',
                           'workspace_support', 'workflow_governance'})
+
+    def test_agent_api_and_harness_route_through_support_and_oasis7_consumers(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')
+        for package in packages:
+            self.write(f'crates/{package}/Cargo.toml',
+                       f'[package]\nname="{package}"\nversion="0.1.0"\n')
+            self.write(f'crates/{package}/src/lib.rs', '')
+        base = self.commit()
+        manifests = {name: (f'crates/{name}', {}) for name in packages}
+        reverse = {
+            'oasis7_agent_api': {'oasis7_agent_harness', 'oasis7'},
+            'oasis7_agent_harness': {'oasis7'},
+            'oasis7': set(),
+        }
+        graph = (manifests, reverse, {})
+        expected = {'baseline', 'rust_baseline', 'workspace_support',
+                    'oasis7_required', 'launcher_web'}
+        with patch.object(selector, 'cargo_graph', return_value=graph):
+            for package in ('oasis7_agent_api', 'oasis7_agent_harness'):
+                with self.subTest(package=package):
+                    self.write(f'crates/{package}/src/lib.rs', '// changed')
+                    plan = selector.select(config, base, self.commit())
+                    self.assertEqual(plan['scope'], 'targeted')
+                    expected_profiles = {'oasis7_agent_harness'}
+                    if package == 'oasis7_agent_api':
+                        expected_profiles.add('oasis7_agent_api')
+                    self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
+                    self.assertEqual(set(plan['groups']), expected)
+                    base = self.git('rev-parse', 'HEAD')
+
+    def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')
+        for package in packages:
+            self.write(f'crates/{package}/Cargo.toml',
+                       f'[package]\nname="{package}"\nversion="0.1.0"\n')
+            self.write(f'crates/{package}/src/lib.rs', '')
+        base = self.commit()
+        old_manifests = {name: (f'crates/{name}', {}) for name in packages}
+        old_reverse = {
+            'oasis7_agent_api': {'oasis7_agent_harness', 'oasis7'},
+            'oasis7_agent_harness': {'oasis7'},
+            'oasis7': set(),
+        }
+        new_manifests = {'oasis7': ('crates/oasis7', {})}
+        new_reverse = {'oasis7': set()}
+        Path('crates/oasis7_agent_harness/src/lib.rs').unlink()
+        head = self.commit()
+
+        def graph_for(ref):
+            return ((old_manifests, old_reverse, {}) if ref == base
+                    else (new_manifests, new_reverse, {}))
+
+        with patch.object(selector, 'cargo_graph', side_effect=graph_for):
+            plan = selector.select(config, base, head)
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline', 'workspace_support',
+                                               'oasis7_required', 'launcher_web'})
 
 
 if __name__ == '__main__':

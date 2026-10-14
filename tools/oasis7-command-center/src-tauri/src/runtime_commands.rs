@@ -1,4 +1,6 @@
 mod lifecycle;
+mod private_input;
+pub use private_input::*;
 
 use crate::commands::Host;
 use oasis7_command_center_core::{
@@ -18,6 +20,7 @@ use tokio::sync::Semaphore;
 #[derive(Clone)]
 pub struct RuntimeHost {
     runtime: Arc<Mutex<Option<Runtime>>>,
+    jobs: Arc<oasis7_command_center_core::tools::jobs::ToolJobs>,
     failure: Arc<Option<String>>,
     slots: Arc<Semaphore>,
     approved_exit: Arc<AtomicBool>,
@@ -26,12 +29,50 @@ pub struct RuntimeHost {
     watching: Arc<AtomicBool>,
 }
 
+fn with_tool_status(
+    mut status: QuitStatus,
+    jobs: &oasis7_command_center_core::tools::jobs::ToolJobs,
+) -> Result<QuitStatus, String> {
+    let operations = jobs.list().map_err(|e| e.to_string())?;
+    let active = operations
+        .iter()
+        .filter(|job| job.state == "running")
+        .count();
+    let unknown = operations
+        .iter()
+        .filter(|job| job.state == "unknown")
+        .count();
+    status.active += active;
+    status.unknown += unknown;
+    if active + unknown > 0 {
+        status.safe = false;
+        status.reason = format!(
+            "本机工具仍有 {active} 项执行中、{unknown} 项结果未知；{}",
+            status.reason
+        );
+    }
+    Ok(status)
+}
+
 fn exit_ready(status: &QuitStatus) -> bool {
     status.safe && status.active == 0 && status.unknown == 0 && status.pending_requests == 0
 }
 
 impl RuntimeHost {
+    #[cfg(test)]
     pub fn open(path: PathBuf) -> oasis7_command_center_core::Result<Self> {
+        Self::open_with_jobs(
+            path,
+            Arc::new(oasis7_command_center_core::tools::jobs::ToolJobs::open(
+                ":memory:",
+            )?),
+        )
+    }
+
+    pub fn open_with_jobs(
+        path: PathBuf,
+        jobs: Arc<oasis7_command_center_core::tools::jobs::ToolJobs>,
+    ) -> oasis7_command_center_core::Result<Self> {
         let (runtime, failure) = match Runtime::open(&path) {
             Ok(runtime) => (Some(runtime), None),
             Err(error) => (
@@ -44,6 +85,7 @@ impl RuntimeHost {
         };
         Ok(Self {
             runtime: Arc::new(Mutex::new(runtime)),
+            jobs,
             failure: Arc::new(failure),
             slots: Arc::new(Semaphore::new(4)),
             approved_exit: Arc::new(AtomicBool::new(false)),
@@ -79,7 +121,7 @@ impl RuntimeHost {
         .map_err(|_| "执行请求未能完成".to_string())?
     }
 
-    async fn project_work(
+    pub(crate) async fn project_work(
         &self,
         host: &Host,
         work: impl FnOnce(&mut Runtime, &Project) -> oasis7_command_center_core::Result<RuntimeSnapshot>
@@ -110,6 +152,90 @@ impl RuntimeHost {
                 return Err("项目上下文已变化，请刷新后重试".into());
             }
             work(runtime, &project).map_err(|e| e.to_string())
+        })
+        .await
+    }
+
+    fn check_exit(&self) -> Result<QuitStatus, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "执行状态不可用".to_string())?;
+        self.jobs.freeze().map_err(|e| e.to_string())?;
+        let status = (|| {
+            let r = runtime
+                .as_mut()
+                .ok_or_else(|| self.unavailable_quit_status().reason)?;
+            let status =
+                with_tool_status(r.shutdown_if_idle().map_err(|e| e.to_string())?, &self.jobs)?;
+            if exit_ready(&status) {
+                self.approved_exit.store(true, Ordering::Release);
+            }
+            Ok(status)
+        })();
+        if status.is_err() && !self.approved_exit.load(Ordering::Acquire) {
+            self.jobs.unfreeze().map_err(|e| e.to_string())?;
+        }
+        status
+    }
+
+    fn unavailable_quit_status(&self) -> QuitStatus {
+        QuitStatus {
+            safe: false,
+            active: 0,
+            unknown: 1,
+            pending_requests: 0,
+            waiting: false,
+            reason: self
+                .failure
+                .as_ref()
+                .clone()
+                .unwrap_or_else(|| "执行状态不可用".into()),
+        }
+    }
+
+    // Serialize cancellation with the watcher that can approve process exit.
+    // A missing runtime is an unknown outcome, but must not disable ordinary tools.
+    fn cancel_wait(&self) -> Result<QuitStatus, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "执行状态不可用".to_string())?;
+        if self.approved_exit.load(Ordering::Acquire) {
+            return Err("客户端已确认退出".into());
+        }
+        if self.exit_checking.load(Ordering::Acquire) {
+            return Err("正在核对退出状态，请稍后取消".into());
+        }
+        self.jobs.unfreeze().map_err(|e| e.to_string())?;
+        self.waiting.store(false, Ordering::Release);
+        let status = runtime
+            .as_mut()
+            .map(|r| r.cancel_exit_wait())
+            .unwrap_or_else(|| self.unavailable_quit_status());
+        with_tool_status(status, &self.jobs)
+    }
+
+    async fn interrupt_turn(
+        &self,
+        host: &Host,
+        target: RuntimeTarget,
+    ) -> Result<RuntimeSnapshot, String> {
+        let jobs = self.jobs.clone();
+        self.project_work(host, move |runtime, project| {
+            jobs.with_open(|| runtime.interrupt_turn(project, target))
+        })
+        .await
+    }
+
+    async fn answer_request(
+        &self,
+        host: &Host,
+        reply: RequestAnswer,
+    ) -> Result<RuntimeSnapshot, String> {
+        let jobs = self.jobs.clone();
+        self.project_work(host, move |runtime, project| {
+            jobs.with_open(|| runtime.answer_request(project, reply))
         })
         .await
     }
@@ -170,8 +296,9 @@ pub async fn connect_runtime(
     if !std::path::Path::new(&path).is_absolute() {
         return Err("请选择 Codex 0.137.0 原生程序的绝对路径".into());
     }
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.connect(p, &path))
+        .project_work(&host, move |r, p| jobs.with_open(|| r.connect(p, &path)))
         .await;
     invalidate(&handle);
     result
@@ -184,10 +311,11 @@ pub async fn create_runtime_session(
     handle: tauri::AppHandle,
     mut config: SessionConfig,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
         .project_work(&host, move |r, p| {
             config.basis_revision = p.head.clone();
-            r.create_session(p, config)
+            jobs.with_open(|| r.create_session(p, config))
         })
         .await;
     invalidate(&handle);
@@ -201,8 +329,11 @@ pub async fn continue_runtime_session(
     handle: tauri::AppHandle,
     thread_id: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.continue_session(p, &thread_id))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.continue_session(p, &thread_id))
+        })
         .await;
     invalidate(&handle);
     result
@@ -216,8 +347,11 @@ pub async fn start_runtime_turn(
     thread_id: String,
     input: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.start_turn(p, &thread_id, &input))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.start_turn(p, &thread_id, &input))
+        })
         .await;
     invalidate(&handle);
     result
@@ -231,8 +365,11 @@ pub async fn steer_runtime_turn(
     target: RuntimeTarget,
     input: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.steer_turn(p, target, &input))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.steer_turn(p, target, &input))
+        })
         .await;
     invalidate(&handle);
     result
@@ -245,9 +382,7 @@ pub async fn interrupt_runtime_turn(
     handle: tauri::AppHandle,
     target: RuntimeTarget,
 ) -> Result<RuntimeSnapshot, String> {
-    let result = runtime
-        .project_work(&host, move |r, p| r.interrupt_turn(p, target))
-        .await;
+    let result = runtime.interrupt_turn(&host, target).await;
     invalidate(&handle);
     result
 }
@@ -259,26 +394,20 @@ pub async fn answer_runtime_request(
     handle: tauri::AppHandle,
     reply: RequestAnswer,
 ) -> Result<RuntimeSnapshot, String> {
-    let result = runtime
-        .project_work(&host, move |r, p| r.answer_request(p, reply))
-        .await;
+    let result = runtime.answer_request(&host, reply).await;
     invalidate(&handle);
     result
 }
 
 #[tauri::command]
 pub async fn get_exit_status(runtime: State<'_, RuntimeHost>) -> Result<QuitStatus, String> {
-    if let Some(reason) = runtime.failure.as_ref() {
-        return Ok(QuitStatus {
-            safe: false,
-            active: 0,
-            unknown: 1,
-            pending_requests: 0,
-            waiting: false,
-            reason: reason.clone(),
-        });
+    if runtime.failure.is_some() {
+        return with_tool_status(runtime.unavailable_quit_status(), &runtime.jobs);
     }
-    runtime.run(|r| Ok(r.quit_status())).await
+    let jobs = runtime.jobs.clone();
+    runtime
+        .run(move |r| with_tool_status(r.quit_status(), &jobs))
+        .await
 }
 
 #[tauri::command]
@@ -286,13 +415,27 @@ pub async fn request_exit_wait(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
+    let jobs = runtime.jobs.clone();
+    let checking = runtime.exit_checking.clone();
+    let approved = runtime.approved_exit.clone();
     let waiting = runtime.waiting.clone();
     let status = runtime
         .run(move |r| {
+            if checking.load(Ordering::Acquire) || approved.load(Ordering::Acquire) {
+                return Err("正在核对或已确认退出".into());
+            }
+            jobs.freeze().map_err(|e| e.to_string())?;
             waiting.store(true, Ordering::Release);
             Ok(r.begin_wait_for_exit())
         })
-        .await?;
+        .await;
+    let status = match status.and_then(|status| with_tool_status(status, &runtime.jobs)) {
+        Ok(status) => status,
+        Err(error) => {
+            runtime.cancel_wait()?;
+            return Err(error);
+        }
+    };
     runtime.watch_exit(handle.clone());
     invalidate(&handle);
     Ok(status)
@@ -303,15 +446,27 @@ pub async fn request_exit_stop(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
+    let jobs = runtime.jobs.clone();
+    let checking = runtime.exit_checking.clone();
+    let approved = runtime.approved_exit.clone();
     let waiting = runtime.waiting.clone();
     let result = runtime
         .run(move |r| {
+            if checking.load(Ordering::Acquire) || approved.load(Ordering::Acquire) {
+                return Err("正在核对或已确认退出".into());
+            }
+            jobs.freeze().map_err(|e| e.to_string())?;
             waiting.store(true, Ordering::Release);
             r.begin_wait_for_exit();
             r.stop_for_exit().map_err(|e| e.to_string())
         })
         .await;
-    runtime.watch_exit(handle.clone());
+    let result = result.and_then(|status| with_tool_status(status, &runtime.jobs));
+    if result.is_err() {
+        runtime.cancel_wait()?;
+    } else {
+        runtime.watch_exit(handle.clone());
+    }
     invalidate(&handle);
     result
 }
@@ -321,17 +476,10 @@ pub async fn cancel_exit_wait(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
-    let waiting = runtime.waiting.clone();
-    let approved = runtime.approved_exit.clone();
-    let status = runtime
-        .run(move |r| {
-            if approved.load(Ordering::Acquire) {
-                return Err("客户端已确认退出".into());
-            }
-            waiting.store(false, Ordering::Release);
-            Ok(r.cancel_exit_wait())
-        })
-        .await?;
+    let owner = runtime.inner().clone();
+    let status = tauri::async_runtime::spawn_blocking(move || owner.cancel_wait())
+        .await
+        .map_err(|_| "退出取消未完成".to_string())??;
     invalidate(&handle);
     Ok(status)
 }
@@ -340,6 +488,101 @@ pub async fn cancel_exit_wait(
 mod tests {
     use super::*;
 
+    #[test]
+    fn concurrent_cancel_and_exit_check_never_reopen_approved_admission() {
+        for _ in 0..32 {
+            let runtime = RuntimeHost::open(PathBuf::from(":memory:")).unwrap();
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let cancel_host = runtime.clone();
+            let cancel_barrier = barrier.clone();
+            let cancel = std::thread::spawn(move || {
+                cancel_barrier.wait();
+                cancel_host.cancel_wait()
+            });
+            barrier.wait();
+            let status = runtime.check_exit().unwrap();
+            let _ = cancel.join().unwrap();
+            assert!(exit_ready(&status));
+            assert!(runtime.exit_is_approved());
+            assert!(runtime.jobs.with_open(|| Ok(())).is_err());
+            assert!(runtime.cancel_wait().is_err());
+        }
+    }
+
+    #[test]
+    fn request_answers_are_rejected_by_exit_admission_before_runtime_work() {
+        let host = Host::open(PathBuf::from(":memory:")).unwrap();
+        *host.project.lock().unwrap() = Some(Project {
+            id: "fixture".into(),
+            path: "/fixture".into(),
+            git_common_dir: "/fixture/.git".into(),
+            branch: Some("fixture".into()),
+            head: "fixture-head".into(),
+            environment: "local".into(),
+        });
+        let runtime = RuntimeHost::open(PathBuf::from(":memory:")).unwrap();
+        let reply = RequestAnswer {
+            request_id: "original-request".into(),
+            target: RuntimeTarget {
+                instance_id: "original-instance".into(),
+                thread_id: "original-thread".into(),
+                turn_id: "original-turn".into(),
+            },
+            decision: Some("accept".into()),
+            answers: Default::default(),
+        };
+        runtime.jobs.freeze().unwrap();
+        let interrupt =
+            tauri::async_runtime::block_on(runtime.interrupt_turn(&host, reply.target.clone()));
+        assert!(
+            interrupt
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+        let frozen = tauri::async_runtime::block_on(runtime.answer_request(&host, reply.clone()));
+        assert!(
+            frozen
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+        runtime.jobs.unfreeze().unwrap();
+        let interrupt =
+            tauri::async_runtime::block_on(runtime.interrupt_turn(&host, reply.target.clone()));
+        assert!(
+            !interrupt
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+        let reopened = tauri::async_runtime::block_on(runtime.answer_request(&host, reply));
+        assert!(
+            !reopened
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+    }
+
+    #[test]
+    fn quit_projection_includes_running_and_unknown_tool_operations() {
+        let jobs = oasis7_command_center_core::tools::jobs::ToolJobs::open(":memory:").unwrap();
+        jobs.admit("install", "hash", "tool", "install").unwrap();
+        let status = QuitStatus {
+            safe: true,
+            active: 0,
+            unknown: 0,
+            pending_requests: 0,
+            waiting: false,
+            reason: String::new(),
+        };
+        let running = with_tool_status(status.clone(), &jobs).unwrap();
+        assert_eq!(running.active, 1);
+        assert!(!exit_ready(&running));
+        jobs.finish("install", "unknown", None).unwrap();
+        let unknown = with_tool_status(status.clone(), &jobs).unwrap();
+        assert_eq!(unknown.unknown, 1);
+        assert!(!exit_ready(&unknown));
+        jobs.finish("install", "succeeded", None).unwrap();
+        assert!(exit_ready(&with_tool_status(status, &jobs).unwrap()));
+    }
     #[test]
     fn exit_requires_idle_known_state_and_no_outstanding_request() {
         let mut status = QuitStatus {
@@ -404,10 +647,21 @@ mod tests {
                 .contains("历史自管工作的终止尚未确认")
         );
         assert!(!runtime.exit_is_approved());
-        assert_eq!(std::fs::read(path).unwrap(), original);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
         let result = tauri::async_runtime::block_on(
             runtime.run::<()>(|_| panic!("damaged runtime storage must reject execution")),
         );
         assert!(result.is_err());
+        assert!(runtime.check_exit().is_err());
+        runtime.jobs.with_open(|| Ok(())).unwrap();
+        runtime.jobs.freeze().unwrap();
+        runtime.waiting.store(true, Ordering::Release);
+        let status = runtime.cancel_wait().unwrap();
+        assert!(!status.safe);
+        assert_eq!(status.unknown, 1);
+        assert!(!status.waiting);
+        runtime.jobs.with_open(|| Ok(())).unwrap();
+        assert!(!runtime.exit_is_approved());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
     }
 }

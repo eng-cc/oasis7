@@ -458,3 +458,15 @@ fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() 
 
 #[path = "world_service_game_task.rs"]
 mod game_task_tests;
+
+#[cfg(unix)]
+#[path = "world_service_private_goal.rs"]
+mod private_goal_tests;
+
+#[cfg(unix)]
+#[path = "world_service_private_task_context.rs"]
+mod private_task_context_tests;
+
+#[cfg(unix)]
+#[path = "world_service_task_playtest.rs"]
+mod task_playtest;

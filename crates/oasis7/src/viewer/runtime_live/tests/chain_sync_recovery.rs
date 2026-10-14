@@ -94,6 +94,7 @@ fn world_service_submission_does_not_hold_shared_viewer_mutex_and_preserves_unkn
             correlation: expected,
             outcome: Err("must not be consumed as another request".into()),
             admission_error: None,
+            feedback_origin: None,
         },
     );
     let mut different = request;

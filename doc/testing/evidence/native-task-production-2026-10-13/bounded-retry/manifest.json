@@ -1,0 +1,82 @@
+{
+  "schema": "oasis7/bounded-production-retry-artifacts/v1",
+  "source_head": "7959443225200c9d3595bbcb47365662e88df787",
+  "real_child": "/root/production_bounded_retry_player",
+  "runtime": "attached_codex_subagent",
+  "scope": "targeted",
+  "execution_mode": "prepared_world",
+  "test_tier": "test_tier_full",
+  "evidence_level": "actual native TCP gameplay with independent child and parent joins",
+  "verdict": "passed_targeted",
+  "budget_verdict": "passed",
+  "first_attempt": "../README.md",
+  "original_player_report_sha256": "dc479bbbe6d0cc273c957b1cbeb3c511e55d036f95a8fb4e822e4598eb14a269",
+  "normalization": "only Skill path made repository-relative",
+  "artifacts": [
+    {
+      "path": "README.md",
+      "byte_length": 2252,
+      "sha256": "b813355b501a75b584a7c755b802c1cc6101acfc1cce4ece3de22b51c2122831"
+    },
+    {
+      "path": "calls.jsonl",
+      "byte_length": 2085,
+      "sha256": "f8200d14d4ec5b5f0087c257c1e6374e465e1f2555f4019d34f1291af104b778"
+    },
+    {
+      "path": "cleanup.json",
+      "byte_length": 3055,
+      "sha256": "bea4576a6394f179eac374a445a8e970d46af828be28de589a0efef7e4c44f10"
+    },
+    {
+      "path": "disposable-world-cleanup.json",
+      "byte_length": 267,
+      "sha256": "a38b667efb5f5f6fb8250ae426de260b0fb43aabd447e99986d5bf1850229a58"
+    },
+    {
+      "path": "finished-observation.json",
+      "byte_length": 3349,
+      "sha256": "2f694bd149a73afbfe0b40d68ca2a81349a0d3238af997bbe9a0b1c6f6a937e1"
+    },
+    {
+      "path": "initial-world-witness.json",
+      "byte_length": 5903,
+      "sha256": "a950b8649c07dc3681f13c1c10b1fce146d60483c7d8018e06d5393fc8194c8a"
+    },
+    {
+      "path": "oracle-summary.json",
+      "byte_length": 1286,
+      "sha256": "cbfb92eb4d67d7fe7e202432ec57e245bedaa20ea11950f4a74ffce4b7f57d72"
+    },
+    {
+      "path": "original-recovery.json",
+      "byte_length": 4747,
+      "sha256": "58e2b499252cd38592f46a72110ce5d1fa8388197bdc68dee60c762a8aa06905"
+    },
+    {
+      "path": "original-schedule.json",
+      "byte_length": 4747,
+      "sha256": "58e2b499252cd38592f46a72110ce5d1fa8388197bdc68dee60c762a8aa06905"
+    },
+    {
+      "path": "player-report.json",
+      "byte_length": 1348,
+      "sha256": "d95bb0aa92d5b8f742c7e29b5876896e6712780106ecac6ef12792067db363b2"
+    },
+    {
+      "path": "production-events.json",
+      "byte_length": 3163,
+      "sha256": "3a5499cf35f3091d6f46e326948175155ea531c0fd7a08618247a8069ee6c1a4"
+    },
+    {
+      "path": "source-manifest.json",
+      "byte_length": 613,
+      "sha256": "a1ad617d9c4df5321cad96f8f233b03ca28222dcb201da5f29304bccf34e7a5c"
+    },
+    {
+      "path": "world-witness.json",
+      "byte_length": 19556,
+      "sha256": "4fcac9c3fc8274b3b8aea53462481fa2f02188469fc81158fa7d12ea0dab4165"
+    }
+  ]
+}

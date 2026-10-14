@@ -8,7 +8,7 @@ tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH] [--group NAME]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH] [--group NAME] [--support-plan JSON|--support-profiles JSON]
 
   commit        Run the lightweight local commit gate used by pre-commit.
   required      Run the explicit heavier required gate for local validation and PR gate.
@@ -38,6 +38,7 @@ esac
 
 shift
 group=""
+support_profiles=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-root)
@@ -48,6 +49,16 @@ while [[ $# -gt 0 ]]; do
     --group)
       [[ $# -ge 2 && -n "$2" ]] || { usage; exit 1; }
       group="$2"
+      shift 2
+      ;;
+    --support-profiles)
+      [[ $# -ge 2 && -n "$2" ]] || { usage; exit 2; }
+      support_profiles="$2"
+      shift 2
+      ;;
+    --support-plan)
+      [[ $# -ge 2 && -n "$2" ]] || { usage; exit 2; }
+      support_profiles="plan:$2"
       shift 2
       ;;
     *)
@@ -188,6 +199,10 @@ run_oasis7_net_libp2p_clippy() {
 }
 
 run_oasis7_workspace_support_crate_tests() {
+  run_cargo_clippy -p oasis7_agent_api --all-targets
+  run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo test -p oasis7_agent_api
+  run_cargo test -p oasis7_agent_harness --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \
@@ -201,9 +216,63 @@ run_oasis7_workspace_support_crate_tests() {
     -p pixel_world_bridge \
     --lib
   run_cargo test -p oasis7_wasm_executor --features wasmtime --lib
+  run_cargo test -p oasis7_secure_envelope -p oasis7_context --all-targets --locked
+  run_cargo test -p oasis7_local_signer --test context_cli --locked
   run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
   # Native tool tests build the real template with the installed stable WASM target.
   OASIS7_WASM_BUILD_STD=0 run_cargo test -p wasm_build_suite -p wasm_module_observe
+}
+
+run_selected_workspace_support() {
+  if [[ -z "$support_profiles" ]]; then
+    run_oasis7_workspace_support_crate_tests
+    return
+  fi
+  local selected profile
+  selected=$("$ci_python" - "$support_profiles" "$driver_dir" <<'PY'
+import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('scope', Path(sys.argv[2]) / 'plan-rust-required-scope.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+raw = sys.argv[1]
+if raw.startswith('plan:'):
+    plan = json.loads(raw[5:])
+    if not isinstance(plan, dict) or 'workspace_support' not in plan.get('groups', []):
+        raise SystemExit('support job missing from plan')
+    if 'workspace_support_profile_version' not in plan:
+        # A trusted base planner predating profiles cannot narrow this job.
+        profiles = list(module.SUPPORT_PROFILES)
+    elif plan['workspace_support_profile_version'] != 1:
+        raise SystemExit('unknown support profile plan version')
+    else:
+        profiles = plan.get('workspace_support_profiles')
+        if plan.get('scope') == 'full' and set(profiles or []) != set(module.SUPPORT_PROFILES):
+            raise SystemExit('full plan omitted support profiles')
+else:
+    profiles = json.loads(raw)
+if (not isinstance(profiles, list) or not profiles or
+        any(not isinstance(p, str) for p in profiles) or
+        len(set(profiles)) != len(profiles) or
+        not set(profiles).issubset(module.SUPPORT_PROFILES)):
+    raise SystemExit('invalid or missing workspace support profiles')
+print('\n'.join(sorted(profiles)))
+PY
+  ) || return 2
+  while IFS= read -r profile; do
+    echo "+ support profile: $profile"
+    case "$profile" in
+      oasis7_agent_api) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" ;;
+      oasis7_agent_harness) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
+      oasis7_wasm_executor) run_cargo test -p "$profile" --features wasmtime --lib ;;
+      oasis7_secure_envelope|oasis7_context) run_cargo test -p "$profile" --all-targets --locked ;;
+      oasis7_local_signer) run_cargo test -p "$profile" --lib; run_cargo test -p "$profile" --test context_cli --locked ;;
+      oasis7_client_launcher) run_cargo test -p "$profile" --bin oasis7_client_launcher ;;
+      wasm_build_suite|wasm_module_observe) OASIS7_WASM_BUILD_STD=0 run_cargo test -p "$profile" ;;
+      *) run_cargo test -p "$profile" --lib ;;
+    esac
+    echo "+ support profile completed: $profile"
+  done <<< "$selected"
 }
 
 run_rustsec_advisory_check() {
@@ -243,6 +312,8 @@ run_cargo_tooling_baseline_contract_tests() {
 run_cargo_tooling_contract_tests() {
   run_cargo_tooling_baseline_contract_tests
   run python3 ./scripts/cargo-cache.test.py
+  run python3 ./scripts/cargo-incremental-clean.test.py
+  run python3 ./scripts/runtime-module-routing-perf-harness.test.py
   run bash ./scripts/cargo-dev-lib.test.sh
   run bash ./scripts/check-standalone-tool-lockfiles.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
@@ -253,6 +324,7 @@ run_workflow_governance_baseline_contract_tests() {
   run python3 ./scripts/plan-rust-required-scope.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
+  run python3 ./scripts/ci-support-profiles.test.py
   run bash ./scripts/plan-wasm-determinism-scope.test.sh
   run bash ./scripts/ensure-wasm-bindgen-cli.test.sh
   run python3 ./scripts/ci-local-signer-tests.test.py
@@ -277,6 +349,7 @@ run_workflow_governance_contract_tests() {
 
 run_packaging_artifact_contract_tests() {
   run python3 ./scripts/package-source-plan.test.py
+  run python3 ./scripts/package-release-version.test.py
   run python3 ./scripts/safe-git-archive.test.py
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
@@ -589,7 +662,7 @@ run_group() {
     viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run_oasis7_viewer_visual_test_build; run_oasis7_viewer_performance_smoke_report_only ;;
     pixel_world_bridge) run_pixel_world_bridge_lib_tests; run_pixel_world_bridge_wasm_check ;;
     launcher_web) run_oasis7_client_launcher_web_build ;;
-    workspace_support) run_oasis7_workspace_support_crate_tests ;;
+    workspace_support) run_selected_workspace_support ;;
     scenario_regression) run_scenario_regression_tests ;;
     operational_contracts) run_operational_contract_tests ;;
     packaging_contracts) run_packaging_contract_tests ;;
@@ -604,6 +677,10 @@ run_group() {
 }
 
 echo "+ ci test tier: $tier"
+if [[ -n "$support_profiles" && ( "$tier" != required || "$group" != workspace_support ) ]]; then
+  echo '--support-profiles requires required --group workspace_support' >&2
+  exit 2
+fi
 if [[ -n "$group" ]]; then
   [[ "$tier" == required ]] || { echo '--group requires required tier' >&2; exit 2; }
   run_group "$group"

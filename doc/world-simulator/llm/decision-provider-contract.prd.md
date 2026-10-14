@@ -131,6 +131,7 @@
   - AC-13: provider 只能返回绑定 entry 的 typed args intent；trusted host 负责类型/范围/枚举/必填校验和 deterministic canonical CBOR 编码，runtime 再做完整 schema、权限、预算、live state 与 replay 校验。
   - AC-14: unknown-institution E2E 复用 `institution-migration-v1` 与产品 SC-32，使用未进入 Kernel closed `Action` 的 active governed module command，证明 discovery -> schema -> typed args -> host encoding -> runtime commit -> committed feedback/memory；并验证 preview/stale/deny/no-effect 不扣费、accepted effect/debit/receipt exactly-once、retry/reconnect/restore/replay 不重复扣费或发放 replay credit。
   - AC-15: E2E 负例至少覆盖 unknown/inactive module、无 catalog/schema/hash 漂移、revoked grant、stale snapshot/policy、subject/presenter/audience mismatch、malformed typed args、oversize payload、expired cost quote 和 nonce replay；均产生稳定 trace/error 并收敛为 `Wait` 或 `ActionRejected`，不得名称 fallback 或静默重绑。
+  - builtin 的补充目标分别按[输入完整性验收](#ac-builtin-input-integrity)与[参数说明一致性验收](#ac-builtin-parameter-consistency)判断；两项不能互相代签，也不能外推独立 ProviderBacked 路径的实现或证明。
 - Non-Goals:
   - 不在本轮直接把 `Local Provider` 接入主线模拟代码。
   - 不在本轮重写现有 `LlmAgentBehavior`、memory 系统或 runtime kernel。
@@ -352,11 +353,67 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 ## 内置 Responses Provider 基线与诊断 receipt 边界
 
 - builtin provider 使用 OpenAI-compatible Responses transport；`base_url` 可规范化 API base、`/v1/`、旧 chat-completions 或 responses 后缀。配置解析优先级为 `[llm]` 直接值、选中 profile/provider、root、环境变量与 builtin default；agent override 以规范化 agent 名称选择。坏 TOML 必须显式失败，不能因单键可回退而静默吞掉整份配置错误。
-- 未配置 `system_prompt` 时 builtin fallback 为“硅基个体存在的意义是保障硅基文明存续和发展；”。这只是可配置的 provider 指令默认值，不是世界规则、玩家承诺或对目标达成的保证。
+- builtin fallback 保留当前“读规则/观察 → 资源稳态 → 产业建设 → 治理协作 → 危机韧性”的策略基线，完整默认值及显式覆盖见[默认 prompt 合同](#builtin-default-system-prompt)。这只是可配置的 provider 指令，不是世界规则、玩家承诺或对目标达成的保证；短句样例不是省略配置时的默认值。
 - profile 是 `DecisionRequest.provider_config_ref` 的受控配置，而非世界记忆或兼容别名。未知 profile 必须结构化失败；不得静默改用通用 profile。单次 `timeout_ms` 是明确上限，有限 retry 只适用于可解释 provider error；超时、格式错误、预算耗尽、未知工具或非法动作都留下分类 trace/error，并收敛为无状态变化的 `Wait` 或 `ActionRejected`，不得生成启发式替代动作。
-- builtin prompt 保持 tool-only：每 turn 只能查询或提交一个最终 `agent_submit_decision`，不以自由文本授权动作。`PromptBudget` 按优先级裁剪 observation、conversation/module history 与 memory digest；module calls、decision turns 与 repair rounds 均有上限。多个可解析片段只选择一个稳定终态并记录 collapse trace，绝不顺序执行同一 completion 的多个动作。
+- builtin prompt 保持 tool-only：每 turn 只能查询或提交一个最终 `agent_submit_decision`，不以自由文本授权动作。`PromptBudget` 对 observation、conversation/module history 与 memory digest 的裁剪须满足下述[当前输入完整性目标](#builtin-input-integrity)，不能以旧摘要可裁为由丢掉当前必需材料；module calls、decision turns 与 repair rounds 均有上限。多个可解析片段只选择一个稳定终态并记录 collapse trace，绝不顺序执行同一 completion 的多个动作。
 - 感知/上下文/短长期目标进入结构化 request；候选决策经 catalog/schema 与 runtime 校验后执行；只有 committed replayed `ActionResult` 回写 feedback、recent summary 和本地权威 memory。player、agent、tool、system chat role 分离；原始 provider JSON 不得伪装为玩家可读消息。外部 memory 只可提出 write intent，长期记忆影响玩家当前行动时的可读、可纠正合同仍由游戏专业 authority 证明，内部 history/trace 不能替代该证明。
 - `agent_debug_grant_resource` 仅是显式 debug capability；普通 catalog、parity、成本与稳定性样本均不得使用它。token、延迟、prompt/completion 计数和有限 retry count 是诊断与评测输入，不是计费、发布或默认启用证据。
 - `LlmEffectIntentTrace` / `LlmEffectReceiptTrace` 记录 `llm.prompt.module_call`、intent id、params、capability ref、origin、status、payload 与预留 cost；`max_module_calls` 控制体积，旧 trace 以默认字段兼容。这些是 simulator diagnostic facts：在 runtime-owned T4/T5 证明 intent-to-ActionResult causality、replay never re-calls provider、以及恢复不重复外部副作用前，不得宣称完整 effect/receipt 或 replay closure。
 - simulator diagnostic event 名称固定为 `LlmEffectQueued { agent_id, intent }` 与 `LlmReceiptAppended { agent_id, receipt }`。写入顺序是：`LlmAgentBehavior` 处理 module call 时生成 intent/receipt，`AgentRunner::tick` 从 `AgentDecisionTrace` 读取，再逐条写入 `WorldKernel.journal`。该顺序仅描述诊断记录，不把 intent/receipt 提升为权威 effect、ActionResult 因果或 replay 幂等证明。
 - provider 可表达 compile/deploy/install、offer/bid/purchase/delist/destroy/cancel 等模块意图，但 parser/schema 通过不等于动作已接受；所有意图仍经 runtime 权威校验、共识提交和结果回执。production 禁止 runtime source compile，只有显式 dev/test 可用受限 source package；actor、hash、版本、价格、订单标识与必填 payload 必须严格校验。`module.lifecycle.status` 只派生自已知 artifact/instance/ownership/listing/order/installed 状态，不是第二 registry，也不宣称激活、所有权或成交。
+
+<a id="builtin-default-system-prompt"></a>
+### builtin 默认 system prompt 与显式覆盖
+
+在没有生效的显式覆盖时，builtin Responses 的基础 prompt 为：
+
+```text
+你是硅基文明发展 Agent。按“读规则/观察 -> 资源稳态 -> 产业建设 -> 治理协作 -> 危机韧性”推进文明进程，每轮仅提交一个可执行 decision。若规则或动作前置条件不明确，先调用 world.rules.guide 与 environment.current_observation，再做决策。
+```
+
+保留该策略是对当前两处默认常量与实际 `base_system_prompt` 接线的文档对齐，不重新选择模型策略，也不证明其游戏效果。env-only、合法 TOML 省略字段以及空白值在没有其他有效配置来源时均回退到此值；有效 TOML、环境变量与 runtime prompt override 的既有优先级保持。清除 runtime override 后回到已解析配置，而不是无条件覆盖为默认值。
+
+`config.example.toml` 中的“硅基个体存在的意义是保障硅基文明存续和发展；”是显式配置样例；复制该行会有意覆盖默认策略。TOML prompt profile 与 `DecisionRequest.provider_config_ref` 分属各自配置合同，不能互作别名。本节只适用于 builtin Responses，不把该默认值施加给 local bridge 的独立 Chat Completions prompt。
+
+验收应捕获实际组装请求的 `base_system_prompt`，分别覆盖默认/空白与显式 TOML、env、runtime override/清除，预期使用本节独立文本，不只与同一个实现常量自比；现有重复常量也须逐一对账。无需真实模型调用。实现映射见[系统设计](decision-provider-contract.design.md#des-builtin-default-system-prompt)。
+
+<a id="builtin-concurrency-retry"></a>
+### builtin concurrency-limit 的有界恢复
+
+builtin unbudgeted 请求的既有一次恢复机会不能取决于合法 JSON 的空格或换行。对受支持的 SSE error payload，只有同一个结构化 error 对象同时包含 `type=rate_limit_error` 与表达 `concurrency limit exceeded` 的 message，才适用一次、250 ms 退避的重试；不能拼接不同对象的字段、扫描任意文字或扩展到所有 HTTP 429。
+
+紧凑、含空格和合法多行 JSON 表达同一错误时，结果必须等价；缺字段、其它类型、无关 message、坏 JSON 保持原失败路径。`max_model_calls=None` 时首次错误后成功总共两次请求，重复错误也最多两次；`Some(max_model_calls)` 仍关闭 adapter 内部重试，每次 `complete` 仅一次请求，由上层原预算合同决定后续工作。设计与离线参数矩阵见[系统设计](decision-provider-contract.design.md#des-builtin-concurrency-retry)。本节补齐格式语义，不表示 detector 已修复或真实服务已验证。
+
+<a id="builtin-input-integrity"></a>
+### builtin 当前输入完整性（目标）
+
+本节与下节冻结 builtin `LlmAgentBehavior` 的补充目标合同；文档生效不代表实现已修复或验收已通过。它们不扩大独立 ProviderBacked 路径、真实模型能力或发布支持范围。
+
+- 每次实际模型请求都必须保留当前目标与当前最小 observation；最小 observation 保留观测合同规定的必要当前字段。本次决策循环已有查询回复时，还必须保留最新回复的成功/失败状态及后续决策所需关键结果/错误信息，并保持与查询的对应关系；初次尚无查询时无需构造回复。工具已执行、结果存在于 history/trace 或只留下成功标记，均不能代替请求中真实包含必要材料。
+- `PromptBudget` 必须使用本次实际 profile 的有效输入预算，在最终请求边界校验必需材料能否容纳。可压缩旧摘要、重复说明及按需提供 schema；不得通过删除当前必需材料、切断其语义、隐式增大预算或仅检查中间 prompt section 使请求看似合规。最终请求计量与保真压缩边界由[配对系统设计](decision-provider-contract.design.md#des-builtin-input-integrity)拥有。
+- 最新普通只读查询结果是观测材料，可以进入后续决策输入；它不是动作接受、世界状态变化或已结算效果，也不要求先产生 committed action。世界执行反馈仍只消费权威 `ActionResult`/receipt；本目标不放宽上文的 feedback、memory write、身份隔离或世界权威合同。
+- 最小输入仍无法容纳时，必须在调用模型前停止，按现有无副作用 `Wait`/结构化失败路径收口，并给出可区分的配置不足原因与修正配置、缩减可选材料后重新组装的下一步。不得静默发出缺少当前反馈的请求、改用其它 provider、制造替代动作或把查询完成显示为任务完成。该原因与 [C0 调用次数耗尽](continuous-agent-harness.prd.md#request-bound-call-budget)分开；不引入 cognition 计费、reserve/settle、cache 或新的重试方案。
+- 验收：[AC-BUILTIN-INPUT-INTEGRITY](#ac-builtin-input-integrity)。
+
+<a id="builtin-parameter-consistency"></a>
+### builtin 工具参数说明一致性（目标）
+
+- 同一次请求中的自然语言范围说明、OutputSchema/tool schema、parser 与 Runtime 必须表达同一合法参数合同。推荐值仅是合法域内的建议，不得写成合法上下界；schema 正确不能抵消同一请求正文中的矛盾说明。
+- 治理提案的投票窗口和通过阈值继续消费[政治数值基线与普通治理边界](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002)。builtin 说明应从共享常量或统一 schema 生成、校验，具体结构由[配对系统设计](decision-provider-contract.design.md#des-builtin-parameter-consistency)拥有；不得为修复说明漂移而放宽 Runtime、parser 的合法域或其它主体、权限与前置条件。
+- 验收：[AC-BUILTIN-PARAMETER-CONSISTENCY](#ac-builtin-parameter-consistency)。
+
+<a id="ac-builtin-input-integrity"></a>
+### AC-BUILTIN-INPUT-INTEGRITY：最终请求保留当前输入，容量不足不调用
+
+- 给定：分别使用实际 Balanced、Compact profile，并各覆盖短目标与默认目标，共四个组合；由确定性 client/transport fixture 返回一轮普通 `environment_current_observation` 查询，不使用 debug 资源注入或真实模型。
+- 当：builtin 执行查询并组装第二次请求，捕获真实序列化 Responses payload；另提供最小必需输入无法容纳的配置。
+- 则：四个正常组合的第二次 payload 均保留当前目标、必要当前 observation 与该查询的关键结果/状态，且满足实际有效预算；history、section trace 或查询计数不能代签。容量不足用例在受阻请求的模型调用前停止，后续调用次数为零，留下配置不足诊断与恢复下一步，保持无替代动作、无新增世界效果。
+- 专业 owner：`agent_engineer` / `qa_engineer`；验证层级：`test_tier_required`。取证边界见[系统验证映射](decision-provider-contract.design.md#ver-builtin-input-integrity)；此项不证明真实模型行为质量、完整玩家体验或其它 provider 的支持范围。
+
+<a id="ac-builtin-parameter-consistency"></a>
+### AC-BUILTIN-PARAMETER-CONSISTENCY：治理说明与合法边界独立对账
+
+- 给定：builtin 实际组装的治理决策请求，以及除待测边界外其它参数、主体和权限均合法的 fixture。
+- 当：分别检查请求正文、tool schema 与 parser/Runtime 合同，并验证正反向边界。
+- 则：正文与 schema 均表述 `pass_threshold_bps = 5000..=10000`、`voting_window_ticks = 1..=1440`，排除旧的 `1000..=9000` 和 `8..=256` 范围说明。parser 接受门槛 `5000/10000` 与窗口 `1/1440`，拒绝门槛 `4999/10001` 与窗口 `0/1441`；保留 `6500` 正例及其它正常主体校验，不放宽 Runtime 规则或声称支持 30% 门槛。
+- 专业 owner：`agent_engineer` / `runtime_engineer` / `qa_engineer`；验证层级：`test_tier_required`。取证边界见[系统验证映射](decision-provider-contract.design.md#ver-builtin-parameter-consistency)。本项可共用请求捕获 fixture，但必须与输入完整性独立判定；无需真实模型，不以 schema 正确或一次解析成功代签正文一致性。

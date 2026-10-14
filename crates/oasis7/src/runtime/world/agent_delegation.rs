@@ -138,6 +138,10 @@ fn action_scope(action: &Action) -> Option<(&'static str, String)> {
             "TransferMaterial",
             format!("{from_ledger}->{to_ledger}:{kind}"),
         )),
+        Action::BuildFactory { spec, .. } => Some(("BuildFactory", spec.factory_id.clone())),
+        Action::BuildFactoryWithModule { spec, .. } => {
+            Some(("BuildFactoryWithModule", spec.factory_id.clone()))
+        }
         Action::ScheduleRecipe { factory_id, .. } => Some(("ScheduleRecipe", factory_id.clone())),
         // Recognize unsupported delegated module actions so admission cannot bypass
         // the authority boundary; issuance and native quotes remain unavailable.
@@ -149,6 +153,16 @@ fn action_scope(action: &Action) -> Option<(&'static str, String)> {
 }
 
 impl World {
+    /// Test bootstrap only: retain the production source/object/budget validation.
+    /// This is not an owner-facing grant issuance API.
+    #[cfg(any(test, feature = "test_tier_required", feature = "test_tier_full"))]
+    pub fn install_test_native_delegation_grant(
+        &mut self,
+        grant: AgentDelegationGrantV1,
+    ) -> Result<(), WorldError> {
+        self.install_agent_delegation_grant(grant)
+    }
+
     fn delegation_ledger(&self) -> Result<Ledger, WorldError> {
         match self.cognition.get("agent_delegation") {
             None | Some(Value::Null) => Ok(Ledger::default()),
@@ -222,7 +236,7 @@ impl World {
             || grant.action_kinds.iter().any(|kind| {
                 !matches!(
                     kind.as_str(),
-                    "MoveAgent" | "TransferMaterial" | "ScheduleRecipe"
+                    "MoveAgent" | "TransferMaterial" | "ScheduleRecipe" | "BuildFactory"
                 )
             })
         {
@@ -425,7 +439,57 @@ impl World {
                 .map_err(|_| denied("domain_quote_unavailable"))?
                 .tariff_electricity_total
             }
-            Action::ScheduleRecipe { plan, .. } if plan.accepted_batches > 0 => plan.power_required,
+            Action::BuildFactory { spec, .. } => {
+                let power = self
+                    .state
+                    .factory_construction_power_profiles
+                    .get(&spec.factory_id)
+                    .ok_or_else(|| denied("domain_quote_construction_power_missing"))?;
+                if power.factory_id != spec.factory_id
+                    || !power.active
+                    || power.authority_revision == 0
+                    || power.electricity_amount < 0
+                {
+                    return Err(denied("domain_quote_construction_power_invalid"));
+                }
+                let canonical =
+                    crate::runtime::builtin_factory_spec(&power.factory_kind, &spec.factory_id)
+                        .ok_or_else(|| denied("domain_quote_factory_kind_unsupported"))?;
+                if &canonical != spec {
+                    return Err(denied("domain_quote_factory_spec_mismatch"));
+                }
+                let profile = self
+                    .state
+                    .factory_profiles
+                    .get(&spec.factory_id)
+                    .ok_or_else(|| denied("domain_quote_factory_profile_missing"))?;
+                let tags = |values: &[String]| {
+                    values
+                        .iter()
+                        .map(|v| v.trim().to_ascii_lowercase())
+                        .filter(|v| !v.is_empty())
+                        .collect::<std::collections::BTreeSet<_>>()
+                };
+                if profile.factory_id != canonical.factory_id
+                    || profile.tier != canonical.tier
+                    || profile.recipe_slots != canonical.recipe_slots
+                    || tags(&profile.tags) != tags(&canonical.tags)
+                {
+                    return Err(denied("domain_quote_factory_profile_mismatch"));
+                }
+                power.electricity_amount
+            }
+            Action::ScheduleRecipe {
+                recipe_id, plan, ..
+            } => {
+                let canonical =
+                    crate::runtime::builtin_recipe_plan(recipe_id, plan.accepted_batches)
+                        .ok_or_else(|| denied("domain_quote_unsupported"))?;
+                if *plan != canonical {
+                    return Err(denied("domain_quote_plan_mismatch"));
+                }
+                canonical.power_required
+            }
             // Module-produced plans require their actual native plan at the
             // execution seam. Never trust a desired-batch request as a quote.
             _ => return Err(denied("domain_quote_unsupported")),
@@ -662,6 +726,7 @@ impl World {
                     }
                     DomainEvent::MaterialTransitStarted { job_id, .. } => *job_id == action_id,
                     DomainEvent::RecipeStarted { job_id, .. } => *job_id == action_id,
+                    DomainEvent::FactoryBuildStarted { job_id, .. } => *job_id == action_id,
                     DomainEvent::ActionRejected {
                         action_id: id,
                         reason,
@@ -686,6 +751,8 @@ impl World {
         let supported = matches!(
             action,
             Action::MoveAgent { .. }
+                | Action::BuildFactory { .. }
+                | Action::BuildFactoryWithModule { .. }
                 | Action::TransferMaterial { .. }
                 | Action::ScheduleRecipe { .. }
                 | Action::ScheduleRecipeWithModule { .. }
