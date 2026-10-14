@@ -151,7 +151,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
-以 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的源码和入口核对为依据，[REQ-CC-016](command-center.prd.md#REQ-CC-016)补齐产品/系统设计树、目录查漏、显式配对与覆盖反馈；[专题设计](document-tree.design.md)规定文件级快照、关系及真实桌面验证。生命周期读取基础已补原始声明/规范化类别分离，来源详情可显示类别；核对来源为 [解析实现](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs)和[专题设计实施顺序](document-tree.design.md#111-验证映射表)。树 UI、文件级快照投影、筛选和桌面验收尚待实施；本地候选不代表能力上线或已合入。
+以 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的源码和入口核对为依据，[REQ-CC-016](command-center.prd.md#REQ-CC-016)补齐产品/系统设计树、目录查漏、显式配对与覆盖反馈；[专题设计](document-tree.design.md)规定文件级快照、关系及真实桌面验证。生命周期读取基础已补原始声明/规范化类别分离，来源详情可显示类别；核对来源为 [解析实现](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs)和[专题设计实施顺序](document-tree.design.md#111-验证映射表)。2026-10-14 核对的本地候选已在现有章节索引补[实际覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)：读取/遗漏数量、原因计数及有界路径样本，范围见[专题设计实施顺序](document-tree.design.md#111-验证映射表)。树 UI、文件级快照投影、筛选和桌面验收尚待实施；本地候选不代表能力上线或已合入。
 
 <a id="cc-status-attention"></a>
 

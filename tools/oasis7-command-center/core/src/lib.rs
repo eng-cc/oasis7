@@ -173,7 +173,8 @@ impl CommandCenter {
                 ));
             }
             context::register_project(&self.db, Path::new(&p.path))?;
-            index::read(&p).map(|(sections, git)| (p, sections, git))
+            index::read(&p)
+                .map(|(sections, git, coverage, omitted)| (p, sections, git, coverage, omitted))
         });
         let previous = self
             .current
@@ -188,10 +189,22 @@ impl CommandCenter {
             .unwrap_or(0)
             + 1;
         match result {
-            Ok((p, sections, git)) => {
-                self.current.sources.push(SourceStatus { kind: "local".into(), state: if sections.is_empty() { "empty" } else { "partial" }.into(),
-                    last_attempt: Some(attempt.clone()), last_success: Some(attempt), source_revision: Some(p.head.clone()),
-                    generation: generation.to_string(), coverage: "tracked Markdown in doc, AGENTS.md and project map; 3000 paths, 1 MiB/file, 16 MiB total; untracked files excluded".into(), error: None });
+            Ok((p, sections, git, coverage, omitted)) => {
+                self.current.sources.push(SourceStatus {
+                    kind: "local".into(),
+                    state: if sections.is_empty() && !omitted {
+                        "empty"
+                    } else {
+                        "partial"
+                    }
+                    .into(),
+                    last_attempt: Some(attempt.clone()),
+                    last_success: Some(attempt),
+                    source_revision: Some(p.head.clone()),
+                    generation: generation.to_string(),
+                    coverage,
+                    error: None,
+                });
                 self.current.project = Some(p);
                 self.current.sections = sections;
                 self.current.git = git;

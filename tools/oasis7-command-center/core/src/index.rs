@@ -1,6 +1,9 @@
+#[path = "index_coverage.rs"]
+mod coverage;
 #[path = "lifecycle_metadata.rs"]
 mod lifecycle_metadata;
 use crate::{Error, Result, domain::*, process::run};
+use coverage::{Coverage, read_document};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 pub fn digest(bytes: &[u8]) -> String {
@@ -44,13 +47,13 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     }
     Ok(path)
 }
-pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
     read_candidate(project, || {})
 }
 fn read_candidate(
     project: &Project,
     after_read: impl FnOnce(),
-) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
     let root = Path::new(&project.path);
     let files = document_list(root)?;
     let changed = dirty_paths(root)?;
@@ -79,24 +82,37 @@ fn read_candidate(
         };
         (priority, name.into_owned())
     });
-    for name in names.into_iter().take(3000) {
+    let mut coverage = Coverage::new(names.len());
+    for (position, name) in names.into_iter().enumerate() {
         let name = std::str::from_utf8(name)
             .map_err(|_| Error::Invalid("non UTF-8 document path".into()))?;
         if !name.ends_with(".md") {
             continue;
         }
-        let path = match safe_path(root, name) {
-            Ok(path) => path,
-            Err(_) => continue,
-        };
-        if std::fs::metadata(&path)?.len() > 1024 * 1024 {
+        if position >= 3000 {
+            coverage.omit(name, "file_count_budget");
             continue;
         }
-        let content = std::fs::read_to_string(path)?;
+        let path = match safe_path(root, name) {
+            Ok(path) => path,
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                coverage.omit(name, "deleted");
+                continue;
+            }
+            Err(_) => {
+                coverage.omit(name, "path_unavailable");
+                continue;
+            }
+        };
+        let content = match read_document(&path, 16 * 1024 * 1024 - total) {
+            Ok(content) => content,
+            Err(reason) => {
+                coverage.omit(name, reason);
+                continue;
+            }
+        };
         total += content.len();
-        if total > 16 * 1024 * 1024 {
-            break;
-        }
+        coverage.read += 1;
         let dirty = changed.contains(name.as_bytes());
         let revision = digest(content.as_bytes());
         observed.push((name.to_owned(), revision.clone()));
@@ -162,7 +178,12 @@ fn read_candidate(
             "HEAD changed during indexing; refresh again".into(),
         ));
     }
-    Ok((sections, snapshot))
+    Ok((
+        sections,
+        snapshot,
+        coverage.summary(total),
+        coverage.has_omissions(),
+    ))
 }
 fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
     run(

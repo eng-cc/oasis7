@@ -45,7 +45,7 @@ fn rejects_tracked_candidate_list_changes_without_a_new_commit() {
 fn unchanged_dirty_documents_are_readable() {
     let (tmp, project) = fixture();
     std::fs::write(tmp.path().join("doc/prd.md"), "# Product\nDirty content\n").unwrap();
-    let (sections, _) = read(&project).unwrap();
+    let (sections, _, _, _) = read(&project).unwrap();
     assert!(
         sections
             .iter()

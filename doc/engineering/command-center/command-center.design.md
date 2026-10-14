@@ -531,4 +531,4 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 
 ## 文档全局阅读增量
 
-[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；本次仅文档设计，尚未实现或验收，不改变既有 §11 的验证结论。
+[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；完整树能力尚未实现或验收。已有章节索引现由 [覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)提供候选、读取、遗漏、原因计数和有界路径样本，并限制实际读取量；具体范围与缺口见专题设计 §11。这不证明文件级树、独立快照、配对或真实桌面验收。
