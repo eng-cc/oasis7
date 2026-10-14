@@ -952,8 +952,80 @@ def scenario_transitive_reverse_dependency_selection() -> None:
             shutil.rmtree(root)
 
 
+def scenario_clause_graph_diamonds_are_parsed_once_per_call() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    other = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-clause-graph')
+    documents = {}
+    depth = 12
+    for level in range(depth):
+        for label in ('a', 'b'):
+            links = (f'[a]({level + 1}a.prd.md#rule) [repeat a]({level + 1}a.prd.md#rule) [b]({level + 1}b.prd.md#rule)'
+                     if level < depth - 1 else '[origin](../product/feature.prd.md#req-actual-001)')
+            documents[root / f'doc/system/{level}{label}.prd.md'] = '# Rules\n## Rule\nTrace refs: ' + identifier + '\n' + links
+    product = root / 'doc/product/feature.prd.md'
+    documents[product] = '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier
+    initial = root / 'doc/system/0a.prd.md'
+    parse_calls, reads = [], []
+    original = module.fragment_section
+    def counted_parse(*args):
+        parse_calls.append(args[1])
+        assert len(parse_calls) <= len(documents), 'diamond paths must not cause repeated clause parsing'
+        return original(*args)
+    def reader(path):
+        reads.append(path)
+        return documents.get(path)
+    module.fragment_section = counted_parse
+    dependencies = set()
+    ids, product_chain = module.resolved_requirement_context(root, initial, documents[initial], 'rule', reader, dependencies=dependencies)
+    assert ids == {identifier} and product_chain
+    assert len(reads) == len(set(reads)), 'each source is read at most once inside one clause graph'
+    expected = {path.relative_to(root).as_posix() for path in documents if path != root / 'doc/system/0b.prd.md'}
+    assert dependencies == expected, (dependencies, expected)
+    # A later snapshot/call cannot inherit cached identities from this one.
+    documents[product] = documents[product].replace(identifier, other)
+    parse_calls.clear()
+    ids, product_chain = module.resolved_requirement_context(root, initial, documents[initial], 'rule', reader)
+    assert not ids and not product_chain
+
+
+def scenario_clause_graph_preserves_depth_cycle_and_ref_contexts() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    other = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-clause-contexts')
+    source = root / 'doc/system/root.prd.md'
+    product = root / 'doc/product/feature.prd.md'
+    wrong = root / 'doc/product/other.prd.md'
+    documents = {product: '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier,
+                 wrong: '# Other\n## REQ-OTHER-001\nTrace ID: ' + other}
+    for i in range(1, 32):
+        target = f'{i + 1}.prd.md#rule' if i < 31 else '../product/feature.prd.md#req-actual-001'
+        documents[root / f'doc/system/{i}.prd.md'] = '# Clause file\n## Rule\nTrace refs: ' + identifier + '\n[next](' + target + ')'
+    branches = ['[shallow](../product/feature.prd.md#req-actual-001)', '[deep](1.prd.md#rule)', '[wrong](../product/other.prd.md#req-other-001)']
+    results = []
+    for links in (branches, list(reversed(branches))):
+        documents[source] = '# Root\n## Rule\nTrace refs: ' + identifier + '\n' + ' '.join(links)
+        issues, paths = [], set()
+        ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', documents.get, diagnostics=issues, dependencies=paths)
+        assert ids == {identifier} and has_product, (ids, has_product)
+        assert any('depth limit (32)' in issue for issue in issues), issues
+        results.append((ids, has_product, set(issues), paths))
+    assert results[0] == results[1], 'shallow cache must not hide deep cutoffs, or vice versa'
+    documents[source] = '# Root\n## Rule\nTrace refs: ' + identifier + '\n[next](cycle.prd.md#rule)'
+    documents[root / 'doc/system/cycle.prd.md'] = '# Cycle\n## Rule\nTrace refs: ' + identifier + '\n[back](root.prd.md#rule) [origin](../product/feature.prd.md#req-actual-001)'
+    issues, paths = [], set()
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', documents.get, diagnostics=issues, dependencies=paths)
+    assert ids == {identifier} and has_product
+    assert any('chain cycle:' in issue for issue in issues), issues
+    assert paths == {'doc/system/root.prd.md', 'doc/system/cycle.prd.md', 'doc/product/feature.prd.md'}, paths
+
+
 def main() -> None:
     scenarios = (
+        scenario_clause_graph_diamonds_are_parsed_once_per_call,
+        scenario_clause_graph_preserves_depth_cycle_and_ref_contexts,
         scenario_validation_source_reverse_selection,
         scenario_transitive_reverse_dependency_selection,
         scenario_formal_trace_table_and_multirefs_compatibility,

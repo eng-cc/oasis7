@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from doc_content_warnings import report_findings
+from collections import deque
 from collections.abc import Callable
 from functools import lru_cache
 from dataclasses import dataclass
@@ -758,10 +759,7 @@ def fragment_section(text: str, fragment: str) -> str | None:
     return "\n".join(line for _, line in lines[start:end])
 
 
-def requirement_identity(text: str, fragment: str) -> set[str]:
-    section = fragment_section(text, fragment)
-    if section is None:
-        return set()
+def section_requirement_identity(section: str) -> set[str]:
     identifiers = declared_trace_ids(section)
     for _, line in visible_lines(section):
         heading = re.match(r"^ {0,3}#{1,6}\s+(?:[0-9.]+\s+)?((?:REQ|SC|AC)-[A-Z0-9][A-Z0-9_-]*)(?:\b|$)", line, re.I)
@@ -770,50 +768,118 @@ def requirement_identity(text: str, fragment: str) -> set[str]:
     return identifiers
 
 
+def requirement_identity(text: str, fragment: str) -> set[str]:
+    section = fragment_section(text, fragment)
+    return section_requirement_identity(section) if section is not None else set()
+
+
 def resolved_requirement_context(root: Path, source: Path, text: str, fragment: str,
                                  read_target: TargetTextReader, follow_symlinks: bool = False,
                                  visited: frozenset[tuple[str, str]] = frozenset(),
                                  diagnostics: list[str] | None = None,
                                  dependencies: set[str] | None = None) -> tuple[set[str], bool]:
-    relative = source.relative_to(root).as_posix()
+    """Resolve one snapshot's precise clause graph without re-expanding diamonds.
+
+    Parsing/reads are shared only inside this call. Evaluation memo keys retain
+    remaining depth and every active ancestor reachable from the current node:
+    acyclic converging branches share results, while cyclic/deep contexts never
+    reuse an incompatible result. Cached diagnostics and dependencies are replayed.
+    """
+    initial = (source.relative_to(root).as_posix(), fragment)
+    budget = 32 - len(visited)
+    # Node: own identities, explicit refs, product origin, outgoing clause keys,
+    # and direct paths read (including missing endpoints). Keep every edge.
+    graph = {}
+    pending = deque([(source, text, fragment, 0)])
+    queued = {initial}
+    texts = {source: text}
+    while pending:
+        current_source, current_text, current_fragment, distance = pending.popleft()
+        relative = current_source.relative_to(root).as_posix()
+        key = (relative, current_fragment)
+        if key in visited or distance >= budget:
+            continue
+        section = fragment_section(current_text, current_fragment)
+        direct_paths = {relative}
+        if section is None:
+            graph[key] = (set(), set(), False, (), direct_paths)
+            continue
+        own = section_requirement_identity(section)
+        refs, _ = trace_reference_ids(section)
+        product_origin = bool(relative.startswith('doc/product/') and own
+                              and (relative.endswith(AUTHORITY_SUFFIXES)
+                                   or current_source.name in AUTHORITY_ROOT_BASENAMES))
+        edges = []
+        if not (product_origin and not refs):
+            for node in parse_markdown_links(section):
+                raw_path, next_fragment = split_link_target(node.target)
+                if not next_fragment or external_target(raw_path):
+                    continue
+                target = current_source if not raw_path else resolve_target(
+                    root, current_source, raw_path, follow_symlinks=follow_symlinks)
+                if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
+                    continue
+                target_relative = target.relative_to(root).as_posix()
+                direct_paths.add(target_relative)
+                if target not in texts:
+                    texts[target] = read_target(target)
+                target_text = texts[target]
+                if target_text is None:
+                    continue
+                child = (target_relative, next_fragment)
+                edges.append(child)
+                # BFS first reaches each clause by its shortest available path;
+                # evaluation below still enforces depth on *each* calling path.
+                if child not in queued:
+                    queued.add(child)
+                    pending.append((target, target_text, next_fragment, distance + 1))
+        graph[key] = (own, refs, product_origin, tuple(edges), direct_paths)
+
+    @lru_cache(maxsize=None)
+    def reachable(key):
+        found = set()
+        stack = [key]
+        while stack:
+            current = stack.pop()
+            if current in found:
+                continue
+            found.add(current)
+            node = graph.get(current)
+            if node is not None:
+                stack.extend(node[3])
+        return frozenset(found)
+
+    memo = {}
+    def evaluate(key, active):
+        relative, current_fragment = key
+        if key in active or len(active) >= 32:
+            reason = 'cycle' if key in active else 'depth limit (32)'
+            return (frozenset(), False, frozenset({relative}),
+                    frozenset({f'requirement chain {reason}: {relative}#{current_fragment}'}))
+        memo_key = (key, 32 - len(active), frozenset(active.intersection(reachable(key))))
+        if memo_key in memo:
+            return memo[memo_key]
+        own, refs, product_origin, edges, direct_paths = graph[key]
+        identities, has_product = set(own), product_origin
+        paths, issues = set(direct_paths), set()
+        for child in edges:
+            child_ids, child_product, child_paths, child_issues = evaluate(child, active | {key})
+            matching = refs.intersection(child_ids)
+            identities.update(matching)
+            if child_product and (matching or not refs):
+                has_product = True
+            paths.update(child_paths)
+            issues.update(child_issues)
+        result = (frozenset(identities), has_product, frozenset(paths), frozenset(issues))
+        memo[memo_key] = result
+        return result
+
+    identities, has_product, paths, issues = evaluate(initial, visited)
     if dependencies is not None:
-        dependencies.add(relative)
-    key = (relative, fragment)
-    if key in visited or len(visited) >= 32:
-        if diagnostics is not None:
-            reason = "cycle" if key in visited else "depth limit (32)"
-            diagnostics.append(f"requirement chain {reason}: {relative}#{fragment}")
-        return set(), False
-    section = fragment_section(text, fragment)
-    if section is None:
-        return set(), False
-    own = requirement_identity(text, fragment)
-    product_authority = (relative.startswith('doc/product/')
-                         and (relative.endswith(AUTHORITY_SUFFIXES) or source.name in AUTHORITY_ROOT_BASENAMES))
-    refs, _ = trace_reference_ids(section)
-    resolved = set(own)
-    has_product = bool(product_authority and own)
-    if has_product and not refs:
-        return resolved, True
-    for node in parse_markdown_links(section):
-        raw_path, next_fragment = split_link_target(node.target)
-        if not next_fragment or external_target(raw_path):
-            continue
-        target = source if not raw_path else resolve_target(root, source, raw_path, follow_symlinks=follow_symlinks)
-        if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
-            continue
-        if dependencies is not None:
-            dependencies.add(target.relative_to(root).as_posix())
-        target_text = read_target(target)
-        if target_text is None:
-            continue
-        child_ids, child_product = resolved_requirement_context(
-            root, target, target_text, next_fragment, read_target, follow_symlinks, visited | {key}, diagnostics, dependencies)
-        matching = refs.intersection(child_ids)
-        resolved.update(matching)
-        if child_product and (matching or not refs):
-            has_product = True
-    return resolved, has_product
+        dependencies.update(paths)
+    if diagnostics is not None:
+        diagnostics.extend(sorted(issues))
+    return set(identities), has_product
 
 
 def engineering_only_disposition(text: str) -> bool:
