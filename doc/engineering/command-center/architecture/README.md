@@ -7,7 +7,7 @@
 - 历史环境表 Last Verified 为 **2026-07-06**，节点表为 **2026-06-23**。读取摘要的日期不能代替部署、健康或可用性的核验日期。
 - 项目进度与待处理事项见[当前状态](../README.md#cc-status-attention)；本页的更新方法见[架构索引维护流程](../command-center.manual.md#cc-maintenance-architecture)。
 
-本轮环境局部增量（2026-10-14）：对固定源 `f69c8a666024fa564e52314965025b019fa42d4c` 准备独立 DevLocal ECS 预览，HTTPS 仍返回维护状态；原生安装与邀测验收待结果。此记录不刷新原测试网 fleet 的身份、角色、历史或健康，详见[部署记录](../../../testing/evidence/ecs-hosted-preview-deploy-2026-10-13.md)。
+独立 ECS 技术预览的环境准备、构建尝试和部署验收由 [交付任务 #4671](https://github.com/eng-cc/oasis7/issues/4671) 承接。本页保留架构入口；该任务的技术预览不代表正式世界开放或原测试网恢复。
 
 ## 从问题进入
 
@@ -109,7 +109,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，私有 owner proof/盐独立密文保存、公共 canonical 目标发布与 owner/history 当前正文回读已交付；journal-tail 控制链恢复回归和最终 CI 已通过。[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，executor 控制、私有 Context 与 task-fenced 行动已交付；独立附着 Codex 的两目标移动记录绑定候选 `b59d0105`，最终源 `cd2976b7` 普通验证、独立评审与 required CI 已通过。[#4634](https://github.com/eng-cc/oasis7/pull/4634) 候选 `326189ecd` 补齐原生物流观察与转运，普通回归、独立权限评审及一次独立 Skill 转运/到账已通过。2026-10-13 局部核验：物流必要 CI 已通过并合入 `5e930fac`；原候选试玩来源保留。生产 [#4650](https://github.com/eng-cc/oasis7/pull/4650) 已通过最终必要 CI 并合入 `dbe03eda`；有界独立 Skill 复测保留原候选 `795944322` 来源。当前建厂到首产物候选在 native 建设边界重算完整内置规格，以 Context/base 签名报价并投影主体建设范围，普通连续链路及独立代码评审通过；本批有界独立试玩真实建成一座工厂并恢复原回执，但未执行投料/生产且报告晚于截止，整链结果 inconclusive，Stop/revoke 与世界清理完成。另获授权的最后复测在源 `52c136a7b` 用十九次调用完成整条建厂、投料、首产物链路，报告在 360 秒许可内写入，父侧已核对唯一事件、精确余额及原回应恢复，清理完成。当前 HEAD 的 CI 和合入仍待完成。[当前实施候选](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)不表示完整 TaskSnapshot、两 Runtime 首局或部署已完成；其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
-**实际部署核验：** 2026-10-14 已局部核对独立 ECS 预览的 HTTPS 维护页、loopback/private 配置和显式独立账号/session/replay 路径；SMTP 认证通过但未发送邮件。实际应用、登录权限负例、完整 session 连续性和真实游戏 Runtime 组合仍未验收，没有模型调用。[部署记录](../../../testing/evidence/ecs-hosted-preview-deploy-2026-10-13.md)
+**实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合，也没有启动游戏/模型任务。
 
 <a id="cc-architecture-release"></a>
 
@@ -123,7 +123,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 
 **已有实现：** 已有部署更新、有界 proof/identity 及回滚入口。runbook 当前明记 [identity-v2 与 managed peer registry provisioning 缺口](../../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#221-bounded-204-proof-and-identity-v2-contract)，只影响依赖它的具体部署/破坏性操作，不能扩成阅读、看板刷新或所有开发任务的前置条件。
 
-**实际部署核验：** 本轮独立 ECS 技术预览仅完成准备；原生包构建失败保留，同源重试结果待核对，应用安装和公开玩家路由尚未启用。[部署记录](../../../testing/evidence/ecs-hosted-preview-deploy-2026-10-13.md)不表示正式世界开放或旧世界恢复；重启、旧窗口通过和源码合入均不证明当日恢复完成。
+**实际部署核验：** 没有本次发布或恢复结果；当前主线的[实际部署暂缓约束](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)仍需遵守。重启、旧窗口通过和源码合入均不证明当日恢复完成。
 
 <a id="cc-architecture-command-center"></a>
 
