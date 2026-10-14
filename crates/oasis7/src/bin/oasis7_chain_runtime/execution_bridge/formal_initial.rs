@@ -64,7 +64,7 @@ impl InitialWorldClosure {
         identity: &FormalWorldIdentityV1,
         release: &ReleaseSecurityPolicy,
     ) -> Result<Self, String> {
-        Self::from_existing_world_inner(world, identity, release, None)
+        Self::from_existing_world_inner(world, identity, release, None, None)
     }
     pub(crate) fn from_existing_world_with_node_bootstrap(
         world: &World,
@@ -82,7 +82,7 @@ impl InitialWorldClosure {
                 "formal initial node bootstrap differs from existing World boundary".into(),
             );
         }
-        Self::from_existing_world_inner(world, identity, release, Some(bootstrap))
+        Self::from_existing_world_inner(world, identity, release, Some(bootstrap), None)
     }
     /// Stage a fresh genesis boundary for external approval. The resulting
     /// initial record commits these exact hashes and the zero-height Snapshot;
@@ -101,13 +101,40 @@ impl InitialWorldClosure {
         {
             return Err("formal genesis bootstrap differs from fresh World boundary".into());
         }
-        Self::from_existing_world_inner(world, identity, release, Some(bootstrap))
+        Self::from_existing_world_inner(world, identity, release, Some(bootstrap), None)
+    }
+    #[cfg(test)]
+    pub(crate) fn from_existing_world_for_test_executable(
+        world: &World,
+        identity: &FormalWorldIdentityV1,
+        release: &ReleaseSecurityPolicy,
+        bootstrap: InitialNodeBootstrapV1,
+        executable: &std::path::Path,
+    ) -> Result<Self, String> {
+        if bootstrap.height == 0
+            || bootstrap.height != world.state().time
+            || bootstrap.execution_state_root != blake3_hex(&to_cbor(world.snapshot())?)
+            || bootstrap.consensus_block_hash.trim().is_empty()
+            || bootstrap.execution_block_hash.trim().is_empty()
+        {
+            return Err(
+                "formal shipping test bootstrap differs from existing World boundary".into(),
+            );
+        }
+        Self::from_existing_world_inner(
+            world,
+            identity,
+            release,
+            Some(bootstrap),
+            Some(test_execution_policy_material(executable, release)?),
+        )
     }
     fn from_existing_world_inner(
         world: &World,
         identity: &FormalWorldIdentityV1,
         release: &ReleaseSecurityPolicy,
         bootstrap: Option<InitialNodeBootstrapV1>,
+        test_policy: Option<(Vec<u8>, String, String)>,
     ) -> Result<Self, String> {
         identity.validate().map_err(|e| e.to_string())?;
         let snapshot = world.snapshot();
@@ -151,7 +178,10 @@ impl InitialWorldClosure {
             .strip_prefix("blake3:")
             .ok_or("formal initial governing hash encoding")?
             .to_owned();
-        let (policy, executable, policy_digest) = execution_policy_material(release)?;
+        let (policy, executable, policy_digest) = match test_policy {
+            Some(material) => material,
+            None => execution_policy_material(release)?,
+        };
         let mut objects = BTreeMap::new();
         let state_root = insert(&mut objects, snapshot_bytes, vec![]);
         let journal = insert(&mut objects, to_cbor(world.journal())?, vec![]);
@@ -396,4 +426,38 @@ impl InitialWorldClosure {
             },
         ))
     }
+}
+
+/// Test setup pins the real shipping image before any external C0 is signed.
+#[cfg(test)]
+pub(crate) fn test_execution_policy_material(
+    executable: &std::path::Path,
+    release: &ReleaseSecurityPolicy,
+) -> Result<(Vec<u8>, String, String), String> {
+    if !executable.is_absolute() {
+        return Err("shipping fixture executable must be absolute".into());
+    }
+    let path = std::fs::canonicalize(executable).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err("shipping fixture executable must be regular".into());
+    }
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = std::io::Read::read(&mut file, &mut buffer).map_err(|e| e.to_string())?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    let executable = hasher.finalize().to_hex().to_string();
+    let policy = to_cbor(crate::controlled_execution_policy::GuardedExecutionPolicy::current())?;
+    let digest = blake3_hex(&to_cbor((
+        "oasis7.formal.execution_policy.v1",
+        &policy,
+        &executable,
+        release,
+    ))?);
+    Ok((policy, executable, digest))
 }

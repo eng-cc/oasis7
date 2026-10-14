@@ -61,9 +61,10 @@ pub(super) fn exercise_with_fault(
     }
     case.scenario_deadline
         .report_stage("actual op CLI fixture begins")?;
-    let mut initial_runtime = case.runtime.take().ok_or("fixture runtime consumed")?;
-    initial_runtime.stop(Duration::from_secs(10))?;
-    drop(initial_runtime); // shipping owner alone holds the real writer lock
+    if let Some(mut initial_runtime) = case.runtime.take() {
+        initial_runtime.stop(Duration::from_secs(10))?;
+        drop(initial_runtime);
+    } // shipping owner alone holds the real writer lock
     let original_operation = "fixture-original-healthy-owner";
     let original_request_digest =
         io::digest(&("shipping owner fixture", &case.runtime_config_path))?;
@@ -95,7 +96,28 @@ pub(super) fn exercise_with_fault(
         original_operation,
         &original_request_digest,
         &config_digest,
-    )?;
+    )
+    .map_err(|error| {
+        let path = case.root.join("shipping-owner.stderr");
+        let stderr = std::fs::read(&path).unwrap_or_default();
+        let bounded = &stderr[..stderr.len().min(16 * 1024)];
+        format!(
+            "{error}; stderr_file={}: {}",
+            path.display(),
+            String::from_utf8_lossy(bounded)
+        )
+    })?;
+    let initial_client = RemoteWorldServiceClient::new(case.public_client_config.clone())
+        .map_err(|error| error.to_string())?;
+    let initial_view = read_current(&initial_client, &case.world)?;
+    // The coordinator already verified exact C0 before spawning the owner.
+    // Background ticks may advance the current cut; the client still verifies
+    // its signed lineage from that unchanged external C0 trust pin.
+    if initial_view.version().commit.position < 1 || initial_view.formal_commit().is_none() {
+        return Err(
+            "shipping owner did not serve a qualified read from the external C0 pin".into(),
+        );
+    }
     let new_replica_directory = case.root.join("operation-successor-replica");
     oracle_support::private_directory(&new_replica_directory)?;
     let replica = super::durable_set_tests::signed_transition(
@@ -1020,7 +1042,9 @@ fn cli(binary: &OsString, root: &Path, args: &[&str]) -> Result<Value, String> {
     let output = run_cli(binary, root, args)?;
     if !output.status.success() {
         return Err(format!(
-            "shipping op {args:?}: {}",
+            "shipping op {args:?} failed ({}); stdout: {}; stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         ));
     }
@@ -1028,10 +1052,14 @@ fn cli(binary: &OsString, root: &Path, args: &[&str]) -> Result<Value, String> {
 }
 fn cli_error(binary: &OsString, root: &Path, args: &[&str], expected: &str) -> Result<(), String> {
     let output = run_cli(binary, root, args)?;
-    if output.status.success() || !String::from_utf8_lossy(&output.stderr).contains(expected) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // The shipping tracing subscriber emits command errors on stdout; retain
+    // both the nonzero exit requirement and the exact rejection-code check.
+    if output.status.success() || !(stdout.contains(expected) || stderr.contains(expected)) {
         return Err(format!(
-            "expected CLI rejection {expected}: {}",
-            String::from_utf8_lossy(&output.stderr)
+            "expected CLI rejection {expected} ({}); stdout: {stdout}; stderr: {stderr}",
+            output.status
         ));
     }
     Ok(())

@@ -217,9 +217,23 @@ fn run_protected_runtime_fixture(
         deadline.report_stage("private P/R fixture directories ready")?;
     }
 
+    let shipping_mode = matches!(
+        crash_phase,
+        Some("healthy_operation" | "healthy_fault_writer_lock" | "healthy_fault_old_owner_sigkill")
+    );
+    let shipping_executable = if shipping_mode {
+        Some(std::path::PathBuf::from(
+            std::env::var_os("OASIS7_CHAIN_RUNTIME_BIN")
+                .ok_or("shipping fixture requires OASIS7_CHAIN_RUNTIME_BIN")?,
+        ))
+    } else {
+        None
+    };
     let release = oasis7::runtime::ReleaseSecurityPolicy::production_hardened();
-    let (_policy_material, executable_digest, execution_policy_digest) =
-        formal_package::execution_policy_material(&release)?;
+    let (_policy_material, executable_digest, execution_policy_digest) = match &shipping_executable {
+        Some(path) => crate::execution_bridge_real_tests::real_execution_bridge::formal_initial::test_execution_policy_material(path, &release)?,
+        None => formal_package::execution_policy_material(&release)?,
+    };
     if executable_digest.trim().is_empty() {
         return Err("loaded executable image digest must be nonempty".into());
     }
@@ -302,7 +316,9 @@ fn run_protected_runtime_fixture(
         execution_block_hash: fixtures::h(82),
         execution_state_root: state_root,
     };
-    let closure = if genesis_mode {
+    let closure = if let Some(executable) = &shipping_executable {
+        crate::execution_bridge_real_tests::real_execution_bridge::formal_initial::InitialWorldClosure::from_existing_world_for_test_executable(&world, &identity, &release, bootstrap, executable)?
+    } else if genesis_mode {
         crate::execution_bridge_real_tests::real_execution_bridge::formal_initial::InitialWorldClosure::
             from_genesis_world_with_node_bootstrap(&world, &identity, &release, bootstrap)?
     } else {
@@ -599,8 +615,13 @@ fn run_protected_runtime_fixture(
             .ok_or("healthy durable-set fixture lacks its scenario deadline")?
             .report_stage("opening original C0 runtime")?;
     }
-    let mut runtime = FormalLiveRuntime::open_with_native_history(&runtime_config_path)?;
-    runtime.start()?;
+    let runtime = if shipping_mode {
+        None
+    } else {
+        let mut runtime = FormalLiveRuntime::open_with_native_history(&runtime_config_path)?;
+        runtime.start()?;
+        Some(runtime)
+    };
     if matches!(
         crash_phase,
         Some(
@@ -610,17 +631,23 @@ fn run_protected_runtime_fixture(
                 | "healthy_fault_writer_lock"
                 | "healthy_fault_old_owner_sigkill"
         )
-    ) {
+    ) && !shipping_mode
+    {
         scenario_deadline
             .ok_or("healthy durable-set fixture lacks its scenario deadline")?
             .report_stage("original C0 runtime started")?;
     }
     let initial_client =
         RemoteWorldServiceClient::new(client_config()).map_err(|error| error.to_string())?;
-    let initial_view = read_current(&initial_client, &world_identity)
-        .map_err(|error| format!("initial externally pinned read: {error}"))?;
-    assert_eq!(initial_view.version().commit.position, 1);
-    assert!(initial_view.formal_commit().is_some());
+    let initial_view = if shipping_mode {
+        None
+    } else {
+        let view = read_current(&initial_client, &world_identity)
+            .map_err(|error| format!("initial externally pinned read: {error}"))?;
+        assert_eq!(view.version().commit.position, 1);
+        assert!(view.formal_commit().is_some());
+        Some(view)
+    };
     if let Some(
         mode @ ("healthy_set"
         | "healthy_set_long"
@@ -631,10 +658,14 @@ fn run_protected_runtime_fixture(
     {
         let scenario_deadline =
             scenario_deadline.ok_or("healthy durable-set fixture lacks its scenario deadline")?;
-        scenario_deadline.report_stage("initial qualified C0 read complete")?;
+        scenario_deadline.report_stage(if shipping_mode {
+            "shipping C0 qualified; awaiting shipping owner startup"
+        } else {
+            "initial qualified C0 read complete"
+        })?;
         let case = durable_set_tests::HealthySetCase {
             long_history: mode == "healthy_set_long",
-            runtime: Some(runtime),
+            runtime,
             runtime_config_path,
             writer_directory: writer_dir,
             endpoint_binary,
@@ -671,6 +702,8 @@ fn run_protected_runtime_fixture(
             _ => durable_set_tests::exercise(case),
         };
     }
+    let mut runtime = runtime.ok_or("non-shipping fixture runtime missing")?;
+    let initial_view = initial_view.ok_or("non-shipping fixture initial view missing")?;
     if unavailable_replica {
         return availability_tests::exercise(availability_tests::AvailabilityCase {
             runtime,
