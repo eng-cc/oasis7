@@ -7,6 +7,21 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io::Read;
 const SCOPE: &str = "execution_bridge_live_tasks_v1";
+#[cfg(test)]
+std::thread_local! {
+    static PROTECTED_HEIGHT_VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in super::super) fn reset_protected_height_validation_count() {
+    PROTECTED_HEIGHT_VALIDATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in super::super) fn protected_height_validation_count() -> usize {
+    PROTECTED_HEIGHT_VALIDATIONS.with(std::cell::Cell::get)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Shard {
@@ -71,6 +86,9 @@ pub(super) fn protected_heights(
     records: &Path,
     store: &LocalCasStore,
 ) -> Result<BTreeSet<u64>, String> {
+    #[cfg(test)]
+    PROTECTED_HEIGHT_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
+
     let directory = store.root().join("pin_scopes").join(SCOPE);
     match fs::symlink_metadata(&directory) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
@@ -184,7 +202,7 @@ pub(super) fn refresh(
     store: &LocalCasStore,
     world: &oasis7::runtime::World,
     hot: u64,
-) -> Result<(), String> {
+) -> Result<super::ValidatedTaskRetention, String> {
     let previous = protected_heights(records, store)?;
     let wanted = live_results(world)?;
     let latest = list_execution_bridge_record_heights(records)?
@@ -260,5 +278,13 @@ pub(super) fn refresh(
         }
         replace_execution_bridge_record_pin_shard(&record, archive, false, false, store)?;
     }
-    Ok(())
+    let durable_record = super::load_execution_bridge_record(
+        super::execution_bridge_record_path(records, latest).as_path(),
+    )?;
+    Ok(super::ValidatedTaskRetention::new(
+        records,
+        store,
+        durable_record,
+        wanted,
+    ))
 }

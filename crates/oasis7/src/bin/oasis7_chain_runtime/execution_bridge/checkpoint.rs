@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
@@ -14,14 +14,70 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_PIN_SCOPE: &str = "execution_bridge_v1";
+type CheckpointRetentionPolicy = (u64, usize);
+#[cfg(test)]
+pub(super) mod task_evidence;
+#[cfg(not(test))]
 mod task_evidence;
 pub(super) fn refresh_live_task_read_evidence(
     records: &Path,
     store: &LocalCasStore,
     world: &oasis7::runtime::World,
     hot: u64,
-) -> Result<(), String> {
+) -> Result<ValidatedTaskRetention, String> {
     task_evidence::refresh(records, store, world, hot)
+}
+
+/// Opaque evidence that task retention was fully validated and synchronized
+/// for this exact durable head and storage root in the current transaction.
+pub(super) struct ValidatedTaskRetention {
+    records: PathBuf,
+    store_root: PathBuf,
+    durable_record: ExecutionBridgeRecord,
+    protected: BTreeSet<u64>,
+}
+
+impl ValidatedTaskRetention {
+    fn new(
+        records: &Path,
+        store: &LocalCasStore,
+        durable_record: ExecutionBridgeRecord,
+        protected: BTreeSet<u64>,
+    ) -> Self {
+        Self {
+            records: records.to_path_buf(),
+            store_root: store.root().to_path_buf(),
+            durable_record,
+            protected,
+        }
+    }
+
+    fn into_protected(
+        self,
+        records: &Path,
+        store: &LocalCasStore,
+        record: &ExecutionBridgeRecord,
+    ) -> Result<BTreeSet<u64>, String> {
+        if self.records.as_path() != records
+            || self.store_root.as_path() != store.root()
+            || self.durable_record != normalize_execution_bridge_record_for_persist(record)
+        {
+            return Err("validated live task retention does not match durable head".into());
+        }
+        let latest_height = list_execution_bridge_record_heights(records)?
+            .last()
+            .copied();
+        if latest_height != Some(self.durable_record.height) {
+            return Err("durable execution bridge head advanced after task validation".into());
+        }
+        let durable = load_execution_bridge_record(
+            execution_bridge_record_path(records, self.durable_record.height).as_path(),
+        )?;
+        if durable != self.durable_record {
+            return Err("durable execution bridge head changed after task validation".into());
+        }
+        Ok(self.protected)
+    }
 }
 
 pub(super) fn execution_checkpoint_root_dir(execution_records_dir: &Path) -> std::path::PathBuf {
@@ -711,12 +767,12 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
     execution_records_dir: &Path,
     execution_store: &LocalCasStore,
     record: &ExecutionBridgeRecord,
+    protected: &BTreeSet<u64>,
     hot_window_heights: u64,
-    checkpoint_interval_heights: u64,
-    checkpoint_keep_latest: usize,
+    checkpoint_policy: CheckpointRetentionPolicy,
     gc_allowed: bool,
 ) -> Result<u64, String> {
-    let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
+    let (checkpoint_interval_heights, checkpoint_keep_latest) = checkpoint_policy;
     replace_execution_bridge_record_pin_shard(record, true, true, true, execution_store)?;
 
     if record.checkpoint_ref.is_some() {
@@ -793,15 +849,42 @@ pub(super) fn run_execution_bridge_incremental_retention_maintenance(
     checkpoint_interval_heights: u64,
     checkpoint_keep_latest: usize,
 ) -> Result<u64, String> {
+    let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
     let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
     let was_degraded = degraded_marker.exists();
     run_execution_bridge_incremental_retention_maintenance_inner(
         execution_records_dir,
         execution_store,
         record,
+        &protected,
         hot_window_heights,
-        checkpoint_interval_heights,
-        checkpoint_keep_latest,
+        (checkpoint_interval_heights, checkpoint_keep_latest),
+        !was_degraded,
+    )
+}
+
+/// Completes the incremental half of the same retention transaction that
+/// produced `validated`. Standalone callers must use the full-validating
+/// wrapper above.
+pub(super) fn run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+    execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
+    record: &ExecutionBridgeRecord,
+    validated: ValidatedTaskRetention,
+    hot_window_heights: u64,
+    checkpoint_interval_heights: u64,
+    checkpoint_keep_latest: usize,
+) -> Result<u64, String> {
+    let protected = validated.into_protected(execution_records_dir, execution_store, record)?;
+    let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
+    let was_degraded = degraded_marker.exists();
+    run_execution_bridge_incremental_retention_maintenance_inner(
+        execution_records_dir,
+        execution_store,
+        record,
+        &protected,
+        hot_window_heights,
+        (checkpoint_interval_heights, checkpoint_keep_latest),
         !was_degraded,
     )
 }

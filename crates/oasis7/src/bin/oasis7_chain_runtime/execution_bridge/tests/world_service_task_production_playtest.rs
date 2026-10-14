@@ -794,7 +794,7 @@ fn check_quote_read_contract(
         .unwrap()
     };
     let before = pin();
-    let repeated = retry_same_signed_recipe_quote_until(proof, deadline, |original| {
+    let repeated = retry_same_signed_private_quote_until(proof, deadline, |original| {
         client.quote_task_recipe(original)
     });
     match repeated {
@@ -902,7 +902,7 @@ fn check_quote_read_contract(
     );
 }
 
-pub(super) fn retry_same_signed_recipe_quote_until<Q, T>(
+pub(super) fn retry_same_signed_private_quote_until<Q, T>(
     original: &SignedReadRequest<Q>,
     deadline: Instant,
     mut read: impl FnMut(
@@ -940,7 +940,7 @@ pub(super) fn retry_same_signed_recipe_quote_until<Q, T>(
 }
 
 #[test]
-fn repeated_recipe_quote_retries_same_signed_read_within_original_deadline() {
+fn repeated_private_quote_retries_same_signed_read_within_original_deadline() {
     use oasis7::world_service::client::WorldServiceClientError;
 
     #[derive(serde::Serialize)]
@@ -959,7 +959,7 @@ fn repeated_recipe_quote_retries_same_signed_read_within_original_deadline() {
     let original_address = &proof as *const _;
     let deadline = Instant::now() + Duration::from_secs(2);
     let mut calls = 0;
-    let repeated = retry_same_signed_recipe_quote_until(&proof, deadline, |observed| {
+    let repeated = retry_same_signed_private_quote_until(&proof, deadline, |observed| {
         calls += 1;
         assert!(std::ptr::eq(original_address, observed));
         assert_eq!(observed.request.original_pin, original_pin);
@@ -982,7 +982,7 @@ fn repeated_recipe_quote_retries_same_signed_read_within_original_deadline() {
 
     let expired_deadline = Instant::now() + Duration::from_millis(10);
     let mut expired_calls = 0;
-    let expired = retry_same_signed_recipe_quote_until(&proof, expired_deadline, |_| {
+    let expired = retry_same_signed_private_quote_until(&proof, expired_deadline, |_| {
         expired_calls += 1;
         std::thread::sleep(Duration::from_millis(20));
         Err::<(), _>(WorldServiceClientError::Transport(
@@ -996,7 +996,7 @@ fn repeated_recipe_quote_retries_same_signed_read_within_original_deadline() {
     assert_eq!(expired_calls, 1);
 
     let mut conflict_calls = 0;
-    let conflict = retry_same_signed_recipe_quote_until(
+    let conflict = retry_same_signed_private_quote_until(
         &proof,
         Instant::now() + Duration::from_secs(1),
         |_| {

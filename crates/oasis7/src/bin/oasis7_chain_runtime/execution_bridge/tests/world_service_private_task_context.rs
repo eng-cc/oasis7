@@ -141,10 +141,23 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     // Active goal evidence survives both the normal 32-block window and full reconciliation.
-    for height in 7..=40 {
+    for height in 7..40 {
         commit(&mut driver, height, create.clone());
     }
+    super::super::super::checkpoint::task_evidence::reset_protected_height_validation_count();
+    commit(&mut driver, 40, create.clone());
+    assert_eq!(
+        super::super::super::checkpoint::task_evidence::protected_height_validation_count(),
+        1,
+        "one retention transaction must fully validate existing task-pin shards once"
+    );
     let cas = LocalCasStore::new(dir.join("store"));
+    assert_eq!(
+        cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap(),
+        vec![format!("record-{:020}", 4)],
+        "published task evidence shards must equal the current live dependency set"
+    );
     // An unchanged, fully verified task dependency must not be re-published.
     // A historical mtime distinguishes reuse from atomic rewriting without
     // depending on filesystem timestamp granularity or execution speed.
@@ -184,7 +197,55 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         )
         .is_err()
     );
+    let latest_record_path =
+        super::super::super::checkpoint::execution_bridge_record_path(&dir.join("records"), 40);
+    let latest_record =
+        super::super::super::checkpoint::load_execution_bridge_record(latest_record_path.as_path())
+            .unwrap();
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance(
+            &dir.join("records"),
+            &cas,
+            &latest_record,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "standalone incremental maintenance must revalidate a corrupt task-pin shard"
+    );
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+            &dir.join("records"),
+            &cas,
+            2,
+        )
+        .is_err(),
+        "full reconciliation must revalidate a corrupt task-pin shard"
+    );
     std::fs::write(&shard, &retained_bytes).unwrap();
+    let validated = super::super::super::checkpoint::refresh_live_task_read_evidence(
+        &dir.join("records"),
+        &cas,
+        &driver.execution_world,
+        2,
+    )
+    .unwrap();
+    let mut replacement_record = latest_record.clone();
+    replacement_record.node_block_hash = Some("replacement-head-hash".into());
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+            &dir.join("records"),
+            &cas,
+            &replacement_record,
+            validated,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "validated task-pin set must not be reused for a replaced same-height record"
+    );
     super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
         &dir.join("records"),
         &cas,
@@ -532,6 +593,12 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         !cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
             .unwrap()
             .contains(&format!("record-{:020}", 4))
+    );
+    assert_eq!(
+        cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap(),
+        vec![format!("record-{:020}", AGE + 10)],
+        "retained task evidence shards must equal the live dependency set after goal replacement"
     );
     let current = game_task::current_control(&driver.execution_world, "agent-a")
         .unwrap()
@@ -908,6 +975,39 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         !bytes
             .windows(goal.request.content.goal_text.len())
             .any(|b| b == goal.request.content.goal_text.as_bytes())
+    );
+    let records = dir.join("records");
+    let stale_height =
+        super::super::super::checkpoint::list_execution_bridge_record_heights(&records)
+            .unwrap()
+            .last()
+            .copied()
+            .unwrap();
+    let stale_record = super::super::super::checkpoint::load_execution_bridge_record(
+        super::super::super::checkpoint::execution_bridge_record_path(&records, stale_height)
+            .as_path(),
+    )
+    .unwrap();
+    let stale_validation = super::super::super::checkpoint::refresh_live_task_read_evidence(
+        &records,
+        &cas,
+        &driver.execution_world,
+        2,
+    )
+    .unwrap();
+    commit(&mut driver, stale_height + 1, create.clone());
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+            &records,
+            &cas,
+            &stale_record,
+            stale_validation,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "task validation must not be reused after a higher durable record is appended"
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
