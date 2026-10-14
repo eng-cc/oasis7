@@ -16,7 +16,7 @@ mod world_service_execution;
 pub(crate) mod world_service_read;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ExecutionBridgeState {
+pub(crate) struct ExecutionBridgeState {
     pub last_applied_committed_height: u64,
     pub last_execution_block_hash: Option<String>,
     pub last_execution_state_root: Option<String>,
@@ -833,9 +833,8 @@ mod simulator_mirror;
 mod tests;
 
 #[allow(unused_imports)]
-pub(super) use self::driver::NodeRuntimeExecutionDriver;
-#[cfg(not(test))]
-pub(super) use self::driver::derive_local_execution_bootstrap;
+pub(crate) use self::driver::NodeRuntimeExecutionDriver;
+pub(crate) use self::driver::derive_local_execution_bootstrap;
 #[allow(unused_imports)]
 pub(crate) use self::driver::{load_execution_world, load_execution_world_with_policy};
 #[allow(unused_imports)]
@@ -851,7 +850,6 @@ pub(crate) use self::driver_observability::{
 #[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
 
-#[cfg(not(test))]
 pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 
 pub(crate) mod controlled_bootstrap_anchor;

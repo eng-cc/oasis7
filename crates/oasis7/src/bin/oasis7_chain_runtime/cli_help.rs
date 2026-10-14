@@ -15,6 +15,7 @@ pub fn print_help() {
 Starts standalone chain/node runtime with status HTTP endpoints.\n\n\
 Offline command (before Node/services):\n\
   verify-controlled-bootstrap --trusted-config <external-json> --evidence <original-proof-json>\n\
+  initialize-preview-world --root <fresh-root> --world-id <id> --node-id <id> --key-dir <secure-config> --genesis-nonce <64-hex> --status-bind <loopback:port>\n\
   verifies a certificate-bound checkpoint prerequisite; caller authenticates issuer policy independently.\n\
 \n\
 Options:\n\

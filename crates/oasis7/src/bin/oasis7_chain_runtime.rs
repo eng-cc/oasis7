@@ -63,6 +63,8 @@ mod gameplay_submit_api;
 mod governance_registry;
 #[path = "oasis7_chain_runtime/identity_provision.rs"]
 mod identity_provision;
+#[path = "oasis7_chain_runtime/preview_world_init.rs"]
+mod preview_world_init;
 #[path = "oasis7_chain_runtime/identity_receipt.rs"]
 mod identity_receipt;
 #[cfg(test)]

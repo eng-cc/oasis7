@@ -10,6 +10,7 @@ use super::node_keypair_config;
 
 pub(super) fn dispatch<'a>(mut args: impl Iterator<Item = &'a str>) -> Option<Result<(), String>> {
     match args.next()? {
+        "initialize-preview-world" => Some(super::preview_world_init::run(args)),
         "provision-identity" => Some(super::identity_provision::run(args)),
         "identity-receipt" => Some(run(args)),
         "verify-rebuild-proof" => Some(super::rebuild_status::run_verify(args)),
