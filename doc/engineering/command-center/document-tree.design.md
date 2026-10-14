@@ -128,8 +128,6 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 章节索引并发反例已有程序回归；独立树快照、迁移与完整 corpus 性能未验证 |
 | [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
 
-章节标题按 Markdown heading 的可见文本解析：去掉强调、链接目标、代码包裹与 ATX 尾标记，Setext 多行标题以空格连接；原文及源行号仍保留。现有章节键仍采用原源行及父级标题合同，显示规范化不重绑定个人阅读记录、不修改既有身份。该基础修复不提供 Markdown 链接锚点解析或文件级树关系。
-
 生命周期解析基础已由 [lifecycle_metadata.rs](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs) 和现有来源详情承接：原始声明与规范化类别分开，新增可选字段兼容旧阅读记录；[生命周期回归](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)覆盖附注、全角分隔符、未知原值和错误声明。这不提供文件级树、筛选或真实桌面验收。
 
 现有章节索引的覆盖反馈由 [index_coverage.rs](../../../tools/oasis7-command-center/core/src/index_coverage.rs) 承接：来源状态显示候选/已读/遗漏数量、实际已读字节、完整遗漏原因计数与最多 20 条路径样本（标明样本/总数）；单文件实际读取受文件和剩余总量预算限制，空文件计为已读，全量遗漏不判为空结果。这是现有工作树章节索引的局部反馈，不提供逐文件持久覆盖、独立树快照/attempt、固定提交或树 UI；本节表内尚待实现的义务仍保留。
