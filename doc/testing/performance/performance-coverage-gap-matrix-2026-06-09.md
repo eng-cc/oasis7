@@ -28,10 +28,13 @@
 | WASM 执行器 / module cache 热点 | 仓库里已有 ignored perf probes，如 `oasis7_wasm_executor` / `oasis7_wasm_abi` 的 local perf probe | 这些 probe 没有进入标准回归，热点退化更依赖手工意识 | 把 ignored probe 收敛成可复用的本地 perf checklist，先作为诊断手册，不急着进默认 CI | `on-demand` | P3 |
 | 跨 surface 统一预算口径 | 局部有 compile closure/size、Viewer probe、release soak 阈值 | 缺少统一的 surface budget 表，导致哪些指标算退化依赖人记忆 | 建一份 repo-level perf budget 表，只维护少量核心指标：Viewer FPS/frame p95、runtime tick p95、launcher build/size、soak stall/lag | 先文档化，后逐步接 gate | P2 |
 
+<a id="建议优先顺序"></a>
+<a id="实施顺序建议"></a>
 ## 历史补测排序
 
 当次排序与交付建议见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4065#issuecomment-6162417589)；这是矩阵权威修订来源，不冒充所有原 perf harness 的实施 Task。持续 tier、报告/阻断、预算和有效比较条件由下表与测试入口持有，不由旧 Rank 产生新排期。
 
+<a id="先做哪三项"></a>
 ## 性能验证合同（不表达排期）
 | Surface | 设计依据 | 验证要求与历史样本 | Gate boundary | Rollout caution |
 | --- | --- | --- | --- | --- |
@@ -57,8 +60,3 @@
 - 不建议把所有性能测试都塞进默认 `required`，否则日常 PR 时延会明显上升，且噪音会很大。
 - 不建议为每个功能单独建 perf case；优先围绕关键路径、共享热点和发布风险面抽样。
 - 不建议在没有稳定基线前就给所有 surface 设硬阈值；先文档化预算，再逐步 gate 化。
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
-<a id="建议优先顺序"></a>
-<a id="先做哪三项"></a>
-<a id="实施顺序建议"></a>

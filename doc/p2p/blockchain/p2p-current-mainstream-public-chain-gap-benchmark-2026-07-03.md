@@ -124,6 +124,8 @@ Forbidden:
 - `full state/receipt index completeness`
 - `multi-client consensus equivalence`
 
+<a id="integrated-professional-findings"></a>
+<a id="recommended-execution-order"></a>
 ## 历史角色回报与执行建议来源
 
 当次角色回报与执行顺序见 [Task #1842 历史记录](https://github.com/eng-cc/oasis7/issues/1842#issuecomment-6162414656)。本文研究方法、固定窗口结论和 gap 矩阵继续保留；不将旧 all-pass 改写为当前 readiness。实际对外判断须重取同候选公开入口、runtime、hosted/API/Viewer 与 readiness evidence，optional proof lanes 不作为 promotion gates。
@@ -140,7 +142,3 @@ Forbidden:
 - Cosmos IBC light clients: https://docs.cosmos.network/ibc/latest/light-clients/developer-guide/overview
 - Polkadot light clients: https://docs.polkadot.com/reference/tools/light-clients/
 - Avalanche Primary Network validation: https://docs.avax.network/docs/tooling/avalanche-cli/create-avalanche-nodes/validate-primary-network
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
-<a id="integrated-professional-findings"></a>
-<a id="recommended-execution-order"></a>

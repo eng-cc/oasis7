@@ -432,10 +432,18 @@ build.rs/宏可能执行不可信代码，最小权限仍不等于无风险。�
 | [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R05](codeql-integration.design.md#cq-r05) | 失败真实可见，不构造绿灯 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R05 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 观察态不等于安全合入担保；本次不证明扫描已运行 |
 | [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R09](codeql-integration.design.md#cq-r09) | 能运营、排障、回退 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R09 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不承诺当前已有健康运行数据；本次不证明扫描已运行 |
 
+<a id="12-最少-pr-的交付划分"></a>
+<a id="121-pr-s规范与设计"></a>
+<a id="122-pr-c一次完整实现"></a>
 ## 12. 历史交付来源
 
 规范 [PR #4189](https://github.com/eng-cc/oasis7/pull/4189)、实现 [PR #4207](https://github.com/eng-cc/oasis7/pull/4207) 与 SARIF [PR #4232](https://github.com/eng-cc/oasis7/pull/4232) 是实际交付来源。原 PR-S/PR-C、C1–C5 分工与并行图见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4218#issuecomment-6162416255)；#4188/#4218/#4141 已以 `not_planned` 关闭，只作历史来源，不重建实施或扫描排期。
 
+<a id="13-pr-c-内部分工和并行图"></a>
+<a id="131-一个-canonical-code-task多份有边界工作包"></a>
+<a id="132-工作包与文件所有权"></a>
+<a id="133-依赖顺序"></a>
+<a id="134-实施顺序"></a>
 ## 13. 技术依赖与验收边界
 
 planner 的固定 matrix/config 输出是 workflow/health 消费者的共同输入；scope 路由、dispatcher、capability inventory 和汇总必须与实际执行一致。变更需验证真实受影响组合，不能用 isolated fixture 代签 hosted 扫描事实，也不为旧两 PR 数量目标省略必要漏洞修复。四语言单元、权限、查询集、资源槽位、失败语义与 CQ-R/CQ-T 合同仍由前述技术章节持有；预检、启用及回退顺序见下节。
@@ -606,13 +614,3 @@ gh variable set OASIS7_CODEQL_MODE --repo "$REPO" --body observe
 - E12：CodeQL Action analyze 输入。`https://raw.githubusercontent.com/github/codeql-action/v4/analyze/action.yml`
 
 本文是待审查的规范设计；扫描实现与激活仍待分别验证，不是扫描已通过或生产已激活的证明。
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
-<a id="12-最少-pr-的交付划分"></a>
-<a id="121-pr-s规范与设计"></a>
-<a id="122-pr-c一次完整实现"></a>
-<a id="13-pr-c-内部分工和并行图"></a>
-<a id="131-一个-canonical-code-task多份有边界工作包"></a>
-<a id="132-工作包与文件所有权"></a>
-<a id="133-依赖顺序"></a>
-<a id="134-实施顺序"></a>

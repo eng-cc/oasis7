@@ -75,6 +75,7 @@
 - `qa_engineer`
   - 建立 control-feeling matrix，并把 failed guarantee 作为正式 blocker 分类。
 
+<a id="实施顺序"></a>
 ## 设计依赖与历史来源
 
 canonical accepted intent/status/blocker/next-step truth 是 Viewer/API 呈现和 interrupt/reprioritize/override 的共同输入；QA 矩阵按下节独立验证这些保证。历史 `TASK-GAME-071…075` 的规划见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/1193#issuecomment-6162410298)；accepted-intent 的实施来源另见 [Task #1543](https://github.com/eng-cc/oasis7/issues/1543)。不把原编号队列当作当前排期或子项完成证明。
@@ -92,24 +93,3 @@ canonical accepted intent/status/blocker/next-step truth 是 Viewer/API 呈现�
 - 如果只在 Viewer 表面补提示，而 canonical truth 仍不完整，合同会再次回退成文案层错觉。
 - 如果只把 issue #164 解释成“增加 direct control”，会偏离当前间接控制主路线并冲淡 retention 主 blocker。
 - 如果不把 failed guarantee 写成独立 blocker，后续很容易再次出现“系统能跑但像旁观”的静默退化。
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
-<a id="实施顺序"></a>
-
-### 2.1 需求承接与分配表
-
-| 上游 requirement | 承接义务 | 本设计条款 | 权威职责 | 边界 |
-| --- | --- | --- | --- | --- |
-| [Intent 可读](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | 主意图与替换结果显式可读 | [Intent 可读](gameplay-indirect-control-agency-contract.design.md#1-intent-legibility-beforeat-commit) | Gameplay 定义 agency 保证 | 不代签 runtime、headed 或 API 实玩 |
-| [因果确认](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | 执行状态与玩家意图的主因果保持关联 | [因果确认](gameplay-indirect-control-agency-contract.design.md#2-execution-acknowledgement-with-causality) | Gameplay 定义 agency 保证 | 不代签 runtime、headed 或 API 实玩 |
-| [中断重排恢复](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | 方向可改变且重连恢复 agency 面 | [中断重排恢复](gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks) | Gameplay 定义 agency 保证 | 不代签 runtime、headed 或 API 实玩 |
-| [有界后果](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | 成本、变化、阻塞和下一步可判读 | [有界后果](gameplay-indirect-control-agency-contract.design.md#4-bounded-consequence-readability) | Gameplay 定义 agency 保证 | 不代签 runtime、headed 或 API 实玩 |
-
-### 11.1 验证映射表
-
-| 上游 requirement | 本设计条款 | 独立 obligation | 验证方法 | evidence target | 未证明范围 |
-| --- | --- | --- | --- | --- | --- |
-| [Intent 可读](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | [Intent 可读](gameplay-indirect-control-agency-contract.design.md#1-intent-legibility-beforeat-commit) | 主意图与替换结果显式可读 | N/A: reason=本次仅归位历史计划且四项保证正文未改变; scope=当前文档编辑不进行 runtime 或 headed 玩家验收; owner_role=qa_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/1193#issuecomment-6162410298; re-evaluate=改变或实施对应保证时按同候选实际流程分别验证 | 实施 PR 的候选/环境/原世界结果和 headed/API 样本 | 文档/来源检查不证明玩家控制感通过 |
-| [因果确认](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | [因果确认](gameplay-indirect-control-agency-contract.design.md#2-execution-acknowledgement-with-causality) | 执行状态与玩家意图的主因果保持关联 | N/A: reason=本次仅归位历史计划且四项保证正文未改变; scope=当前文档编辑不进行 runtime 或 headed 玩家验收; owner_role=qa_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/1193#issuecomment-6162410298; re-evaluate=改变或实施对应保证时按同候选实际流程分别验证 | 实施 PR 的候选/环境/原世界结果和 headed/API 样本 | 文档/来源检查不证明玩家控制感通过 |
-| [中断重排恢复](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | [中断重排恢复](gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks) | 方向可改变且重连恢复 agency 面 | N/A: reason=本次仅归位历史计划且四项保证正文未改变; scope=当前文档编辑不进行 runtime 或 headed 玩家验收; owner_role=qa_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/1193#issuecomment-6162410298; re-evaluate=改变或实施对应保证时按同候选实际流程分别验证 | 实施 PR 的候选/环境/原世界结果和 headed/API 样本 | 文档/来源检查不证明玩家控制感通过 |
-| [有界后果](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001) | [有界后果](gameplay-indirect-control-agency-contract.design.md#4-bounded-consequence-readability) | 成本、变化、阻塞和下一步可判读 | N/A: reason=本次仅归位历史计划且四项保证正文未改变; scope=当前文档编辑不进行 runtime 或 headed 玩家验收; owner_role=qa_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/1193#issuecomment-6162410298; re-evaluate=改变或实施对应保证时按同候选实际流程分别验证 | 实施 PR 的候选/环境/原世界结果和 headed/API 样本 | 文档/来源检查不证明玩家控制感通过 |

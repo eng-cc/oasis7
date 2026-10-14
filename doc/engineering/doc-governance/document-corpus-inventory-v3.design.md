@@ -425,6 +425,7 @@ object 内容、组成员或来源集合变化均触发重新核对；普通任�
 
 ## 10. 兼容、迁移与回滚
 
+<a id="101-交付组织"></a>
 ### 10.1 原子迁移与消费者合同
 
 当次 PR 包装、工作包和逐文件执行清单见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610)。持续维护仍按 [workflow source of truth](../workflow/source-of-truth.md)；本文不要求普通改动先建 Task 或按旧 loop/packet 包装。
@@ -626,6 +627,3 @@ git diff --check
 | `doc/engineering/doc-governance/doc-structure-standard.design.md` | 文件职责、目录登记、四模块和证据生命周期权限 |
 
 **最终完成定义：没有共同源文档、共同复核集合、共同证据组或共同规则变化的两个任务，不再因为 corpus inventory 体系而写入同一个持久文件；同时，覆盖、审读绑定、证据边界与有效准入没有被削弱。**
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
-<a id="101-交付组织"></a>

@@ -2990,18 +2990,16 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 - “停止”不回滚已发生的资源消耗，但阻断续期、补读与任何偿还义务。
 - 首页 `og:title` 与总纲修订号属于非阻断 P2，可在后续独立元数据整理中处理，不与本次正文 P1 修复混合。
 
-## 2026-08-26 定向小说化修订
-
-定向修改、QA finding-fix、动作顺序和剩余风险见 [Task #3431 历史记录](https://github.com/eng-cc/oasis7/issues/3431#issuecomment-6162413998)。本记录只索引该旧版本窗口，不产生当前 QA 或新精修义务。
-
-## 2026-08-26 第一至第三卷完整逐章 line edit
-
-逐章覆盖、同步结果和原版本/发布边界见 [Task #3437 历史记录](https://github.com/eng-cc/oasis7/issues/3437#issuecomment-6162413138)；原记录不映射成 V50 的正文/发布身份。长期编辑方法在 [SOP](../draft/chapter-writing-sop.md) 和 [写作方法](../draft/writing-method-reference.md) 维护，不继续在本页追加执行流水。
-
-<!-- Historical section locators; execution details are in the linked original Task/PR. -->
 <a id="范围-22"></a>
 <a id="采纳的补丁-54"></a>
 <a id="保留风险与后续"></a>
 <a id="2026-08-26-qa-finding-fix-补丁"></a>
+## 2026-08-26 定向小说化修订
+
+定向修改、QA finding-fix、动作顺序和剩余风险见 [Task #3431 历史记录](https://github.com/eng-cc/oasis7/issues/3431#issuecomment-6162413998)。本记录只索引该旧版本窗口，不产生当前 QA 或新精修义务。
+
 <a id="覆盖与结论"></a>
 <a id="版本与发布边界"></a>
+## 2026-08-26 第一至第三卷完整逐章 line edit
+
+逐章覆盖、同步结果和原版本/发布边界见 [Task #3437 历史记录](https://github.com/eng-cc/oasis7/issues/3437#issuecomment-6162413138)；原记录不映射成 V50 的正文/发布身份。长期编辑方法在 [SOP](../draft/chapter-writing-sop.md) 和 [写作方法](../draft/writing-method-reference.md) 维护，不继续在本页追加执行流水。
