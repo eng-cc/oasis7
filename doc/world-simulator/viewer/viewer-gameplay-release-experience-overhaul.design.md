@@ -21,12 +21,15 @@
 
 ### 2.1 需求承接与分配表
 
-本表限定分支指引和吸引力样例的兼容修改；既有 shell、渲染、权限及发布条款保持其原有适用范围。
+本表限定首局方案、分支指引和吸引力样例的兼容修改；既有 shell、渲染、权限及发布条款保持其原有适用范围。
 
 | 上游 requirement / acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
 | [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | 当前区域专业化的主指引与完整分支承诺同义，保留真实可用工业动作 | [分支投影职责](#branch-stage-projection) | gameplay / runtime 发布动作；Viewer 消费 | 不新增治理或冲突机制，不重排 shell |
 | [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | 回退报价和样例 gate 在截止前、边界及恢复后保持同一窗口判断 | [吸引力样例回退窗口](#fixture-rollback-window) | gameplay 样例阶段；Viewer / QA 结构回归 | 不新增真实 Runtime 回退，不代签真人可玩性 |
+| [REQ-FIRST-INDUSTRIAL-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-002) | 查看、查询、提交及成果表达同一对象和实际方案。 | [当前方案交互](#starter-plan-interaction) | gameplay/M4 参数与报价；Runtime 因果；Viewer/QA 入口验证。 | 不重建 Shell/Inspector，不由 UI 补算成本。 |
+| [REQ-FIRST-INDUSTRIAL-005](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-005) | 报价失效、迟到响应和未知结果保留原请求语义，不重复提交或误归因。 | [当前方案交互](#starter-plan-interaction) | M4/Runtime identity 与重验；Viewer/QA 时序验证。 | 不新增恢复权限，不以退出界面取消已提交动作。 |
+| [REQ-FIRST-INDUSTRIAL-008](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-008) | 首产物成果连接真实后继目标与自然离场，重入保留既有成果和未决义务。 | [当前方案交互](#starter-plan-interaction) | gameplay 后继条件；Runtime 结算；Viewer/QA 续玩验证。 | 不把候选当建成，不扩张 Agent 授权或生成离线收益。 |
 
 ## 3. 当前实现与目标边界
 - 当前 `main` 的 Player 是 fullscreen、world-first 单舞台：世界棋盘为首屏主体，
@@ -278,7 +281,7 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
 ## 4. 约束与边界
 - 本设计只重排 Viewer 的视觉/交互，不改网络协议、仿真核心逻辑和 `third_party`。
 - Search/selection 只导航、居中和打开上下文；执行只能从已授权 Command/Console 路径发生。
-- queued/accepted 不等于完成；无 receipt 时显示明确的 `No action receipt yet`。
+- queued/accepted 不等于完成；无适用 receipt 时明确显示结果尚未确认，`No action receipt yet` 不能解释成世界未生效或确定失败。
 - 所有实现必须保留键盘焦点、关闭/`Escape`、CJK/长文案和无横向溢出的可读性契约。
 
 ## 5. 设计演进计划
@@ -369,11 +372,52 @@ unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fu
 
 修复不清空已提交结果，不改变 `production_only` 的首产物边界，也不把后续交付变成隐藏前置。样例可同时具有“已完成恢复”和“仍有后续用途”，但不能因此恢复已截止的回退能力。真实入口若将来发布回退动作，仍由其专业合同独立判断当前窗口和实际执行结果。
 
+<a id="starter-plan-interaction"></a>
+## 8. 当前首局方案与成果的交互
+
+本节落实[首局具体样本](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#des-first-concrete-sample)，复用现有 Next Move、Gameplay Details 和唯一 Action Receipt。它不是新控制台、通用实体 Inspector 或新的导航路线；当前 Agent-only context 边界不变，工厂方案只在已有 gameplay 操作上下文表达。
+
+### 8.1 从 Next Move 完成这一次决定
+
+默认阅读顺序是：**当前对象与目标 → 本次实际方案 → 主要成本/阻塞 → 明确下一动作 → 可展开依据与诊断**。对象、方案、提交范围及返回路径在进入详情后仍可辨认；原始 JSON、内部 ID 和次要诊断默认收起。影响损失、权限或不可逆承诺的信息不能折叠到玩家无法发现的位置。
+
+查看对象只导航，请求预览只读取，提交才进入执行链；动作名称与 pending 反馈必须表达这一区别。固定方案的 factory/recipe/batches 与实际提交同源；可编辑但未接入提交的查询明确标为独立查询，不能让玩家以为编辑了 Next Move。保留现行 direct 动作白名单的合法行为，不把非 direct 入口仅靠文案变成提交；同一动作不保留两份竞争的 submit 控件，也不用 CSS 视觉移位造成与 DOM/键盘不同的顺序。完整成本从 [M4 同方案报价](../m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)读取；缺失字段保留未确认，不由前端常量或另一账本补齐。
+
+### 8.2 状态、合法操作与焦点
+
+下表是现有状态的交互映射，不要求新的 runtime enum。查询 attempt、方案适用性和原提交结果分开；具体身份与失效规则遵循 M4/Runtime，而非用一个 loading 布尔值覆盖全部。
+
+| 触发状态 | 保留的信息与合法操作 | 返回、焦点与禁止行为 |
+| --- | --- | --- |
+| 打开详情 / 返回世界 | 保留当前目标、对象和本次规范方案；查看/查询/提交入口明确 | 返回原 invoker；关闭不提交、不取消、不重置世界 |
+| 查询中 | 保留方案和查询归属，明确尚无可用报价；允许退出或受支持的重新选择 | 不把 pending 当成零成本或可执行；异步响应不夺焦点 |
+| 参数或对象改变 | 旧报价失去提交资格，保留可解释的变化原因；新查询绑定新方案 | 旧响应不得覆盖新对象；无需因更新世界快照清空全部上下文 |
+| 报价失效 / snapshot 更新 | 禁用旧方案提交；保留原查询关联并待复核，或显式废弃该 attempt 并提供重查 | 不无声转 idle 丢弃在途结果，不用旧 allowed 恢复提交按钮 |
+| 提交中 / 结果未知 | 保留原请求身份与已知范围，提供真实的核对/安全重试能力或限制说明 | 不显示确定失败/未生效，不以新身份重提；退出不取消旧请求 |
+| 权限失效 | 当前权限决定脱敏；保留允许读取的已知结果和恢复说明，执行按当前授权重验 | 不借保留草稿/请求泄露数据，不继承旧授权 |
+| 部分或完整成果到达 | 实际所得、已确认范围与尚待决范围分别可读；引用唯一 Receipt，再展示真实后继条件 | 无关旧结果不替换当前方案；不强制弹窗领奖、不夺焦点、不把部分成功合成全目标完成 |
+| 离场 / 重新进入 | 恢复成果摘要、当前目标、待决请求与有效委托；核对当前条件后提供第一动作 | 不重复播报旧成功、不产生离线收益；焦点回可用主入口而不是已失效按钮 |
+
+正常更新使用非打断式状态播报；仍可从同一 Receipt 入口主动回看详情。不要为了只保留一个主 CTA 而隐藏合法返回、暂停未来委托或核对原请求的入口；这些是上下文恢复，不是第二条主线。
+
+### 8.3 成果与后继目标的阅读边界
+
+先显示已被领域结果证明的实际投入/所得，再在原意图—action/job—settlement 精确关联成立时解释本次玩家贡献，最后说明当前真实用途与剩余条件。只有同 owner、最近结果或同名材料时可显示归属成果，但不称为当前决定的功劳；预览不是实际结果，Agent 解释不是归因证据。
+
+成果摘要引用同一 Action Receipt，不建立第二份回执或重复浮层。Assembler 候选可被查看、比较并显示已满足条件与缺口，即使当前不能建设；只有实际可执行动作使用提交型 CTA。候选未知时诚实解释，不把不可用候选包装成正式可行推荐。首产物、持续能力、建成 Assembler 和交付保持独立，首产物后可自然离场。
+
+### 8.4 该操作链的入口验收
+
+针对同一候选，在现有 quote state/response、gameplay action 提交、Gameplay Details 与 Receipt 路径验证正常提交、对象/参数改变、报价在途失效、迟到旧响应、权限失效和未知结果恢复；不能只测 reducer 或静态按钮存在。图形验证按既有矩阵覆盖桌面和窄屏，特别检查中文 IME composition、Tab/Shift+Tab、Escape/返回焦点、长文本和文字放大后的主要成本/动作/关闭入口可达；成果播报不夺焦点。具体验证版本、运行命令与证据留在 Task/PR；本节不声明实际 GUI 或真人体验已通过。
+
 ### 11.1 验证映射表
 
 | 上游 requirement / acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法与 test/manual source | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | [分支投影职责](#branch-stage-projection) | 当前区域专业化不发布未开放的阶段承诺，并保留合法合金路线 | [industrial_progression.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs) 的 `runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready`；当前候选 `test_tier_required` | PR 中的聚焦回归结果；主指引、全部承诺及可执行工业路线 | 普通合同回归，实际入口体验另验 |
 | [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | [吸引力样例回退窗口](#fixture-rollback-window) | 同一路线截止前、incident 开始、修复后及完成态；拒绝反向 available、缺失或冲突 phase | [gameplay-attraction-scenario.test.mjs](../../../crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs)；当前候选 `node` 结构正反例 | PR 中的样例测试结果；报价与 gate 窗口一致 | `fixture_structure_only`，不证明真实回退或 human playability |
+| [REQ-FIRST-INDUSTRIAL-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-002) | [当前方案交互](#starter-plan-interaction) | 查看/查询/提交分开，同参数与实际成果可读；承接 AC-FIRST-INDUSTRIAL-001。 | 待执行：按 [测试手册](../../../testing-manual.md) 选择当前 candidate 的适用 S6 场景，沿 §8.1/8.4 的 quote→submit→receipt 真实消费者核对对象、参数、成本和反馈；覆盖桌面/窄屏、IME、键盘、文字放大与非打断播报。 | PR 中的实际参数、权威结果与 headed captures；记录缺失前置。 | 单元/组件测试不代签 GUI；图形正确不证明真人理解、主体感或留存。 |
+| [REQ-FIRST-INDUSTRIAL-005](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-005) | [当前方案交互](#starter-plan-interaction) | 失效/迟到结果不污染当前方案，原请求未知与已结算范围分开；承接 AC-FIRST-INDUSTRIAL-003。 | 待执行：按 [测试手册](../../../testing-manual.md) 在当前 candidate 的适用 S6 场景执行 §8.2 的参数/对象改变、报价在途失效、旧响应迟到、权限失效及未知结果恢复；核对实际提交、焦点和原请求身份，缺恢复入口记录 blocked。 | PR 中的消息时序、原请求与领域结果、无重复效果证据及 headed captures。 | reducer 或固定脚本不代签真实消费者、GUI 或自主试玩。 |
+| [REQ-FIRST-INDUSTRIAL-008](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-008) | [当前方案交互](#starter-plan-interaction) | 单一成果回执、可见后继目标和自然离场分别成立；承接 AC-FIRST-INDUSTRIAL-004。 | 待执行：按 [测试手册](../../../testing-manual.md) 在当前 candidate 的适用 S6 场景验证 §8.2/8.3 的成果到达、后继不可执行、自然离场和重入；检查旧成果不误归给新意图、不重复播报、不复活失效授权；无提示续玩观察单独记录。 | PR 中的成果/后继条件、离场与重入状态、headed captures 和提示介入记录。 | 图形与恢复正确不证明 Agent 主体感或真人留存，未覆盖窗口保持未验证。 |
 
 本节定义实现与验收边界；具体候选、执行过的测试和未覆盖入口记录在对应 PR。代码或样例回归成功不能升级为真实自主试玩、图形交互或发行验收通过。
