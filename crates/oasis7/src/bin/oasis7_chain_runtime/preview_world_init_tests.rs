@@ -139,6 +139,154 @@ fn genuine_commit_cas_publication_and_restart_keep_initial_receipt() {
         original
     );
     assert!(!String::from_utf8(original).unwrap().contains("PRIVATE_KEY"));
+
+    let original_height = receipt.published_commit["position"].as_u64().unwrap();
+    let original_record_path = o
+        .root
+        .join("records")
+        .join(format!("{original_height:020}.json"));
+    let original_record: Value =
+        serde_json::from_slice(&fs::read(original_record_path).unwrap()).unwrap();
+    let current_identity =
+        bridge::world_service_read::identity(&o.root.join("world"), &o.world_id).unwrap();
+    let current = bridge::world_service_read::pin(
+        &o.root.join("records"),
+        &o.root.join("store"),
+        &current_identity,
+        None,
+    )
+    .unwrap();
+    let current_record: Value = serde_json::from_slice(
+        &fs::read(
+            o.root
+                .join("records")
+                .join(format!("{:020}.json", current.commit.position)),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let live_refs = [
+        current_record["snapshot_ref"].as_str().unwrap(),
+        current_record["journal_ref"].as_str().unwrap(),
+        current_record["world_head_proof_ref"].as_str().unwrap(),
+    ];
+    let historical_refs = [
+        original_record["snapshot_ref"].as_str().unwrap(),
+        original_record["journal_ref"].as_str().unwrap(),
+        original_record["world_head_proof_ref"].as_str().unwrap(),
+    ];
+    let store = o.root.join("store");
+    for hash in historical_refs {
+        if live_refs.contains(&hash) {
+            continue;
+        }
+        let object = find_cas_object(&store, hash).expect("retained historical CAS object");
+        fs::remove_file(object).unwrap();
+    }
+    assert_eq!(
+        initialize(&o).unwrap().world,
+        receipt.world,
+        "archived original proof must survive historical CAS collection"
+    );
+    assert!(
+        bridge::world_service_read::pin(
+            &o.root.join("records"),
+            &o.root.join("store"),
+            &current_identity,
+            None,
+        )
+        .is_ok(),
+        "current head remains validated from live CAS"
+    );
+}
+
+fn find_cas_object(path: &Path, hash: &str) -> Option<PathBuf> {
+    for entry in fs::read_dir(path).ok()? {
+        let entry = entry.ok()?;
+        if entry.file_type().ok()?.is_dir() {
+            if let Some(found) = find_cas_object(&entry.path(), hash) {
+                return Some(found);
+            }
+        } else if entry.file_name().to_string_lossy().contains(hash) {
+            return Some(entry.path());
+        }
+    }
+    None
+}
+
+#[test]
+fn missing_or_tampered_initial_publication_archive_requires_verified_backup() {
+    let root = Directory::new();
+    let o = root.options();
+    let receipt = initialize(&o).unwrap();
+    let archive = o.root.join("genesis/initial-publication");
+    let manifest = archive.join("manifest.json");
+    let original_manifest = fs::read(&manifest).unwrap();
+
+    fs::write(&manifest, b"{}").unwrap();
+    let error = initialize(&o).err().unwrap();
+    assert!(error.contains("archive hash mismatch"), "{error}");
+    fs::write(&manifest, &original_manifest).unwrap();
+
+    let proof_path = archive.join("world-head-proof.cbor");
+    let original_proof = fs::read(&proof_path).unwrap();
+    fs::write(&proof_path, b"tampered").unwrap();
+    let error = initialize(&o).err().unwrap();
+    assert!(
+        error.contains("archived world head proof hash mismatch"),
+        "{error}"
+    );
+    fs::write(&proof_path, original_proof).unwrap();
+
+    fs::remove_file(&manifest).unwrap();
+    let error = initialize(&o).err().unwrap();
+    assert!(error.contains("verified backup"), "{error}");
+    assert_eq!(receipt.world.world_id, o.world_id);
+}
+
+#[test]
+fn legacy_receipt_without_archive_fails_closed_without_rewriting_world() {
+    let root = Directory::new();
+    let o = root.options();
+    initialize(&o).unwrap();
+    let receipt_path = o.root.join("initialization-receipt.json");
+    let before = fs::read(&receipt_path).unwrap();
+    let mut legacy: Receipt = serde_json::from_slice(&before).unwrap();
+    legacy.initial_publication_proof_hash = None;
+    legacy.receipt_schema_hash = blake3_hex(LEGACY_RECEIPT_SCHEMA.as_bytes());
+    legacy.initializer_source_hash = "older-initializer-source".into();
+    legacy.relative_paths = json!({
+        "world":"world",
+        "records":"records",
+        "store":"store",
+        "execution_state":"state.json",
+        "initial_artifact":"genesis/initial-artifact.json",
+        "viewer_public":"viewer.public.json",
+        "viewer_environment":"private/viewer.env"
+    });
+    let (node_key, _) =
+        super::super::node_keypair_config::read_existing_node_keypair_in_secure_config_dir(
+            &o.key_dir,
+        )
+        .unwrap();
+    let service = super::super::build_feedback_submit_signer(&o.node_id, &node_key).unwrap();
+    let private: [u8; 32] = hex::decode(service.private_key_hex)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    legacy.node_scoped_signature = hex::encode(
+        SigningKey::from_bytes(&private)
+            .sign(&receipt_payload(&legacy).unwrap())
+            .to_bytes(),
+    );
+    fs::write(&receipt_path, encode(json!(legacy)).unwrap()).unwrap();
+    fs::remove_dir_all(o.root.join("genesis/initial-publication")).unwrap();
+    let legacy_receipt = fs::read(&receipt_path).unwrap();
+
+    let error = initialize(&o).err().unwrap();
+    assert!(error.contains("verified backup"), "{error}");
+    assert_eq!(fs::read(&receipt_path).unwrap(), legacy_receipt);
+    assert!(o.root.join("genesis/initial-artifact.json").exists());
 }
 #[test]
 fn partial_existing_root_and_mismatched_receipt_are_never_repaired() {
@@ -337,23 +485,33 @@ fn initial_commit_validator_binding_uses_provisioned_node_identity() {
     )
     .unwrap();
     assert_eq!(envelope["public_key_hex"], expected.public_key_hex);
-    verify_signed_initial_commit(&o.root, &o, height).unwrap();
+    let record = fs::read(o.root.join("records").join(format!("{height:020}.json"))).unwrap();
+    let envelope_bytes = fs::read(
+        o.root
+            .join("replication/replication_commit_messages")
+            .join(format!("{height:020}.json")),
+    )
+    .unwrap();
+    verify_signed_initial_commit(&o, height, &record, &envelope_bytes).unwrap();
 }
 
 #[test]
-fn corrupted_initial_consensus_signature_rejected_before_rerun() {
+fn tampered_archived_initial_consensus_signature_fails_closed_before_rerun() {
     let root = Directory::new();
     let o = root.options();
-    let receipt = initialize(&o).unwrap();
-    let height = receipt.published_commit["position"].as_u64().unwrap();
+    initialize(&o).unwrap();
     let path = o
         .root
-        .join("replication/replication_commit_messages")
-        .join(format!("{height:020}.json"));
+        .join("genesis/initial-publication/consensus-envelope.json");
     let mut envelope: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     envelope["signature_hex"] = json!("00".repeat(64));
     fs::write(&path, serde_json::to_vec(&envelope).unwrap()).unwrap();
-    assert!(initialize(&o).err().unwrap().contains("signature rejected"));
+    assert!(
+        initialize(&o)
+            .err()
+            .unwrap()
+            .contains("archived signed envelope hash mismatch")
+    );
 }
 
 #[test]
@@ -369,7 +527,11 @@ fn valid_same_signer_commit_from_other_initialization_cannot_replace_pin() {
     let height = receipt.published_commit["position"].as_u64().unwrap();
     let other_height = other_receipt.published_commit["position"].as_u64().unwrap();
     assert_eq!(height, other_height);
-    let relative = format!("replication/replication_commit_messages/{height:020}.json");
-    fs::copy(other.root.join(&relative), o.root.join(&relative)).unwrap();
+    let archived_envelope = "genesis/initial-publication/consensus-envelope.json";
+    fs::copy(
+        other.root.join(archived_envelope),
+        o.root.join(archived_envelope),
+    )
+    .unwrap();
     assert!(initialize(&o).is_err());
 }

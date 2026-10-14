@@ -16,6 +16,8 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+#[path = "preview_world_init_archive.rs"]
+mod archive;
 #[path = "preview_world_init_fs.rs"]
 mod files;
 
@@ -23,13 +25,16 @@ const SCHEMA: &str = "oasis7.devlocal.preview-world-init/v1";
 const GENESIS_DOMAIN: &str = "oasis7.devlocal.preview-genesis/v1";
 const CLAIM: &str =
     "fresh_devlocal_technical_preview_not_governed_activation_or_formal_network_finality";
-const RECEIPT_SCHEMA: &str = "v1:world_id,node_id,genesis_nonce,genesis_digest,service_public_key,reader_public_key,status_bind,initial_height,commit,artifact_hashes,relative_paths,source_hash,claim,node_scoped_signature";
+const LEGACY_RECEIPT_SCHEMA: &str = "v1:world_id,node_id,genesis_nonce,genesis_digest,service_public_key,reader_public_key,status_bind,initial_height,commit,artifact_hashes,relative_paths,source_hash,claim,node_scoped_signature";
+const RECEIPT_SCHEMA: &str = "v1:world_id,node_id,genesis_nonce,genesis_digest,service_public_key,reader_public_key,status_bind,initial_height,commit,artifact_hashes,initial_publication_proof_hash,relative_paths,source_hash,claim,node_scoped_signature";
 const SIGNATURE_DOMAIN: &[u8] = b"oasis7.devlocal.preview-init-receipt/v1\0";
 fn source_hash() -> String {
     blake3_hex(
         &[
             include_bytes!("preview_world_init.rs").as_slice(),
             include_bytes!("preview_world_init_fs.rs").as_slice(),
+            include_bytes!("preview_world_init_archive.rs").as_slice(),
+            include_bytes!("execution_bridge/world_service_read.rs").as_slice(),
         ]
         .concat(),
     )
@@ -59,6 +64,8 @@ struct Receipt {
     initial_height: u64,
     published_commit: Value,
     genesis_artifact_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    initial_publication_proof_hash: Option<String>,
     consumer_public_config_hash: String,
     initializer_source_hash: String,
     receipt_schema_hash: String,
@@ -74,7 +81,7 @@ fn receipt_payload(receipt: &Receipt) -> Result<Vec<u8>, String> {
     Ok([SIGNATURE_DOMAIN, encode(value)?.as_slice()].concat())
 }
 fn relative_paths() -> Value {
-    json!({"world":"world","records":"records","store":"store","execution_state":"state.json","initial_artifact":"genesis/initial-artifact.json","viewer_public":"viewer.public.json","viewer_environment":"private/viewer.env"})
+    json!({"world":"world","records":"records","store":"store","execution_state":"state.json","initial_artifact":"genesis/initial-artifact.json","initial_publication_proof":"genesis/initial-publication/manifest.json","viewer_public":"viewer.public.json","viewer_environment":"private/viewer.env"})
 }
 
 pub(super) fn run<'a>(args: impl Iterator<Item = &'a str>) -> Result<(), String> {
@@ -206,18 +213,18 @@ struct InitialCommitSigningPayload<'a> {
     payload: &'a [u8],
     public_key_hex: Option<&'a str>,
 }
-fn verify_signed_initial_commit(root: &Path, options: &Options, height: u64) -> Result<(), String> {
+fn verify_signed_initial_commit(
+    options: &Options,
+    height: u64,
+    record_bytes: &[u8],
+    envelope_bytes: &[u8],
+) -> Result<(), String> {
     let (key, _) = super::node_keypair_config::read_existing_node_keypair_in_secure_config_dir(
         &options.key_dir,
     )?;
     let expected = super::derive_node_consensus_signer_keypair(&options.node_id, &key)?;
-    let envelope: InitialCommitEnvelope = serde_json::from_slice(&files::read_bounded(
-        &root
-            .join("replication/replication_commit_messages")
-            .join(format!("{height:020}.json")),
-        16 * 1024 * 1024,
-    )?)
-    .map_err(|_| "initial consensus envelope invalid")?;
+    let envelope: InitialCommitEnvelope =
+        serde_json::from_slice(envelope_bytes).map_err(|_| "initial consensus envelope invalid")?;
     let message: Value = serde_json::from_slice(&envelope.payload)
         .map_err(|_| "initial consensus commit invalid")?;
     if envelope.version != 1
@@ -231,11 +238,8 @@ fn verify_signed_initial_commit(root: &Path, options: &Options, height: u64) -> 
     {
         return Err("initial consensus signer or world binding rejected".into());
     }
-    let record: Value = serde_json::from_slice(&files::read_bounded(
-        &root.join("records").join(format!("{height:020}.json")),
-        1024 * 1024,
-    )?)
-    .map_err(|_| "initial execution record invalid")?;
+    let record: Value =
+        serde_json::from_slice(record_bytes).map_err(|_| "initial execution record invalid")?;
     if envelope.record.world_id != options.world_id
         || envelope.record.content_hash != blake3_hex(&envelope.payload)
         || envelope.record.size_bytes != envelope.payload.len() as u64
@@ -426,6 +430,8 @@ fn initialize(options: &Options) -> Result<Receipt, String> {
     if pinned.commit.position <= initial_height {
         return Err("preview CAS publication did not advance real commit".into());
     }
+    let initial_publication_proof_hash =
+        archive::publish(&stage.path, options, &identity, &pinned.commit)?;
     let _ = bridge::derive_service_execution_bootstrap(
         &stage.path.join("world"),
         &stage.path.join("records"),
@@ -463,6 +469,7 @@ fn initialize(options: &Options) -> Result<Receipt, String> {
         initial_height,
         published_commit: json!(pinned.commit),
         genesis_artifact_hash: artifact_hash,
+        initial_publication_proof_hash: Some(initial_publication_proof_hash),
         consumer_public_config_hash: blake3_hex(&public_config),
         initializer_source_hash: source_hash(),
         receipt_schema_hash: blake3_hex(RECEIPT_SCHEMA.as_bytes()),
@@ -510,9 +517,8 @@ fn verify_at(
         || receipt.genesis_nonce != options.genesis_nonce
         || receipt.status_bind != options.status_bind
         || receipt.service_public_key != service_public
-        || receipt.receipt_schema_hash != blake3_hex(RECEIPT_SCHEMA.as_bytes())
-        || receipt.initializer_source_hash != source_hash()
-        || receipt.relative_paths != relative_paths()
+        || (receipt.receipt_schema_hash != blake3_hex(RECEIPT_SCHEMA.as_bytes())
+            && receipt.receipt_schema_hash != blake3_hex(LEGACY_RECEIPT_SCHEMA.as_bytes()))
     {
         return Err(
             "existing preview receipt does not match exact requested initialization".into(),
@@ -531,6 +537,22 @@ fn verify_at(
         .map_err(|_| "invalid preview service pin")?
         .verify_strict(&receipt_payload(&receipt)?, &signature)
         .map_err(|_| "node-scoped preview receipt signature rejected")?;
+    let original: oasis7::world_service::CommitRef =
+        serde_json::from_value(receipt.published_commit.clone())
+            .map_err(|_| "preview original commit invalid")?;
+    if receipt.initial_publication_proof_hash.is_none() {
+        return Err(
+            "existing preview world has no archived initial publication proof; restore from a verified backup; no repair performed".into(),
+        );
+    }
+    archive::verify(root, options, &receipt, &original, owner)?;
+    if receipt.initializer_source_hash != source_hash()
+        || receipt.relative_paths != relative_paths()
+    {
+        return Err(
+            "existing preview receipt does not match exact initializer source and paths".into(),
+        );
+    }
     let artifact = files::read_bounded(
         &root.join("genesis/initial-artifact.json"),
         16 * 1024 * 1024,
@@ -552,16 +574,6 @@ fn verify_at(
     if identity != receipt.world {
         return Err("preview identity differs from admitted genesis".into());
     }
-    let original: oasis7::world_service::CommitRef =
-        serde_json::from_value(receipt.published_commit.clone())
-            .map_err(|_| "preview original commit invalid")?;
-    verify_signed_initial_commit(root, options, original.position)?;
-    let _ = bridge::world_service_read::pin(
-        &root.join("records"),
-        &root.join("store"),
-        &identity,
-        Some(&original),
-    )?;
     let current = bridge::world_service_read::pin(
         &root.join("records"),
         &root.join("store"),
