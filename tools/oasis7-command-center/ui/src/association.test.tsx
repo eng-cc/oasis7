@@ -20,3 +20,27 @@ it('keeps a saved missing goal identity unresolved instead of linking the replac
   expect(screen.getByRole('button', {name:'原章节已变化/尚未核实 · doc/core/prd.md#heading-old'})).not.toHaveTextContent('新目标与原章节无关');
   expect(mock.invoke.mock.calls.some(([command]) => command === 'read_source')).toBe(false);
 });
+
+
+it('offers summary chapters on the home view and opens their original revision without searching', async () => {
+  const source = {id:'doc/engineering/command-center/README.md#cc-status-baseline',path:'doc/engineering/command-center/README.md',title:'核验基线与覆盖范围',content:'核验于旧窗口，部署未知',line:20,revision:'summary-revision',committedRevision:'summary-head',dirty:true,factKind:'sourceFact',lifecycle:null};
+  const snapshot: Snapshot = {
+    project:{id:'project',path:'/repo',gitCommonDir:'/repo/.git',branch:'work',head:'head',environment:'local'},
+    preferences:{projectPath:'/repo',view:'direction',query:''},sections:[source],
+    associations:[],decisions:[],readingPositions:[],sources:[],git:{status:'',worktrees:''},
+  };
+  mock.invoke.mockImplementation(async (command: string) => command === 'query_view' ? snapshot : {state:'unconnected',repository:null,account:null,observedAt:null,lastAttempt:null,coverage:'未接入',error:null,pulls:[]});
+  render(() => <App />);
+  await waitFor(() => expect(screen.getByRole('button', {name:source.title})).toBeEnabled());
+  const {fireEvent} = await import('@solidjs/testing-library');
+  const entry = screen.getByRole('button', {name:source.title});
+  entry.focus();
+  fireEvent.click(entry);
+  await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith('read_source', {sectionId:source.id,revision:source.revision,line:source.line}));
+  expect(screen.getByText(source.content)).toBeInTheDocument();
+  expect(screen.getByRole('region', {name:'来源详情'})).toHaveFocus();
+  expect(screen.getByText(source.committedRevision)).toBeInTheDocument();
+  expect(mock.invoke.mock.calls.some(([command]) => command === 'search_rules')).toBe(false);
+  fireEvent.click(screen.getByRole('button', {name:'关闭详情'}));
+  expect(entry).toHaveFocus();
+});
