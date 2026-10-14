@@ -375,6 +375,13 @@ def authority_lines(lines: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def id_tokens(text: str) -> set[str]:
     tokens: set[str] = set()
+    # Cross-layer Trace IDs have their own declaration and reference contract.
+    # Strip only valid UUID v4 IDs so malformed local references remain visible.
+    text = re.sub(
+        r"\bO7-REQ-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\w-])",
+        "",
+        text,
+    )
     for match in ID_RE.finditer(text):
         token = match.group(1).upper()
         # A wildcard such as REQ-TOPIC-* is prose describing an ID family,
