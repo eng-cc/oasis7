@@ -487,9 +487,12 @@ driver，生成可验证 CAS、提交记录和 world proof；不写入测试能�
 人为 finality。cognition 的 pending binding 和本地提交只证明该预览的初始化材料。
 
 输出在同文件系统的 0700 sibling staging 构建，文件和目录同步后通过 OS 原子 no-replace
-发布。目标已存在时必须核对原 receipt、创世原字节、identity、实际 signer、公有初始
-publication 引用与当前 CAS/record/proof；缺失、冲突、篡改或非受保护路径立即拒绝。
-幂等查询不补写或升级旧材料，也不因后续真实提交推进而把原初始锚改写成当前 head。
+发布。receipt 固定初始 publication manifest 的摘要；manifest 绑定原始 execution record、
+节点签名 envelope 及 snapshot、journal、world-head proof 的确切 CAS 字节，使初始证明在
+历史 CAS 回收后仍可验证。目标已存在时核对原 receipt、创世原字节、identity、实际 signer、
+归档初始证明与当前 live CAS/record/proof；缺失、冲突、篡改或非受保护路径立即拒绝。旧根若
+没有该认证归档，只能从已验证备份恢复，初始化器不重建、不重签、不改写旧证明；幂等查询也
+不因后续真实提交推进而把原初始锚改写成当前 head。
 
 私钥只保留在受保护配置中。公开初始化 receipt 给出 identity、材料承诺和 derived
 feedback-submit service public key，不提供 node seed 或消费者签名私钥。操作员通过独立
