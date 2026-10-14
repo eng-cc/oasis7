@@ -140,6 +140,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - [PR #4533](https://github.com/eng-cc/oasis7/pull/4533)：桌面基础、四视图、SQLite、真实 worktree 和有限 GitHub 窗口；记录了 macOS arm64 本地打包与原生交互验证。
 - [PR #4563](https://github.com/eng-cc/oasis7/pull/4563)：固定 Codex CLI 0.137.0 的可选实验执行、原请求身份、未知结果与退出管理；真实握手/receipt 有记录，但没有成功模型输出证明。
 - [PR #4572](https://github.com/eng-cc/oasis7/pull/4572)：读取显式规范后继、保留历史版本和来源理由；记录了原生界面与重启恢复验证。
+- 首页的[来源阅读降级入口](../../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)复用既有文档索引和来源详情，分别提示缺失摘要；不新增后台来源、执行动作或聚合判断。四区首页及完整用户任务仍未验收。
 - 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#3-des-cc-tree-001文件关系与树投影)。类别不推导实现状态，完整文档树与筛选仍待实施。
 - 个人决定、阅读记录和未决操作与可重建缓存分开；启用连接不代表授权任务，恢复不自动重发未知副作用。
 
