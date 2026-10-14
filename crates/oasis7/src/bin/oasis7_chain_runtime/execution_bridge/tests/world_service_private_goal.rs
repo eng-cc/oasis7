@@ -381,7 +381,10 @@ fn private_goal_native_tcp_prepare_publish_read_restart_and_recovery() {
         Err(oasis7::world_service::client::WorldServiceClientError::Transport(ref reason))
             if reason == "private transport timed out"
     ));
-    assert_eq!(server_outcome, "response_written");
+    assert!(
+        matches!(server_outcome, "response_written" | "write_failed"),
+        "a timed-out client leaves server delivery unknown"
+    );
 
     assert_eq!(response.payload.activation_commit.unwrap().position, 4);
     assert_eq!(
