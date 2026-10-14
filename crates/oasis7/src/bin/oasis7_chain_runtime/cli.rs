@@ -601,6 +601,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             && options.guarded_initial_config.is_none()
             && options.genesis_validator_registry_path.is_none()
             && options.deployment_inventory_path.is_none())
+        || (options.deployment_inventory_path.is_some()
+            && options.network_tier_manifest_path.is_none())
     {
         let typed = super::development_runtime::from_options(&options)?;
         super::development_runtime::into_options(typed, false)?;

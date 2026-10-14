@@ -2,6 +2,8 @@
 //! monotonic oracles simulate custody; no remote deployment is performed.
 #[path = "formal_live_healthy_fixed_lookup_tests.rs"]
 mod fixed_lookup;
+#[path = "formal_live_healthy_operation_process_tests/raw_seed.rs"]
+mod raw_seed;
 use super::durable_set_tests::{HealthySetCase, ManagedEndpointChild};
 use super::*;
 use crate::{formal_live_runtime, node_lifecycle::local_io as io};
@@ -610,6 +612,7 @@ pub(super) fn exercise_with_fault(
         case.replica_address,
         &replica_bootstrap,
     )?;
+    raw_seed::copy_objects(&case.primary_directory, &new_replica_directory)?;
     let mut new_primary = ManagedEndpointChild::start(&case.endpoint_binary, &pconfig)?;
     let mut new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &rconfig)?;
     new_primary.wait_management(primary_management, Duration::from_secs(20))?;
