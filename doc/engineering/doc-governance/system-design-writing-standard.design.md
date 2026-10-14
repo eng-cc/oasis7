@@ -26,7 +26,7 @@
 - 设计承担的技术责任；
 - 与产品需求、专业规则、实现和证据的链接。
 
-需要更强追溯时，可以在人工可读的身份块记录 id、title、status、owner_role、module、upstream_refs、source_baseline、last_reviewed_at、review_evidence_ref 和 superseded_by。它们目前是写作信息，不是本次新增的机器 schema；status 只描述文档生命周期，不赋予运行时、workflow 或合同消费资格。语义身份是 canonical repository + path + fragment；合同版本使用其 schema 定义的 `revision`，源码或文档快照使用独立的 commit OID，不能把 SHA 填进要求整数的 task input `revision`。
+跨层要求身份遵循[跨层追踪规范](cross-layer-requirements-traceability.design.md)：在需求承接处记录 `Trace refs: <完整 ID>`，逐项链接要求声明和本设计条款。全局 ID 是稳定要求的关联键，不是文档、任务或运行合同身份；纯工程要求可以在已有专业条款声明，产品层不适用时说明原因。文档标题、owner、生命周期和审读基线按需记录，不新增机器 schema 或任务输入协议。具体技术合同的身份、schema revision、源码 commit OID 和实际验证版本继续按各自合同区分，不以 Trace ID 代替。
 
 ### 1.2 非目标
 
@@ -40,23 +40,27 @@
 
 ## 2. 上游约束与相关角色
 
-先列出消费者、输入 authority、专业 owner 和需要共同审读的角色。上游引用必须带路径和 fragment；固定输入还应带不可变提交、发布记录或当前 task contract 能提供的版本锚点。
+先列出消费者、输入 authority、专业 owner 和需要共同审读的角色。上游引用必须带路径和 fragment；固定输入还应带不可变提交或发布记录等准确版本锚点。
 
 ### 2.1 需求承接与分配表
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)的适用写作/引用约定。
 
 每一行 MUST 是一个真实的需求或专业接受关系，不能只写“支持 REQ”或类别名。路径和 fragment 要能定位到上游原文；纯工程变更没有产品 AC 时，填写专业规则/缺陷条款或用户请求的准确定位，并写明不适用产品 AC 的理由。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| <真实上游路径#REQ/AC 或专业条款> | <本次必须承接的具体结果、前置条件和判定边界> | <本设计路径#DES 或 fragment> | <外部 authority、owner、固定输入或解除条件> | <不承诺的入口、环境、能力或未覆盖链路> |
+| <Trace refs: 完整 ID；真实上游路径#REQ/AC 或专业条款> | <本次必须承接的具体结果、前置条件和判定边界> | <本设计路径#DES 或 fragment> | <外部 authority、owner、固定输入或解除条件> | <不承诺的入口、环境、能力或未覆盖链路> |
+
+现有系统设计结构检查要求本表上游引用定位到另一个 Markdown 文件，本设计条款列定位到本文件。工程要求可以在专业 design 声明 Trace ID，但本文件的声明不替代已有的外部上游依据和验证映射；不得用 self-upstream 绕过这项结构约束。
 
 一条需求可以映射多个设计条款，一个设计条款也可以服务多个需求；每条关系都保留上述五列，不建立一对一文档或任务要求。外部 owner/dependency 不是本设计的隐含责任，排除范围也不能用空白代替。
 
-`path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自合同或版本记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。技术 authority 由对应领域的有效合同与实际版本确定；当前工作树、浮动分支、`latest`、mutable URL、Project/cache 和作者自报 digest 不能替代它。合同或验证记录若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。消费者只读取声明的有限关系闭包，未声明、重复、歧义、越界或不能回读的条款阻断，不扩散为无界 legacy 迁移。
+`path#fragment` 定位被消费的条款；跨仓库时明确仓库，固定合同或证据时保留实际提交/发布版本。全局 Trace ID 关联同一要求，不取消上述定位和版本信息，也不改变技术 authority。局部 `REQ-*`/`AC-*` 仅在同一文件且无歧义时可直接使用，跨文件引用保留真实链接。路径或 anchor 迁移时更新活跃引用，保留旧到新映射，要求的 Trace ID 不变。不能以同名条款、浮动分支或作者自报结果替代已固定的输入和实际证据；只核对本次影响的关系，不扩展为全仓 legacy 迁移。
 
 ### 2.2 适用关系与显式 N/A
 
-跨层关系按语义适用：变更产品价值、玩家承诺、产品范围或产品 AC 时，至少一个 typed `product_requirement` upstream ref MUST 为 `required`；纯工程、治理或专业合同变更 MUST 引用 `professional_acceptance`，此时 product requirement MAY 显式标为 `not_applicable`；声称存在交付工作的 obligation MUST NOT 同时把 product 与 professional 上游都标为 `not_applicable`。消费或改变技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时，`trace.system_design.applicability` MUST 为 `required` 并引用准确 `path#fragment`；只有不消费这些技术义务时才可以标为 `not_applicable`。
+跨层关系按语义适用：改变产品价值、玩家承诺、产品范围或产品验收时，引用实际产品要求及其 Trace ID；纯工程、治理或专业合同变更引用真实专业条款及其 Trace ID，说明产品层不适用的理由。消费或改变技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现义务时，链接准确的系统设计条款；尚无设计时如实指出缺口，不用不适用掩盖缺失。没有独立技术义务的简单文案编辑无需新增系统设计或要求 ID。这里使用普通文字和链接，不要求 typed upstream refs 或 `trace.system_design.applicability` 字段。
 
 不适用条款说明具体理由和范围；重要未覆盖部分明确列出，不用空引用冒充验证。
 
@@ -70,7 +74,7 @@
 
 当前基线至少包含适用的提交、版本、配置、数据/快照、消费者和环境。若设计描述 partial、current、target、proven，必须说明它们分别代表文档、实现、测试还是发布事实。
 
-输入改变、消费者切换或基线失效时，不在正文中改写历史结论；通过当前 task 的变更记录和重新绑定处理，具体 eligibility/epoch 规则引用 workflow authority。
+输入改变、消费者切换或基线失效时，不在正文中改写历史结论；在当前 PR 与真实验证记录说明变化及必要的重新验证，具体流程遵循 workflow authority。
 
 ## 4. 边界与结构
 
@@ -104,7 +108,7 @@
 | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |
 
-任务输入合同沿用当前 binding 提供的 input_contracts、固定提交/发布记录和 acceptance references；本文不宣布这些字段已经由新的 parser 或 adapter 执行。`revision` 只承载合同/发布 schema 所规定的版本类型；`source_commit`、`source_head_oid` 与 integration/tested-tree OID 分别记录不可变快照和候选实现，互不替代。不得只写不断变化的 main 路径作为 in-flight contract。
+固定输入使用实际提交、发布记录和验收条款。专业合同的 `revision` 遵守其已有 schema；源码提交、候选 source HEAD 和 integration/tested-tree 分别记录相应快照，不能相互代替。不得仅用不断变化的 main 路径证明本次消费的合同或测试版本。本规范不新增任务 binding、parser 或 adapter 协议。
 
 接口字段、schema、ABI 或协议变化必须说明消费者兼容、版本切换、旧数据/快照处理和验证入口。缺少实现或运行证据时写明未验证范围，不用“设计上支持”替代事实。
 
@@ -146,9 +150,10 @@
 设计维护稳定的“要求—设计—验证方法”关系；任务维护本次实际实现、基线和证据。推荐追踪链：
 
 ~~~
-产品成功标准（适用时）
+产品或专业要求（同一 Trace ID；产品适用时保留成功标准）
   -> 专业域 PRD-ID / 规则条款
   -> 系统设计条款（路径 + fragment）
+  -> Task（引用同一 Trace ID；可直接为 PR）
   -> 实现与实际验证记录
   -> PR + 固定源提交 / 实际测试基线
   -> 测试、评审与交付证据
@@ -160,7 +165,7 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| <真实上游路径#REQ/AC 或专业条款> | <本设计路径#DES 或 fragment> | <本次要证明的具体义务和前置条件> | <准确命令或观察、测试/手册路径与 ID、场景/层、版本/环境> | <Issue evidence、CI、artifact、receipt 或评审定位> | <未覆盖入口、失败路径、平台或阈值> |
+| <Trace refs: 完整 ID；真实上游路径#REQ/AC 或专业条款> | <本设计路径#DES 或 fragment> | <本次要证明的具体义务和前置条件> | <准确命令或观察、测试/手册路径与 ID、场景/层、版本/环境> | <Issue evidence、CI、artifact、receipt 或评审定位> | <未覆盖入口、失败路径、平台或阈值> |
 
 证据必须区分本地运行、fixture/fake-GitHub、hosted CI、真实集成和发布验证。结构检查通过只证明结构；不证明产品正确、专业语义、运行行为、独立审读或 release readiness。
 
@@ -174,7 +179,7 @@
 
 本规范当前交付：专业技术设计的十二段骨架、需求承接表、当前/目标/差距表、接口/质量/验证映射、固定输入和证据边界，以及附录模板。
 
-本规范当前不激活：额外任务准入、审批、状态或完成协议。changed-scope gate 在本次实现完成后适用于新增或实质修改的系统设计和 trace records；未触达的 legacy content 保持在强制迁移范围之外。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
+本规范不增加任务准入、审批、状态或完成协议。全局 ID 及三层关系按跨层规范在新增或实质修改的相关要求范围内维护，未触达的存量不强制迁移。当前通过完整 ID 全文检索、真实链接和人工核对追踪；自动聚合索引与新的唯一性/完整性 checker 尚未实现，工具实现另由独立 Issue 跟踪。既有检查只证明其实际覆盖的结构，不能代替设计、行为或交付证据。
 
 ---
 
@@ -187,6 +192,7 @@
 
 适用范围 / owner / 固定基线：
 关联 PRD、规则、任务和消费者：
+Trace refs、要求声明及本设计条款：
 
 ## 1. 问题、目标与非目标
 ## 2. 上游约束与相关角色
@@ -208,7 +214,7 @@
 
 ~~~text
 受影响条款/表格：
-上游 requirement 或专业 acceptance（path#fragment）：
+Trace refs、上游 requirement 或专业 acceptance（path#fragment）：
 具体 obligation 与适用条件：
 本设计条款（path#anchor）：
 准确 test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则：
