@@ -130,6 +130,15 @@ cat >"$FIXTURE/doc/testing/upstream.md" <<'DOC'
 ## Fixture requirement
 DOC
 printf '%s\n' '# fixture test source' >"$FIXTURE/doc/testing/fixture.test.py"
+cat >"$FIXTURE/doc/testing/design.md" <<'DOC'
+# Testing module overview
+## Architecture
+## Component responsibilities
+## Main flow
+## Data and state flow
+## Topic navigation
+DOC
+
 cat >"$FIXTURE/doc/testing/changed.design.md" <<'DOC'
 # Fixture system design
 
@@ -150,7 +159,7 @@ Fixture local design.
 | [fixture requirement](upstream.md#fixture-req) | [fixture local](#fixture-local) | fixture obligation | [fixture test](fixture.test.py) | fixture evidence | fixture uncovered |
 DOC
 {
-  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md' 'doc/testing/changed.design.md' 'doc/testing/upstream.md'
+  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md' 'doc/testing/changed.design.md' 'doc/testing/upstream.md' 'doc/testing/design.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort
 } >"$FIXTURE/doc/.governance/module-root-md-allowlist.txt"
 cat >"$FIXTURE/doc/.governance/top-level-directory-registry.json" <<'JSON'
@@ -368,8 +377,9 @@ if (
   exit 1
 fi
 grep -Fq 'trace-upstream-missing' "$TMPDIR/full-corpus-system-design.out"
-grep -Fq 'system-design-traceability: full-corpus checked' "$TMPDIR/full-corpus-system-design.out"
+grep -Fq 'system-design-traceability: full-corpus inventoried 2 professional designs; topic-contracts=1 module-overviews=1 module-contracts=0;' "$TMPDIR/full-corpus-system-design.out"
 grep -Fq '::warning::system-design-traceability: trace-upstream-missing' "$TMPDIR/full-corpus-system-design.out"
+grep -Fq 'module-overview: doc/testing/design.md: inventoried' "$TMPDIR/full-corpus-system-design.out"
 grep -Fqx -- '--base' "$TMPDIR/system-design.args"
 grep -Fqx -- "$fixture_base" "$TMPDIR/system-design.args"
 grep -Fqx -- '--head' "$TMPDIR/system-design.args"

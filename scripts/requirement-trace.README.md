@@ -167,6 +167,33 @@ Git-diff or existing-trace-table prefilter. Product, fiction/novel, `.governance
 directories and the existing normative-overlay exclusions are outside that
 professional selection. All remaining professional lifecycle values are
 included. Core inventory covers both product documents and professional designs.
+Module roots `doc/<module>/design.md` are also inventoried separately from topic
+contracts. Every root path is reported. Pure module overviews are checked by core
+content against their architecture/component/flow/navigation duties, without
+imposing topic 2.1/11.1 mapping tables. A root with either standard mapping heading
+adopts the complete traceability contract, even if its table is empty or malformed;
+comment/code examples do not opt in. Counts distinguish topic contracts, module
+overviews, and module contracts. Module roots are also checked incrementally; a
+root that adopted the contract in the comparison base cannot evade it by deleting
+or renaming mapping headings. Current mapping tables also retain the contract.
+
+Product features and professional designs relate many-to-many through applicable
+requirements and Trace IDs, never by matching file counts. The content checkers
+validate recognizable exact upstream/local links, explicit Trace refs against
+linked declarations, and positive product design-state links against the relevant
+allocation relation. Engineering-only relations need an explicit product N/A
+reason and scope. Undesigned or partially covered features remain legitimate;
+checks must not encourage invented designs. Design coverage and implementation
+status are separate, so implementation gaps may remain when design is covered.
+The scoped core checker also compares unchanged product PRDs against the
+merge-base snapshot: newly invalid positive design links or newly missing
+feature-allocation relations fail even if only the target design changed.
+Pre-existing identical relation errors and unrelated legacy status-field gaps
+are not promoted to blockers by that differential check. It is bounded to those
+recognizable relation failures, not arbitrary semantic changes.
+Actual semantic coverage and a complete feature inventory still require human
+review. These content checks do not change the query CLI's non-gating behavior.
+
 These two standalone full-corpus modes default to historical warnings and reject
 `--base`, `--head` or `--worktree` combinations. Input, read, unsafe-path and
 execution errors still fail. The aggregate shell entry first preserves scoped

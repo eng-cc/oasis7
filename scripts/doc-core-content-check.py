@@ -8,6 +8,7 @@ No remote links are fetched and no implementation status is inferred from Git.
 from __future__ import annotations
 import argparse
 import importlib.util
+from functools import lru_cache
 from pathlib import Path
 import re
 import sys
@@ -34,7 +35,7 @@ def finding(path, line, code, message):
     return f'doc-core-content: {code}: {path}:{line}: {message}'
 
 
-def check_core(path, text):
+def check_core(path, text, previous_text=None):
     lines = product.visible_lines(text)
     headings = '\n'.join(line for _, line in lines if re.match(r'^ {0,3}#{1,6}\s', line))
     # Root product PRDs retain their separate, established root contract.
@@ -44,6 +45,10 @@ def check_core(path, text):
         groups = ('文档身份', '问题|目标', '范围|Non-Goals', '体验|决策', '要求', '验收|证据', '未决|取舍|风险')
     elif path.startswith('doc/product/'):
         groups = ('文档身份', '设计命题|问题|目标', '代表性|流程|体验', '机制|设计', '验证|追踪|证据', '决策|取舍|未决|风险')
+    elif system.is_module_design_overview(path) and not system.design_requires_traceability(path, text, previous_text):
+        # Module overview duties come from doc-structure-standard section 3.2;
+        # do not impose topic trace tables or feature cards on navigation.
+        groups = ('架构|结构|设计定位|Architecture|Structure', '组件|职责|分层|Component|Responsibilit', '主链路|流程|Flow|Pipeline', '数据流|状态流|Data Flow|State Flow', '导航|阅读顺序|专题|Navigation|Reading')
     else:
         groups = ('问题|目标|范围', '上游|需求承接', '边界|结构|设计条款', '验证', '决策|未决|风险')
     tailoring = [(number, line) for number, line in lines if re.match(r'^\s*-?\s*结构裁剪[:：]', line)]
@@ -80,7 +85,59 @@ def check_core(path, text):
     return [finding(path, 1, 'missing-core-section', f'缺少核心章节（可使用等价标题或说明结构裁剪）：{group}') for group in groups if not re.search(group, headings, re.I)]
 
 
-def check_status(path, text):
+def check_design_evidence(path, number, block, evidence, root, read_target):
+    """Check exact mechanical relations; semantic completeness remains human review."""
+    errors = []
+    source = root / path
+    identities = system.declared_trace_ids(block)
+    for _, line in product.visible_lines(block):
+        if re.match(r'^\s*(?:-\s*)?Trace refs\s*[:：]', line, re.I):
+            identities.update(match.group(0) for match in system.GLOBAL_TRACE_RE.finditer(line))
+    for _, line in product.visible_lines(block):
+        match = re.match(r'^ {0,3}#{1,6}\s+((?:REQ|SC|AC)-[A-Z0-9_-]+)\b', line, re.I)
+        if match:
+            identities.add(match[1].upper())
+    # A feature may be implemented through its explicitly associated acceptance criteria.
+    source_text = read_target(source) or block
+    _, _, acceptance_relations = product.declared_prd_relations(source_text)
+    identities.update(ac for req, ac in acceptance_relations if req in identities)
+    for raw in system.link_nodes(evidence):
+        details = []
+        target, fragment = system.validate_reference(
+            root, source, raw, path=f'{path}:{number}', code='invalid-design-evidence',
+            errors=details, require_fragment=True, markdown_target=True,
+            follow_symlinks=False, read_target=read_target)
+        if target is None:
+            errors.append(finding(path, number, 'invalid-design-evidence', '; '.join(details)))
+            continue
+        relative = target.relative_to(root).as_posix()
+        if not system.is_system_design_path(relative):
+            errors.append(finding(path, number, 'invalid-design-evidence', f'设计依据须指向专业系统设计条款：{raw}'))
+            continue
+        target_text = read_target(target)
+        table = system.table_after_heading(target_text, system.DEMAND_HEADING)
+        matched = False
+        if table and system.is_demand_table(table):
+            for row_number, cells in table.rows:
+                row_errors = []
+                relation = system.relation_from_demand_row(root, target, row_number, cells, row_errors, False, read_target)
+                if relation is None or row_errors or relation.local_fragment != fragment:
+                    continue
+                upstream = read_target(root / relation.upstream_path)
+                if relation.upstream_path == path and system.fragment_occurrences(block, relation.upstream_fragment) == 1:
+                    matched = True
+                elif upstream is not None and {identity for identity in identities if relation.upstream_path == path or identity.startswith('O7-REQ-')}.intersection(system.requirement_identity(upstream, relation.upstream_fragment)):
+                    matched = True
+        if not matched:
+            errors.append(finding(path, number, 'design-feature-relation-missing', f'设计条款须有指向本功能或其明确 Trace ID 的需求承接关系：{raw}'))
+    return errors
+
+
+def is_anchor_line(line):
+    return re.fullmatch(r"\s*<a\b[^>]*\bid\s*=\s*['\"][^'\"]+['\"][^>]*>\s*(?:</a>)?\s*", line, re.I) is not None
+
+
+def check_status(path, text, *, root=None, read_target=None):
     lines = product.visible_lines(text)
     starts = []
     for i, (_, line) in enumerate(lines):
@@ -95,7 +152,15 @@ def check_status(path, text):
         level_match = re.match(r'^ {0,3}(#{1,6})\s', heading)
         level = len(level_match[1]) if level_match else 0
         end = next((j for j in range(i+1, len(lines)) if (m := re.match(r'^ {0,3}(#{1,6})\s', lines[j][1])) and len(m[1]) <= level), len(lines))
-        block = '\n'.join(line for _, line in lines[i:end])
+        start = i
+        while start > 0 and (not lines[start-1][1].strip() or is_anchor_line(lines[start-1][1])):
+            start -= 1
+        block_end = end
+        if end < len(lines):
+            # An anchor immediately before the next heading belongs to that feature.
+            while block_end > i + 1 and (not lines[block_end-1][1].strip() or is_anchor_line(lines[block_end-1][1])):
+                block_end -= 1
+        block = '\n'.join(line for _, line in lines[start:block_end])
         fields = {}
         for label in STATUS_FIELDS:
             matches = re.findall(r'^\s*(?:-\s*)?'+re.escape(label)+r'[:：]\s*(.*?)\s*$', block, re.M)
@@ -109,8 +174,11 @@ def check_status(path, text):
         for status, evidence, positive in [('系统设计状态','系统设计依据',{'部分覆盖','已覆盖'}),('实现状态','实现与验证依据',{'部分实现','已实现待验证','已验证'})]:
             if fields[status] in positive and not product.markdown_links(fields[evidence]):
                 errors.append(finding(path, number, 'missing-status-evidence', f'{status}必须关联真实证据链接（链接真实性/内容仍需人工核对）'))
+        if fields['系统设计状态'] in {'部分覆盖', '已覆盖'} and root is not None and read_target is not None:
+            errors.extend(check_design_evidence(path, number, block, fields['系统设计依据'], root, read_target))
         if fields['系统设计状态'] == '不适用':
-            if not all(re.search(word + r'[:：]\s*[^；;\s]+', fields['系统设计依据']) for word in ('理由', '范围')):
+            values = [re.search(word + r'[:：]\s*([^；;]+)', fields['系统设计依据']) for word in ('理由', '范围')]
+            if not all(value and value[1].strip(' `。') not in {'无', '-', 'N/A', '待补', '无独立技术义务'} for value in values):
                 errors.append(finding(path, number, 'not-applicable-missing-reason', '设计不适用须说明具体理由和适用范围；需人工核实没有独立技术义务'))
         if fields['系统设计状态'] == '部分覆盖' or fields['实现状态'] == '部分实现':
             if not fields['剩余范围'] or fields['剩余范围'] in {'无','N/A','待补','-'}:
@@ -119,6 +187,33 @@ def check_status(path, text):
             evidence = fields['实现与验证依据'] + fields['核对日期与基线']
             if not re.search(r'\d{4}-\d{2}-\d{2}', fields['核对日期与基线']) or not all(word in evidence for word in ('基线','环境','验收')):
                 errors.append(finding(path, number, 'verified-missing-boundary', '已验证需要核对日期、基线、环境与验收范围'))
+    return errors
+
+
+def newly_broken_status_relations(root, base, head, worktree, selected_paths, read_target):
+    """Unchanged consumers only pay for newly broken relations, never legacy debt."""
+    paths = set(product.run_git(root, 'ls-tree', '-r', '--name-only', head, '--', 'doc/product').splitlines())
+    if worktree:
+        paths.update(product.run_git(root, 'ls-files', '--others', '--exclude-standard', '--', 'doc/product').splitlines())
+    errors = []
+    @lru_cache(maxsize=None)
+    def base_reader(target):
+        return system.committed_target_text(root, base, target)
+    def relation_findings(path, text, reader):
+        if not text:
+            return []
+        lifecycle = product.metadata_value(product.document_identity_text(text), '生命周期')
+        if lifecycle and lifecycle.strip('` ') in {'superseded', 'retired'}:
+            return []
+        return [error for error in check_status(path, text, root=root, read_target=reader)
+                if ': invalid-design-evidence:' in error or ': design-feature-relation-missing:' in error]
+    for path in sorted(paths - selected_paths):
+        if not (path.endswith('.prd.md') or path.endswith('/prd.md')):
+            continue
+        current = read_target(root / path)
+        old = base_reader(root / path)
+        old_errors = set(relation_findings(path, old, base_reader))
+        errors.extend(error for error in relation_findings(path, current, read_target) if error not in old_errors)
     return errors
 
 
@@ -135,8 +230,9 @@ def main():
     if args.full_corpus and (args.base is not None or args.head is not None or args.worktree):
         parser.error('--full-corpus cannot be combined with range/worktree')
     try:
+        previous = {}
         if args.full_corpus:
-            product.run_git(root, 'rev-parse', '--verify', 'HEAD^{commit}')
+            corpus_head = product.run_git(root, 'rev-parse', '--verify', 'HEAD^{commit}').strip()
             # Validate directory traversal before the product collector can read files.
             product_root = root / 'doc/product'
             for parent in (root / 'doc', product_root):
@@ -153,34 +249,50 @@ def main():
             if hard_errors:
                 print('\n'.join(hard_errors))
                 return 2
+            read_target = lambda target: system.full_corpus_read(root, target)
             selected = [(d.path, d.new_text) for d in documents]
             professional = system.collect_full_corpus(root)
             selected.extend(professional)
-            print(f"doc-core-content: full-corpus selected product={len(documents)} professional={len(professional)}; professional designs include all lifecycles")
+            previous.update((path, product.git_text(root, corpus_head, path)) for path, _ in professional if system.is_module_design_overview(path))
+            roots = sum(system.is_module_design_overview(path) for path, _ in professional)
+            root_contracts = sum(system.is_module_design_overview(path) and system.design_requires_traceability(path, text, previous.get(path)) for path, text in professional)
+            print(f"doc-core-content: full-corpus selected product={len(documents)} professional={len(professional)} (topic-contracts={len(professional) - roots} module-overviews={roots - root_contracts} module-contracts={root_contracts}); professional designs include all lifecycles")
         else:
             base = product.resolve_commit(root, args.base, 'base')
             head = product.resolve_commit(root, args.head, 'head')
             documents, _ = product.collect_documents(root, base, head, args.worktree)
             selected = [(d.path, d.new_text) for d in documents]
             checkout = product.run_git(root, 'rev-parse', '--verify', 'HEAD^{commit}').strip()
+            source_base = product.run_git(root, 'merge-base', base, head).strip()
+            @lru_cache(maxsize=None)
+            def read_target(target):
+                relative = target.relative_to(root).as_posix()
+                if args.worktree:
+                    # Validate lexical paths and symlinks before any worktree read.
+                    system.full_corpus_read(root, target)
+                    return system.worktree_file_text(root, checkout, relative)
+                return system.committed_target_text(root, head, target)
             for path in system.changed_system_design_paths(root, base, head, args.worktree):
                 relative = path.relative_to(root).as_posix()
-                text = system.worktree_file_text(root, checkout, relative) if args.worktree else product.git_text(root, head, relative)
+                text = read_target(root / relative)
                 if text is None:
                     raise OSError(f'selected document cannot be read: {relative}')
                 selected.append((relative, text))
+                previous[relative] = product.git_text(root, source_base, relative)
         errors = []
+        if not args.full_corpus:
+            errors.extend(newly_broken_status_relations(root, source_base, head, args.worktree, {path for path, _ in selected}, read_target))
         for path, text in selected:
             lifecycle = product.metadata_value(product.document_identity_text(text), '生命周期')
             if path.startswith('doc/product/') and lifecycle and lifecycle.strip('` ') in {'superseded', 'retired'}:
                 print(f'doc-core-content: skipped active core/status rules: {path}: lifecycle={lifecycle}; identity and successor remain checked by product content checker')
                 continue
-            core_findings = check_core(path, text)
+            core_findings = check_core(path, text, previous.get(path))
             errors.extend(core_findings)
             if not core_findings and any('结构裁剪' in line for _, line in product.visible_lines(text)):
                 print(f'::notice::doc-core-content: {path}: 结构裁剪映射可定位；理由、适用范围和风险仍需人工复核')
             if path.startswith('doc/product/') and (path.endswith('.prd.md') or path.endswith('/prd.md')):
-                errors.extend(check_status(path, text))
+                errors.extend(check_status(path, text, root=root, read_target=read_target))
         print(f'doc-core-content: checked {len(selected)} documents; selected documents scanned in full, including legacy REQ blocks; unrecognized feature prose and evidence truth require human review')
         return report_findings(errors, args.warn_only or args.full_corpus) if errors else 0
     except (OSError, ValueError) as exc:
