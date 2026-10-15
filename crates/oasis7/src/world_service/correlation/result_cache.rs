@@ -79,27 +79,26 @@ pub(super) fn validate_with(
     // Never hold the mutex through decoding or cryptography. Concurrent misses
     // may repeat work; neither in-progress nor failed validation is reusable.
     let result = validate_result_record_uncached(key, value)?;
-    if let Ok(mut state) = cache.lock() {
-        if !state
+    if let Ok(mut state) = cache.lock()
+        && !state
             .entries
             .iter()
             .any(|entry| entry.key == key && entry.input == input)
+    {
+        while state.entries.len() >= MAX_ENTRIES
+            || state.retained_input_bytes.saturating_add(input_bytes) > MAX_RETAINED_INPUT_BYTES
         {
-            while state.entries.len() >= MAX_ENTRIES
-                || state.retained_input_bytes.saturating_add(input_bytes) > MAX_RETAINED_INPUT_BYTES
-            {
-                let Some(entry) = state.entries.pop_front() else {
-                    break;
-                };
-                state.retained_input_bytes -= entry.key.len() + entry.input.len();
-            }
-            state.retained_input_bytes += input_bytes;
-            state.entries.push_back(Entry {
-                key: key.into(),
-                input,
-                result: result.clone(),
-            });
+            let Some(entry) = state.entries.pop_front() else {
+                break;
+            };
+            state.retained_input_bytes -= entry.key.len() + entry.input.len();
         }
+        state.retained_input_bytes += input_bytes;
+        state.entries.push_back(Entry {
+            key: key.into(),
+            input,
+            result: result.clone(),
+        });
     }
     Ok(result)
 }
