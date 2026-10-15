@@ -409,6 +409,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib
 env -u RUSTC_WRAPPER cargo test -p oasis7_net --features runtime_bridge --lib
 ```
 
+<a name="s4b：governance-registry-drill（l4-前置-l4）"></a>
+
 ### S4B：Governance Registry Drill（L4 前置 / L4）
 - 适用场景：
   - 治理 signer rotation / revocation / failover runbook 首轮验证
@@ -663,6 +665,19 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
     - `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`
     - `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md`
     - `doc/world-runtime/evidence/runtime-launcher-profile-consistency-2026-03-11.md`
+
+<a id="storage-profile-retention-density-validation"></a>
+#### S6.5.1：release_default 保留密度配置断言
+
+此步承接存储专题 [SC-7 配置子断言](doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md#storage-case-sc7)，由 storage profile / QA 在实际候选核验。真实测试定义位于 [storage_profile.rs](crates/oasis7_proto/src/storage_profile.rs) 的 `storage_profile::tests::storage_profiles_scale_retention_density`，当前断言 `release_default.execution_hot_head_heights == 64` 且等于 `execution_checkpoint_interval`；64 是当前 source 断言，不把专业合同的 ≤ 条件改为新的固定数值要求。
+
+```bash
+env -u RUSTC_WRAPPER cargo test -p oasis7_proto --lib storage_profile::tests::storage_profiles_scale_retention_density -- --exact --nocapture
+```
+
+- 执行时固定 source/tested tree、命令及环境，保存完整 test 输出与退出码；必须实际运行恰好 1 个所列测试并通过、命令 exit=0。过滤后 0 tests、跳过、ignored 或仅编译成功均不能记为通过。
+- 该步骤只证明当前 profile 配置的局部断言；不证明实际 retention 窗口、exact-height restore、未重复保留同区间 snapshot、2500 heights footprint 或恢复/服务组合。SC-7 原完整目标、R0–R3、required/full 与同候选验证义务继续独立，不由此步骤替代。
+- 本次仅补准确验证方法，未运行上述命令，也未运行节点、GC、恢复或预算验收。driver_storage_profile 的 policy/cache/CAS 集成测试不是该配置 equality 的替代证据。
 
 ### S8：长稳与压力技术套件
 - Viewer 当前 Web 性能 probe（当前活跃入口）：
@@ -1132,6 +1147,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - `viewer-primary-web-entry-regression.sh` 专用于该隔离后端；`viewer-software-safe-step-regression.sh --release-web-fixture` 才启用同一路径，通用 `--url` / stack 参数仍使用调用者的原有运行源。primary/strict 的 `--scenario` 与 release 总入口的 `--web-scenario` 已移除；显式 release fixture 也会拒绝 step 的 debug scenario 参数；不得将它报告为指定 scenario 的验证。启动等待会立即报告 launcher/fixture 退出码和日志。
 - `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
 - `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
+
+<a name="network-tiers-shared-network-evidence"></a>
 
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` 与对应 project/runbook 为准：
