@@ -294,7 +294,7 @@ class Selection(unittest.TestCase):
         }
         graph = (manifests, reverse, {})
         expected = {'baseline', 'rust_baseline', 'workspace_support',
-                    'oasis7_required', 'launcher_web'}
+                    'oasis7_required', 'launcher_web', 'formal_process'}
         with patch.object(selector, 'cargo_graph', return_value=graph):
             for package in ('oasis7_agent_api', 'oasis7_agent_harness'):
                 with self.subTest(package=package):
@@ -332,7 +332,7 @@ class Selection(unittest.TestCase):
                         expected_profiles.add('oasis7_client_api')
                     self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
                     self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
-                                     'workspace_support', 'oasis7_required', 'launcher_web'})
+                                     'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})
                     base = self.git('rev-parse', 'HEAD')
 
     def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
@@ -362,7 +362,7 @@ class Selection(unittest.TestCase):
             plan = selector.select(config, base, head)
         self.assertEqual(plan['scope'], 'targeted')
         self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline', 'workspace_support',
-                                               'oasis7_required', 'launcher_web'})
+                                               'oasis7_required', 'launcher_web', 'formal_process'})
 
 
 if __name__ == '__main__':

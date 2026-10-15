@@ -8,11 +8,12 @@ tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH] [--group NAME] [--support-plan JSON|--support-profiles JSON]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-standard|full-core|full-support] [--repo-root PATH] [--group NAME] [--support-plan JSON|--support-profiles JSON]
 
   commit        Run the lightweight local commit gate used by pre-commit.
   required      Run the explicit heavier required gate for local validation and PR gate.
   full          Run required checks plus all extended feature/integration tests.
+  full-standard Run full checks excluding the independent formal-process suites.
   full-core     Run doc/fmt plus the heaviest `oasis7 --tests` full-tier shard.
   full-support  Run the remaining support crates/viewer shard plus `oasis7 --lib --bins`.
 
@@ -29,7 +30,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$tier" in
-  commit|required|full|full-core|full-support) ;;
+  commit|required|full|full-standard|full-core|full-support) ;;
   *)
     usage
     exit 1
@@ -115,6 +116,10 @@ run_cargo_clippy() {
 
 
 run_oasis7_required_tier_tests() {
+  if [[ -n "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then
+    run python3 "$driver_dir/ci-test-artifacts.py" run --repo-root "$repo_root" --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
+    return
+  fi
   local viewer_manifest viewer_binary
   viewer_manifest="$(mktemp)"
   run_cargo build -p oasis7 --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
@@ -134,9 +139,6 @@ PY_VIEWER
 )"
   rm -f "$viewer_manifest"
   PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features test_tier_required
-  case "$(uname -s)" in
-    Linux|Darwin) run ./scripts/formal-live-local-tests.sh "$repo_root" ;;
-  esac
 }
 
 run_scenario_regression_tests() {
@@ -331,6 +333,7 @@ run_cargo_tooling_contract_tests() {
 run_workflow_governance_baseline_contract_tests() {
   run node ./scripts/cache-permission-probe.test.cjs
   run python3 ./scripts/plan-rust-required-scope.test.py
+  run python3 ./scripts/ci-formal-process.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
   run python3 ./scripts/ci-support-profiles.test.py
@@ -662,7 +665,8 @@ run_group() {
   case "$1" in
     baseline) run_required_gate_checks ;;
     rust_baseline) run_rust_baseline ;;
-    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
+    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; if [[ -z "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields; fi ;;
+    formal_process) run bash "$driver_dir/formal-live-local-tests.sh" "$repo_root" ;;
     consensus) run_oasis7_consensus_clippy; run_oasis7_consensus_tests ;;
     distfs) run_oasis7_distfs_clippy; run_oasis7_distfs_tests ;;
     node) run_oasis7_node_clippy; run_oasis7_node_tests ;;
@@ -699,7 +703,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 --features wasmtime --lib --bins ;;
+    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac

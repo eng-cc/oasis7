@@ -54,23 +54,23 @@
 | attestation proof payload | `proof_schema_version`、`request_id`、`signer_node_id`、`platform`、`evidence_summary`、`attached_files[]`、`payload_sha256` | 节点先打包 proof payload，再以其内容地址作为 `proof_cid` 提交 attestation | `evidence_collected -> packaged -> submitted -> archived` | `payload_sha256` 必须稳定对应 payload 内容；同一 payload 重放不得改变 `proof_cid` | payload 可由任意合规节点生成，但提交 attestation 仍需受信 node identity |
 | 兼容状态机映射 | `module_release_request_id`、`release_id`、`shadow_manifest_hash`、`applied_manifest_hash`、`applied_proposal_id` | `ModuleRelease*` 事件驱动写入发布清单映射 | `requested/shadowed/approved/applied -> draft/finalized/active` | 映射关系 append-only；同 `request_id` 不可重写 | 仅治理 apply 与发布流水写入 |
 - Acceptance Criteria:
-  - AC-1 (PRD-WORLD_RUNTIME-016): 生产路径移除 builtin 模块清单 `include_str!` 作为主真源，改为线上发布清单驱动；本地内置仅允许作为应急 bootstrap 且默认关闭。
-  - AC-2 (PRD-WORLD_RUNTIME-016): 节点在加载模块前必须同时校验 `manifest_hash`、artifact signature、signer trust root，任一失败即拒绝执行。
-  - AC-3 (PRD-WORLD_RUNTIME-017): 生产配置下禁用 `identity_hash_v1` 宽松回退；仅允许 `ed25519`（或后续明确版本）签名方案。
-  - AC-4 (PRD-WORLD_RUNTIME-017): `apply_proposal()` 在生产配置下不得本地生成 finality 证书；必须显式传入外部阈值签名证书。
-  - AC-5 (PRD-WORLD_RUNTIME-018): 新增去中心化发布证据链路，支持提案、复构建证明、阈值签名与证据归档，且可由任意合规节点触发。
-  - AC-6 (PRD-WORLD_RUNTIME-018): CI 在生产流程中不作为发布必要条件，仅承担开发期回归与兼容性校验，不拥有生产发布判定权。
-  - AC-7 (PRD-WORLD_RUNTIME-018): 发布端各节点构建只要求“同平台可复现”；跨平台不同 hash 由 keyed token 表达，最终以签名清单合法性为准。
-  - AC-8 (PRD-WORLD_RUNTIME-017): finality 证书校验必须绑定 `epoch_id + validator_set_hash + stake_root + threshold_bps + min_unique_signers`；仅“签名数量阈值”判定视为不达标。
-  - AC-9 (PRD-WORLD_RUNTIME-017): 安装/升级/回滚/发布应用等生产路径不得调用本地自签 `apply_proposal()`；统一改为外部证书路径。
-  - AC-10 (PRD-WORLD_RUNTIME-018): 现有 `ModuleReleaseRequested/Shadowed/RoleApproved/Applied` 状态机需输出到 release manifest 映射，保证迁移期可回放且可追溯。
-  - AC-11 (PRD-WORLD_RUNTIME-018): 从主 CI 移除生产发布写入与激活职责（含默认模块发布写入）；主 CI 只保留 `--check` 类回归校验。
-  - AC-12 (PRD-WORLD_RUNTIME-018): 为阈值验签与发布收敛提供可执行基准：`stake/epoch` 校验耗时与“2 epoch 内收敛”均需有固定测试入口（`scripts/oasis7-runtime-finality-baseline.sh`）与归档产物（`summary.md`/`summary.json`）。
-  - AC-13 (PRD-WORLD_RUNTIME-018): `proposal -> attestation` 证明落盘必须包含 `signer_node_id/platform/build_manifest_hash/source_hash/wasm_hash/proof_cid`，并强校验 `wasm_hash == release request manifest.wasm_hash`，冲突重复证明拒绝。
-  - AC-14 (PRD-WORLD_RUNTIME-018): `ModuleReleaseApply` 必须按当前 epoch 快照 signer 集做 attestation 阈值聚合，且仅快照内 signer 计入阈值；阈值不足不得激活 release manifest。
-  - AC-15 (PRD-WORLD_RUNTIME-018): 发布运行手册必须定义并可执行分诊“证明冲突、attestation 阈值不足、manifest 不可达/回滚/漂移”三类阻断场景，并明确主 CI 仅做开发回归与对账，不承担生产发布写入/激活。
-  - AC-16 (PRD-WORLD_RUNTIME-018): `oasis7_chain_runtime` 必须提供 node-side `ModuleReleaseSubmitAttestation` 提交入口，使发布节点能够直接提交 attestation action 到共识队列，而不是依赖 CI 或手工改状态。
-  - AC-17 (PRD-WORLD_RUNTIME-018): proof payload 打包脚本必须能输出可归档目录与稳定 `proof_cid`，并把 `request_id/signer_node_id/platform/build_manifest_hash/source_hash/wasm_hash/builder_image_digest/container_platform/canonicalizer_version` 与 release evidence 摘要绑定到同一 payload。
+  - <a id="ac-1"></a>AC-1 (PRD-WORLD_RUNTIME-016): 生产路径移除 builtin 模块清单 `include_str!` 作为主真源，改为线上发布清单驱动；本地内置仅允许作为应急 bootstrap 且默认关闭。
+  - <a id="ac-2"></a>AC-2 (PRD-WORLD_RUNTIME-016): 节点在加载模块前必须同时校验 `manifest_hash`、artifact signature、signer trust root，任一失败即拒绝执行。
+  - <a id="ac-3"></a>AC-3 (PRD-WORLD_RUNTIME-017): 生产配置下禁用 `identity_hash_v1` 宽松回退；仅允许 `ed25519`（或后续明确版本）签名方案。
+  - <a id="ac-4"></a>AC-4 (PRD-WORLD_RUNTIME-017): `apply_proposal()` 在生产配置下不得本地生成 finality 证书；必须显式传入外部阈值签名证书。
+  - <a id="ac-5"></a>AC-5 (PRD-WORLD_RUNTIME-018): 新增去中心化发布证据链路，支持提案、复构建证明、阈值签名与证据归档，且可由任意合规节点触发。
+  - <a id="ac-6"></a>AC-6 (PRD-WORLD_RUNTIME-018): CI 在生产流程中不作为发布必要条件，仅承担开发期回归与兼容性校验，不拥有生产发布判定权。
+  - <a id="ac-7"></a>AC-7 (PRD-WORLD_RUNTIME-018): 发布端各节点构建只要求“同平台可复现”；跨平台不同 hash 由 keyed token 表达，最终以签名清单合法性为准。
+  - <a id="ac-8"></a>AC-8 (PRD-WORLD_RUNTIME-017): finality 证书校验必须绑定 `epoch_id + validator_set_hash + stake_root + threshold_bps + min_unique_signers`；仅“签名数量阈值”判定视为不达标。
+  - <a id="ac-9"></a>AC-9 (PRD-WORLD_RUNTIME-017): 安装/升级/回滚/发布应用等生产路径不得调用本地自签 `apply_proposal()`；统一改为外部证书路径。
+  - <a id="ac-10"></a>AC-10 (PRD-WORLD_RUNTIME-018): 现有 `ModuleReleaseRequested/Shadowed/RoleApproved/Applied` 状态机需输出到 release manifest 映射，保证迁移期可回放且可追溯。
+  - <a id="ac-11"></a>AC-11 (PRD-WORLD_RUNTIME-018): 从主 CI 移除生产发布写入与激活职责（含默认模块发布写入）；主 CI 只保留 `--check` 类回归校验。
+  - <a id="ac-12"></a>AC-12 (PRD-WORLD_RUNTIME-018): 为阈值验签与发布收敛提供可执行基准：`stake/epoch` 校验耗时与“2 epoch 内收敛”均需有固定测试入口（`scripts/oasis7-runtime-finality-baseline.sh`）与归档产物（`summary.md`/`summary.json`）。
+  - <a id="ac-13"></a>AC-13 (PRD-WORLD_RUNTIME-018): `proposal -> attestation` 证明落盘必须包含 `signer_node_id/platform/build_manifest_hash/source_hash/wasm_hash/proof_cid`，并强校验 `wasm_hash == release request manifest.wasm_hash`，冲突重复证明拒绝。
+  - <a id="ac-14"></a>AC-14 (PRD-WORLD_RUNTIME-018): `ModuleReleaseApply` 必须按当前 epoch 快照 signer 集做 attestation 阈值聚合，且仅快照内 signer 计入阈值；阈值不足不得激活 release manifest。
+  - <a id="ac-15"></a>AC-15 (PRD-WORLD_RUNTIME-018): 发布运行手册必须定义并可执行分诊“证明冲突、attestation 阈值不足、manifest 不可达/回滚/漂移”三类阻断场景，并明确主 CI 仅做开发回归与对账，不承担生产发布写入/激活。
+  - <a id="ac-16"></a>AC-16 (PRD-WORLD_RUNTIME-018): `oasis7_chain_runtime` 必须提供 node-side `ModuleReleaseSubmitAttestation` 提交入口，使发布节点能够直接提交 attestation action 到共识队列，而不是依赖 CI 或手工改状态。
+  - <a id="ac-17"></a>AC-17 (PRD-WORLD_RUNTIME-018): proof payload 打包脚本必须能输出可归档目录与稳定 `proof_cid`，并把 `request_id/signer_node_id/platform/build_manifest_hash/source_hash/wasm_hash/builder_image_digest/container_platform/canonicalizer_version` 与 release evidence 摘要绑定到同一 payload。
 - Non-Goals:
   - 不在本期引入全新加密算法（继续以 ed25519 为主）。
   - 不在本期重构模块业务 ABI 或 gameplay 逻辑。
@@ -183,3 +183,46 @@
 ### SC-9 / DC-5 组合证明保持独立
 
 [GWSC actual DC5 receiver](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-attachment) 必须消费 execution+state-sync 同 candidate/world/canonical window 的真实附件，schema valid不等于pass。SC-9 两 outage classes × stage_finish/transit/buffer_admission/terminal_settlement 八完整 cells、fixed baseline identities/quantities/state/window/lease/receipt/W/progression/next action/recheck 均保留；required deterministic matrix + active LLM/provider pure API parity，full真实localstack/provider external headed desktop+narrow S6/Playwright/screenshots/console + provider Agent parity（decision source/backend/contract/transport），provider_local_mock不能替代。只有 gameplay canonical interruption可reset unfinished W一次；read-plane outage仅stale/unknown/reconcile，不能改世界/W。Release/receipt目标合同只提供依赖，不把genericWASM场景当这些cells完成证据。
+
+## 既有发布结果的产品接收与身份定位
+
+本节只将既有结果精确接入权威世界基础设施根；原 SC-1..7、AC-1..17、PRD-WORLD_RUNTIME-016..018、NFR（两条原 NFR-OMR-6）、DEC、TASK、阈值、profile 适用条件与上述全部原文不变。产品原文声明唯一身份，本专业条款与 AC 只 refs；source、字段、算法、签名、加载策略、测试参数和验收仍由本专业及其引用的 P2P/runtime/QA authority 拥有。文档接收不表示实现、正式环境或公开能力通过。
+
+<a id="sr2-product-source-and-trust"></a>
+### 生产来源、身份与外部授权的有限产品接收
+
+- Trace refs: O7-REQ-7a3866ed-cd66-48ea-9cc7-bb793575c957；[生产模块来源受治理清单约束](../../product/world-infrastructure/prd.md#req-infra-release-source)；原 SC-3、AC-1、PRD-WORLD_RUNTIME-016、DEC-OMR-001，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-d01cf80e-1172-4963-8bc0-877dc9de8e00；[生产模块身份与签名合法性](../../product/world-infrastructure/prd.md#req-infra-release-identity)；原 SC-1、AC-2/3、NFR-OMR-4、DEC-OMR-002，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-1440a1a4-3240-4644-8ada-bf9a34771465；[发布批准必须来自合法外部证书](../../product/world-infrastructure/prd.md#req-infra-release-certificate)；原 SC-2、AC-4/8/9、PRD-WORLD_RUNTIME-017、DEC-OMR-003，独立结果与条件以原文为准。
+
+该组不以 action authorization 关闭 materializer source fallback gap；原 snapshot/threshold/minsigners/生产禁自签和默认 bootstrap 限制全部保留。exact artifact 可验证性只是 DWE-004 的局部依赖，不由 DWE 身份代签本组生产来源/外部授权结果。
+
+<a id="sr2-product-node-release"></a>
+### 节点发布、平台构建与证据的有限产品接收
+
+- Trace refs: O7-REQ-b89862c6-6316-4511-afdc-1e2d1e9a5e8e；[发布证明聚合满足当前授权门槛](../../product/world-infrastructure/prd.md#req-infra-release-attestation-authorization)；原 AC-14，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-a5a2d539-b2c8-42dd-83e0-a6108b5ab288；[发布阻断故障可分诊](../../product/world-infrastructure/prd.md#req-infra-release-release-triage)；原 AC-15、Technical Specifications 原 Edge Cases / S11，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-c9c94faf-43bb-474c-8cf9-7ed1441e5494；[生产发布不依赖 CI](../../product/world-infrastructure/prd.md#req-infra-release-ci)；原 SC-4/6、AC-6/11、NFR-OMR-5、DEC-OMR-004，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-c1427344-798f-47f1-9dab-790fd3693cf7；[合规节点可触发并提交发布证据](../../product/world-infrastructure/prd.md#req-infra-release-participation)；原 SC-4/7、AC-5/16、PRD-WORLD_RUNTIME-018，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-f25099a9-5f30-466e-939a-48ac57cbead2；[发布构建按平台可复现](../../product/world-infrastructure/prd.md#req-infra-release-reproducibility)；原 SC-5、AC-7，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-80d9506a-b1e5-4ac2-8d68-eb73ecfccd51；[发布证据完整可追溯与可回放](../../product/world-infrastructure/prd.md#req-infra-release-evidence)；原 SC-7、AC-5/10/13/17、AC-14/15 的证明绑定与审计子范围、NFR-OMR-2，独立结果与条件以原文为准。
+
+任意合规节点触发与 CI 非必要分别判定；平台可复现和证据完整也不互相代签。request/proof/hash/body、字段绑定、signer/platform 去重/冲突及归档是实现手段，仍须证明它们支持的上述结果；node ACK 不证明 finality/activation。AC-14 的当前 epoch signer 聚合仍须原阈值证据；AC-15 的三类 runbook 阻断场景保持独立。
+
+<a id="sr2-product-release-quality"></a>
+### 既有质量目标与验证机制的有限产品接收
+
+- Trace refs: O7-REQ-02b10123-7422-4509-9d04-ea43444890c6；[信任根版本在既有窗口收敛](../../product/world-infrastructure/prd.md#req-infra-release-convergence)；原 NFR-OMR-3、AC-12，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-c2a3ca44-d9b3-4ae0-8245-d8f496f38673；[缓存命中时模块验证耗时](../../product/world-infrastructure/prd.md#req-infra-release-module-latency)；原 NFR-OMR-1、AC-12，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-8d0fe4a1-7c99-42d2-8b5d-7c4990591993；[既有快照规模下证书验证耗时](../../product/world-infrastructure/prd.md#req-infra-release-certificate-latency)；原 NFR-OMR-6（finality latency）、AC-12，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-0ed26c5c-b1a1-4e51-a462-56bd4712e295；[节点证明提交结果可分诊](../../product/world-infrastructure/prd.md#req-infra-release-diagnostics)；原 NFR-OMR-6（submit 响应）、AC-16，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-d01cf80e-1172-4963-8bc0-877dc9de8e00；[生产模块身份与签名合法性](../../product/world-infrastructure/prd.md#req-infra-release-identity)；原 SC-1、AC-2/3、NFR-OMR-4、DEC-OMR-002，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-c9c94faf-43bb-474c-8cf9-7ed1441e5494；[生产发布不依赖 CI](../../product/world-infrastructure/prd.md#req-infra-release-ci)；原 SC-4/6、AC-6/11、NFR-OMR-5、DEC-OMR-004，独立结果与条件以原文为准。
+- Trace refs: O7-REQ-80d9506a-b1e5-4ac2-8d68-eb73ecfccd51；[发布证据完整可追溯与可回放](../../product/world-infrastructure/prd.md#req-infra-release-evidence)；原 SC-7、AC-5/10/13/17、AC-14/15 的证明绑定与审计子范围、NFR-OMR-2，独立结果与条件以原文为准。
+
+原 AC-12 与 NFR-OMR-7 的固定脚本、命令、日志、summary.md/summary.json 和可重复测量是验证方法，仍为必需的专业验收，不能因为方法不新建产品功能而省略。两条原 NFR-OMR-6 按 submit 响应与 finality latency 分别保留；100 signer 热缓存/本地缓存、200ms/50ms、2epoch、trace100%、forged0、CI-off 都不得互相代签。上述 root refs 仅接收各独立结果，不将整组归为 product N/A。
+
+<a id="sr2-product-version-dependency"></a>
+### 版本激活与迁移的有限产品依赖
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的原 canonical block governing version、inclusive activation boundary、原 manifest/artifact/schedule 历史 replay 与缺证 fail-closed 依赖，经 [activation authority](module-lifecycle.md#sr2-activation-contract) 与 [migration publication](module-lifecycle.md#sr2-migration-publication) 承接。本组仍是原 AC-2/8/9/10 的 target dependency，不重发 DWE 身份，不涵盖 CI/任意节点可用性或完整 BFT。schema/corehash、all-object staging 和单一 durable commit 是履行既有原子激活/失败无 partial publication 的专业手段，不新建产品行为；该结果与原 ACT-01/MIG-01..03 验收不被豁免。所有 target/unimplemented 与 partial 状态仍有效。
