@@ -23,6 +23,8 @@ import { AgentActivitySurface } from "./agent_activity_surface.jsx"; import { Ho
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { ControlProofPanel } from "./control_proof_panel.jsx";
+import { PasskeyAccountSurface } from "./viewer_passkey_account_surface.jsx";
+import { keepFocusInDialog } from "./viewer_modal_focus.js";
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
@@ -611,6 +613,12 @@ function CalloutCard(props) {
 }
 
 function HostedLoginForm(props) {
+  return <PasskeyAccountSurface onJoinWorld={(account, options) => core.joinHostedAccountWorld(account, options)} onV2Detected={() => core.disableLegacyHostedSession()}
+    onSessionInvalidated={() => core.invalidateHostedAccountSession()}
+    legacyForm={() => <LegacyHostedLoginForm {...props} />} />;
+}
+
+function LegacyHostedLoginForm(props) {
   const locale = () => props.locale ?? uiLocale();
   const clearHostedLoginError = () => {
     if (core.state.hostedLogin.error != null || core.state.hostedLogin.retryAfterSeconds != null) {
@@ -720,9 +728,11 @@ function HostedLoginGate() {
   const locale = () => uiLocale();
   let dialogRef;
   let previousFocus = null;
+  let releaseFocusGuard = () => {};
 
   onMount(() => {
     previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    releaseFocusGuard = keepFocusInDialog(() => dialogRef);
     queueMicrotask(() => {
       const firstFocusable = dialogRef ? focusableElements(dialogRef)[0] : null;
       (firstFocusable || dialogRef)?.focus();
@@ -730,6 +740,7 @@ function HostedLoginGate() {
   });
 
   onCleanup(() => {
+    releaseFocusGuard();
     if (previousFocus && document.contains(previousFocus)) {
       previousFocus.focus();
     }
@@ -773,7 +784,7 @@ function HostedLoginGate() {
             <div>
               <div class="panel__eyebrow">{tr(locale(), "标准用户流程", "Standard User Flow")}</div>
               <h1 id="hosted-login-gate-title" class="auth-gate__title">
-                {tr(locale(), "登录邮箱后进入游戏", "Sign In With Email")}
+                {tr(locale(), "登录后进入游戏", "Sign In to Play")}
               </h1>
             </div>
             <Badge class="badge badge--warn">auth=missing</Badge>
@@ -855,13 +866,13 @@ function ViewerEntryMenu() {
       <div class="entry-menu__panel stack">
         <div>
           <div class="panel__title panel__title--spaced">
-            {tr(locale(), "语言与观察器入口", "Language and Viewer Entry")}
+            {tr(locale(), "语言与账号入口", "Language and Account Entry")}
           </div>
           <div class="feedback-detail">
             {tr(
               locale(),
-              "主玩法继续留在当前页面；这里只保留语言切换。",
-              "Primary gameplay stays on this page. This menu only keeps locale switching.",
+              "主玩法继续留在当前页面；在这里切换语言或管理账号安全。",
+              "Primary gameplay stays on this page. Change language or manage account security here.",
             )}
           </div>
         </div>
@@ -885,6 +896,12 @@ function ViewerEntryMenu() {
           <Badge>{`locale=${localeCode(locale())}`}</Badge>
         </div>
         <div class="feedback-detail">{viewerEntryUrls().softwareSafeUrl}</div>
+        <Show when={isHostedPublicJoinDeploymentMode(core.state.hostedAccess?.deployment_mode) && core.state.auth.available}>
+          <details aria-label="账号与安全">
+            <summary>{tr(locale(), "账号与安全", "Account and Security")}</summary>
+            <div style={{ "max-height": "60vh", overflow: "auto" }}><HostedLoginForm locale={locale()} /></div>
+          </details>
+        </Show>
       </div>
     </details>
   );

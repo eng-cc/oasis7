@@ -15,6 +15,8 @@
 
 本文只组合玩家从了解产品到进入、安装、验证受支持技术预览的路径。根 `README.md` 是公开当前状态与 claim envelope 的唯一权威；Viewer、Launcher、发行资产与访问模式的实现合同由 `world-simulator` 专业域拥有。
 
+账号接入组合依赖[免邮箱注册与多凭证账号合同](../../p2p/blockchain/hosted-public-join-key-based-onboarding.prd.md)：推荐通行密钥，邮箱保持可选；账号创建、世界准入与运行时绑定分别验收。实现候选与虚拟认证器证据不自动升级公开就绪结论。
+
 ### 活跃产品专题
 
 - [`访问模式与发行就绪`](access-modes-and-release-readiness.prd.md)：`viewer` / `pure_api` 模式边界、能力等价、失败恢复、统一候选门禁与公开 claim 升阶。
