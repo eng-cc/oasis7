@@ -201,6 +201,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
 
+<a id="testing-default-selection-tree"></a>
+
 ## 默认测试选择树（影响面覆盖 + 最小充分测试）
 
 先按改动影响面选择最小测试集，再按风险升级；不要把 `required`、`full` 或 release gate 当作“无脑全跑”的替代品。每次结论至少写清：本次影响面、已跑最小测试集、证据路径、未覆盖/残余风险。
@@ -509,6 +511,8 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
   - raster、真实浏览器与性能证据不由本套件替代，按 S6 的 JS-browser / JS-full 升级。
 
 <a id="testing-s6-qa-receiver"></a>
+<a id="testing-web-ui-closed-loop-smoke"></a>
+
 ### S6：Web UI 闭环 smoke 套件（L4A）
 - JS-required（结构/反馈/Vitest/freshness/build）：触达 `crates/oasis7_viewer/**` 的 source、生成物边界或 bundle 时，执行 `npm --prefix crates/oasis7_viewer run test:frontend-structure`、`npm --prefix crates/oasis7_viewer run test:feedback-contract`、`npm --prefix crates/oasis7_viewer run test:ui`、`./scripts/agent-browser-viewer-dist-freshness-test.sh` 与 `./scripts/build-viewer-software-safe.sh`。
 - JS-browser（真实浏览器）：WASM bundle ready 后，以真实 browser 验证关键交互、console、desktop 与 narrow viewport；任何 player-visible 改动必须通过此层，不能只以 JS-required 替代。
@@ -704,6 +708,8 @@ npm --prefix crates/oasis7_viewer run build:viewer:visual-test
   - `scripts/ci-tests.sh full` 已接入 `./scripts/llm-baseline-fixture-smoke.sh`；
   - 压测结果需保留 CSV/summary/log 产物。
 
+<a id="testing-p2p-storage-consensus-long-running"></a>
+
 ### S9：P2P/存储/共识在线长跑技术套件
 - 当前状态（2026-02-28）：`scripts/p2p-longrun-soak.sh` 已恢复为可执行脚本，底座为多进程 `oasis7_chain_runtime`。
 - 时间语义说明：PoS 出块/提案节拍由 `--pos-slot-duration-ms` 与 `--pos-ticks-per-slot` 锚定；`--node-tick-ms` 仅表示 worker 轮询/回退间隔。
@@ -857,6 +863,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
   - manifest 仍是 example/template/placeholder/private-only endpoint；
   - 非同窗口 real-env 证据；
   - 通过手工复制数据目录获得的同步假象。
+
+<a id="testing-p2p-mixed-topology-matrix"></a>
 
 ### S9B：P2P Mixed-Topology Matrix（P2PARCH-6）
 - 当前状态（2026-04-07）：`scripts/p2p-mixed-topology-matrix.sh` 已把 `P2PARCH-6` 收口成一个可执行矩阵，区分 `exact` 与 `proxy` 两类覆盖，并把 shared-window / dedicated-lab / pass-uplift 外部证据与 blocker 语义写进 `summary.json`。
@@ -1152,6 +1160,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - Boundary:
   - `testing-manual.md` is an execution index only; do not duplicate current network-tier verdicts here.
   - `public_testnet_rehearsal` history may explain historical technical benchmark context, but is not L5 evidence; current public readiness belongs to formal `public_testnet` readiness docs.
+
+<a id="testing-decentralized-module-release-runtime-alerts"></a>
 
 ### S11：去中心化模块发布运行与告警（world-runtime）
 - 适用范围：线上模块发布（`proposal -> attestation -> apply`）与 builtin 在线清单加载故障分诊。
