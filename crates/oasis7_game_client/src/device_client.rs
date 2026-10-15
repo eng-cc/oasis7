@@ -79,7 +79,6 @@ impl Client {
             genesis_digest: config.genesis_digest,
         };
         let remote = RemoteWorldServiceClient::new(WorldServiceClientConfig {
-            formal_read_trust: None,
             endpoint: config.endpoint,
             trusted_service_public_key: config.service_public_key,
             expected_world: world.clone(),
