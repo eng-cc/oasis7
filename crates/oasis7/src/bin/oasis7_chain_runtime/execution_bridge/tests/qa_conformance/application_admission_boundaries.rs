@@ -29,6 +29,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let independent_client = RemoteWorldServiceClient::new(independent_config).unwrap();
     let canonical = independent_client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: "agent:agent-a".into(),

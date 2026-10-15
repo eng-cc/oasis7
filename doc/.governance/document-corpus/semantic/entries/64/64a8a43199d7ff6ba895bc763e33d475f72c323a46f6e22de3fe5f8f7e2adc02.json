@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "30379f84a050e37c128190838bfd662e517ce4e5e1b6b583cfa316e1f1905392",
+    "content_sha256": "c40e9e939817071cb843badfb4488a0e624978e55348a502da47b99a5c7ff836",
     "current_authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
     "decision_owner": "blockchain_ops_engineer",
     "disposition": "retain_historical_benchmark",

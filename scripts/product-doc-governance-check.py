@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from doc_content_warnings import report_findings
 from dataclasses import dataclass
 import html
 from pathlib import Path
@@ -356,7 +357,7 @@ def check(root: Path) -> list[str]:
         for label, expected in expected_metadata.items():
             actual = metadata(text, label)
             if actual != expected:
-                fail(errors, "metadata-contract", f"{module.path}: {label} expected {expected!r}, got {actual!r}")
+                fail(errors, "metadata-content" if label in {"生命周期", "Owner role"} else "metadata-contract", f"{module.path}: {label} expected {expected!r}, got {actual!r}")
         prd_id = metadata(text, "Product PRD-ID")
         if prd_id:
             if prd_id in seen_ids:
@@ -424,7 +425,9 @@ def check(root: Path) -> list[str]:
             if not owner.strip() or not prd_refs:
                 fail(errors, "traceability-owner-prd", f"{module.path}: {sc_id}")
             row_paths = re.findall(r"`([^`]+\.md)`", authority_docs)
-            if not row_paths or any(not (root / row_path).is_file() for row_path in row_paths):
+            if not row_paths:
+                fail(errors, "traceability-authority-format", f"{module.path}: {sc_id}")
+            elif any(not (root / row_path).is_file() for row_path in row_paths):
                 fail(errors, "traceability-authority", f"{module.path}: {sc_id}")
             else:
                 authority_texts = [(root / row_path).read_text(encoding="utf-8") for row_path in row_paths]
@@ -495,14 +498,83 @@ def check(root: Path) -> list[str]:
     return errors
 
 
+# Explicit allowlist: new findings fail closed until classified. Do not suppress
+# read exceptions, missing files, root identity, or module topology contracts.
+CONTENT_FINDING_CODES = frozenset({
+    "metadata-content", "metadata-last-reviewed", "section-contract", "invalid-fragment",
+    "lifecycle-contract", "lifecycle-successor", "topic-lifecycle",
+    "traceability-contract", "traceability-authority-format", "traceability-owner-prd", "traceability-evidence-tier",
+    "traceability-prd-resolution", "authority-backlink", "topic-pair-backlink",
+})
+
+
+def is_content_finding(error: str) -> bool:
+    return error.split(": ", 2)[1] in CONTENT_FINDING_CODES
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--warn-only", action="store_true", help="Warn for content conventions; identity/topology/integrity errors still fail")
+    parser.add_argument("--enforce-changed", action="store_true", help="Block content findings only for substantively changed product documents")
+    parser.add_argument("--base")
+    parser.add_argument("--head")
+    parser.add_argument("--worktree", action="store_true")
     args = parser.parse_args()
+    if args.enforce_changed and args.warn_only:
+        parser.error("--enforce-changed cannot be combined with --warn-only")
+    if not args.enforce_changed and (args.base or args.head or args.worktree):
+        parser.error("range arguments require --enforce-changed")
+    changed = set()
+    if args.enforce_changed:
+        # Reuse the same Git range and normalization as product content checks.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("overlay_product_content", Path(__file__).with_name("product-doc-content-check.py"))
+        content = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = content
+        spec.loader.exec_module(content)
+        root = args.repo_root.resolve()
+        try:
+            base = content.resolve_commit(root, args.base, "base")
+            head = content.resolve_commit(root, args.head, "head")
+            paths, worktree_paths = content.diff_paths(root, base, head, args.worktree, scope="doc")
+            source_base = content.run_git(root, "merge-base", base, head).strip()
+            for path, status in paths.items():
+                if status.startswith("D") or not path.endswith(".md"):
+                    continue
+                old = content.git_text(root, source_base, path)
+                new = content.current_text(root, head, path, path in worktree_paths)
+                if new is None:
+                    raise OSError(f"selected document cannot be read: {path}")
+                if status.startswith(("A", "R", "C", "??")) or content.normalized_for_change(old) != content.normalized_for_change(new):
+                    changed.add(path)
+        except (ValueError, OSError) as exc:
+            print(f"product-doc-governance: error: {exc}")
+            return 2
     errors = check(args.repo_root.resolve())
     if errors:
-        print("\n".join(errors))
-        return 1
+        advisory = [error for error in errors if is_content_finding(error)]
+        hard = [error for error in errors if not is_content_finding(error)]
+        blocking = []
+        warnings = []
+        for error in advisory:
+            # Findings carry an exact repository path; never classify by PR date.
+            source = re.search(r"(?<![\w/.-])(doc/[^\s:]+\.md)(?=[:\s]|$)", error)
+            touched = bool(source and source.group(1) in changed)
+            if args.enforce_changed:
+                if source is None:
+                    hard.append(f"product-doc-governance: unable-to-classify-source: {error}")
+                else:
+                    (blocking if touched else warnings).append(error)
+            elif args.warn_only:
+                warnings.append(error)
+            else:
+                blocking.append(error)
+        if warnings:
+            report_findings(warnings, True)
+        if hard or blocking:
+            print("\n".join(hard + blocking))
+        return 1 if hard or blocking else 0
     print("product-doc-governance: OK")
     return 0
 

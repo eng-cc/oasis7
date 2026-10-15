@@ -33,10 +33,10 @@
 
 | 上游要求 | 承接与分配 | 本设计条款 | 主责与消费方 | 边界 |
 | --- | --- | --- | --- | --- |
-| [SC-2/4：稳定用户、项目与审计链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 在外部副作用前持久保存恢复身份，未知结果沿用原身份 | [首次绑定恢复](#bridge-identity-recovery) | runtime_engineer；bridge-core/store/provider | 保留身份不等于映射就绪，不假设跨服务事务 |
-| [SC-2：每笔入账的完整对账链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 完整消费相关分页，去重并区分未完成扫描 | [扫描完整性](#bridge-scan-completeness) | runtime_engineer；chain-watcher/Explorer | 不用头页计数证明完整，不启用账号池并发复用 |
-| [SC-2：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 串行提交或 fencing 保护文件、内存和人工终态 | [有效处理权](#bridge-reconcile-ownership) | runtime_engineer；reconcile/store/operator | 并发处理权不代替跨重启恢复 |
-| [SC-1/2：topup 与 query 验证链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 持久成功事实与尝试分离，receipt 驱动 verification-only | [持久业务阶段](#bridge-recovery-state) | runtime_engineer；ledger/reconcile/provider | 未知外部结果按原订单核对，不无条件跳过 topup |
+| [PRD-P2P-TBRIDGE-002：稳定身份](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | 在外部副作用前持久保存恢复身份，未知结果沿用原身份 | [首次绑定恢复](#bridge-identity-recovery) | runtime_engineer；bridge-core/store/provider | 保留身份不等于映射就绪，不假设跨服务事务 |
+| [PRD-P2P-TBRIDGE-002：完整发现与审计](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | 完整消费相关分页，去重并区分未完成扫描 | [扫描完整性](#bridge-scan-completeness) | runtime_engineer；chain-watcher/Explorer | 不用头页计数证明完整，不启用账号池并发复用 |
+| [PRD-P2P-TBRIDGE-002：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | 串行提交或 fencing 保护文件、内存和人工终态 | [有效处理权](#bridge-reconcile-ownership) | runtime_engineer；reconcile/store/operator | 并发处理权不代替跨重启恢复 |
+| [PRD-P2P-TBRIDGE-004：异常与验证快照](mainchain-token-newapi-quota-bridge.prd.md#tbridge-004) | 持久成功事实与尝试分离，receipt 驱动 verification-only | [持久业务阶段](#bridge-recovery-state) | runtime_engineer；ledger/reconcile/provider | 未知外部结果按原订单核对，不无条件跳过 topup |
 
 ## 3. 最小数据模型
 - `bridge_user_binding`
@@ -152,6 +152,8 @@
 <a id="bridge-recovery-state"></a>
 ### 4.1 持久业务阶段与处理尝试分离
 
+主责：runtime_engineer；承接 [PRD-P2P-TBRIDGE-004](mainchain-token-newapi-quota-bridge.prd.md#tbridge-004)，相关条款 [AC-4](mainchain-token-newapi-quota-bridge.prd.md#tbridge-ac-4)、[查询成功判定 AC-6](mainchain-token-newapi-quota-bridge.prd.md#tbridge-ac-6)。产品适用性：N/A；reason=本项仅细化 operator-managed 单向服务额度桥的内部恢复，不定义玩家或 Agent 模型可用性承诺；scope=成功 topup 事实与后续查询恢复。不覆盖公开兑换、custody、账号池复用或供给。
+
 本节细化配对 PRD 的 PRD-P2P-TBRIDGE-002/004、Flow-TBRIDGE-005 和 AC-4/6，是目标恢复合同，不表示四项实现已交付。业务阶段记录已经成立的事实；一次 reconcile 的尝试、失败和临时处理权不能覆盖这些事实。
 
 | 已有持久事实 | 允许的后续处理 | 禁止的退回 |
@@ -206,12 +208,16 @@
 <a id="bridge-identity-recovery"></a>
 ### 6.1 首次绑定的不确定结果
 
+主责：runtime_engineer；承接 [PRD-P2P-TBRIDGE-002](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002)，相关条款 [SC-4](mainchain-token-newapi-quota-bridge.prd.md#tbridge-sc-4)。产品适用性：N/A；reason=本项仅细化 operator-managed 单向服务额度桥的内部恢复，不定义玩家或 Agent 模型可用性承诺；scope=首次 binding/project 不确定结果恢复。不覆盖公开兑换、custody、账号池复用或供给。
+
 在第一次可能产生外部副作用的调用之前，持久保存恢复所需的本地 binding/project 身份和由其派生的稳定 external ID。持久保存失败时不能先调用远端；远端创建成功但回复丢失、无法解码或本地结果落盘失败时，重启/重试沿用同一身份进行查询或幂等 upsert。
 
 只有能够确定未产生外部副作用、且没有其他业务引用的失败，才能按显式清理规则删除本地预留记录；不能把所有异常都作为回滚身份的依据。保留身份不等于标为 ready，项目/Token 准备完成并通过原有检查前 provider 仍被阻塞。本节不创建跨服务事务或宣称远端无条件 exactly-once。
 
 <a id="bridge-scan-completeness"></a>
 ### 6.2 watcher 分页和扫描完整性
+
+主责：runtime_engineer；承接 [PRD-P2P-TBRIDGE-002](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002)，相关条款 [SC-2](mainchain-token-newapi-quota-bridge.prd.md#tbridge-sc-2)。产品适用性：N/A；reason=本项仅细化 operator-managed 单向服务额度桥的内部恢复，不定义玩家或 Agent 模型可用性承诺；scope=watcher 相关分页发现与去重。不覆盖公开兑换、custody、账号池复用或供给。
 
 消费 Explorer 返回的全部相关分页，而不是将第一批 200 条当成完整历史；账户匹配包含转入和转出，必须在读取后按现有合同归因。每页结果按原交易/action 身份去重，重复扫描不重复建账。
 
@@ -221,6 +227,8 @@
 
 <a id="bridge-reconcile-ownership"></a>
 ### 6.3 并发处理权与跨重启阶段
+
+主责：runtime_engineer；承接 [PRD-P2P-TBRIDGE-002](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002)，相关条款 [Flow-TBRIDGE-005](mainchain-token-newapi-quota-bridge.prd.md#tbridge-flow-005)。产品适用性：N/A；reason=本项仅细化 operator-managed 单向服务额度桥的内部恢复，不定义玩家或 Agent 模型可用性承诺；scope=同一稳定订单的并发提交及人工终态保护。不覆盖公开兑换、custody、账号池复用或供给。
 
 对同一稳定订单串行化业务提交，或在存储提交边界以有效的 attempt generation/版本条件拒绝过期结果。具体互斥/fencing 实现可替换，但必须同时保护持久文件和内存投影；单纯在请求入口加锁而允许旧回调覆盖文件不满足合同。
 
@@ -293,9 +301,20 @@ A 成功提交 Reconciled 后 B 的延迟失败只能成为该过期尝试的诊
 
 | 上游要求 | 本设计条款 | 机制与场景 | 验证来源 | 执行证据 | 未覆盖与状态 |
 | --- | --- | --- | --- | --- | --- |
-| [SC-2/4：稳定用户、项目与审计链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [首次绑定恢复](#bridge-identity-recovery) | §10 的丢回复、保存失败与重启；mock 远端项目数及未就绪消费分别断言 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的身份故障用例 | source、外部 ID、项目数、本地重载及命令退出码 | planned；现有创建前失败用例不能代签未知副作用 |
-| [SC-2：每笔入账的完整对账链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [扫描完整性](#bridge-scan-completeness) | §10 的 201/401 条、后页、转出占头页、新增头部、坏 cursor 与后页错误 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的真实分页 mock | source、请求 cursor、完整/未完成结果、去重账项和退出码 | planned；返回所有交易的单页 mock 不能代签分页 |
-| [SC-2：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [有效处理权](#bridge-reconcile-ownership) | §10 的 barrier 固定双尝试、延迟失败、双成功与处理者退出 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的并发故障用例 | source、受控时序、内存/文件/重载终态、计数和退出码 | planned；部署支持的并发范围单独说明 |
-| [SC-1/2：topup 与 query 验证链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [持久业务阶段](#bridge-recovery-state) | §10 的 Credited 后查询失败、重启与再次保存失败；保留真正未入账正例 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的持久阶段故障用例 | source、receipt/order、重载阶段、topup 调用数和退出码 | planned；并发回归不能代签跨重启恢复 |
+| [PRD-P2P-TBRIDGE-002：稳定身份](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | [首次绑定恢复](#bridge-identity-recovery) | §10 的丢回复、保存失败与重启；mock 远端项目数及未就绪消费分别断言 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的身份故障用例 | source、外部 ID、项目数、本地重载及命令退出码 | planned；现有创建前失败用例不能代签未知副作用 |
+| [PRD-P2P-TBRIDGE-002：完整发现与审计](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | [扫描完整性](#bridge-scan-completeness) | §10 的 201/401 条、后页、转出占头页、新增头部、坏 cursor 与后页错误 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的真实分页 mock | source、请求 cursor、完整/未完成结果、去重账项和退出码 | planned；返回所有交易的单页 mock 不能代签分页 |
+| [PRD-P2P-TBRIDGE-002：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | [有效处理权](#bridge-reconcile-ownership) | §10 的 barrier 固定双尝试、延迟失败、双成功与处理者退出 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的并发故障用例 | source、受控时序、内存/文件/重载终态、计数和退出码 | planned；部署支持的并发范围单独说明 |
+| [PRD-P2P-TBRIDGE-004：异常与验证快照](mainchain-token-newapi-quota-bridge.prd.md#tbridge-004) | [持久业务阶段](#bridge-recovery-state) | §10 的 Credited 后查询失败、重启与再次保存失败；保留真正未入账正例 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的持久阶段故障用例 | source、receipt/order、重载阶段、topup 调用数和退出码 | planned；并发回归不能代签跨重启恢复 |
 
 现有测试入口为 `crates/oasis7/src/bin/oasis7_newapi_bridge_service/tests.rs`，分页替身在同目录 `tests_support.rs`；在这些已有入口补充 §10 的故障语义，按 `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service` 执行并记录实际结果。手册/测试入口存在不表示新增场景已实现或执行；本次文档不运行真实 topup、模型调用或 operator 部署，也不以测试计划代替四项独立验收。
+
+### 11.2 当前源码差距（静态核对）
+
+本节区分目标恢复合同与当前代码，主责 runtime_engineer / qa_engineer；源码固定基线 `c1ae79da79c2cb7962a5e87bb3cee1b60eaf623e`，未执行行为测试或外部服务。
+
+- `service.rs::bind_user` 先保存本地身份，但 ensure 失败仍对新 binding 调用 `rollback_new_binding`；创建前失败测试期望 binding/project 为空，不能证明远端已创建后丢回复的身份恢复。
+- `chain_client.rs::fetch_confirmed_account_txs` 仅请求 `limit=200` 并消费返回 items，尚不能证明 §6.2 的相关分页完整发现。
+- `store.rs` 局部 mutex 与原子文件保存不能证明整次 reconcile 的有效处理权；§6.3 的延迟失败、双成功和人工终态场景仍需独立证明。
+- `service_letai.rs` 依据原 state 为 `Credited` 跳过 topup；此前 user/project 失败会进入 `record_retryable_failure`，该路径可能写为 Failed/ManualReview。已有 restart 测试人工设置 Credited 后在健康路径恢复，不能证明 Credited 后前置连续失败、再次重启/保存失败仍保留成功事实。
+
+这些缺口不改变上文 planned/目标状态，不引入付费调用或状态修复结论；共享 runtime/CI 的在途 owner 工作不作为本设计已实现的依据。

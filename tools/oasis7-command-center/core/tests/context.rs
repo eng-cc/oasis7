@@ -183,6 +183,21 @@ fn legacy_private_index_is_hidden_without_destroying_reading_history() {
     );
     let mut center = CommandCenter::open(&db).unwrap();
     let snapshot = center.open_project(&private).unwrap();
+    let inventory_query = oasis7_command_center_core::document_inventory::DocumentInventoryQuery {
+        schema_version: 1,
+        project_id: snapshot.project.as_ref().unwrap().id.clone(),
+        snapshot_id: None,
+        query: String::new(),
+        read_filter: "all".into(),
+        cursor: None,
+    };
+    assert!(
+        !center
+            .document_inventory(inventory_query.clone())
+            .unwrap()
+            .files
+            .is_empty()
+    );
     let section = &snapshot.sections[0];
     center
         .record_reading(&section.id, &section.revision, 1)
@@ -196,9 +211,11 @@ fn legacy_private_index_is_hidden_without_destroying_reading_history() {
     service.bind(&private, "fixture", "Test", false).unwrap();
     assert!(center.snapshot().sections.is_empty());
     assert!(center.search("Legacy", 20).is_err());
+    assert!(center.document_inventory(inventory_query.clone()).is_err());
     assert!(center.read_version(&section.id, &section.revision).is_err());
     let reopened = CommandCenter::open(&db).unwrap();
     assert!(reopened.snapshot().sections.is_empty());
+    assert!(reopened.document_inventory(inventory_query).is_err());
     assert_eq!(
         connection
             .query_row("SELECT COUNT(*) FROM history", [], |r| r.get::<_, u64>(0))

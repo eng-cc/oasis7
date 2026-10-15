@@ -22,7 +22,7 @@
 ## 入口分工
 - `README.md` 只承担 landing page 职责：告诉读者先去哪个权威入口，不重复长表索引内容。
 - `prd.md` 是模块权威规格入口，适合先理解 required/full 分层、证据包与跨模块测试边界。
-- PR、实际 CI 与评审记录（Issue 按需） 是唯一的可变执行台账；PRD、manual 与 evidence 文档只保留可复用的测试合同、命令、证据字段和声明边界。
+- PR、实际 CI 与评审记录（Issue 按需）承载可变执行状态；PRD、design 与 manual 维护可复用测试合同、命令和声明边界。evidence 保存实际窗口的原始材料、版本身份、原判定及必要解释，不作为后续执行台账。按[长期文档与过程记录分工](../engineering/workflow/source-of-truth.md#information-record-placement)保留来源，不能因日期、SHA 或已关闭任务批删历史证据。
 - `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
 - `testing-manual.md` 与 `manual/README.md` 是 operator 手册层：前者决定通用测试路径，后者把 Web UI、Playwright、public-testnet attach 与模型视觉评审分流到对应步骤。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。

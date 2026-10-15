@@ -248,6 +248,7 @@ mod tests {
         };
         let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
         let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint,
             trusted_service_public_key: hex::encode(key.verifying_key().to_bytes()),
             expected_world: world.clone(),
@@ -265,6 +266,8 @@ mod tests {
             },
             client: Some(client),
             operation: AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world,
                 scope_id: "public".into(),

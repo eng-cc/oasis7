@@ -3,6 +3,7 @@ use super::World;
 
 fn intent(id: &str) -> EffectIntent {
     EffectIntent {
+        birth_era: None,
         intent_id: id.into(),
         kind: "fixture.effect".into(),
         params: serde_json::json!({"intent": id}),
@@ -13,6 +14,9 @@ fn intent(id: &str) -> EffectIntent {
 
 fn receipt(id: &str) -> EffectReceipt {
     EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: id.into(),
         status: "ok".into(),
         payload: serde_json::json!({"intent": id}),

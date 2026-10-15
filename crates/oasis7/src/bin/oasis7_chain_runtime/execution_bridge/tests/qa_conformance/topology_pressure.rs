@@ -51,6 +51,7 @@ fn witness(active: usize, peers: usize) -> serde_json::Value {
 }
 fn client() -> RemoteWorldServiceClient {
     RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: "http://world-service:4200".into(),
         trusted_service_public_key: sign_read_request("service", (), &hex::encode([9u8; 32]))
             .unwrap()

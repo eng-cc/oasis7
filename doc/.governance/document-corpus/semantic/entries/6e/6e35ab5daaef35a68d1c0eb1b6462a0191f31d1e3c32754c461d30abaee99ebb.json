@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "ec504129c1d753dc3360c26c3b4f5ef0cb1d0d5d7288b5793a6b7ab339f5f036",
+    "content_sha256": "5b24f949cad50546c9d1abf33f04f927e0184d2ad3ace7383c8a2e75a59bd554",
     "current_authority": "doc/site/design.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_current_design_supplement",

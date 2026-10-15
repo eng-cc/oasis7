@@ -323,6 +323,9 @@ fn trusted_executor_replays_effect_receipt_ack_after_closure_window_exactly_once
     let stale_snapshot = world.snapshot();
     let journal_before_receipt = world.journal().clone();
     let receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: intent.intent_id.clone(),
         status: "ok".to_string(),
         payload: json!({"published": true}),
@@ -468,6 +471,9 @@ fn trusted_executor_replays_multi_effect_receipt_closure_exactly_once() {
     let stale_snapshot = world.snapshot();
     let journal_before_receipt = world.journal().clone();
     let first_receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: first.intent_id.clone(),
         status: "ok".to_string(),
         payload: json!({"published": true, "effect": 1}),
@@ -475,6 +481,9 @@ fn trusted_executor_replays_multi_effect_receipt_closure_exactly_once() {
         signature: None,
     };
     let second_receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: second.intent_id.clone(),
         status: "ok".to_string(),
         payload: json!({"published": true, "effect": 2}),

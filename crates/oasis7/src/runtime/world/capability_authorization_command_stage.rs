@@ -213,6 +213,11 @@ impl<'a> TrustedCommandStage<'a> {
             .unwrap_or(0)
     }
 
+    /// Read the birth era before allocation can roll the stage into a new era.
+    pub(super) fn next_effect_birth_era(&self) -> Option<u64> {
+        self.base.effect_birth_era_for(self.next_intent_id_era)
+    }
+
     pub(super) fn allocate_next_intent_seq(&mut self) -> u64 {
         let (allocated, next_id, next_era) =
             World::preview_next_intent_seq(self.next_intent_id, self.next_intent_id_era);
@@ -226,7 +231,7 @@ impl<'a> TrustedCommandStage<'a> {
             .iter()
             .filter(|event| event.id > world_head_before)
             .filter_map(|event| match &event.body {
-                WorldEventBody::EffectQueued(intent) => Some(intent.intent_id.clone()),
+                WorldEventBody::EffectQueued(intent) => Some(intent.identity_key()),
                 _ => None,
             })
             .collect()
@@ -352,8 +357,10 @@ impl<'a> TrustedCommandStage<'a> {
         cap_ref: String,
         origin: EffectOrigin,
     ) -> Result<EffectIntent, WorldError> {
+        let birth_era = self.base.effect_birth_era_for(self.next_intent_id_era);
         let intent_id = format!("intent-{}", self.allocate_next_intent_seq());
         let intent = EffectIntent {
+            birth_era,
             intent_id: intent_id.clone(),
             kind: kind.clone(),
             params,
@@ -605,7 +612,7 @@ impl<'a> TrustedCommandStage<'a> {
                 !self
                     .base
                     .capability_effect_receipt_links
-                    .contains_key(&pending.intent_id)
+                    .contains_key(&pending.identity_key())
             })
         {
             return Err(WorldError::CapabilityAuthorizationDenied {
@@ -618,7 +625,7 @@ impl<'a> TrustedCommandStage<'a> {
                 !self
                     .base
                     .capability_effect_receipt_links
-                    .contains_key(&pending.intent_id)
+                    .contains_key(&pending.identity_key())
             }) else {
                 break;
             };
@@ -881,6 +888,9 @@ impl PreparedTrustedCommand {
         if WorldPreparedBaseHead::capture(world)? != self.base_head {
             return Err(WorldPreparedBaseHead::stale_error());
         }
+        if let Some(consensus_record) = self.consensus_record {
+            world.install_prepared_tick_consensus_record(consensus_record)?;
+        }
         for artifact in self.module_cache_additions {
             world.module_cache.insert(artifact);
         }
@@ -919,9 +929,6 @@ impl PreparedTrustedCommand {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(self.journal_events_evicted);
-        if let Some(consensus_record) = self.consensus_record {
-            world.install_prepared_tick_consensus_record(consensus_record);
-        }
         if let Some(projection) = self.capability_authorization {
             world.capability_grants_v2 = projection.capability_grants_v2;
             world.capability_nonce_records = projection.capability_nonce_records;

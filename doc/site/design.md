@@ -12,9 +12,8 @@
 ## 2. 阅读顺序
 1. `doc/site/prd.md`
 2. `doc/site/design.md`
-3. `doc/site/prd.md`
-4. `doc/site/prd.index.md`
-5. 下钻 `github-pages/`、`manual/` 等专题目录
+3. `doc/site/prd.index.md`
+4. 下钻 `github-pages/`、`manual/` 等专题目录
 
 ## 3. 设计结构
 - 展示层：首页、展示页、下载页与内容组织。
@@ -30,7 +29,18 @@
 - 页面与体验优化进入 `github-pages/`
 - 静态文档与手册迁移进入 `manual/`
 
+<a id="homepage-layout-authority"></a>
 ### GitHub Pages 当前视觉与交互权威
+
+首页现行布局采用聚焦的后果链方案：一个资源压力问题、一段玩家位置与持久后果说明、
+一个主要操作及一个次要文字链接，并保留明确可见的 `limited playable technical preview`。
+首屏不恢复三列事实摘要；其有效信息由标题、副标题和后续说明承接。本条确定文档优先关系，
+不改变当前 HTML、按钮目的地、公开能力承诺或已有验收结论。
+
+7 月 19 日补充负责后果链节奏与渐进披露；7 月 18 日补充继续承接双语、响应式、可访问性
+与生成素材边界，但其“三列事实摘要”布局已经被本节替代。两者发生布局冲突时以本节为准，
+不是以文件日期自行覆盖所有专业要求。生成图公开标签按 7 月 18 日文档记录的 #2459 amendment：
+不强制展示 Image2／non-gameplay 生产标签；来源保留在仓库，生成图仍不是玩法或发布证据。
 
 首页以陌生访客为第一阅读对象：首屏先说明游戏、玩家位置与当前可做
 事项，再渐进披露证据、下载、文档与技术细节。中英文路由须保持同一信息
@@ -43,8 +53,8 @@
 
 - 需求与公开边界：`doc/site/prd.md`
 - 首页页面级层级基线：`doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`
-- 当前首屏内容与响应式验收：`doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`
-- 当前后果链节奏与渐进披露：`doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`
+- 响应式、双语与素材边界补充：[7 月 18 日文档](github-pages/github-pages-visual-content-refresh-2026-07-18.design.md)；旧三列布局不再生效。
+- 后果链节奏与渐进披露补充：[7 月 19 日文档](github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md)；服从本节的当前布局与图注边界。
 
 ### 静态页面实现与页面级覆盖合同
 
@@ -53,6 +63,41 @@
 - 共享架构图仍使用 `site/assets/images/architecture-flow.svg`。更新图稿时保留稳定引用路径和 SVG 的 `title`、`desc`、`role`、`aria-labelledby` 语义，不得以未说明的位图替代或破坏缩放可读性。
 - 页面级设计证据按 route family 管理：中英文共享视觉系统时可复用一份明确列出路径、语言长度风险与响应式约束的设计稿；真实浏览器桌面/移动截图与门禁结果仍是实现验证，Image2/概念图和设计稿不能替代运行证据或 QA 结论。fixture、debug、vendor 与纯构建输出不是产品页面，须在其所属模块明确分类而非纳入公开首页覆盖。
 - 任何新增公开页面、Hero Canvas/架构图/时间线的实质变更，或现有页面的视觉层级重排，均须先更新本节或对应的非日期化专业设计 authority，并补齐 `1440x900`、`390x844`、`360x800` 的真实浏览器证据。这是未清偿的页面设计治理债务触发器，不得恢复已退役微专题作为替代。
+
+<a id="site-roadshow-deck-receiver"></a>
+### 既有 HTML 路演 deck 的有限接收
+
+Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；承接 [产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011)，只将既有 [PRD-SITE-012](prd.md#prd-site-012)与 [AC-15](prd.md#ac-15)、[AC-16](prd.md#ac-16)、[AC-17](prd.md#ac-17)接入本模块 authority，不新增页面、框架或视觉方案。
+
+原 `site/deck/index.html` / `site/deck/en/index.html` 属于同一 route family；其固定顺序、双语长度、hash/键盘触控、持续 preview 与回链的页面比较目标见 [Coverage](deck/html-roadshow-deck-page-2026-06-19.design.md#coverage)、[信息结构](deck/html-roadshow-deck-page-2026-06-19.design.md#information-architecture)及 [Required States](deck/html-roadshow-deck-page-2026-06-19.design.md#required-states)。保留 [AC-16](prd.md#ac-16)的当前静态 Pages 发布兼容性及“不要求新增 Node/Vite/SPA 构建”边界；本段只定位原合同，不宣称实现已适配。
+
+维护权限、`draft -> linked -> published -> revised` 与发布责任人复核仍见 [原功能矩阵](prd.md#deck-functional-contract)，不新增审批层。首页当前布局 authority 不因此改为 deck 布局，deck 也不进入 discovery 六叶的状态范围。Image2 与历史 #1484 只提供原设计/出处，不提供浏览器、a11y、导航、发布或新视觉 signoff。验证沿 [原专业验证入口](prd.md#validation-site-012)及 [页面比较说明](deck/html-roadshow-deck-page-2026-06-19.design.md#implementation-comparison-notes)，静态链、页面行为和实际发布分别取证，本次全部未运行。
+
+<a id="static-manual-design"></a>
+### 静态手册的共享设计
+
+承接 [静态手册需求](manual/site-manual-static-docs.prd.md#static-manual-requirements)。
+本节是该专题的当前系统设计入口；旧同名 design 仅保留兼容路由，不再维护第二份设计正文。
+
+- **输入与内容主责**：Viewer 内容以 [canonical 手册](../world-simulator/viewer/viewer-manual.manual.md) 为准；
+  `site/doc/cn/` 与 `site/doc/en/` 是公开镜像，不反向决定 Runtime 合同或发布状态。内容维护者维护原稿，
+  镜像维护者同步译文和页面；验证者核对实际候选。任务状态从 Git、PR、实际 CI 与评审读取。
+- **页面与接口**：保留 CN/EN 的 `index.html`、`viewer-manual.html`、主页入口及语言互链；维护既有
+  `site/assets/styles.css` 与 `site/assets/app.js`，手册样式限定在适用的 `.docs-*` 范围。
+  不引入 CMS、SSG、服务端渲染或新的必需构建链，不把一次性迁移扩成全仓文档搬迁。
+- **同步顺序**：修改原稿及其适用边界，再同步两种语言的正文、目录、导航、锚点和元数据。
+  保持公开 URL 与可用深链；确需迁移时先提供兼容去向并核对消费者，不以新目录存在代替链接验收。
+  中英文采用相同信息结构和能力口径；翻译缺失、链接缺失或来源不明必须显式处理，不能用旧镜像冒充同步完成。
+- **失败与发布**：入口失效、主次语言矛盾或 unsupported claim 属于本次同步的缺陷；页面可打开、
+  静态构建成功或内容合入都不证明部署已完成、游戏可玩或新候选通过。沿现有发布链交付，不新增发布审批层。
+- **验证**：按 [测试手册](../../testing-manual.md) 的适用 Site/S6 路径，对同候选原稿和 CN/EN 页面核对
+  内容来源、首页到目录到正文、语言往返、深链、窄屏和键盘可达性。可见布局改动仍需适用真实浏览器证据；
+  文档合并只验证文本、引用和职责，不生成截图、冷启动、真实 Provider 或部署 PASS。
+
+| 上游需求 | 设计与验证承接 | 未证明范围 |
+| --- | --- | --- |
+| [稳定 URL、双语与纯静态范围](manual/site-manual-static-docs.prd.md#static-manual-requirements) | 本节的页面接口、成对同步与来源核对；按测试手册验证真实页面 | 不证明线上更新或游戏发行 |
+| [内容基线与镜像漂移风险](manual/site-manual-static-docs.prd.md#风险) | 原稿→双语镜像→导航/锚点；来源缺失保持明确缺口 | 不用历史验收替代当前候选 |
 
 <a id="story-reader-design"></a>
 ### 故事入口与 reader 状态机
@@ -162,6 +207,17 @@ phase / result / reason / permitted_next_action`。
 [成功提交后的 retention 合同](../engineering/workflow/package-source-security.md#release-upgrade-retention)，
 不能为了腾空间提前删除唯一恢复资产或备份。本节不重复定义 SOURCEPLAN、新鲜度、安装布局或 retention。
 
+
+### 2.1 需求承接与分配表
+
+下表为既有首写/完整性合同及独立 deck 公开说明合同补齐身份与反链，不新增安装机制、平台或页面承诺。页面展示、会话重验与世界恢复仍由原 owner 独立负责。
+
+| 上游 requirement / acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
+| Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011) | 既有固定顺序公开说明、双语导航/预览边界，以及原静态发布兼容性的接收定位 | [deck 有限接收](#site-roadshow-deck-receiver) | [PRD-SITE-012](prd.md#prd-site-012)、AC-15–17；页面比较 owner 与模块维护者、发布责任人各保留原职责 | 不代签完整设计、页面行为、静态链适配或当前发布；不扩 discovery 六叶 |
+
 <a id="manual-upgrade-validation"></a>
 ### SC-8 / SC-10 的平台验证映射
 
@@ -182,6 +238,15 @@ phase / result / reason / permitted_next_action`。
 首写边界前后结果；受控本地记录可保留状态摘要，公开结论只保留脱敏关联。QA 逐条记录 pass/fail/blocked/not_run
 及剩余缺口，不从某平台绿色结果外推其他平台。签名/notarization、公开 claim 升阶与真实世界恢复仍消费各自
 专业证据；本节的目标合同不能作为这些能力已交付的证明。
+
+
+### 11.1 验证映射表
+
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | [首写与完整性](#manual-upgrade-first-write) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：compatible / unchanged failure / uncertain write / retrieval and retry；原 test_tier_full，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
+| Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | [首写与完整性](#manual-upgrade-first-write) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：missing / unverifiable / mismatch / replaced candidate / retrieval and retry；原 test_tier_required，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011) | [deck 有限接收](#site-roadshow-deck-receiver) | 固定顺序/直接访问、双语/hash/键盘触控、入口回链/preview、静态发布适配分别核对 | planned；`test_tier_required`；[测试分层与证据规范](../../testing-manual.md)只提供分层/实际记录要求，不是现成 deck 自动化。按本接收段链接的原专业验证要求，在固定候选记录 CN/EN deck 的直接访问/固定顺序、hash/键盘触控、入口回链/preview 及原静态发布兼容核对；当前未运行 | 页面实施 PR 的同候选真实操作/截图、静态链与适用发布核对结果 | 本次只有文档关系；Image2、旧任务或链接可解析均不证明 QA、设计全覆盖、部署或发行 |
 
 ## 设计目标
 - 提供 `site` 模块的总体设计入口。

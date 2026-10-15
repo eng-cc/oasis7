@@ -1,5 +1,7 @@
 # oasis7 Simulator：LMSO29 可用性与稳定性收敛（设计文档）
 
+历史运行边界：2026-02-11 的已实施、回归观察和 LMSO29.1 下一动作均为原窗口记录；原 Task 与 `.tmp` 原始输出的长期可取回性未核实，故保留原文，不当作当前排期、今日 PASS 或自动复跑授权。预算、协议兼容、测试方法与 builtin 输入保护合同继续保留。
+
 - 对应设计文档: `doc/world-simulator/llm/llm-lmso29-stability.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
@@ -70,6 +72,8 @@
 - 先收敛动作失败（特别是 move 失败模式）再扩大 token 放宽范围。
 - 引入“多次 30 tick + 固定统计口径”的验收方式，降低单次采样偏差影响。
 - 在保持 `llm_errors=0` 的前提下，逐步回收 `llm_input_chars_max` 与 `module_call` 波动。
+
+<a name="6-validation-decision-record"></a>
 
 ## 6. Validation & Decision Record
 

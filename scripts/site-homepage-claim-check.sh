@@ -105,15 +105,15 @@ ZH_PATTERNS=(
   "<link rel=\"alternate\" hreflang=\"en\" href=\"https://oasis7.tech/en/\" />"
   "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://oasis7.tech/\" />"
   "data-homepage-claim=\"preview-status\""
-  "状态：limited playable technical preview"
+  "状态：受限可玩技术预览"
   "不是正式玩家发布或公开网页加入"
   "data-homepage-claim=\"indirect-agency\""
   "你可以影响文明，但不能替 Agent 决定每一步。"
-  "资源告急。"
-  "文明会怎么选？"
-  "你给方向。Agent 作选择。"
-  "查看受控危机回放"
-  "基于当前受控测试场景整理的示例性回放；"
+  "在小行星带，"
+  "给 AI 文明一个方向。"
+  "你设定目标与边界，Agent 在资源约束中行动。"
+  "了解玩法"
+  "依据保留的玩家报告与世界记录整理。"
   "不是实时世界遥测，也不是公开玩法模式。"
   "文明制图 · 世界氛围图"
   "data-homepage-claim=\"consequence-story\""
@@ -127,14 +127,14 @@ ZH_PATTERNS=(
   "不是实时世界遥测"
   "data-homepage-claim=\"provenance-story\""
   "data-homepage-claim=\"telemetry-boundary\""
-  "基于当前受控测试场景整理的示例性回放；"
+  "依据保留的玩家报告与世界记录整理。"
   "不是实时世界遥测"
   "data-homepage-claim=\"access-signing-boundary\""
   "当前公开入口仅用于技术预览验证，不是公开网页玩家入口。"
   "Windows 尚未补齐代码签名，macOS 尚未完成 notarization"
   "checksums 仅用于辅助校验，不替代平台信任链。"
   "data-homepage-claim=\"default-web-entry\""
-  "默认网页验证入口：viewer"
+  "本站不能直接进入游戏，需要先配置本地预览"
   "data-homepage-claim=\"future-platform-boundary\""
   "当前还不是 creator-facing 的 mod / 模块平台。"
   "data-homepage-claim=\"download-boundary\""
@@ -159,11 +159,11 @@ EN_PATTERNS=(
   "not a public player launch or public web join"
   "data-homepage-claim=\"indirect-agency\""
   "You can influence a civilization, but you cannot decide every step for its Agents."
-  "Resources are running out."
-  "What will the civilization choose?"
-  "You set the direction. Agents make the choices."
-  "View a controlled crisis replay"
-  "An illustrative replay based on current controlled test scenarios;"
+  "Give an AI civilization"
+  "a direction."
+  "In the asteroid belt, set goals and boundaries. Agents act under resource constraints."
+  "Explore the gameplay"
+  "Adapted from retained player reports and world records."
   "not live world telemetry or a public game mode."
   "CIVILIZATION CARTOGRAPHY · WORLD ATMOSPHERE"
   "data-homepage-claim=\"consequence-story\""
@@ -177,14 +177,14 @@ EN_PATTERNS=(
   "not live world telemetry"
   "data-homepage-claim=\"provenance-story\""
   "data-homepage-claim=\"telemetry-boundary\""
-  "An illustrative replay based on current controlled test scenarios;"
+  "Adapted from retained player reports and world records."
   "not live world telemetry"
   "data-homepage-claim=\"access-signing-boundary\""
   "The public entry is for technical-preview validation only, not a public web player entry."
   "Windows is not code-signed yet, macOS is not notarized yet"
   "checksums are only an extra check, not a platform trust chain."
   "data-homepage-claim=\"default-web-entry\""
-  "Default web verification entry: viewer"
+  "This site cannot launch the game; a local preview must be configured"
   "data-homepage-claim=\"future-platform-boundary\""
   "not a creator-facing mod / modules platform yet."
   "data-homepage-claim=\"download-boundary\""
@@ -208,7 +208,6 @@ STYLE_PATTERNS=(
   "html[data-js=\"true\"] .menu-button"
   ".developer-details"
   ".boundary-banner"
-  ".proof-switch-btn,"
   ".story-step,"
 )
 
@@ -357,58 +356,15 @@ def stylesheet_signature(parser: HomepageParser, document_path: Path, site_root:
 
 
 def proof_signature(parser: HomepageParser) -> tuple[Node | None, dict[str, object]]:
-    proof_roots = [node for node in parser.nodes if node.tag == "section" and node.attrs.get("id") == "proof"]
-    if len(proof_roots) != 1:
-        return None, {}
-    root = proof_roots[0]
-    nodes = [node for node in descendants(parser, root) if not is_template_node(node)]
-    tabs = Counter(node.attrs.get("data-proof-tab", "") for node in nodes if "data-proof-tab" in node.attrs)
-    panels = Counter(node.attrs.get("data-proof-panel", "") for node in nodes if "data-proof-panel" in node.attrs)
-    events = Counter(node.attrs.get("data-proof-event", "") for node in nodes if "data-proof-event" in node.attrs)
-    figures = [node for node in nodes if "proof-figure" in node.classes()]
-    codes = [node for node in nodes if "data-proof-code" in node.attrs]
-    causal_cards = [node for node in nodes if "proof-causal-card" in node.classes()]
-    dynamic_causal = [node for node in nodes if "data-proof-causal" in node.attrs]
-    dynamic_causal_nodes = descendants(parser, dynamic_causal[0]) if len(dynamic_causal) == 1 else []
-    dynamic_causal_nodes = [node for node in dynamic_causal_nodes if not is_template_node(node)]
-    causal_coverage = set(node.attrs.get("data-proof-panel", "") for node in causal_cards)
-    if len(dynamic_causal) == 1 and len(causal_cards) <= 1:
-        causal_coverage = set(tabs)
-    figure_panels = Counter(node.attrs.get("data-proof-panel", "") for node in figures)
-    code_panels = Counter(node.attrs.get("data-proof-panel", "") for node in codes)
-    figure_visibility = Counter(
-        (node.attrs.get("data-proof-panel", ""), node.attrs.get("data-proof-visible", "")) for node in figures
-    )
-    code_visibility = Counter(
-        (node.attrs.get("data-proof-panel", ""), node.attrs.get("data-proof-visible", "")) for node in codes
-    )
-    event_visibility = Counter(
-        (node.attrs.get("data-proof-event", ""), node.attrs.get("data-proof-visible", ""))
-        for node in nodes
-        if "data-proof-event" in node.attrs
-    )
-    features = {
-        "figures": len(figures),
-        "figure-panels": figure_panels,
-        "code-panels": code_panels,
-        "figure-visibility": figure_visibility,
-        "code-visibility": code_visibility,
-        "event-visibility": event_visibility,
-        "causal": len(dynamic_causal),
-        "causal-root-hidden": any(is_hidden(node) for node in dynamic_causal),
-        "causal-cards": len(causal_cards),
-        "causal-coverage": tuple(sorted(causal_coverage)),
-        "causal-lists": class_count(nodes, "proof-causal-list"),
-        "causal-kicker": sum("data-proof-causal-kicker" in node.attrs for node in dynamic_causal_nodes),
-        "causal-title": sum("data-proof-causal-title" in node.attrs for node in dynamic_causal_nodes),
-        "causal-steps": sum("data-proof-causal-step" in node.attrs for node in dynamic_causal_nodes),
-        "log-details": sum(node.tag == "details" and "proof-log-details" in node.classes() for node in nodes),
-        "switcher": sum("data-proof-switcher" in node.attrs for node in nodes),
-        "controls": sum("data-proof-controls" in node.attrs for node in nodes),
-        "timeline": sum("data-proof-timeline" in node.attrs for node in nodes),
-        "evidence-mode": Counter(node.attrs.get("data-evidence-mode", "") for node in nodes if "data-evidence-mode" in node.attrs),
-    }
-    return root, {"nodes": nodes, "tabs": tabs, "panels": panels, "events": events, "features": features}
+    roots = [n for n in parser.nodes if n.tag == "section" and n.attrs.get("id") == "proof"]
+    if len(roots) != 1: return None, {}
+    nodes = [n for n in descendants(parser, roots[0]) if not is_template_node(n)]
+    cases = [n for n in nodes if "data-decision-walkthrough" in n.attrs]
+    case = cases[0] if len(cases) == 1 else None
+    return roots[0], {"nodes": nodes, "case": case,
+        "steps": [n.attrs["data-decision-panel"] for n in nodes if "data-decision-panel" in n.attrs],
+        "source": case.attrs.get("data-evidence-source", "") if case else "",
+        "version": case.attrs.get("data-source-version", "") if case else ""}
 
 
 def is_hidden(node: Node) -> bool:
@@ -425,7 +381,10 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
             if landing:
                 landing_sections[node.attrs["id"]] = landing
 
-    required_landing_ids = {"hero", "proof", "world-laws", "world", "download"}
+    archive = [n for n in parser.nodes if n.attrs.get("id") == "world"]
+    if len(archive) != 1 or archive[0].tag != "a" or archive[0].attrs.get("href") != "observations/" or not any(n.tag == "footer" for n in archive[0].ancestors):
+        errors.append(f"{path}: world archive must retain its footer link and legacy anchor")
+    required_landing_ids = {"hero", "proof", "world-laws", "download"}
     missing_landing = sorted(required_landing_ids - landing_sections.keys())
     if missing_landing:
         errors.append(f"{path}: missing landing section classes for: {', '.join(missing_landing)}")
@@ -459,26 +418,29 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
     if proof_root is None:
         errors.append(f"{path}: expected exactly one #proof section")
     else:
-        features = proof["features"]
-        assert isinstance(features, dict)
-        if features["switcher"] != 1 or features["controls"] != 1 or features["timeline"] != 1:
-            errors.append(f"{path}: proof switcher/control/timeline markers must each occur once")
-        if features["evidence-mode"] != Counter({"controlled-replay": 1}):
-            errors.append(f"{path}: proof must declare data-evidence-mode=controlled-replay exactly once")
-        if features["figures"] != len(proof["tabs"]):
-            errors.append(f"{path}: proof must provide one proof figure per evidence tab")
-        dynamic_causal = features["causal"] == 1 and features["causal-kicker"] == 1 and features["causal-title"] == 1 and features["causal-steps"] == 6
-        static_causal = features["causal-cards"] == len(proof["tabs"]) and features["causal-coverage"] == tuple(sorted(proof["tabs"]))
-        if features["causal-root-hidden"]:
-            errors.append(f"{path}: proof causal controller must be the visible causal explanation, not a hidden marker")
-        if not dynamic_causal and not static_causal:
-            errors.append(f"{path}: proof causal explanation markers are incomplete")
-        elif features["causal-lists"] != (1 if dynamic_causal else features["causal-cards"]):
-            errors.append(f"{path}: each proof causal explanation must contain one causal step list")
-        if features["log-details"] != 1:
-            errors.append(f"{path}: proof must provide one expandable event-log disclosure")
-        if any("data-proof-visible" not in node.attrs for node in proof["nodes"] if "data-proof-panel" in node.attrs):
-            errors.append(f"{path}: every proof panel must declare data-proof-visible")
+        case = proof["case"]
+        nodes = proof["nodes"]
+        if case is None or case.attrs.get("data-provenance") != "runtime_capture":
+            errors.append(f"{path}: exactly one runtime_capture case required")
+        if case is not None:
+            for field in ["data-source-build", "data-runtime-profile", "data-source-scenario", "data-source-window"]:
+                if case.attrs.get(field, "").strip().lower() in {"", "unknown", "n/a", "none"}:
+                    errors.append(f"{path}: incomplete case runtime provenance: {field}")
+        if proof["steps"] != ["0", "1", "2", "3"]:
+            errors.append(f"{path}: four ordered real-case steps required")
+        import re
+        if not re.fullmatch(r"[0-9a-f]{40}", proof["version"]):
+            errors.append(f"{path}: fixed test source version required")
+        if not re.fullmatch(r"https://github\.com/eng-cc/oasis7/blob/[0-9a-f]{40}/doc/testing/evidence/[^?#]+", proof["source"]):
+            errors.append(f"{path}: immutable trusted case report required")
+        for step in [n for n in nodes if "data-decision-panel" in n.attrs]:
+            children = descendants(parser, step)
+            if is_hidden(step) or not any(n.tag == "h3" for n in children) or any(n.tag == "button" for n in children):
+                errors.append(f"{path}: case steps must be readable static h3 headings")
+        if not any(n.tag == "h2" and case in n.ancestors for n in nodes):
+            errors.append(f"{path}: case needs a section h2")
+        if sum(n.attrs.get("data-evidence-mode") == "controlled-replay" for n in nodes) != 1:
+            errors.append(f"{path}: one controlled replay boundary required")
 
     provenance = [
         node
@@ -490,16 +452,12 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
     else:
         provenance_node = provenance[0]
         semantics = provenance_node.attrs.get("data-evidence-provenance", "")
-        if semantics not in {"illustrative", "source-bound"}:
+        if semantics != "runtime_capture":
             errors.append(
-                f"{path}: provenance-story must declare data-evidence-provenance=illustrative or source-bound"
+                f"{path}: provenance-story must declare data-evidence-provenance=runtime_capture"
             )
-        elif semantics == "illustrative":
-            expected_word = "示例性" if language == "zh" else "illustrative"
-            if expected_word not in provenance_node.text_content().lower():
-                errors.append(f"{path}: illustrative proof must visibly disclose {expected_word}")
-        elif not provenance_node.attrs.get("data-evidence-source", "").strip():
-            errors.append(f"{path}: source-bound proof must identify data-evidence-source")
+        elif not provenance_node.attrs.get("data-evidence-source", "").strip() or provenance_node.attrs.get("data-evidence-source") != proof.get("source"):
+            errors.append(f"{path}: runtime_capture proof must identify data-evidence-source")
 
     return landing_sections, dict(claims), (proof_root, proof), errors
 
@@ -524,27 +482,9 @@ if zh_styles is None or en_styles is None or zh_styles != en_styles or not zh_st
     )
 
 if zh_proof[0] is not None and en_proof[0] is not None:
-    zh_data = zh_proof[1]
-    en_data = en_proof[1]
-    for key in ("tabs", "events"):
-        if zh_data[key] != en_data[key]:
-            errors.append(f"homepage proof {key} parity mismatch: zh={zh_data[key]!r} en={en_data[key]!r}")
-    zh_features = zh_data["features"]
-    en_features = en_data["features"]
-    for key in (
-        "figures",
-        "figure-panels",
-        "code-panels",
-        "figure-visibility",
-        "code-visibility",
-        "event-visibility",
-        "causal-coverage",
-        "log-details",
-    ):
-        if zh_features[key] != en_features[key]:
-            errors.append(f"homepage proof feature parity mismatch for {key}: zh={zh_features[key]!r} en={en_features[key]!r}")
-    if zh_features["evidence-mode"] != en_features["evidence-mode"]:
-        errors.append("homepage proof evidence-mode parity mismatch")
+    for key in ("steps", "source", "version"):
+        if zh_proof[1][key] != en_proof[1][key]:
+            errors.append(f"homepage case {key} parity mismatch")
 
 if errors:
     for error in errors:
@@ -555,3 +495,6 @@ print("ok: homepage structural, proof, disclosure, provenance, and stylesheet pa
 PY
 
 echo "ok: homepage claim/parity, metadata, and no-js navigation markers are present"
+
+python3 "${REPO_ROOT}/scripts/site-discovery-check.py"
+python3 "${REPO_ROOT}/scripts/site-discovery-check.test.py"

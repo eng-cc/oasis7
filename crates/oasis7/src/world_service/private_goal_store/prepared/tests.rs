@@ -187,7 +187,10 @@ fn prepared_goal_exact_body_commitment_and_publication_fences() {
     altered.owner_proof = sign_goal_prepare(r, &hex::encode([9; 32])).unwrap();
     assert!(altered.validate().is_err());
     altered.goal_ref = commitment(
-        &decode_salt(&altered.reference_salt).unwrap(),
+        &hex::decode(&altered.reference_salt)
+            .unwrap()
+            .try_into()
+            .unwrap(),
         &altered.owner_proof,
     )
     .unwrap();

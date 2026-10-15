@@ -100,6 +100,8 @@ fn view(
 ) -> oasis7::world_service::verified_view::VerifiedWorldView {
     client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),

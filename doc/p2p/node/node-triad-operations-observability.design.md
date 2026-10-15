@@ -9,12 +9,31 @@
 
 ### 2.1 需求承接与分配表
 
-| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [观测输出合同](node-triad-operations-observability.prd.md#ops-report-contract) | OPS-AC-1–4：真实输入适配、最新 attempt 与历史成功、窗口新鲜度及真实 p99；当次范围独立判定 | [观测设计](#ops-report-design) | 对应工具/运行时维护者及 QA | 文档修订不声明脚本或现场验收通过，不新增发布门禁 |
-| [运行隔离与诊断](node-triad-operations-observability.prd.md#observability-run-contract) | 独占 run、按消费者路由、SSH 失败仍报告、持久错误不由指标发布清除 | [设计约束](#observability-run-design) | 对应模块维护者与 QA | 文档补齐不宣称实现或真实运行完成 |
+| [独占 run](node-triad-operations-observability.prd.md#observability-run-contract) | 写入前原子独占；冲突写前拒绝/重分配，同 run 工件所属一致。 | [编排目标](#run-exclusive) | runtime / blockchain ops / QA；上游各自 owning module | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [参数路由](node-triad-operations-observability.prd.md#observability-run-contract) | service/status/shared target 先校验再按消费者分配，非法参数写前失败。 | [编排目标](#run-routing) | runtime / blockchain ops / QA；上游各自 owning module | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [失败后报告](node-triad-operations-observability.prd.md#observability-run-contract) | 首个/后续/全部 SSH 失败保留结构化不可用样本、继续其余节点并生成终态报告，非零退出。 | [编排目标](#run-failure-report) | runtime / blockchain ops / QA；上游各自 owning module | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [持久错误](node-triad-operations-observability.prd.md#observability-run-contract) | reward collector/probe state 写入失败独立保留 last_error/degraded，不因旧 report、无新 epoch 或 invariant 正常清错。 | [编排目标](#run-worker-error) | runtime / blockchain ops / QA；上游各自 owning module | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [选用范围](node-triad-operations-observability.prd.md#ops-selected-scope) | 本轮明确候选、inventory、用途；旧 fleet 退出不把旧未验证结果升级为通过。 | [报告目标](#report-scope) | runtime / blockchain ops / QA；上游各自 owning module | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [OPS-AC-1](node-triad-operations-observability.prd.md#ops-report-contract) | 真实 traffic envelope 保值，未知 schema/不可用/缺文件显式诊断，仅支持格式可 adapter。 | [报告目标](#report-envelope) | runtime / blockchain ops / QA；上游各自 owning module | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [OPS-AC-2](node-triad-operations-observability.prd.md#ops-report-contract) | 最新 attempt、最近成功、窗口截止独立；显式 as-of 保留合法历史且不伪造当前覆盖。 | [报告目标](#report-freshness) | runtime / blockchain ops / QA；上游各自 owning module | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [OPS-AC-3](node-triad-operations-observability.prd.md#ops-report-contract) | 真实窗口 nearest-rank p99 与 max、样本量分别表达。 | [报告目标](#report-percentile) | runtime / blockchain ops / QA；上游各自 owning module | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
+| [OPS-AC-4](node-triad-operations-observability.prd.md#ops-report-contract) | storage 目录并集、GC 状态与不足信息按上游解释，报告不授予发布或 GC 正确性。 | [报告目标](#report-storage) | runtime / blockchain ops / QA；上游各自 owning module | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。  产品适用性：N/A；理由：本行是旧接口维护或 operator 技术观测合同，本身不新增玩家承诺；范围：本行所列专业机制，不免除现行产品恢复、经济或可用性义务。 |
 
-## 数据流
+## 问题、目标与当前差距
+
+- Owner role：`blockchain_ops_engineer`；runtime 维护 status/worker 真值，QA 判读适用证据。
+- 审读基线：`edf61e801e4888087c2e65a402011088bd1c50b2`（2026-10-15）。目标是同一候选、inventory 和窗口下可诊断的 operator 报告；下列编排条款是应满足的目标，不是已实现声明。
+- 当前 [monitor](../../../scripts/p2p-real-env-observability-monitor.sh) 使用秒级 `date` 与 `mkdir -p` 分配目录；未原子取得独占权。它把同一个 `pass_through_args` 数组传给 snapshot、host、traffic，尚不满足按消费者路由合同。
+- monitor 与 [host monitor](../../../scripts/p2p-real-env-host-monitor.sh) 使用 `set -e` 串行调用；未围绕 collector/SSH 失败建立保证最终报告的捕获路径。不能声称首个/后续/全部 SSH 失败后仍完成采样与报告。
+- [现有 monitor 测试](../../../scripts/p2p-real-env-observability-monitor.test.sh) 导入/调用 summary 并检查 fixture 输出；[host 测试](../../../scripts/p2p-real-env-host-monitor.test.sh) 主要核对 host summary。二者不是完整 orchestration 的 stub collector 并发/故障回归。
+- 产品适用性：N/A；理由：本设计表格分配的是采样、目录隔离、参数路由及报告解释的专业 operator 机制，本身不新增玩家功能或经济承诺；范围：本设计的工具编排与技术诊断。它不否认真实玩家恢复、积分/PowerCredit 或可用性合同；storage/reward 的 producer 义务仍由各自 authority 拥有，本文不改变计算规则或恢复承诺。
+- 当前 summary 的 `summarize_storage` 直接累加 `bytes_by_dir`，且将非 None/success 的 GC 状态均判作失败；与 OPS-AC-4 的目录并集、GC 多状态解释存在差距，仍需独立实现与正负例核验。
+- 剩余风险：目录碰撞、参数误传与早退可使本轮报告缺失或混入旧数据；未知 schema、过期窗口与 producer 错误不能用健康数值冲淡。源码审读不证明故障已修复，也不验证现场 fleet。
+
+<a id="数据流"></a>
+## 边界与数据流
 
 `health/status + host/process + traffic window + WASM window -> snapshot/host/summary helpers -> JSON + Markdown artifacts -> operator/QA evidence review`
 
@@ -23,10 +42,16 @@
 <a id="observability-run-design"></a>
 ## 编排责任与终态输出
 
+以下为目标状态；当前差距见上节，不能据此操作生产或宣称脚本已满足。
+
+<a id="run-routing"></a>
 1. monitor 解析并验证配置；按 snapshot/host/traffic/WASM 的受支持输入分别构造参数，不把同一参数数组无差别转交所有子工具。
+<a id="run-exclusive"></a>
 2. 写入前原子分配独占 run 目录，snapshot 单独调用也承担同样责任；冲突在写前拒绝或重新分配，不覆盖已存在目录。外层与子采集器记录同一所属关系。
+<a id="run-failure-report"></a>
 3. 捕获采集失败并保留结构化不可用样本；host SSH 失败不跳过后续节点和最终报告。终态汇总同时保留非零退出、失败节点、仍有效的其他采样和 underlying snapshot 的 blocked。
 4. 汇总仅引用本 run 的实际文件；失败细节限制为 label、时间、阶段和受限错误类别，不输出凭据或完整环境。
+<a id="run-worker-error"></a>
 5. reward state 写入错误独立于数值发布与 invariant：采集窗口按实际 last_error/degraded 解释，不用已有 report 或无新 epoch 清错。producer 只有在对应持久化真正恢复后才清除该错误；本设计不更改持久化格式或奖励计算。
 
 <a id="ops-report-design"></a>
@@ -36,10 +61,15 @@
 [OPS-AC-1–4](node-triad-operations-observability.prd.md#ops-report-contract)。沿用当前受支持工具，
 不把本文解释成 triad 脚本已支持任意拓扑或新增部署控制面。
 
+<a id="report-scope"></a>
 1. 在现有 run 配置/报告中明确选定 candidate、inventory 和用途；历史样本只按原身份、窗口引用，不从旧包重新排部署。
+<a id="report-envelope"></a>
 2. adapter 区分真实 envelope、status-only 和明确支持的旧平铺格式，归一化值、可用性、窗口及错误；未知输入保留原因，不静默变为零流量。
+<a id="report-freshness"></a>
 3. reducer 分别保留最新 attempt 和最近成功。各节点用同一显式 as-of 判窗口交集、age、stale 与 reset；当前失败不能由旧成功掩盖，合法历史窗口仍可离线重算。
+<a id="report-percentile"></a>
 4. p99 从实际滚动样本计算 nearest-rank（升序 rank=ceil(0.99×N)），保留 p95/max 和窗口样本数。完整窗口要求按 producer 合同满足；样本不足时标明不完整/不可用，不将 max 作为 p99 替代值。
+<a id="report-storage"></a>
 5. report 将同一归约结果输出 JSON 与 Markdown；storage 的目录去重、GC availability 由存储合同提供，不在 report 再维护一套统计真值。
 
 | 验收 | 目标回归与分层 |
@@ -53,7 +83,8 @@
 回归可使用离线 fixture/stub，但需走实际适配和汇总链；每项记录实际执行结果，不能以设计矩阵证明实现已修。
 真实采样与服务恢复声明仍按对应环境和当次授权独立验收。
 
-## 安全与运行约束
+<a id="安全与运行约束"></a>
+## 安全、风险与运行约束
 
 只采样资源和状态，不写 SSH password、private key、seed、完整 env 秘密或原始业务载荷。长期 alerting/TSDB、Prometheus/Grafana/OTel exporter、自动 remediation 和对外 status 承诺不属于本设计。
 
@@ -62,7 +93,14 @@
 
 ### 11.1 验证映射表
 
-| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 验证方法 / 精确来源 / candidate 与环境 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [观测输出合同](node-triad-operations-observability.prd.md#ops-report-contract) | [观测设计](#ops-report-design) | OPS-AC-1–4：真实输入适配、最新 attempt 与历史成功、窗口新鲜度及真实 p99；当次范围独立判定 | [现有验证入口](../../../scripts/p2p-real-env-observability-monitor.test.sh)；在实际实施候选按观测设计中的各正负 fixture 和进程边界分别运行，入口存在不代表矩阵已覆盖 | 实施 PR 的候选、命令、逐项结果和未运行项 | 本次未运行行为、真实节点、部署或性能验收 |
-| [运行隔离与诊断](node-triad-operations-observability.prd.md#observability-run-contract) | [设计约束](#observability-run-design) | 独占 run、按消费者路由、SSH 失败仍报告、持久错误不由指标发布清除 | 候选版本的[验证入口](../../../scripts/p2p-real-env-observability-monitor.test.sh)：固定时钟并发、sentinel、service/status 参数及首个/后续/全部 SSH 失败；reward 两轮失败及真正恢复另按 worker fixture 验证；静态核对与实际执行分别记录 | 实施 PR 的候选、命令、fixture 与真实结果 | 不代签未执行回归、真实模型、浏览器、节点或发布验收 |
+| [独占 run](node-triad-operations-observability.prd.md#observability-run-contract) | [编排目标](#run-exclusive) | 写入前原子独占；冲突写前拒绝/重分配，同 run 工件所属一致。 | 静态核对 monitor 与 `../../../scripts/p2p-real-env-triad-snapshot.sh`（snapshot） 的分配入口；现有秒级 date/mkdir -p 不满足目标。未来用实际 orchestration + stub collectors 做固定时钟并发、不同 inventory 与预存 sentinel 测试，检查不覆盖旧工件。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。 |
+| [参数路由](node-triad-operations-observability.prd.md#observability-run-contract) | [编排目标](#run-routing) | service/status/shared target 先校验再按消费者分配，非法参数写前失败。 | 对照 monitor、snapshot、host 与 `../../../scripts/p2p-real-env-traffic-monitor.sh`（traffic） 的 CLI；当前统一 pass_through_args 存在差距。未来实际执行 service/status 单项、组合、help 与非法选项 stub 回归，核对每个子进程收到的参数及写前退出。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。 |
+| [失败后报告](node-triad-operations-observability.prd.md#observability-run-contract) | [编排目标](#run-failure-report) | 首个/后续/全部 SSH 失败保留结构化不可用样本、继续其余节点并生成终态报告，非零退出。 | 静态核对 host 的 run_ssh 与 monitor 串行 set -e；未来以 stub SSH/collectors 驱动实际脚本，分别注入三类失败并检查 label/时间/受限错误、JSON/Markdown、后续节点与退出码。现有 summary fixture 不覆盖此行为。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。 |
+| [持久错误](node-triad-operations-observability.prd.md#observability-run-contract) | [编排目标](#run-worker-error) | reward collector/probe state 写入失败独立保留 last_error/degraded，不因旧 report、无新 epoch 或 invariant 正常清错。 | 当前只核对 `../../../scripts/p2p-real-env-observability-summary.py`（summary） 的 summarize_reward_runtime 消费边界；producer 写入实现未在本专题核实。未来由 worker owner 沿实际调用链提供连续两轮失败/真正恢复 fixture，再核对 status→report；不得从 summary 通过推导写入恢复。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 未运行目标故障/并发回归；不证明 producer 修复、真实 SSH 或现场恢复。 |
+| [选用范围](node-triad-operations-observability.prd.md#ops-selected-scope) | [报告目标](#report-scope) | 本轮明确候选、inventory、用途；旧 fleet 退出不把旧未验证结果升级为通过。 | 核对选定配置与报告身份；未来离线 fixture 检查不同 inventory 与候选一致性，现场证据另按当次授权取得。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。 |
+| [OPS-AC-1](node-triad-operations-observability.prd.md#ops-report-contract) | [报告目标](#report-envelope) | 真实 traffic envelope 保值，未知 schema/不可用/缺文件显式诊断，仅支持格式可 adapter。 | 静态审读 summary 的 summarize_traffic_control_plane 与 fixture 断言；未来新增真实 single-node envelope→adapter→merged Markdown 正负例。现有 fixture aggregate 不证明全部 envelope 适配。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。 |
+| [OPS-AC-2](node-triad-operations-observability.prd.md#ops-report-contract) | [报告目标](#report-freshness) | 最新 attempt、最近成功、窗口截止独立；显式 as-of 保留合法历史且不伪造当前覆盖。 | 未来执行本地矩阵 00:00/00:10 成功后 00:11–00:30 失败及恢复/全失败/reset/历史 as-of；审读 traffic monitor 采集接线与 summary 消费字段，已有 full_window_covered 断言不证明 producer/reducer 新鲜度。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。 |
+| [OPS-AC-3](node-triad-operations-observability.prd.md#ops-report-contract) | [报告目标](#report-percentile) | 真实窗口 nearest-rank p99 与 max、样本量分别表达。 | 未来走 producer→adapter→status→report，验证 127×100ms+1×1000ms 的 p99=100ms、max=1000ms，以及 100/128/空窗/滚动淘汰；summary 手工字段不是 producer 算法证明。当前未取得该链运行证据。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。 |
+| [OPS-AC-4](node-triad-operations-observability.prd.md#ops-report-contract) | [报告目标](#report-storage) | storage 目录并集、GC 状态与不足信息按上游解释，报告不授予发布或 GC 正确性。 | 按 `../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-observation-contract`（storage observation） 的目录重叠、GC 六状态、degraded 正负例核对 status→summarize_storage→JSON/Markdown；独立 gate 与真实 release 接线分别验收，当前未运行。  离线工具验证遵循 [testing manual](../../../testing-manual.md)；源码审读与未来实际执行分别记录。 | 同一候选的静态核对记录；未来实际命令、退出码、断言与适用环境分项记录 | 现有 fixture 仅覆盖其断言子范围；不证明完整 producer/adapter 链、现场健康或 release readiness。 |

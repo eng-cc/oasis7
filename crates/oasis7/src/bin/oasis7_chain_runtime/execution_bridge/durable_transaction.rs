@@ -14,12 +14,35 @@ pub(super) fn sync_existing_file_durable(path: &Path) -> Result<(), String> {
 }
 
 pub(super) fn write_file_durable(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_file_durable_with_mode(path, bytes, false)
+}
+
+/// Atomically publish private protocol state with mode 0600 applied by the
+/// kernel during temporary-file creation, before any bytes are written.
+pub(super) fn write_private_file_durable(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_file_durable_with_mode(path, bytes, true)
+}
+
+fn write_file_durable_with_mode(path: &Path, bytes: &[u8], private: bool) -> Result<(), String> {
     let parent = parent_dir(path)?;
     ensure_dir_all_durable(parent)?;
     let temp = unique_sibling(path, "tmp");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    let mut file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        if private {
+            options.mode(0o600).open(temp.as_path())
+        } else {
+            options.open(temp.as_path())
+        }
+    }
+    .map_err(|err| format!("create durable temp {} failed: {err}", temp.display()))?;
+    #[cfg(not(unix))]
+    let _ = private;
+    #[cfg(not(unix))]
+    let mut file = options
         .open(temp.as_path())
         .map_err(|err| format!("create durable temp {} failed: {err}", temp.display()))?;
     if let Err(err) = file.write_all(bytes).and_then(|_| file.sync_all()) {
@@ -355,5 +378,38 @@ mod tests {
             b"previous publication"
         );
         fs::remove_dir_all(root).expect("remove durable replacement test root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_durable_file_is_mode_0600_on_publication_and_replacement() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root =
+            std::env::temp_dir().join(format!("oasis7-durable-private-file-{}", unique_token()));
+        ensure_dir_all_durable(root.as_path()).expect("create durable private test root");
+        let path = root.join("formal-private.cbor");
+        write_private_file_durable(path.as_path(), b"first")
+            .expect("publish private protocol file");
+        assert_eq!(
+            fs::metadata(path.as_path())
+                .expect("read private file metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        write_private_file_durable(path.as_path(), b"replacement")
+            .expect("replace private protocol file");
+        assert_eq!(
+            fs::metadata(path.as_path())
+                .expect("read replacement metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(path.as_path()).unwrap(), b"replacement");
+        fs::remove_dir_all(root).expect("remove durable private test root");
     }
 }

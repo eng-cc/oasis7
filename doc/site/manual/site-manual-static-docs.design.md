@@ -1,29 +1,31 @@
 # Site 使用手册静态化（CN/EN）设计文档
 
-- 对应需求文档: `doc/site/manual/site-manual-static-docs.prd.md`
-- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
+- 对应需求文档：[专题 PRD](site-manual-static-docs.prd.md#static-manual-requirements)
+- 本文件仅为兼容入口，不维护独立设计正文或运行结论。
 
-## 1. 设计定位
-定义站点手册专题设计，统一静态文档站、CN/EN 手册迁移与长期维护约定。
+<a id="1-设计定位"></a>
+<a id="2-设计结构"></a>
+<a id="3-关键接口--入口"></a>
+<a id="4-约束与边界"></a>
+<a id="5-设计演进计划"></a>
+<a id="compatibility-route"></a>
+<a id="当前去向与保留边界"></a>
+## 当前去向与保留边界：兼容入口范围
 
-## 2. 设计结构
-- 手册承载层：明确静态站对手册内容、语言版本与入口的组织方式。
-- 迁移编排层：把原有 viewer/manual 内容迁移到静态站可维护结构。
-- 发布同步层：确保手册更新与站点发布、导航和互链同步。
-- 维护治理层：沉淀手册更新责任、版本约定与质量检查。
+设计正文、失败边界与验证责任已由 [Site 静态手册共享设计](../design.md#static-manual-design) 承接。读者直接进入该节；
+### 保留决策与风险
 
-## 3. 关键接口 / 入口
-- 静态文档站入口
-- CN/EN 手册内容目录
-- 手册迁移与导航映射
-- 手册发布与维护约定
+本文不要求重复实现或增加审批。旧 URL 暂留，核清全部引用、配对、动态/外部分发消费者与 corpus 后才可删除。
+[合并前原文](https://github.com/eng-cc/oasis7/blob/2adfc08706f1905c131adc0597a9ae5e99ceb2dd/doc/site/manual/site-manual-static-docs.design.md)保留历史来源，不作为当前操作或验收依据。
 
-## 4. 约束与边界
-- 手册迁移不得破坏现有可访问路径。
-- 语言版本需保持结构和口径一致。
-- 不在本专题扩展新的内容管理系统。
+### 2.1 需求承接与分配表
 
-## 5. 设计演进计划
-- 先固定静态手册结构。
-- 再补内容迁移与导航映射。
-- 最后固化发布同步与维护治理。
+| 上游要求 | 分配内容 | 本设计条款 | 主责 | 限制 |
+| --- | --- | --- | --- | --- |
+| [专题要求](site-manual-static-docs.prd.md#static-manual-requirements) | 通过唯一接收章节定位完整设计 | [兼容路由](#compatibility-route) | 接收文档原 owner | 本文件不是第二份机制设计；产品适用性：N/A；reason=本行只维护旧设计 URL 到接收正文的导航，不承接或重定义其产品功能；scope=本文件兼容路由、旧锚点与接收条款可达性。接收正文的产品及专业要求与独立验证责任不变 |
+
+### 11.1 验证映射表
+
+| 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
+| --- | --- | --- | --- | --- | --- |
+| [专题要求](site-manual-static-docs.prd.md#static-manual-requirements) | [兼容路由](#compatibility-route) | 同候选链接到存在的接收节；接收节保有原职责与独立验证 | [文档检查](../../../scripts/doc-governance-check.test.sh)及接收节逐项映射审读 | 修改 diff、链接核对及实际检查输出 | 文档检查不证明领域运行或发布通过 |

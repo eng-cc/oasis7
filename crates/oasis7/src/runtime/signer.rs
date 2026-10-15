@@ -491,6 +491,49 @@ fn receipt_signing_bytes(
     threshold: Option<u16>,
     participants: &[String],
 ) -> Result<Vec<u8>, WorldError> {
+    match (
+        receipt.birth_era,
+        receipt.world.as_ref(),
+        receipt.intent_payload_digest.as_deref(),
+    ) {
+        (None, None, None) => {}
+        (Some(era), Some(world), Some(digest)) => {
+            world
+                .validate()
+                .map_err(|error| WorldError::ResourceBalanceInvalid {
+                    reason: error.to_string(),
+                })?;
+            if digest.len() != 64
+                || !digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
+                return Err(WorldError::ReceiptSignatureInvalid {
+                    intent_id: receipt.intent_id.clone(),
+                });
+            }
+            return Ok(serde_json::to_vec(&(
+                "oasis7.world.effect.receipt.v2",
+                world,
+                era,
+                receipt.intent_id.as_str(),
+                digest,
+                receipt.status.as_str(),
+                &receipt.payload,
+                receipt.cost_cents,
+                consensus_height,
+                receipts_root,
+                signer_node_id,
+                threshold,
+                participants,
+            ))?);
+        }
+        _ => {
+            return Err(WorldError::ReceiptSignatureInvalid {
+                intent_id: receipt.intent_id.clone(),
+            });
+        }
+    }
     #[derive(Serialize)]
     struct ReceiptPayload<'a> {
         intent_id: &'a str,

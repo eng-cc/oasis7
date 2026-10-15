@@ -68,6 +68,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         }
         if wait.stage.ends_with("_view") {
             return Ok(Some(AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),
@@ -293,6 +295,7 @@ impl RuntimeLlmSidecar {
             .ok_or("rejected Wait original checkpoint missing")?;
         wait.validate_rejection(Some(original))?;
         let Some(IntentResponse {
+            formal_profile: None,
             outcome: IntentOutcome::Rejected { .. },
             ..
         }) = wait.rejection.as_ref()

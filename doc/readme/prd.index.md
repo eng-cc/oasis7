@@ -7,14 +7,14 @@
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
 - 模块设计总览：`doc/readme/design.md`
-- 模块标准执行入口：`doc/readme/prd.md`
+- 模块执行记录：Git、PR、实际 CI 与评审记录；Issue/Project 按需，PRD 不承载可变任务状态。
 - 当前热点子域入口：`doc/readme/governance/README.md`
 - README gap 收口资料入口：`doc/readme/gap/README.md`
 - production 证据与素材入口：`doc/readme/production/README.md`
 
 ## 首读分流
 - 想先回答 README 模块在管什么、哪些内容属于正式对外口径：先读 `doc/readme/prd.md`
-- 想先回答当前在推进什么、哪些治理或运营专题仍是 active：先读 `doc/readme/prd.md`
+- 想先回答当前在推进什么：读取实际 PR 或已有 Task；想确认长期治理和运营边界：先读 `doc/readme/prd.md`
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication 模板 / Moltbook / limited preview 贡献奖励 / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想先区分 README gap 的总收口、具体增量与历史追溯：先读 `doc/readme/gap/README.md`
 - 想追溯 production 收口证据或判断 dated production 素材是否仍可删除：先读 `doc/readme/production/README.md`
@@ -57,7 +57,7 @@
 - runbook、material 与 execution_log 仍保留可检索性，但默认不与模块 PRD 三件套一起暴露在首屏。
 
 ## 索引分层
-- `canonical`：正式 PRD / design / project 三件套，定义 README 与对外口径的当前权威源。
+- `canonical`：维护现行需求和设计的正式文档；Git、PR、实际 CI 与评审记录承载交付事实，Issue/Project 按需。历史专题不因成对文件仍在就自动成为当前权威。
 - `runbook`：已正式建档的运营 SOP，回答“运营同学今天应该怎么执行”。
 - `material`：帖子草案、邀请包、奖励包、轮播包等投放素材，回答“今天要发什么/给什么”。
 - `execution_log`：某轮真实执行记录，仅用于复盘与追溯。
@@ -65,17 +65,15 @@
 ## 覆盖规则
 - 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与相关 PR 和实际验证记录。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 `runbook`、`material`、`execution_log` supporting doc，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
-- 历史压缩：已完成、无下一步、且当前治理入口已由脚本/模块 project/后续复核专题覆盖的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
+- 历史压缩：已完成、无下一步、且当前治理入口已由脚本/现行专业 authority/后续复核专题覆盖的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
 - 排除规则：不纳入 `doc/devlog/**` 与其他非 PRD 配对文档。
 - 按需进入：素材包、执行记录、帖子草案、审计 checklist 与历史收口材料继续保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md` | `doc/readme/governance/readme-remediation-log-template-2026-03-11.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
-| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` |
 
 ## 当前活跃 PRD-only 治理专题
 
@@ -85,8 +83,10 @@
 | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md` |
 
 ## 历史压缩专题清单（保留原址与互链）
-| 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
+| 历史 PRD | 设计承接 | 执行来源 | 保留理由 |
 | --- | --- | --- | --- |
+| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | [同文历史边界与现行去向](gap/readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing)；旧 design 仅兼容 | 原 Git / PR / CI / 评审 | 保留多样本、重试、审计与原失败；不是当前操作入口 |
+| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | [同文历史边界与现行去向](production/readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing)；旧 design 仅兼容 | 原 Git / PR / CI / 评审 | 保留 WASM、复制与玩家身份原合同；旧 Viewer 节点参数不再适用 |
 
 ## 已退役删除专题
 | 专题 | 当前承接 | 删除理由 |
@@ -129,8 +129,8 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与相关 PR 和实际验证记录。
-- ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
+- ROUND-002 的 Gap 主从关系仅作历史定位；当前节点、复制、WASM 和拓扑操作从两份历史 PRD 的“现行去向”进入专业文档。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
 - 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/prd.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 PR、实际 CI 与评审记录（Issue 按需） 追溯。
-- 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前 Moltbook 追溯以 promotion plan、post drafts、liveops runbook 的 canonical PRD/project/runbook 与 `.pm` evidence 为准。
+- 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前渠道方法与素材从 `doc/readme/governance/readme-moltbook-liveops-runbook.md` 和 `doc/readme/governance/readme-moltbook-post-pack.md` 进入；旧 promotion 与 handoff 从 Git history 与实际 PR/已有 Task 追溯，不依赖退役 `.pm`。

@@ -3,6 +3,7 @@
     "baseline",
     "rust_baseline",
     "oasis7_required",
+    "formal_process",
     "consensus",
     "distfs",
     "node",
@@ -106,6 +107,10 @@
       "node",
       "system_deps",
       "wasm_target"
+    ],
+    "formal_process": [
+      "rust_toolchain",
+      "system_deps"
     ]
   },
   "package_groups": {
@@ -117,19 +122,24 @@
     ],
     "oasis7": [
       "oasis7_required",
-      "launcher_web"
+      "launcher_web",
+      "formal_process"
     ],
     "oasis7_consensus": [
-      "consensus"
+      "consensus",
+      "formal_process"
     ],
     "oasis7_distfs": [
-      "distfs"
+      "distfs",
+      "formal_process"
     ],
     "oasis7_node": [
-      "node"
+      "node",
+      "formal_process"
     ],
     "oasis7_net": [
-      "net"
+      "net",
+      "formal_process"
     ],
     "oasis7_viewer": [
       "viewer_js_required"
@@ -170,6 +180,9 @@
     "oasis7_client_api": [
       "workspace_support"
     ],
+    "oasis7_game_client": [
+      "workspace_support"
+    ],
     "oasis7_local_signer": [
       "workspace_support"
     ],
@@ -196,6 +209,20 @@
       ],
       "groups": [],
       "reason": "documents"
+    },
+    {
+      "match": [
+        "scripts/formal-live-local-tests.sh",
+        "scripts/local-node-lifecycle.test.sh",
+        "scripts/legacy-observer-migration.test.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "distfs",
+        "node",
+        "formal_process"
+      ],
+      "reason": "formal_runtime_and_native_node_composition"
     },
     {
       "match": [

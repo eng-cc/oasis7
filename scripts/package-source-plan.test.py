@@ -141,3 +141,66 @@ with tempfile.TemporaryDirectory() as temporary:
     environment["MOCK_SHA"]="a"*40
     assert subprocess.run(["bash", "-c", script], env=environment, cwd=root, capture_output=True).returncode != 0
 print("ok: publication rejects lightweight/annotated tag drift and mixed artifact SHA")
+
+
+# Exercise the actual Testnet staging/checksum blocks and artifact path selection.
+import glob
+# Windows hosted runners use Bash >= 4 (mapfile); macOS system Bash is 3.2.
+workflow_bash = next((candidate for candidate in (shutil.which("bash"), "/opt/homebrew/bin/bash", "/usr/local/bin/bash")
+                      if candidate and Path(candidate).is_file() and
+                      subprocess.run([candidate, "-c", '(( BASH_VERSINFO[0] >= 4 ))'], capture_output=True).returncode == 0), None)
+assert workflow_bash, "Testnet checksum fixture requires Bash >= 4, as used by the Windows runner"
+testnet = (repo / ".github/workflows/testnet-packages.yml").read_text()
+def workflow_run(name):
+    block = re.search(r"      - name: " + re.escape(name) + r"\n(.*?)(?=      - name: |\Z)", testnet, re.S)[1]
+    return "\n".join(line[10:] for line in block.split("        run: |\n", 1)[1].splitlines())
+
+def render(text, platform, asset):
+    return text.replace("${{ matrix.platform }}", platform).replace("${{ matrix.asset_name }}", asset)
+
+upload = testnet.split("      - name: Upload testnet package artifacts\n", 1)[1]
+paths = upload.split("          path: |\n", 1)[1].split("          if-no-files-found:", 1)[0]
+for platform, asset in (("linux-x64", "oasis7-linux-x64.deb"),
+                        ("macos-x64", "oasis7-macos-x64.dmg"),
+                        ("windows-x64", "oasis7-windows-x64.exe")):
+    for missing in (False, True):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            assets = root / "output/testnet-packages/assets"
+            assets.mkdir(parents=True)
+            sourceplan = platform + "-SOURCEPLAN.json"
+            files = [asset, platform + "-BUILDINFO", platform + "-bundle-manifest.json",
+                     platform + "-entrypoint-validation.log", "oasis7-" + platform + "-ops-tools.tar.gz"]
+            for name in files:
+                (assets / name).write_text("fixture\n")
+            if not missing:
+                (assets / sourceplan).write_text(json.dumps({"checkoutSha": "a" * 40}))
+            if platform == "windows-x64":
+                # Stub only the unrelated governed-world producer; execute the real move loop.
+                tools = root / "tools"
+                tools.mkdir()
+                stub = tools / "python3"
+                stub.write_text("#!/bin/bash\nset -eu\nwhile [[ $# -gt 0 ]]; do if [[ $1 == --out-dir ]]; then closure=$2; break; fi; shift; done\nmkdir -p \"$closure/generated-world\" \"$closure/doc/testing/evidence\"\nfor kind in bundle genesis manifest; do touch \"$closure/public-testnet-governed-bootstrap-$kind-2026-06-06.windows.json\"; done\ntouch \"$closure/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt\"\n")
+                stub.chmod(0o755)
+                environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"])
+                staged = subprocess.run([workflow_bash, "-c", workflow_run("Stage Windows governed deployment closure")], cwd=root, env=environment, capture_output=True, text=True)
+                if missing:
+                    assert staged.returncode != 0, "missing Windows SOURCEPLAN accepted"
+                    continue
+                assert staged.returncode == 0, staged.stderr
+            result = subprocess.run([workflow_bash, "-c", render(workflow_run("Generate checksums"), platform, asset)], cwd=root, capture_output=True, text=True)
+            if missing:
+                assert result.returncode != 0, "missing " + platform + " SOURCEPLAN accepted"
+                continue
+            assert result.returncode == 0, result.stderr
+            checksum_root = assets / "windows-governed-closure" if platform == "windows-x64" else assets
+            sums = (checksum_root / (platform + "-SHA256SUMS")).read_text()
+            assert sourceplan in sums, platform + " SOURCEPLAN not checksummed"
+            checked = subprocess.run(["shasum", "-a", "256", "-c", platform + "-SHA256SUMS"], cwd=checksum_root, capture_output=True, text=True)
+            assert checked.returncode == 0, checked.stderr
+            selected = {file.resolve() for pattern in render(paths, platform, asset).splitlines()
+                        for file in map(Path, glob.glob(str(root / pattern.strip()), recursive=True)) if file.is_file()}
+            assert (checksum_root / sourceplan).resolve() in selected, platform + " SOURCEPLAN not uploaded"
+            (checksum_root / sourceplan).write_text("tampered")
+            assert subprocess.run(["shasum", "-a", "256", "-c", platform + "-SHA256SUMS"], cwd=checksum_root, capture_output=True).returncode != 0
+print("ok: Testnet SOURCEPLAN final upload selection, missing-file rejection and checksum integrity on all native platforms")

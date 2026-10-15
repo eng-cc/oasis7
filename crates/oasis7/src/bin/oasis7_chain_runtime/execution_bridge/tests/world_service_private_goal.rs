@@ -167,6 +167,7 @@ fn consumer_with_delivery_hook<T>(
         scope_id: "agent:agent-a".into(),
         read_private_key_hex: signer.private_key_hex.clone(),
         timeout: request_timeout,
+        formal_read_trust: None,
         max_response_bytes: 65536,
     })
     .unwrap();

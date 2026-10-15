@@ -86,6 +86,9 @@ enum PrivateError {
     Forbidden,
     Conflict,
     TaskContextReadConflict(task_context::ReadConflictStage),
+    QuoteBaseDrift,
+    QuoteDeliveryDrift,
+    ContextReadDeliveryDrift(Option<task_context::ReadConflictStage>),
     Recovery,
     Unavailable,
 }
@@ -480,6 +483,21 @@ pub(crate) fn maybe_handle_with_delivery_hook(
                 PrivateError::TaskContextReadConflict(stage) => {
                     (409, "private_goal_conflict", Some(stage.as_str()))
                 }
+                PrivateError::QuoteBaseDrift => (
+                    409,
+                    oasis7::world_service::task_factory_quote::TASK_QUOTE_BASE_DRIFT,
+                    None,
+                ),
+                PrivateError::QuoteDeliveryDrift => (
+                    409,
+                    oasis7::world_service::task_factory_quote::TASK_QUOTE_DELIVERY_DRIFT,
+                    None,
+                ),
+                PrivateError::ContextReadDeliveryDrift(stage) => (
+                    409,
+                    oasis7_client_api::world_service::task_context::TASK_CONTEXT_READ_DELIVERY_DRIFT,
+                    stage.map(task_context::ReadConflictStage::as_str),
+                ),
                 PrivateError::Recovery => (503, "private_goal_recovery_required", None),
                 PrivateError::Unavailable => (503, "private_goal_unavailable", None),
             };

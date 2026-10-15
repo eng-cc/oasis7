@@ -4,6 +4,13 @@
 - 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 审计轮次: 1
+
+## 上游约束、结构边界与审读范围
+
+专业 owner 为 P2P/runtime；消费者为 node、chain adapters、operator status 与 QA matrix。配对 [PRD §2](mainnet-private-reachability-architecture.prd.md#2-user-experience-functionality) 定义部署模式、角色、路径和用户模式义务。本设计以下承接聚焦既有 substrate；用户模式 UI、显式确认与端到端产品可用性不由这些条款单独证明。
+
+本轮仅整理既有要求、设计和验证入口，不改变协议、阈值或现有章节锚点。实现落点中的日期结论保留其历史范围；目标态字段与当前实现仍按原节区分。
+
 ## 设计目标
 - 把“没有公网 IP 的节点如何成为主链级网络一等公民”从部署特例提升成框架层能力。
 - 为 oasis7 冻结一套可同时承载 mixed-topology 与多链型数据面的统一 P2P substrate。
@@ -119,6 +126,8 @@
 - `oasis7_net` 现在按 lane 选择 subscription inbox 配额，并在 req/resp 路径优先筛掉不具备对应 lane capability 的 peer record。
 - `oasis7_node` 现在把 replication / consensus 的 topic-protocol 绑定提升为 traffic lane registry，并在 runtime config 的 `node_role_claim` 上执行 lane publish/subscribe/request/serve 权限校验；`observer-light` 仍可主动请求 `sync/blob_state`，但不会注册对应 serve handler，也不能通过 `feedback_p2p` 绕过 `blob_state` lane 的 publish/subscribe gate。
 
+<a name="anti-eclipse-anti-spam-基线"></a>
+
 ## Anti-Eclipse / Anti-Spam 基线
 - Active peer set 至少来自两类 discovery source。
 - 同一 operator、同一 ASN、同一 `/24` 的 active peer 占比默认上限 `25%`。
@@ -194,3 +203,27 @@ Status observability 只投影 contract 与 runtime-selected path 的 bounded su
   - `all nodes must expose public IP`
   - `single relay dependency counts as public-chain-grade`
   - `current implementation already satisfies this architecture end to end`
+
+## 需求承接与验证范围
+
+承接表只列上述既有设计实际承担的子义务，不改变产品功能状态，也不宣称覆盖产品要求的全部验收。验证表是方法与证据目标，不是本次运行结果。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)；Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3 | 无公网入站的 validator core 通过 sentry/relay 参与；转发、存储和 observer 不获得共识 signer 或私有控制权限 | [设计条款](#节点角色模型) | P2P 角色策略、validator governance；QA/ops 同拓扑验证 | 不覆盖公开 validator 准入、完整 pruning/archive 及用户模式 UI |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)；Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3 | 公网 IP 不是通用参与前提；保持 direct、hole-punched、relay 顺序及 delayed-sync 的 lane 限制 | [设计条款](#路径选择与传输策略) | runtime path selector；operator 维护允许的部署 profile | 不保证任意 NAT pair 可直连，不由 relay reservation 推导公网可达 |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)；Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3 | peer manager 根据既有 source/operator/ASN/subnet/relay-domain 与 budget 规则隔离异常 peer，远端不得覆盖本地 admission | [设计条款](#anti-eclipse-anti-spam-基线) | P2P peer manager；QA fail-signature cases | 不证明跨重启 banlist、经济安全或完整抗攻击能力 |
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003) | [设计条款](#节点角色模型) | 无公网入站的 validator core 通过 sentry/relay 参与；转发、存储和 observer 不获得共识 signer 或私有控制权限 | [testing-manual S9B](../../../testing-manual.md#testing-p2p-mixed-topology-matrix)；在同一 source/config 上执行 `./scripts/p2p-mixed-topology-matrix.sh --tier required`，核对 private/validator_hidden/relay_only 的 exact role/lane policy cases；不证明 validator 已经由 sentry/relay 实际连接或 signer 安全，仍需适用 real-env/dedicated 证据；full proxy 与 dedicated lab 分开判定 | required/full summary、case evidence class 与失败签名 | 不覆盖公开 validator 准入、完整 pruning/archive 及用户模式 UI；本轮未运行行为测试 |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003) | [设计条款](#路径选择与传输策略) | 公网 IP 不是通用参与前提；保持 direct、hole-punched、relay 顺序及 delayed-sync 的 lane 限制 | [testing-manual S9B](../../../testing-manual.md#testing-p2p-mixed-topology-matrix)；required path-failover cases 核对 route sequence；full 依 S9B 选择 proxy/real-env，物理 NAT 覆盖须另有 dedicated lab | matrix summary 的 path_expectation、expected_route 与 claim_boundary | 不保证任意 NAT pair 可直连，不由 relay reservation 推导公网可达；本轮未运行行为测试 |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003) | [设计条款](#anti-eclipse-anti-spam-基线) | peer manager 根据既有 source/operator/ASN/subnet/relay-domain 与 budget 规则隔离异常 peer，远端不得覆盖本地 admission | [testing-manual S9B](../../../testing-manual.md#testing-p2p-mixed-topology-matrix)；同候选 required bootstrap-poisoning、relay-exhaustion 与角色边界 cases；核对 suspect record 的 dial dedupe、预算与集中度判定；required 不证明 live 隔离执行或公网抗攻击 | case stdout/stderr/log、测试断言与 summary | 不证明跨重启 banlist、经济安全或完整抗攻击能力；本轮未运行行为测试 |
+
+## 决策、风险与未覆盖义务
+
+采用 identity-first 和分层 substrate，使地址漂移不改变节点身份，且链型适配不重写可达性真值；代价是角色、lane、路径与 QA claim 必须分别验证。沿用上文“当前结论”：架构已指定不等于端到端已实现。runtime owner 在 contract 输入或 status 投影变化时复核归一化边界；QA/ops 在拓扑、NAT 条件或发布 claim 变化时重核 exact/proxy/real-env 与专用实验室证据。用户模式与风险确认仍回到配对 PRD 及 S9C，不由本表替代。

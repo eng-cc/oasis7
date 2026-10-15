@@ -37,12 +37,14 @@ pub(super) fn setup_wake_handoff_recovery_fixture(
     super::async_support::runtime_provider_prefix(&mut world, &context)
         .expect("persist provider Runtime prefix");
 
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_provider_lineage_store(lineage_path.to_path_buf()),
-    )
-    .expect("Runtime live server");
+    let mut server = Box::new(
+        ViewerRuntimeLiveServer::new(
+            ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                .with_decision_mode(ViewerLiveDecisionMode::Llm)
+                .with_provider_lineage_store(lineage_path.to_path_buf()),
+        )
+        .expect("Runtime live server"),
+    );
     server.world = world;
     server
         .llm_sidecar
@@ -97,7 +99,7 @@ pub(super) fn setup_wake_handoff_recovery_fixture(
     // in-memory wake/error transition while exercising sibling progress.
     server.llm_sidecar.provider_lineage_hydrated = true;
 
-    Box::new(server)
+    server
 }
 
 #[inline(never)]
@@ -105,16 +107,18 @@ pub(super) fn restart_wake_handoff_recovery_fixture(
     server: &ViewerRuntimeLiveServer,
     lineage_path: &std::path::Path,
 ) -> Box<ViewerRuntimeLiveServer> {
-    let mut restarted = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_provider_lineage_store(lineage_path.to_path_buf()),
-    )
-    .expect("restarted Runtime live server");
+    let mut restarted = Box::new(
+        ViewerRuntimeLiveServer::new(
+            ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                .with_decision_mode(ViewerLiveDecisionMode::Llm)
+                .with_provider_lineage_store(lineage_path.to_path_buf()),
+        )
+        .expect("restarted Runtime live server"),
+    );
     restarted.world = server.world.clone();
     restarted
         .llm_sidecar
         .restore_provider_lineage(&restarted.world)
         .expect("restore wake recovery marker");
-    Box::new(restarted)
+    restarted
 }

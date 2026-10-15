@@ -18,7 +18,10 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。此项仅豁免独立产品交互 design；配套专业系统设计承接技术合同，不改变产品 authority，也不声明实现已完成。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
-## 1. 产品承诺
+<a id="1-产品承诺"></a>
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
+## 1. 产品目标与承诺
 
 组织可以围绕共同目标持续协作、重组或退出，但不能把成员、独立资产、Agent 或历史变成可任意抹除、秘密没收或失去因果记录的对象。解散和不活跃是同一持续世界中的可理解状态变化：玩家能知道触发原因、当前范围、保留价值、义务、异议或申诉，以及下一次可执行决策。
 
@@ -72,6 +75,15 @@
 <a id="req-wr-oc-001"></a>
 ### REQ-WR-OC-001：解散处置必须先保护权利与责任连续性
 
+Trace ID: O7-REQ-366c9e94-4bd6-41f8-93dd-8d87f163f21a
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-001](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-001)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：处置顺序有专业合同；game 的资产/债权/责任政策及 effect producer/schema、跨节点恢复与玩家结果面未核清。
+
 - 要求：组织解散或重组按风险冻结、合同/托管/债权与责任处理、Agent/设施/持续业务处置、剩余分配的顺序推进；成员独立资产、已有合同、身份来源和历史 receipt 不得被静默没收、删除或追溯改写。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-OC-001](#ac-wr-oc-001)
@@ -79,6 +91,8 @@
 
 <a id="ac-wr-oc-001"></a>
 ### AC-WR-OC-001：解散阶段保留可审计的后果顺序
+
+Trace refs: O7-REQ-366c9e94-4bd6-41f8-93dd-8d87f163f21a；声明：[REQ-WR-OC-001](#req-wr-oc-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-OC-001
 - 给定：一个包含独立资产、未完成合同、托管资产和持续 Agent/设施业务的组织进入解散或重组。
@@ -88,6 +102,15 @@
 <a id="req-wr-oc-002"></a>
 ### REQ-WR-OC-002：长期不活跃先保护再进入受限连续性
 
+Trace ID: O7-REQ-6e6d890d-c94d-4b43-9947-bfccf2f066e3
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-002](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-002)；[organization-continuity-and-disposition.design / des-wr-oc-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：通知/保护期与有限 estate/delegation 有设计；有效活动、期限、资格政策及实际 reclaim/申诉不自动授予权限的实现未核清。
+
 - 要求：长期不活跃必须经过可读通知和保护期；estate 或可撤销 delegation 只能在明确维护/风险隔离需要下以有限、可撤销范围生效，reclaim/申诉待决不能自动取回控制或解除全部义务。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-OC-002](#ac-wr-oc-002)
@@ -95,6 +118,8 @@
 
 <a id="ac-wr-oc-002"></a>
 ### AC-WR-OC-002：不活跃保护与恢复请求不越级
+
+Trace refs: O7-REQ-6e6d890d-c94d-4b43-9947-bfccf2f066e3；声明：[REQ-WR-OC-002](#req-wr-oc-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-OC-002
 - 给定：一个组织满足不活跃事实，但通知、保护、受限持续和 reclaim/申诉请求处于不同阶段。
@@ -104,6 +129,15 @@
 <a id="req-wr-oc-003"></a>
 ### REQ-WR-OC-003：替代授权在重叠范围内必须唯一且原子交接
 
+Trace ID: O7-REQ-b59a4fa5-9b5f-4119-abf6-7c0f2b4f4268
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-003](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-003)；[organization-continuity-and-disposition.design / des-wr-oc-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：重叠范围唯一授权和替代原子交接有设计；外部 effect 事务、旧未确认请求不迁移及跨节点去重实际证据未核清。
+
 - 要求：同一处置范围最多一个可执行授权和一个权威 receipt 结果；替代授权确认时旧授权在重叠范围原子终止或收缩，旧授权未确认请求不得自动迁移、继承优先级或产生第二次效果。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-OC-003](#ac-wr-oc-003)
@@ -111,6 +145,8 @@
 
 <a id="ac-wr-oc-003"></a>
 ### AC-WR-OC-003：交接竞态保持单一有效授权
+
+Trace refs: O7-REQ-b59a4fa5-9b5f-4119-abf6-7c0f2b4f4268；声明：[REQ-WR-OC-003](#req-wr-oc-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-OC-003
 - 给定：同范围替代 delegation、部分交接、旧授权待决请求与 reclaim/申诉同时存在。
@@ -151,3 +187,9 @@
 | [REQ-WR-OC-001](#req-wr-oc-001) / [AC-WR-OC-001](#ac-wr-oc-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-OC-002](#req-wr-oc-002) / [AC-WR-OC-002](#ac-wr-oc-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-OC-003](#req-wr-oc-003) / [AC-WR-OC-003](#ac-wr-oc-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+
+## 未决问题与证据边界
+
+有效活动、通知/保护期限、资格与各类资产处置合同由相应专业 owner 决定；已有 runtime 设计未完成完整实现、跨节点或正式玩家表面审计，不能把文档承接当作可用能力。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

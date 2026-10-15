@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：阅读、对象和空间章节共同组织舞台体验，验收沿PRD映射；范围：世界舞台产品体验，不承诺renderer实现；风险：长期可探索舞台不能误作当前交付；映射：[目标与设计命题](#1-阅读顺序)、[验证与追踪](#prd-reqac-fragment-mapping)、[决策与风险边界](#6-非承诺)
+
 - 配对产品 PRD：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](player-readable-world-stage.prd.md)
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
@@ -156,8 +158,8 @@ This design delegates product requirements and acceptance semantics to its paire
 
 | PRD requirement | PRD acceptance |
 | --- | --- |
-| [REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) |
-| [REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) |
-| [REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003) | [AC-AGENT-STAGE-003](player-readable-world-stage.prd.md#ac-agent-stage-003) |
-| [REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004) | [AC-AGENT-STAGE-004](player-readable-world-stage.prd.md#ac-agent-stage-004) |
-| [REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) | [AC-AGENT-STAGE-005](player-readable-world-stage.prd.md#ac-agent-stage-005) |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) |
+| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) |
+| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003) | [AC-AGENT-STAGE-003](player-readable-world-stage.prd.md#ac-agent-stage-003) |
+| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004) | [AC-AGENT-STAGE-004](player-readable-world-stage.prd.md#ac-agent-stage-004) |
+| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) | [AC-AGENT-STAGE-005](player-readable-world-stage.prd.md#ac-agent-stage-005) |

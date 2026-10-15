@@ -228,6 +228,58 @@ pub struct NodeExecutionBootstrap {
     pub execution_state_root: String,
 }
 
+/// A genesis-only boundary issued by an execution hook after it has verified
+/// the qualified InitialActivation for this exact world. Unlike
+/// `NodeExecutionBootstrap`, this capability is restricted to height zero and
+/// carries the immutable initial record identity so startup can revalidate it
+/// after a stop/restart. Implementations must never construct one from a raw
+/// service pin or unsigned bootstrap DTO.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeExecutionGenesisBootstrap {
+    world_id: String,
+    initial_record_id: String,
+    boundary: NodeExecutionBootstrap,
+}
+
+impl NodeExecutionGenesisBootstrap {
+    /// Construct a zero-height capability only after independently verifying
+    /// the corresponding InitialActivation proof and World snapshot.
+    pub fn from_qualified_initial_activation(
+        world_id: impl Into<String>,
+        initial_record_id: impl Into<String>,
+        boundary: NodeExecutionBootstrap,
+    ) -> Result<Self, String> {
+        let world_id = world_id.into();
+        let initial_record_id = initial_record_id.into();
+        if world_id.trim().is_empty()
+            || initial_record_id.trim().is_empty()
+            || boundary.height != 0
+            || boundary.consensus_block_hash.trim().is_empty()
+            || boundary.execution_block_hash.trim().is_empty()
+            || boundary.execution_state_root.trim().is_empty()
+        {
+            return Err("qualified Node genesis bootstrap is incomplete or nonzero".into());
+        }
+        Ok(Self {
+            world_id,
+            initial_record_id,
+            boundary,
+        })
+    }
+
+    pub fn world_id(&self) -> &str {
+        &self.world_id
+    }
+
+    pub fn initial_record_id(&self) -> &str {
+        &self.initial_record_id
+    }
+
+    pub fn boundary(&self) -> &NodeExecutionBootstrap {
+        &self.boundary
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeExecutionCheckpointBlob {
     pub content_hash: String,
@@ -291,6 +343,15 @@ pub trait NodeExecutionHook: Send {
     /// before candidate execution begins. Ordinary/network hooks do not opt in.
     fn guarded_local_execution(&self) -> bool {
         false
+    }
+
+    /// Return a genesis capability only while this hook can re-verify the same
+    /// qualified InitialActivation. The default deliberately denies genesis
+    /// bootstrap, including for ordinary guarded local hooks.
+    fn qualified_local_execution_genesis_bootstrap(
+        &mut self,
+    ) -> Result<Option<NodeExecutionGenesisBootstrap>, String> {
+        Ok(None)
     }
 
     fn prepare_local_continuation(

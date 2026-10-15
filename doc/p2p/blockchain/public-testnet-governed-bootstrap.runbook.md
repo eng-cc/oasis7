@@ -1,4 +1,5 @@
 # Public Testnet Governed Bootstrap Runbook (2026-06-06)
+
 - 对应项目文档: GitHub Issue / GitHub Project
 - 关联证据:
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
@@ -9,10 +10,9 @@
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`
   - `doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md`
-
 审计轮次: 2
-
 ## Stable authority and evidence boundary
+
 - This is the stable operator authority for public-testnet topology, deployment truth, rollout, rollback and recovery drills. The frozen bootstrap topology remains historical provenance; the managed-five-node inventory is an execution target only after a fresh Phase A truth capture. Neither records present fleet health or release readiness by itself.
 - Dated manifests, bundles, peer lists, package hashes, status snapshots and evidence files remain evidence-window inputs. Before each deployment, recovery update, or readiness assertion, operators must recapture the current deployment truth and bounded same-window health evidence; QA owns release-blocking verdicts and LiveOps/community owns external status or recovery wording.
 - Restart, port cleanup, reseed, data isolation and waiting for recovery may collect evidence or provide temporary recovery only. For peer-head drift, execution/resource divergence, signer/peer identity mismatch, or degraded replication, identify and repair the code, configuration, package, manifest, deployment artifact, or state-contract root cause before clean redeploy/rebuild; never treat an operational restart as the durable resolution.
@@ -183,7 +183,10 @@ validator-quorum finality or a replacement for `WorldHeadProofV1`.
    - derived validator signer truth
    - validator registry
    - governed bootstrap world
-   - observer `REPLICATION_REMOTE_WRITERS_CSV`
+   - observer `REPLICATION_REMOTE_WRITERS_CSV` for the currently deployed wrapper contract. Keep this field until the wrapper and runtime have both been upgraded and checked; changing only the env spelling can omit the required allowlist.
+
+   Candidate naming migration in [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683): after that PR merges, deploy its matching wrapper and binary, then confirm `--help` exposes `--replication-fetch-requester-public-key` and that the wrapper accepts `REPLICATION_FETCH_REQUESTERS_CSV` before switching. The new name grants additional fetch permission only; writers remain bound to verified validator signers. The candidate retains the old spelling as a warning-emitting adapter and rejects conflicting old/new env values. This documentation does not authorize switching a current deployment to a variable its wrapper does not recognize. In that candidate, flat CLI scalars occur once, opposite switches conflict, and validator IDs/signer bindings are unique; peer/listener/authority/requester lists remain repeatable. Escape leading `--` values with `--node-id -- --literal`. Omitted relay/probe hints use live detection; explicit hints override it.
+
 4. libp2p bootstrap peer id 必须在 validator 启动后实时读取，不能沿用旧证据文件中的值。
 5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链；正常 attach 必须依赖自动 high-head checkpoint catch-up 与 tail gap sync。
 6. 自动 high-head checkpoint catch-up 只覆盖 observer/light-node 边界；execution-required 节点不能用它跳过历史执行，也不能把它当作完整 snapshot state-sync。
@@ -381,7 +384,7 @@ ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .r
 2. 用新的 signer truth 生成 deployment-only validator registry。
 3. 用新的 registry 重建 deployment-only governed bootstrap world。
 4. 读取 validator 实际 `local_peer_id`，更新当前 deployment truth 中的 manifest/bootstrap peer artifact；manifest-backed public_testnet 启动不再要求 observer env 维护 `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV`。
-5. 更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐当前 deployment truth 中所有 authorized replication writers；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。
+5. 按当前部署 wrapper 合同更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐当前 deployment truth 中需要 fetch 权限的 requester signer；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。只有 #4683 合入、匹配 wrapper/binary 已部署且上述 help/配置支持检查完成后，才改用 `REPLICATION_FETCH_REQUESTERS_CSV`；不得仅改 env 名称而丢失 allowlist。
 
 ### Pass criteria
 1. deployment-only registry 与 host 当前 signer truth 一致
@@ -408,7 +411,7 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 3. 需要升级 Windows observer 时，必须使用包含 Windows artifact 的 CI scope；如果先前 run 只有 Linux/macOS，不得把 Linux artifact 复制到 Windows。
 4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。当前 workflow 中 `all_existing` 仍只生成 `linux-x64`、`macos-x64`、`windows-x64`；完整 managed-fleet packaging 必须对同一 requested ref/commit 协调执行 `all_existing` plus `linux_macos_arm64` runs，并记录两组 run ID、BUILDINFO 与 SHA256SUMS。验收以 runtime hash、commit lineage、status health 和高度对齐为准。
 
-Wasmtime48.0.3 → 49.0.2 不得采用运行中 rolling/restart/单节点 rollback；完整 fleet 的审读授权计划、quiescence、identity/checkpoint/closure admission 和 recovery hold 依 [协调维护分册](wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance) 执行，条件不满足保持 `hold`。
+Wasmtime48.0.3 → 49.0.3 不得采用运行中 rolling/restart/单节点 rollback；完整 fleet 的审读授权计划、quiescence、identity/checkpoint/closure admission 和 recovery hold 依 [协调维护分册](wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance) 执行，条件不满足保持 `hold`。
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
 2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。

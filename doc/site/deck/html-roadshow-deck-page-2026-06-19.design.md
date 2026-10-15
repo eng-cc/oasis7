@@ -6,11 +6,10 @@
 - Owner module: `site`
 - Image2 desktop target: `doc/site/deck/assets/html-roadshow-deck-desktop-image2-2026-06-19.png`
 - Image2 mobile target: `doc/site/deck/assets/html-roadshow-deck-mobile-image2-2026-06-19.png`
-- Related task: GitHub issue #1484
-  (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
-  live in `.pm/github-project-sync/task-archive.jsonl`)
+- Historical task and archived process: [Task #1484](https://github.com/eng-cc/oasis7/issues/1484#issuecomment-6162411651) (`task_e02c8fe08ebb4f51887b116675f676c1`); no ignored local archive is required to follow this source.
 
-## Purpose
+<a id="purpose"></a>
+## Purpose（设计目标）
 
 The HTML roadshow deck lets a presenter or external collaborator open a fixed
 sequence and move through the project thesis, gameplay distinction, current
@@ -53,7 +52,8 @@ Mobile prompt used:
 Create a mobile design target for the oasis7 HTML roadshow deck, 390x844. Browser presentation page with reveal.js-like controls. Show compact wrapped top navigation, status chips “HTML Deck” and “limited playable technical preview”, slide number/progress, and a readable one-column cover slide. Use the English/CN bilingual-ready visual system: dark sci-fi background, restrained teal plus warm amber boundary accents, clear cards, no text clipping. Include a second mini-state preview showing a later proof/boundary slide opened by hash navigation, with the same chrome and controls still visible. Do not imply public launch, closed beta, or full playability.
 ```
 
-## Information Architecture
+<a id="information-architecture"></a>
+## Information Architecture（信息结构）
 
 - Persistent chrome: oasis7 brand, return links, docs/project links, and
   language switch.
@@ -65,7 +65,8 @@ Create a mobile design target for the oasis7 HTML roadshow deck, 390x844. Browse
   player loop, stack, proof, and path.
 - End slide: return links and next-step boundary.
 
-## Required States
+<a id="required-states"></a>
+## Required States（状态与风险）
 
 | State | Design requirement |
 | --- | --- |
@@ -103,3 +104,19 @@ chips, and bilingual route. Implementation review should compare:
 The Image2 targets define visual direction and comparison expectations only.
 They do not replace real browser screenshots, responsive checks, keyboard/touch
 navigation smoke, accessibility review, QA evidence, or PR review.
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement | 承接义务 | 本设计条款 | 权威职责 | 边界 |
+| --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | 双语路由和语言长度差异 | [双语路由与长度差异](#coverage) | 页面比较目标；[AC-15](../prd.md#ac-15)；[Site 当前接收](../design.md#site-roadshow-deck-receiver)与[原专业要求](../prd.md#prd-site-012)保持 authority | 不覆盖 AC-16 静态发布实现；Image2 不是浏览器、a11y 或发布证据 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | hash 深链、键盘触控、fragment、窄屏与密集内容的原比较目标 | [导航与适用状态](#required-states) | 页面比较目标；[原功能矩阵](../prd.md#deck-functional-contract)；[Site 当前接收](../design.md#site-roadshow-deck-receiver)与[原专业要求](../prd.md#prd-site-012)保持 authority | 不覆盖 AC-16 静态发布实现；Image2 不是浏览器、a11y 或发布证据 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | 原固定 slide 顺序、persistent chrome/status、回链和有限技术预览边界 | [固定顺序、入口回链与持续预览](#information-architecture) | 页面比较目标；[AC-17](../prd.md#ac-17)；[Site 当前接收](../design.md#site-roadshow-deck-receiver)与[原专业要求](../prd.md#prd-site-012)保持 authority | 不覆盖 AC-16 静态发布实现；Image2 不是浏览器、a11y 或发布证据 |
+
+### 11.1 验证映射表
+
+| 上游 requirement | 本设计条款 | 独立 obligation | 验证方法 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | [双语路由与长度差异](#coverage) | 双语路由和语言长度差异；专业来源 [AC-15](../prd.md#ac-15) | planned；`test_tier_required`；[测试分层与证据规范](../../../testing-manual.md)只提供分层与真实记录要求，不是现成 deck 测试。依原 Implementation Comparison Notes，页面实施 PR 在同一固定候选双语路由记录本行适用导航/状态及窄屏实际操作，当前未运行 | 原要求的同候选真实截图与操作记录，保留[非替代边界](#non-replacement-boundary) | 本次文档关系不表示新 visual-designer signoff 或当前发布验收；不代签 AC-16 静态链 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | [导航与适用状态](#required-states) | hash 深链、键盘触控、fragment、窄屏与密集内容的原比较目标；专业来源 [原功能矩阵](../prd.md#deck-functional-contract) | planned；`test_tier_required`；[测试分层与证据规范](../../../testing-manual.md)只提供分层与真实记录要求，不是现成 deck 测试。依原 Implementation Comparison Notes，页面实施 PR 在同一固定候选双语路由记录本行适用导航/状态及窄屏实际操作，当前未运行 | 原要求的同候选真实截图与操作记录，保留[非替代边界](#non-replacement-boundary) | 本次文档关系不表示新 visual-designer signoff 或当前发布验收；不代签 AC-16 静态链 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../../product/player-entry-distribution/prd.md#sc-entry-011) | [固定顺序、入口回链与持续预览](#information-architecture) | 原固定 slide 顺序、persistent chrome/status、回链和有限技术预览边界；专业来源 [AC-17](../prd.md#ac-17) | planned；`test_tier_required`；[测试分层与证据规范](../../../testing-manual.md)只提供分层与真实记录要求，不是现成 deck 测试。依原 Implementation Comparison Notes，页面实施 PR 在同一固定候选双语路由记录本行适用导航/状态及窄屏实际操作，当前未运行 | 原要求的同候选真实截图与操作记录，保留[非替代边界](#non-replacement-boundary) | 本次文档关系不表示新 visual-designer signoff 或当前发布验收；不代签 AC-16 静态链 |

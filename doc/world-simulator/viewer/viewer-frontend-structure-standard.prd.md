@@ -40,6 +40,8 @@
 - `main.jsx` 与 `pixel_world_host.jsx` 承担 UI composition、state projection、copy、diagnostics、event handlers 与 fixture/test hooks，缺少“何时抽组件、何时抽 service/state module”的标准。
 - 现有 Rust 侧已有体量与真实职责拆分治理；Viewer JS/HTML/JSX 侧需要较轻但明确的对应规则。
 
+<a name="接口-数据"></a>
+
 ## 接口 / 数据
 
 | 类型 | 示例 | 规则 |
@@ -84,7 +86,7 @@ Existing files above the soft threshold are not automatically blockers for unrel
 ### 当前已登记的结构债务
 
 - `legacy_core.js` 仍包含 control、semantic-command、DOM-rendering 与 bootstrap assembly；后续切片应优先抽出一个 coherent boundary，保留 facade、记录前后行数并运行 scoped UI/build/feedback checks。
-- `viewer.html`、`gameplay_attraction_scenario.js`、`main.jsx`、`main.test.jsx`、`pixel_world_host.jsx` 与 `viewer_feedback_module.js` 的现有阈值豁免由 `test:frontend-structure` 的 owner-tagged registry 守护；新增体量或失效豁免必须在 PR 与实际验证记录 说明 owner、原因和下一触发点。
+- 现有阈值豁免的实时文件清单与 cap 以 `crates/oasis7_viewer/scripts/frontend-structure-audit.mjs` 的 `knownLineDebt` registry 为准，由 `test:frontend-structure` 守护；不再以历史 `main.jsx` 等文件枚举代替当前 owning module。生产 1200 / 测试 1600 行软阈值及上述拆分触发条件不变；新增体量或失效豁免必须在 PR 与实际验证记录说明 owner、reason 和 nextTrigger，registry 引用不表示债务清零。
 - `dist/software_safe.js` 仍是 `viewer.js` 的生成 compat alias；dist 中的 `software_safe.html` 必须保持 `viewer.html` 的 byte-for-byte generated copy；compat evidence page 从 canonical fixture 生成。它们不能承接修复或债务绕行。
 
 ## 可接受拆分模式
@@ -101,6 +103,8 @@ Rejected patterns:
 - Copying state shapes or fixture payloads into parallel modules to avoid imports.
 - Creating a second source of truth for canonical `viewer.js`, `viewer.html`, the claim fixture, generated compatibility aliases, or runtime files.
 - Moving JSX into string templates when Solid components would keep structure and test selectors clearer.
+
+<a name="html-jsx-js-职责"></a>
 
 ## HTML / JSX / JS 职责
 

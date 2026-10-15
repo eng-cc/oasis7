@@ -137,8 +137,9 @@ impl PrivateGoalStore {
         }
         #[cfg(unix)]
         {
-            let record = PreparedTaskContextV1::create(proof.clone(), snapshot)
-                .map_err(|_| PrivateTaskContextError::Invalid)?;
+            let record =
+                crate::world_service::private_task_context::create(proof.clone(), snapshot)
+                    .map_err(|_| PrivateTaskContextError::Invalid)?;
             let name = self.context_name(&Scope::new(
                 &proof.request.fence,
                 &proof.subject_public_key,

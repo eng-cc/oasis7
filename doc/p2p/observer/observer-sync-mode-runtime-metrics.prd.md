@@ -85,10 +85,14 @@
 - `ObserverRuntimeMetrics::record_mode_with_dht_report(&HeadSyncModeWithDhtReport)`
 - `ObserverRuntimeMetrics::snapshot() -> ObserverRuntimeMetricsSnapshot`
 
+<a id="observer-sync-mode-observability-report"></a>
+
 ### 模式可观测报告（重新激活目标）
 - `HeadSyncModeReport` 与 `HeadSyncModeWithDhtReport` 均包含 `mode`、既有 `HeadSyncReport` 和 `fallback_used`。
 - `sync_heads_with_mode_observed_report` 与 `sync_heads_with_dht_mode_observed_report` 分别覆盖非 DHT/DHT 路径。
 - `fallback_used` 必须在模式分发层按真实执行路径计算；不得修改既有 `HeadSyncReport` 字段来制造兼容性破坏。
+
+<a id="observer-sync-mode-automatic-record-bridge"></a>
 
 ### 自动记录桥接（重新激活目标）
 - 单轮桥接：`sync_heads_with_mode_observed_report_and_record`、`sync_heads_with_dht_mode_observed_report_and_record`。

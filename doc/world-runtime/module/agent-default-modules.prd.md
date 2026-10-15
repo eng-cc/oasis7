@@ -118,6 +118,8 @@ struct ModuleSlot {
 建议最小拒绝语义：
 - `rule.decision.verdict = deny`，`notes` 给出缺口电量。
 
+<a id="agent-default-modules-install-governance-compatibility"></a>
+
 ### 安装、治理与兼容边界
 - 两个 power module ID 固定为 `m1.power.radiation_harvest` 与 `m1.power.storage`：前者低速补能并发出 audit emission，后者维护私有有限 capacity/level，并在 `pre_action` 移动前拒绝能量不足。
 - 三个安装入口都通过 `propose -> shadow -> approve -> apply`，重复安装或“已注册但停用”必须幂等地跳过重复 register 并恢复 activate。

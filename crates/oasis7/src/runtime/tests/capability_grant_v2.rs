@@ -985,6 +985,9 @@ fn trusted_executor_atomically_commits_state_effect_emit_budget_nonce_and_receip
     );
     world
         .ingest_receipt(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id: intent.intent_id.clone(),
             status: "ok".to_string(),
             payload: json!({"published": true}),

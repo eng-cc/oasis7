@@ -94,6 +94,12 @@
 
 <a id="semantic-positioning-acceptance"></a>
 ## 6. Acceptance Criteria
+
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；局部承接[REQ-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-003)：AC-1/3/5 的位置来源、精确优先、derived/missing 与 DOM 表达是抽象/派生空间表达的有限子义务，不代表多尺度探索已实现。
+
+Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；局部承接[REQ-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-002)：AC-2 的显式 current relation authority 与撤销清线仅承接来源/时效诚实、失效不造关系；不代签旧响应竞态、提交前权威再确认或高后果阻断全链。
+
+AC-4 保持独立 unavailable 验证要求；以下 AC 原文与历史证据不变。
 - AC-1: An agent with `location_id` but no `pos` gets a deterministic `location_derived` position in the Viewer DTO.
 - AC-2: A sparse snapshot with only `location_id` produces no relationship link. Adding a complete current authoritative relation produces a stable link; removing or invalidating any required authority field removes it without changing the deterministic position rule.
 - AC-3: Rendered DOM uses world-coordinate placement when DTO positions are available.

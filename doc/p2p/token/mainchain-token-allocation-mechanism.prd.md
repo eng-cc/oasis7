@@ -47,6 +47,7 @@
 
 ### 原文技术约束（保真）
 #### 接口 / 数据
+<a id="tam-config"></a>
 ### 1) 主配置与边界
 ```rust
 MainTokenConfig {
@@ -126,17 +127,17 @@ DomainEvent::NodePointsSettlementApplied {
   - 同步更新 `total_supply/circulating_supply/total_burned`。
 - 治理更新：
   - `UpdateMainTokenPolicy` 走参数边界校验；
-  - 固定延迟 `2` 个 epoch 生效（`MAIN_TOKEN_POLICY_UPDATE_DELAY_EPOCHS = 2`）；
+  - <a id="tam-policy-delay"></a>固定延迟 `2` 个 epoch 生效（`MAIN_TOKEN_POLICY_UPDATE_DELAY_EPOCHS = 2`）；
   - 增发与费用结算均按“目标 epoch 的有效配置”计算。
 - NodePoints 桥接与二期治理分发：
   - 预算来源：同 epoch `MainTokenEpochIssuanceRecord.node_service_reward_amount`；
   - 分配：按 `awarded_points` 比例做确定性分配，余数按排序回填；
   - 执行：扣减 `node_service_reward_pool`，增加节点主链 Token `liquid_balance` 与 `circulating_supply`；
   - 审计：写入 `main_token_node_points_bridge_records[epoch]`；
-  - 节点主链账户以 `WorldState.node_main_token_account_bindings: BTreeMap<String, String>` 维护；`World::bind_node_main_token_account(node_id, account_id)` 写入并由 `World::node_main_token_account(node_id)` 查询。NodePoints 桥接优先使用该绑定，而不是把 `node_id` 当作账户。
-  - `UpdateMainTokenPolicy { proposal_id, next }` 除原有参数边界和两 epoch 延迟外，要求 proposal 存在且状态为 `Approved` 或 `Applied`。
-  - `DistributeMainTokenTreasury { proposal_id, distribution_id, bucket_id, distributions }` 仅可分发 `staking_reward_pool`、`ecosystem_pool`、`security_reserve`。它扣减 treasury bucket、增加接收方 `liquid_balance` 与 `circulating_supply`（不改变 `total_supply`），并写入 `main_token_treasury_distribution_records[distribution_id]` 与 `MainTokenTreasuryDistributed` 审计事件；`distribution_id` 必须幂等。
-  - 旧快照缺少二期字段时以 `serde(default)` 保持兼容。
+  - <a id="tam-internal-binding"></a>节点主链账户以 `WorldState.node_main_token_account_bindings: BTreeMap<String, String>` 维护；`World::bind_node_main_token_account(node_id, account_id)` 写入并由 `World::node_main_token_account(node_id)` 查询。NodePoints 桥接优先使用该绑定，而不是把 `node_id` 当作账户。
+  - <a id="tam-policy-approval"></a>`UpdateMainTokenPolicy { proposal_id, next }` 除原有参数边界和两 epoch 延迟外，要求 proposal 存在且状态为 `Approved` 或 `Applied`。
+  - <a id="tam-distribution"></a>`DistributeMainTokenTreasury { proposal_id, distribution_id, bucket_id, distributions }` 仅可分发 `staking_reward_pool`、`ecosystem_pool`、`security_reserve`。它扣减 treasury bucket、增加接收方 `liquid_balance` 与 `circulating_supply`（不改变 `total_supply`），并写入 `main_token_treasury_distribution_records[distribution_id]` 与 `MainTokenTreasuryDistributed` 审计事件；`distribution_id` 必须幂等。
+  - <a id="tam-snapshot-defaults"></a>旧快照缺少二期字段时以 `serde(default)` 保持兼容。
 
 ### 5) 运行手册补充
 - 主链 Token / NodePoints 桥接定向回归：
@@ -182,3 +183,5 @@ DomainEvent::NodePointsSettlementApplied {
 - 原“目标” -> 第 1 章。
 - 原“范围” -> 第 2 章。
 - 原“接口/数据、里程碑、风险” -> 第 4~6 章。
+
+专业设计追踪导航：[配置边界](mainchain-token-allocation-mechanism.design.md#tam-config-design)、[延迟](mainchain-token-allocation-mechanism.design.md#tam-delay-design)、[批准条件](mainchain-token-allocation-mechanism.design.md#tam-approval-design)、[三 bucket 分发](mainchain-token-allocation-mechanism.design.md#tam-buckets-design)、[审计幂等](mainchain-token-allocation-mechanism.design.md#tam-idempotency-design)、[内部绑定](mainchain-token-allocation-mechanism.design.md#tam-binding-design)、[快照默认](mainchain-token-allocation-mechanism.design.md#tam-defaults-design)。仅定位原文技术约束，不更新数值、状态或验收。

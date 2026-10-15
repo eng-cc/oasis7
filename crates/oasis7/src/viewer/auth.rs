@@ -17,7 +17,7 @@ pub(crate) use hosted_authorization::tests::context as test_hosted_authorization
 pub use hosted_authorization::{
     HOSTED_AUTHORIZATION_ISSUER_PUBLIC_KEY_ENV, HOSTED_AUTHORIZATION_MAX_AGE_MS,
     HOSTED_IDENTITY_V2_ENABLED_ENV, HostedAuthContextV2, hosted_identity_v2_enabled,
-    issue_hosted_authorization_grant,
+    hosted_identity_v2_enabled_checked, issue_hosted_authorization_grant,
 };
 pub(crate) use hosted_authorization::{
     authorization_nonce, verify_hosted_authorization_grant, verify_hosted_release_grant,

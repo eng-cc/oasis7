@@ -1,5 +1,7 @@
 # Gameplay Agent 认领经济合同设计
 
+历史状态边界：§9 的 2026-03-27 样本与 §10 的 2026-03-29 reopening 是原窗口记录，不表示今日闭环、任务状态或重新调参。原 AGC-005 接收 Task 尚未唯一定位，原过程保留；经济参数、维持理由及重新评估条件继续有效，实际能力须取当前候选证据。
+
 - 对应需求文档: [`Gameplay Agent 认领经济合同`](gameplay-agent-claim-economy-contract.prd.md)
 - 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
@@ -7,7 +9,9 @@
 审计轮次: 2
 
 <a id="public-claim-boundary"></a>
-## Public claim boundary
+## 公开口径边界与风险
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
 
 本设计文件只负责 claim 状态机、成本、资金来源和 provenance 的专业设计，不拥有发行状态或公开 claim。其消费合同是玩家接入与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
 
@@ -41,9 +45,10 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | 首个经济 Agent 认领必须展示非零承诺包，并保持成本、资金来源与后续回收可审计。 | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | `producer_system_designer` / `runtime_engineer` | 不证明具体实现、部署或公开 claim。 |
-| [REQ-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-entry-001) | 同世界新账号的显式首次注册不依赖既有 claimer，返回账号恢复旧绑定；两者与经济 Claim 分开。 | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | `runtime_engineer` / identity / `viewer_engineer` / `qa_engineer` | 后继目标，当前固定 starter 与空世界测试不证明逐账号准入；不修改经济 Claim Prepare/Confirm。 |
-| [AC-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#ac-agc-entry-001) | 同世界新账号的显式首次注册不依赖既有 claimer，返回账号恢复旧绑定；两者与经济 Claim 分开。 | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | `runtime_engineer` / identity / `viewer_engineer` / `qa_engineer` | 后继目标，当前固定 starter 与空世界测试不证明逐账号准入；不修改经济 Claim Prepare/Confirm。 |
+| Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) | 认领经济说明区分当前事实、产品目标、假设与证据边界，缺少同窗依据不发布 | [公开口径边界](#public-claim-boundary) | 产品 / LiveOps / QA / 根 README | 只覆盖认领经济输入，不替代其他专业领域、全渠道审核或实际发布证据 |
+| Trace refs: O7-REQ-612f4d3d-e831-48f9-9dfc-f0844690e6cf；[`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | 首个经济 Agent 认领必须展示非零承诺包，并保持成本、资金来源与后续回收可审计。 | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | `producer_system_designer` / `runtime_engineer` | 不证明具体实现、部署或公开 claim。 |
+| Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270；[REQ-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-entry-001) | 同世界新账号的显式首次注册不依赖既有 claimer，返回账号恢复旧绑定；两者与经济 Claim 分开。 | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | `runtime_engineer` / identity / `viewer_engineer` / `qa_engineer` | 后继目标，当前固定 starter 与空世界测试不证明逐账号准入；不修改经济 Claim Prepare/Confirm。 |
+| Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270；[AC-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#ac-agc-entry-001) | 同世界新账号的显式首次注册不依赖既有 claimer，返回账号恢复旧绑定；两者与经济 Claim 分开。 | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | `runtime_engineer` / identity / `viewer_engineer` / `qa_engineer` | 后继目标，当前固定 starter 与空世界测试不证明逐账号准入；不修改经济 Claim Prepare/Confirm。 |
 | [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001) | 已交付文案切片按 OR 条件披露，保留余额耗尽后记录仍有效与其他独立 gate 的区别。 | [DES-CLAIM-CHAT-002](#des-claim-chat-002) | `runtime_engineer` / `viewer_engineer` | 该切片不改 OC 额度、领取资格、账本或现有 chat gate。 |
 | [REQ-AGC-CHAT-002](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-002) | 注册/绑定不等于经济认领；权威延后说明按实际经济 claim 生成。 | [DES-CLAIM-CHAT-003](#des-claim-chat-003) | `runtime_engineer` / `gameplay_designer` | 不据此减免费用、清除历史未决义务或开放免费经济 claim。 |
 | [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003) | 已交付显示切片让中英文、Viewer/pure API 保留同一含义；旧版或缺失义务说明保守回退。 | [DES-CLAIM-CHAT-004](#des-claim-chat-004) | `viewer_engineer` / `qa_engineer` | 该切片不增加协议字段或把显示状态持久化为世界状态。 |
@@ -244,14 +249,14 @@ service 来源需单独限定：[world_service/projection.rs](../../../crates/oa
 - 最后补 Viewer / pure API 表达与 QA abuse suite，再决定是否进入新一轮平衡调参。
 
 ## 9. 首轮平衡复核结论
-- `TASK-GAMEPLAY-AGC-005`（2026-03-27）当前结论：继续维持 v1 默认值，不新开调参专题。
+- `TASK-GAMEPLAY-AGC-005`（2026-03-27）历史结论：继续维持 v1 默认值，不新开调参专题。
 - 维持项：
   - `slot multiplier = 1.0 / 1.5 / 2.0`
   - `grace_epochs = 2`
   - `forced_reclaim_penalty_bps = 2000`
   - `tier cap = 1 / 2 / 3`
 - 维持理由：
-  - runtime / viewer / QA 三条闭环都已通过，说明当前更缺“真实持有行为样本”，而不是“再造一轮默认值”。
+  - 该历史窗口记录 runtime / viewer / QA 三条闭环通过，当时更缺“真实持有行为样本”，而不是“再造一轮默认值”。
   - 当前成本曲线仍满足本专题最重要的结构边界：首个 claim 非免费、额外槽位单调更贵、欠费与闲置都能回收、refund/slash 可审计。
   - 在还没有真实 claim 分布、平均持有时长、grace 命中率、forced reclaim 占比之前，提前改参数只会稀释对当前默认值的验证意义。
 - 后续只有在以下任一条件成立时，才重新开调参专题：
@@ -272,12 +277,13 @@ service 来源需单独限定：[world_service/projection.rs](../../../crates/oa
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | 验证首个 claim 的非零成本、受限资金用途与回收边界保持同一规则链。 | [`agent claim runtime tests`](../../../crates/oasis7/src/runtime/tests/agent_claims.rs) | PR 与实际验证记录 / QA result | 不证明生产部署、公开资格或最终价格平衡。 |
+| Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) | [公开口径边界](#public-claim-boundary) | 设计事实不得冒充认领能力已部署、账户已获准或渠道已发布 | 按 AC-ENTRY-CLAIM-003 人工审核同候选认领说明的四层字段，与根 README、专业规则及受限发放 runbook 同窗对账；加入缺证、历史样本与目标冒充事实负例。文档结构按 [testing-manual 文档验证入口](../../../testing-manual.md) 的 S0/docs-only 合同检查；该自动检查不代签口径审核 | 对应 PR/候选的 QA 与 LiveOps 审核记录；此处为方法，未新增执行结果 | 不证明当前上线、一般账户资格、结算就绪或其他领域/渠道的 claim |
+| Trace refs: O7-REQ-612f4d3d-e831-48f9-9dfc-f0844690e6cf；[`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | 验证首个 claim 的非零成本、受限资金用途与回收边界保持同一规则链。 | [`agent claim runtime tests`](../../../crates/oasis7/src/runtime/tests/agent_claims.rs) | PR 与实际验证记录 / QA result | 不证明生产部署、公开资格或最终价格平衡。 |
 | [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001) | [DES-CLAIM-CHAT-002](#des-claim-chat-002) | OR gate、余额耗尽后记录保留，以及资源字段独立披露。 | [首聊 snapshot 回归](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_first_chat_unlock_preview.rs) 的 `compat_snapshot_projects_first_chat_unlock_preview_only_for_zero_liquid_without_starter_oc`；同一 source HEAD 的本地 required Rust 层。通过条件：零余额且无记录才有预览，两个文案字段均说明 OR 和余额用尽；这些组合区分实际 gate 与旧文案。 | PR 记录命令、HEAD、本地输入来源与实际测试 verdict。 | 不证明 service 余额投影与真实 gate 正确、provider 可用、重复领取资格或已完成真实对话。 |
 | [REQ-AGC-CHAT-002](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-002) | [DES-CLAIM-CHAT-003](#des-claim-chat-003) | 实际注册与经济认领的义务区分。 | [首聊 snapshot 回归](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_first_chat_unlock_preview.rs) 的 `first_chat_unlock_preview_distinguishes_registration_from_economic_claims`；同一 source HEAD 的 action → snapshot 层。通过条件：真实 RegisterAgent 无经济 claim，真实 ClaimAgent 有 owner/upkeep，其他 Agent 的 claim 不污染文案；同时检查世界记录和说明，避免仅有字符串自证。 | PR 记录世界状态断言与实际测试 verdict。 | 不改变经济状态机或证明所有历史未决义务已结清。 |
 | [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003) | [DES-CLAIM-CHAT-004](#des-claim-chat-004) | 两种语言、旧版与缺失义务说明、预览更新保持相同含义。 | [首聊 Viewer 测试](../../../crates/oasis7_viewer/software_safe_src/first_chat_unlock_preview.test.jsx)；同一 source HEAD 的组件层并构建生成产物。通过条件：EN/ZH 对应、旧版和缺失说明为 unknown、无翻译保留来源、输入更新替换旧说明；覆盖精确字符串映射最易遗漏的兼容分支。 | PR 记录组件测试 verdict、构建结果与证据范围。 | 不证明新鲜度检测、全场景可玩性、真实留存或发行就绪。 |
-| [REQ-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-entry-001) | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | 三情境注册/恢复、第二玩家、隔离与幂等。 | 11.3 后继验证矩阵的 ENTRY 场景；以现有 [auth_actions_claims.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/auth_actions_claims.rs) 空世界样例为基线，后继实现增加 canonical service 两账号与原请求恢复测试，再做同候选入口验证。 | 实现 PR 的固定 source/build、世界身份、原请求/结果及实际测试或试玩记录。 | 当前基线不证明逐账号注册、正式 owner bootstrap 或同世界多玩家验收；本文未运行这些场景。 |
-| [AC-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#ac-agc-entry-001) | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | 三情境注册/恢复、第二玩家、隔离与幂等。 | 11.3 后继验证矩阵的 ENTRY 场景；以现有 [auth_actions_claims.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/auth_actions_claims.rs) 空世界样例为基线，后继实现增加 canonical service 两账号与原请求恢复测试，再做同候选入口验证。 | 实现 PR 的固定 source/build、世界身份、原请求/结果及实际测试或试玩记录。 | 当前基线不证明逐账号注册、正式 owner bootstrap 或同世界多玩家验收；本文未运行这些场景。 |
+| Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270；[REQ-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-entry-001) | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | 三情境注册/恢复、第二玩家、隔离与幂等。 | 11.3 后继验证矩阵的 ENTRY 场景；以现有 [auth_actions_claims.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/auth_actions_claims.rs) 空世界样例为基线，后继实现增加 canonical service 两账号与原请求恢复测试，再做同候选入口验证。 | 实现 PR 的固定 source/build、世界身份、原请求/结果及实际测试或试玩记录。 | 当前基线不证明逐账号注册、正式 owner bootstrap 或同世界多玩家验收；本文未运行这些场景。 |
+| Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270；[AC-AGC-ENTRY-001](gameplay-agent-claim-economy-contract.prd.md#ac-agc-entry-001) | [DES-CLAIM-ENTRY-001](#des-claim-entry-001) | 三情境注册/恢复、第二玩家、隔离与幂等。 | 11.3 后继验证矩阵的 ENTRY 场景；以现有 [auth_actions_claims.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/auth_actions_claims.rs) 空世界样例为基线，后继实现增加 canonical service 两账号与原请求恢复测试，再做同候选入口验证。 | 实现 PR 的固定 source/build、世界身份、原请求/结果及实际测试或试玩记录。 | 当前基线不证明逐账号注册、正式 owner bootstrap 或同世界多玩家验收；本文未运行这些场景。 |
 | [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001) | [DES-CLAIM-CHAT-005](#des-claim-chat-005) | 真实 service 三值事实、来源/隐私、失效/最终重验及三入口同义。 | 11.3 后继验证矩阵的 GATE 场景；以现有 [WorldService HTTP owner 隔离回归](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service_agent_chat.rs) 的 `canonical_owner_goal_http_view_excludes_public_and_registered_delegate` 为基线，后继实现按真实 `WorldServiceProjection` producer→已认证 read→consumer→submit 增加资格、失效与集成回归。 | 实现 PR 的版本、主体/世界/commit 绑定、原始受限投影与各入口结果。 | 已交付本地 snapshot/组件及投影隔离测试不覆盖此后继资格协议；新增测试需在实现时落地，不声明现有自动化已通过。 |
 | [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003) | [DES-CLAIM-CHAT-005](#des-claim-chat-005) | 真实 service 三值事实、来源/隐私、失效/最终重验及三入口同义。 | 11.3 后继验证矩阵的 GATE 场景；以现有 [WorldService HTTP owner 隔离回归](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service_agent_chat.rs) 的 `canonical_owner_goal_http_view_excludes_public_and_registered_delegate` 为基线，后继实现按真实 `WorldServiceProjection` producer→已认证 read→consumer→submit 增加资格、失效与集成回归。 | 实现 PR 的版本、主体/世界/commit 绑定、原始受限投影与各入口结果。 | 已交付本地 snapshot/组件及投影隔离测试不覆盖此后继资格协议；新增测试需在实现时落地，不声明现有自动化已通过。 |
 

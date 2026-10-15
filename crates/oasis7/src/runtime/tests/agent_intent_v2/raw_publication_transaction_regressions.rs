@@ -135,6 +135,7 @@ fn completed_fixture() -> (World, DomainEvent) {
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::EffectQueued(EffectIntent {
+                    birth_era: None,
                     intent_id: "effect-39b-completed".into(),
                     kind: "test_effect".into(),
                     params: serde_json::json!({}),
@@ -147,6 +148,9 @@ fn completed_fixture() -> (World, DomainEvent) {
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::ReceiptAppended(EffectReceipt {
+                    birth_era: None,
+                    world: None,
+                    intent_payload_digest: None,
                     intent_id: "effect-39b-completed".into(),
                     status: "ok".into(),
                     payload: serde_json::json!({}),

@@ -50,10 +50,12 @@ is the single terminal shell authority. The brand contribution is visual: keep
 the world board first, use a quiet dock and on-demand console, keep command and
 Action Receipt legible, and demote diagnostics. The implemented World Feed v1 must
 remain visually distinct from causality and appear as a compact collapsed top-right
-edge overlay/ambient chip until explicitly opened. Desktop fullscreen HUD keeps
-Objective / Next Move / Player Leverage as compact cards; mobile groups Objective /
-Player Leverage first and places Next Move on the second row. Current focus/right-
-panel hooks and `#entity-search` are implementation references, not brand modes.
+edge overlay/ambient chip until explicitly opened. HUD placement follows the
+[shell's current implementation boundary](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary):
+Next Move is the primary region with the shell-defined inline blocker;
+Objective / Player Leverage are supporting context. Narrow screens put that primary region first, not below the context.
+This brand spec does not retain a parallel three-peer-card layout. Current
+focus/right-panel hooks and `#entity-search` are implementation references, not brand modes.
 
 ### 2.4 Voice and Labels
 Player-facing copy uses action verbs and concrete state. Diagnostics may use
@@ -269,16 +271,33 @@ A visual-system task is done only when:
 - task execution log records role verdicts and evidence paths; verdict/confidence follows the [canonical decision table](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract), including escalation on the first `watch` and on `medium/low`.
 
 
+## 目标、范围与设计边界
+
+本轮只整理既有阅读顺序与视觉证据合同，不新增布局、交互、状态或产品承诺。
+产品阅读义务来自 [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)；
+具体 shell 布局继续由 [当前实现边界](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
+拥有，终态/后续目标不得替代当前实现。品牌 token、固定 CSS 数值与完整状态字典仍是专业设计选择，
+不从该产品 REQ 推导；下面的产品映射只适用于明确列出的局部条款。
+
+## 风险与未覆盖范围
+
+本次仅建立文档与静态源码的局部关系，不能证明产品 AC 已完成。相关 Agent/地点/路线的完整
+呈现、所有正式 surface、密度变化后的可读性、完整继续/纠正/中断/恢复路径及真实玩家理解
+仍需对应专业实现与验收证据。静态 JSX/CSS 不证明浏览器视觉、输入、a11y、renderer、
+生产 Director 成功路径或发布通过；历史截图和 visual cards 不升级为本候选证据。
+
 ## Visual review traceability
 
 ### 2.1 需求承接与分配表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 截图为必要输入；DOM/smoke 为补充；按风险最小行集且允许一图覆盖多行 | [本设计条款](#visual-evidence-matrix-design) | QA 与视觉 owner；实际截图和自动化摘要由对应执行者提供 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
+| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；仅承接当前目的、blocker 与下一步的首读层级：单一 Next Move 主区、Objective / Player Leverage 从属；具体布局沿专业 shell authority，窄屏主区优先 | [本设计布局条款](#23-terminal-shell-brand-summary) | viewer_engineer；game_visual_interaction_designer | 仅阅读顺序局部承接；不证明相关对象/路线全覆盖、密度变化可读性、完整恢复路径或产品 AC 完成；不扩展 target 合同 |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 截图为必要输入；DOM/smoke 为补充；按风险最小行集且允许一图覆盖多行 | [本设计条款](#visual-evidence-matrix-design) | QA 与视觉 owner；产品 N/A：理由=本行只规定专业截图取证与评审处置机制，不新增玩家舞台义务；范围=本行 visual-review 机制，不能排除上述真实产品阅读关系 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
 
 ### 11.1 验证映射表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [本设计布局条款](#23-terminal-shell-brand-summary) | 逐句核对产品目的/blocker/下一步子义务与专业主合同；不恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`、`crates/oasis7_viewer/viewer_terminal_shell.css` 做静态对照；未来可见改动另按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md) 的视觉矩阵取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
 | [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-evidence-matrix-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |

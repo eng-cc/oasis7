@@ -2,18 +2,19 @@
   document.documentElement.setAttribute("data-js", "true");
   const LANGUAGE_REDIRECT_KEY = "oasis7_pages_lang_redirect_done_v1";
   const LANGUAGE_MANUAL_CHOICE_KEY = "oasis7_pages_lang_manual_choice_v1";
-  const RELEASE_ASSET_BASE = "https://github.com/eng-cc/oasis7/releases/download";
   const releaseRefreshCallbacks = [];
 
-  const releaseAssetUrl = (fallbackUrl) => {
-    const tagNode = document.querySelector("[data-release-tag]");
-    const tagName = tagNode ? tagNode.textContent.trim() : "";
-    const fallback = String(fallbackUrl || "").trim();
-    const filename = fallback.split("/").pop() || "";
-    if (!tagName || !filename || tagName === "latest") {
-      return fallback;
+  let releaseCandidate = null;
+  const releaseAssetUrl = (fallbackUrl) => window.oasis7Release.assetUrl(releaseCandidate, fallbackUrl);
+  const setDownloadLink = (node, url) => {
+    if (!node) return;
+    if (url) {
+      node.setAttribute("href", url);
+      node.removeAttribute("aria-disabled");
+    } else {
+      node.removeAttribute("href");
+      node.setAttribute("aria-disabled", "true");
     }
-    return `${RELEASE_ASSET_BASE}/${encodeURIComponent(tagName)}/${filename}`;
   };
 
   const safeGetStorage = (key) => {
@@ -42,24 +43,6 @@
     return String(firstLanguage || window.navigator.language || "").toLowerCase();
   };
 
-  const isChineseEntryPath = (pathname) => {
-    const onEnglishPage = /\/en\/(?:index\.html)?$/.test(pathname);
-    if (onEnglishPage) {
-      return false;
-    }
-    return /\/(?:index\.html)?$/.test(pathname);
-  };
-
-  const toEnglishEntryPath = (pathname) => {
-    if (pathname.endsWith("/index.html")) {
-      return `${pathname.slice(0, -"index.html".length)}en/`;
-    }
-    if (pathname.endsWith("/")) {
-      return `${pathname}en/`;
-    }
-    return `${pathname}/en/`;
-  };
-
   const isDocsPath = (pathname) => /\/doc\/(?:cn|en)\//.test(pathname);
 
   const maybeRedirectByLanguageOnFirstVisit = () => {
@@ -72,27 +55,16 @@
       return;
     }
 
-    const { pathname, search, hash } = window.location;
-    if (isDocsPath(pathname)) {
-      return;
-    }
-
-    const preferredLanguage = resolvePreferredLanguage();
-    const prefersEnglish = preferredLanguage.startsWith("en");
-
-    // Entry-page visits are checked once; docs paths are intentionally excluded.
+    const targetAttribute = resolvePreferredLanguage().startsWith("en") ? "data-locale-en" : "data-locale-zh";
+    const declared = document.documentElement.getAttribute(targetAttribute);
+    if (!declared || isDocsPath(window.location.pathname)) return;
+    const target = new URL(declared, window.location.href);
+    if (target.origin !== window.location.origin) return;
     safeSetStorage(LANGUAGE_REDIRECT_KEY, "1");
-
-    if (!prefersEnglish) {
-      return;
-    }
-
-    if (!isChineseEntryPath(pathname)) {
-      return;
-    }
-
-    const targetPath = toEnglishEntryPath(pathname);
-    window.location.replace(`${targetPath}${search}${hash}`);
+    if (target.pathname === window.location.pathname) return;
+    target.search = window.location.search;
+    target.hash = window.location.hash;
+    window.location.replace(target.href);
   };
 
   const bindLanguageChoicePersistence = () => {
@@ -207,285 +179,6 @@
       });
       observer.disconnect();
     }, 2200);
-  };
-
-  const bindHeroCanvas = () => {
-    const canvas = document.querySelector("[data-hero-canvas]");
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      return;
-    }
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reducedMotion.matches) {
-      return;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    let width = 0;
-    let height = 0;
-    let rafId = 0;
-    let lastFrameAt = 0;
-    let sweepX = 0;
-    let pointerX = -1;
-    let pointerY = -1;
-    let pointerActive = false;
-    let pointerEnergy = 0;
-
-    /** @type {Array<{x:number,y:number,vx:number,vy:number,size:number}>} */
-    let nodes = [];
-
-    const randomIn = (min, max) => min + Math.random() * (max - min);
-
-    const nodeCountForViewport = () => {
-      const area = width * height;
-      if (area < 220000) {
-        return 12;
-      }
-      if (area < 500000) {
-        return 18;
-      }
-      return 26;
-    };
-
-    const rebuildNodes = () => {
-      const count = nodeCountForViewport();
-      nodes = Array.from({ length: count }, () => ({
-        x: randomIn(0, width),
-        y: randomIn(0, height),
-        vx: randomIn(-0.16, 0.16),
-        vy: randomIn(-0.14, 0.14),
-        size: randomIn(1.2, 2.4),
-      }));
-    };
-
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const nextWidth = Math.max(1, Math.floor(rect.width));
-      const nextHeight = Math.max(1, Math.floor(rect.height));
-      if (nextWidth === width && nextHeight === height) {
-        return;
-      }
-
-      width = nextWidth;
-      height = nextHeight;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      rebuildNodes();
-    };
-
-    const setPointer = (clientX, clientY, boost = 1) => {
-      const rect = canvas.getBoundingClientRect();
-      pointerX = Math.max(0, Math.min(width, clientX - rect.left));
-      pointerY = Math.max(0, Math.min(height, clientY - rect.top));
-      pointerActive = true;
-      pointerEnergy = Math.min(1, Math.max(pointerEnergy, boost));
-    };
-
-    const fadePointer = () => {
-      pointerActive = false;
-    };
-
-    const stepNodes = () => {
-      const interactionRadius = width < 680 ? 105 : 148;
-      const interactionRadiusSquare = interactionRadius * interactionRadius;
-      const interactionScale = 0.075 * (0.38 + pointerEnergy * 0.62);
-
-      for (const node of nodes) {
-        if (pointerEnergy > 0 && pointerX >= 0 && pointerY >= 0) {
-          const dx = node.x - pointerX;
-          const dy = node.y - pointerY;
-          const distanceSquare = dx * dx + dy * dy;
-          if (distanceSquare < interactionRadiusSquare) {
-            const distance = Math.max(1, Math.sqrt(distanceSquare));
-            const pull = Math.pow(1 - distance / interactionRadius, 1.9) * interactionScale;
-            node.vx += (dx / distance) * pull;
-            node.vy += (dy / distance) * pull;
-          }
-        }
-
-        node.x += node.vx;
-        node.y += node.vy;
-
-        node.vx *= 0.994;
-        node.vy *= 0.994;
-
-        if (node.x <= 0 || node.x >= width) {
-          node.vx *= -1;
-          node.x = Math.max(0, Math.min(width, node.x));
-        }
-        if (node.y <= 0 || node.y >= height) {
-          node.vy *= -1;
-          node.y = Math.max(0, Math.min(height, node.y));
-        }
-      }
-    };
-
-    const drawGridScan = () => {
-      const sweepSpeed = 0.82 * (1 + pointerEnergy * 1.7);
-      sweepX = (sweepX + sweepSpeed) % (width + 180);
-      const gradient = context.createLinearGradient(sweepX - 170, 0, sweepX + 40, 0);
-      gradient.addColorStop(0, "rgba(68, 231, 197, 0)");
-      gradient.addColorStop(0.55, `rgba(68, 231, 197, ${0.1 + pointerEnergy * 0.08})`);
-      gradient.addColorStop(1, "rgba(68, 231, 197, 0)");
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, width, height);
-
-      if (pointerEnergy > 0.02 && pointerX >= 0 && pointerY >= 0) {
-        const halo = context.createRadialGradient(
-          pointerX,
-          pointerY,
-          0,
-          pointerX,
-          pointerY,
-          125 + pointerEnergy * 35,
-        );
-        halo.addColorStop(0, `rgba(124, 241, 139, ${0.19 * pointerEnergy})`);
-        halo.addColorStop(1, "rgba(124, 241, 139, 0)");
-        context.fillStyle = halo;
-        context.fillRect(0, 0, width, height);
-      }
-    };
-
-    const drawLinksAndNodes = () => {
-      const maxDistance = width < 680 ? 115 : 150;
-      const maxDistanceSquare = maxDistance * maxDistance;
-
-      for (let i = 0; i < nodes.length; i += 1) {
-        const first = nodes[i];
-        for (let j = i + 1; j < nodes.length; j += 1) {
-          const second = nodes[j];
-          const dx = first.x - second.x;
-          const dy = first.y - second.y;
-          const distanceSquare = dx * dx + dy * dy;
-          if (distanceSquare > maxDistanceSquare) {
-            continue;
-          }
-          const distance = Math.sqrt(distanceSquare);
-          const alphaBoost = pointerEnergy > 0 ? pointerEnergy * 0.1 : 0;
-          const alpha = Math.pow(1 - distance / maxDistance, 1.8) * (0.24 + alphaBoost);
-          context.strokeStyle = `rgba(110, 213, 235, ${alpha})`;
-          context.lineWidth = 1;
-          context.beginPath();
-          context.moveTo(first.x, first.y);
-          context.lineTo(second.x, second.y);
-          context.stroke();
-        }
-      }
-
-      for (const node of nodes) {
-        let nodeAlpha = 0.72;
-        if (pointerEnergy > 0 && pointerX >= 0 && pointerY >= 0) {
-          const dx = node.x - pointerX;
-          const dy = node.y - pointerY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 130) {
-            nodeAlpha = 0.72 + (1 - dist / 130) * 0.24 * pointerEnergy;
-          }
-        }
-        context.fillStyle = `rgba(132, 255, 188, ${Math.min(1, nodeAlpha)})`;
-        context.beginPath();
-        context.arc(node.x, node.y, node.size, 0, Math.PI * 2);
-        context.fill();
-      }
-    };
-
-    const paint = (now) => {
-      if (document.hidden) {
-        rafId = 0;
-        return;
-      }
-
-      if (now - lastFrameAt < 32) {
-        rafId = window.requestAnimationFrame(paint);
-        return;
-      }
-      lastFrameAt = now;
-
-      if (!pointerActive) {
-        pointerEnergy *= 0.94;
-        if (pointerEnergy < 0.01) {
-          pointerEnergy = 0;
-        }
-      }
-
-      context.clearRect(0, 0, width, height);
-      drawGridScan();
-      stepNodes();
-      drawLinksAndNodes();
-      rafId = window.requestAnimationFrame(paint);
-    };
-
-    resize();
-    window.addEventListener("resize", resize, { passive: true });
-
-    const heroSection = canvas.closest(".section-hero");
-    if (heroSection) {
-      heroSection.addEventListener(
-        "pointermove",
-        (event) => {
-          setPointer(event.clientX, event.clientY, event.pointerType === "touch" ? 0.75 : 1);
-        },
-        { passive: true },
-      );
-      heroSection.addEventListener(
-        "pointerdown",
-        (event) => {
-          setPointer(event.clientX, event.clientY, 1);
-        },
-        { passive: true },
-      );
-      heroSection.addEventListener("pointerleave", fadePointer, { passive: true });
-      heroSection.addEventListener("pointercancel", fadePointer, { passive: true });
-      heroSection.addEventListener(
-        "pointerup",
-        (event) => {
-          if (event.pointerType === "touch") {
-            fadePointer();
-          }
-        },
-        { passive: true },
-      );
-    }
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        if (rafId) {
-          window.cancelAnimationFrame(rafId);
-          rafId = 0;
-        }
-        pointerActive = false;
-        return;
-      }
-      if (!rafId) {
-        lastFrameAt = 0;
-        rafId = window.requestAnimationFrame(paint);
-      }
-    });
-
-    if (typeof reducedMotion.addEventListener === "function") {
-      reducedMotion.addEventListener("change", (event) => {
-        if (!event.matches) {
-          if (!rafId) {
-            lastFrameAt = 0;
-            rafId = window.requestAnimationFrame(paint);
-          }
-          return;
-        }
-        if (rafId) {
-          window.cancelAnimationFrame(rafId);
-          rafId = 0;
-        }
-        context.clearRect(0, 0, width, height);
-      });
-    }
-
-    rafId = window.requestAnimationFrame(paint);
   };
 
   const bindActiveNav = () => {
@@ -629,147 +322,6 @@
     if (steps[0]) {
       setActiveStep(steps[0]);
     }
-  };
-
-  const bindProofSwitcher = () => {
-    const controls = document.querySelector("[data-proof-controls]");
-    if (!controls) {
-      return;
-    }
-
-    const buttons = Array.from(controls.querySelectorAll("[data-proof-tab]"));
-    const panels = Array.from(document.querySelectorAll("[data-proof-panel]"));
-    const events = Array.from(document.querySelectorAll("[data-proof-event]"));
-    const causal = document.querySelector("[data-proof-causal]");
-
-    const isChinesePage = String(document.documentElement.lang || "").toLowerCase().startsWith("zh");
-    const causalCopy = isChinesePage
-      ? {
-          minimal: {
-            kicker: "单点波动 · 因果轨迹",
-            title: "一条收紧条件如何留下痕迹",
-            steps: [
-              ["压力出现", "资源、目标或既有规则先收紧可选空间。"],
-              ["Agent 回应", "它们在当下约束内决定生产、交易或协作。"],
-              ["后果留下", "世界变化进入事件、回放与审计可读的轨迹。"],
-            ],
-          },
-          twin: {
-            kicker: "双区协作 · 因果轨迹",
-            title: "一笔协作如何穿过两个区域",
-            steps: [
-              ["供给收紧", "两个区域先面对需要重新分配的资源与维护压力。"],
-              ["Agent 协作", "Agent 在当下条件里协商交易与共同生产。"],
-              ["结构改变", "供给协议和生产结果成为随后可以回看的世界状态。"],
-            ],
-          },
-          triad: {
-            kicker: "三方治理 · 因果轨迹",
-            title: "一项协定如何成为可观察的制度后果",
-            steps: [
-              ["多方压力", "区域间的物流与优先级冲突，让协作需要新的边界。"],
-              ["Agent 协商", "多方在既有约束内调整路径、协定与治理选择。"],
-              ["治理留档", "投票和协定进入可审计轨迹，供后续观察与回看。"],
-            ],
-          },
-        }
-      : {
-          minimal: {
-            kicker: "Single-front · causal trace",
-            title: "How one tightening condition leaves a trace",
-            steps: [
-              ["Pressure arrives", "Resources, goals, or existing rules narrow the available choices."],
-              ["Agents respond", "They choose production, trade, or cooperation within the current constraints."],
-              ["Consequences remain", "World changes can enter events, replays, and audit-readable traces."],
-            ],
-          },
-          twin: {
-            kicker: "Dual-region · causal trace",
-            title: "How one collaboration crosses two regions",
-            steps: [
-              ["Supply tightens", "Two regions face resources and maintenance pressure that need redistribution."],
-              ["Agents coordinate", "Agents negotiate trade and shared production within the current conditions."],
-              ["Structure changes", "The supply pact and production result become a world-state trail to revisit."],
-            ],
-          },
-          triad: {
-            kicker: "Three-party governance · causal trace",
-            title: "How one pact becomes an observable institution",
-            steps: [
-              ["Pressure multiplies", "Logistics and priority conflicts between regions call for a new boundary."],
-              ["Agents negotiate", "Multiple parties adjust routes, pacts, and governance choices within existing constraints."],
-              ["Governance is recorded", "Votes and pacts enter an auditable trail for later observation and review."],
-            ],
-          },
-        };
-
-    if (!buttons.length || !panels.length || !events.length) {
-      return;
-    }
-
-    const applyTab = (tab) => {
-      buttons.forEach((button) => {
-        const isActive = button.getAttribute("data-proof-tab") === tab;
-        button.classList.toggle("is-active", isActive);
-        button.setAttribute("aria-pressed", isActive ? "true" : "false");
-      });
-
-      panels.forEach((panel) => {
-        const visible = panel.getAttribute("data-proof-panel") === tab;
-        panel.setAttribute("data-proof-visible", visible ? "true" : "false");
-      });
-
-      events.forEach((item) => {
-        const visible = item.getAttribute("data-proof-event") === tab;
-        item.setAttribute("data-proof-visible", visible ? "true" : "false");
-      });
-
-      const nextCausal = causalCopy[tab];
-      if (!causal || !nextCausal) {
-        return;
-      }
-      const kicker = causal.querySelector("[data-proof-causal-kicker]");
-      const title = causal.querySelector("[data-proof-causal-title]");
-      if (kicker) {
-        kicker.textContent = nextCausal.kicker;
-      }
-      if (title) {
-        title.textContent = nextCausal.title;
-      }
-      nextCausal.steps.forEach(([stepTitle, stepCopy], index) => {
-        const titleNode = causal.querySelector(`[data-proof-causal-step="${index}-title"]`);
-        const copyNode = causal.querySelector(`[data-proof-causal-step="${index}-copy"]`);
-        if (titleNode) {
-          titleNode.textContent = stepTitle;
-        }
-        if (copyNode) {
-          copyNode.textContent = stepCopy;
-        }
-      });
-    };
-
-    buttons.forEach((button, index) => {
-      button.addEventListener("click", () => {
-        const tab = button.getAttribute("data-proof-tab") || "minimal";
-        applyTab(tab);
-      });
-
-      button.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
-          return;
-        }
-
-        event.preventDefault();
-        const delta = event.key === "ArrowRight" ? 1 : -1;
-        const nextIndex = (index + delta + buttons.length) % buttons.length;
-        const nextButton = buttons[nextIndex];
-        nextButton.focus();
-        const tab = nextButton.getAttribute("data-proof-tab") || "minimal";
-        applyTab(tab);
-      });
-    });
-
-    applyTab("minimal");
   };
 
   const escapeHtml = (value) =>
@@ -967,6 +519,9 @@
       const currentRequest = requestId + 1;
       requestId = currentRequest;
       setActiveButton(button);
+      content.innerHTML = "";
+      const original = reader.querySelector("[data-story-original]");
+      if (original) original.setAttribute("href", src);
       setStatus(`正在加载：${button.textContent.trim()}`, "loading");
 
       try {
@@ -979,13 +534,15 @@
               return response.text();
             });
 
-        if (!cache.has(src)) {
-          cache.set(src, markdown);
-        }
         if (currentRequest !== requestId) {
           return;
         }
+        cache.set(src, markdown);
 
+        if (!String(markdown).trim()) {
+          setStatus(`当前章节暂无内容：${button.textContent.trim()}。可查看原文或重试。`, "empty");
+          return;
+        }
         content.innerHTML = renderMarkdown(markdown);
         setStatus(`已加载：${button.textContent.trim()}`, "ready");
       } catch (error) {
@@ -1005,9 +562,23 @@
       button.addEventListener("click", () => loadChapter(button));
     });
 
+    const retry = reader.querySelector("[data-story-retry]");
+    if (retry) retry.addEventListener("click", () => {
+      const selected = buttons.find((button) => button.getAttribute("aria-pressed") === "true");
+      if (!selected) return;
+      cache.delete(selected.getAttribute("data-story-src"));
+      loadChapter(selected);
+    });
+
     const defaultSrc = String(reader.getAttribute("data-story-default") || "").trim();
     const initialButton =
       buttons.find((button) => button.getAttribute("data-story-src") === defaultSrc) || buttons[0];
+    document.querySelectorAll("[data-story-start]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        loadChapter(initialButton);
+      });
+    });
     loadChapter(initialButton);
   };
 
@@ -1049,20 +620,15 @@
         return response.json();
       })
       .then((release) => {
-        const tagName = typeof release.tag_name === "string" ? release.tag_name.trim() : "";
-        const publishedAt = Date.parse(String(release.published_at || ""));
-        if (!tagName || !Number.isFinite(publishedAt)) {
-          throw new Error("release metadata is incomplete");
-        }
-
+        const candidate = window.oasis7Release.fromRelease(release);
+        const tagName = candidate.tag;
+        const publishedAt = candidate.publishedAt;
+        releaseCandidate = candidate;
         tagNodes.forEach((node) => {
           node.textContent = tagName;
         });
 
-        const releaseUrl =
-          typeof release.html_url === "string" && release.html_url.trim().length > 0
-            ? release.html_url.trim()
-            : `${RELEASE_ASSET_BASE.replace("/download", "")}/tag/${encodeURIComponent(tagName)}`;
+        const releaseUrl = candidate.notes;
         notesLinks.forEach((node) => {
           node.setAttribute("href", releaseUrl);
         });
@@ -1080,7 +646,10 @@
           node.textContent = prefix ? `${prefix}: ${formattedDate}` : formattedDate;
         });
         document.querySelectorAll('a[href*="oasis7-checksums.txt"]').forEach((node) => {
-          node.setAttribute("href", releaseAssetUrl(node.getAttribute("href")));
+          setDownloadLink(node, releaseAssetUrl(node.getAttribute("href")));
+        });
+        document.querySelectorAll("[data-release-status]").forEach((node) => {
+          node.textContent = pageLang.startsWith("zh") ? "已读取发行元数据；未代签安装或玩法验收。" : "Release metadata loaded; not installation or gameplay validation.";
         });
         releaseRefreshCallbacks.forEach((refresh) => refresh());
       })
@@ -1157,7 +726,9 @@
       const isMobile =
         (uaData && uaData.mobile === true) ||
         /android|iphone|ipad|ipod|mobile/.test(candidateText);
-      if (isMobile) {
+      // The advertised packages are x64. An explicitly ARM device must not
+      // inherit an automatic x64 recommendation from its operating-system name.
+      if (isMobile || /\barm(?:64)?\b|aarch64/.test(candidateText)) {
         return "";
       }
 
@@ -1226,10 +797,19 @@
       const applyPlatform = (platformId, selectionMode) => {
         const next = sourceMap.get(platformId);
         if (!next) {
+          surface.setAttribute("data-download-active-platform", "");
+          setDownloadLink(linkNode, "");
+          if (titleNode) titleNode.textContent = isZh ? "请选择下载目标平台" : "Choose the target platform";
+          if (badgeNode) badgeNode.textContent = isZh ? "未知或不支持的当前设备" : "Unknown or unsupported device";
+          if (copyNode) copyNode.textContent = isZh ? "不推荐本设备安装。可为其他受支持的桌面设备手动选择；也可以继续阅读。" : "No package is recommended for this device. You may manually choose a supported desktop target or keep reading.";
+          if (footnoteNode) footnoteNode.textContent = isZh ? "请选择目标平台；这里未确认本设备兼容性。" : "Choose a target platform; this device's compatibility is not confirmed.";
+          [requirementsNode, installNode, trustNode, supportNode].forEach((node) => { if (node) node.textContent = isZh ? "请先选择目标平台并核对对应发行说明。" : "Choose a target platform and check its release notes first."; });
+          buttons.forEach((button) => { button.setAttribute("aria-pressed", "false"); button.classList.remove("is-active"); });
           return;
         }
 
         surface.setAttribute("data-download-active-platform", platformId);
+        surface.setAttribute("data-download-selection-mode", selectionMode);
         buttons.forEach((button) => {
           const isActive = String(button.getAttribute("data-download-platform-button") || "") === platformId;
           button.classList.toggle("is-active", isActive);
@@ -1247,7 +827,7 @@
           copyNode.textContent = next.copy;
         }
         if (linkNode && next.url) {
-          linkNode.setAttribute("href", releaseAssetUrl(next.url));
+          setDownloadLink(linkNode, releaseAssetUrl(next.url));
         }
         if (linkNode && next.linkLabel) {
           linkNode.textContent = next.linkLabel;
@@ -1265,7 +845,9 @@
           supportNode.textContent = next.support;
         }
         if (footnoteNode) {
-          footnoteNode.textContent = recommendationText.footnote;
+          footnoteNode.textContent = releaseCandidate && !releaseAssetUrl(next.url)
+            ? (isZh ? "本候选缺少此平台资产或 checksum，下载推荐已停止。请查看发行说明或换平台。" : "This candidate lacks the platform asset or checksum. Download recommendation stopped; see release notes or choose another platform.")
+            : recommendationText.footnote;
         }
       };
 
@@ -1276,22 +858,27 @@
       });
 
       const detected = detectPreferredPlatform();
-      const fallback =
-        buttons.length > 0
-          ? String(buttons[0].getAttribute("data-download-platform-button") || "")
-          : "";
-      const initialPlatform = sourceMap.has(detected) ? detected : fallback;
+      const initialPlatform = sourceMap.has(detected) ? detected : "";
       const initialMode = detected && sourceMap.has(detected) ? "auto" : "neutral";
       releaseRefreshCallbacks.push(() => {
-        const activePlatform = surface.getAttribute("data-download-active-platform");
-        const activeSource = sourceMap.get(activePlatform);
-        if (linkNode && activeSource && activeSource.url) {
-          linkNode.setAttribute("href", releaseAssetUrl(activeSource.url));
-        }
+        const active = surface.getAttribute("data-download-active-platform");
+        const mode = surface.getAttribute("data-download-selection-mode") || initialMode;
+        applyPlatform(active, mode);
       });
       applyPlatform(initialPlatform, initialMode);
     });
   };
+
+  document.querySelectorAll(".proof-figure img").forEach((img) => {
+    img.addEventListener("error", () => {
+      const figure = img.closest("figure");
+      if (!figure || figure.querySelector(".media-error")) return;
+      const note = document.createElement("p");
+      note.className = "media-error";
+      note.textContent = document.documentElement.lang.startsWith("zh") ? "参考图不可用；文字与来源仍可阅读。" : "Reference image unavailable; text and source remain readable.";
+      figure.append(note);
+    });
+  });
 
   maybeRedirectByLanguageOnFirstVisit();
   bindLanguageChoicePersistence();
@@ -1420,13 +1007,46 @@
     });
   }
 
+  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"], ["#lore", "#lore > details"], ["#case-conditions", "#case-conditions"]]) {
+    const previewDetails = document.querySelector(selector);
+    if (!previewDetails) continue;
+    let previewLinkHashPending = false;
+    const openPreviewFromHash = () => {
+      if (window.location.hash !== anchor) { previewLinkHashPending = false; return; }
+      // The link already opened it before native navigation; a later hash event must not undo a quick close.
+      if (previewLinkHashPending) { previewLinkHashPending = false; return; }
+      previewDetails.open = true;
+    };
+    openPreviewFromHash();
+    window.addEventListener("hashchange", openPreviewFromHash);
+    document.querySelectorAll(`a[href="${anchor}"]`).forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (window.location.hash !== anchor) previewLinkHashPending = true;
+        previewDetails.open = true;
+      });
+    });
+  }
+
   bindSectionReveal();
-  bindHeroCanvas();
   bindCounters();
   bindActiveNav();
   bindTimelineFilters();
   bindStoryPathHighlight();
-  bindProofSwitcher();
   bindStoryReader();
+  // Evidence is tied to one recorded release, never inferred from a newer tag or its assets.
+  document.querySelectorAll("[data-package-validation-copy]").forEach((node) => {
+    const recordedCopy = node.textContent;
+    const refresh = () => {
+      const tag = node.closest(".preview-validation").querySelector("[data-package-candidate-tag]");
+      if (tag) tag.textContent = releaseCandidate ? releaseCandidate.tag : node.dataset.verifiedRelease;
+      if (!releaseCandidate || releaseCandidate.tag === node.dataset.verifiedRelease) { node.textContent = recordedCopy; return; }
+      node.textContent = document.documentElement.lang.startsWith("zh")
+        ? "此下载候选没有完整试玩验证记录；下方六月构建记录只适用于六月版本。"
+        : "A complete playtest is not verified for this candidate. The June build record below applies only to the June version.";
+    };
+    releaseRefreshCallbacks.push(refresh);
+    refresh();
+  });
   bindLatestReleaseMeta();
 })();

@@ -30,24 +30,38 @@
 - Problem Statement: 测试套件覆盖范围广（required/full、Web 闭环、长跑、分布式），但目标与触发矩阵若不集中维护，容易出现“通过 CI 但缺少真实风险覆盖”。
 - Proposed Solution: 以 testing PRD 统一定义分层测试体系、触发条件、证据标准与发布门禁，并对齐 `testing-manual.md`。
 - Success Criteria:
-  - SC-1: 关键改动路径均可映射到明确测试层级（S0~S10）。
-  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`；`full-support` 必须直接触达 workspace 内稳定可跑的 support crate 测试入口。
+  - [SC-1：测试层级映射](#testing-sc-1)。完整声明见对应精确条款。
+  - [SC-2：required/full 门禁](#testing-sc-2)。完整声明见对应精确条款。
   - SC-3: Web UI 闭环与分布式长跑在发布流程中有可追溯证据，且明确区分 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 两条驱动链路。
     - SC-3A: `release-gate-web` 在 `renderMode=viewer` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent；`renderMode=software_safe` 仅作为兼容 alias 覆盖。
     - SC-3B: 正式 gameplay evidence packet 必须显式区分 `player leverage` 与 `ambient world activity`，并回答“玩家做了什么、世界因此变了什么、这是否打开下一步决策”。
     - SC-3C: `viewer` 与 `pure_api` 这两个 formal 玩家 surface 必须能用同一份 `snapshot.player_gameplay` 事实源回答同一组核心问题：当前阶段、当前目标、进度、阻塞、下一步建议，以及最近一次关键世界变化；其中 `software_safe` 只作为 `viewer` 兼容 alias，`pure_api` 的 `parity_verified` 只适用于 active LLM access，no-LLM 只能记为 blocked/observer-debug。
-  - SC-4: 测试任务 100% 映射 PRD-TESTING-ID。
-  - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / PR、实际 CI 与评审记录（Issue 按需） 命名。
+  - SC-4: 测试范围可追溯到实际适用需求与专业验收；PRD-TESTING-ID 保留作本模块定位，不要求每次变更新建任务身份。
+  - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.design.md` / `*.manual.md` 的文档职责；执行状态由实际 PR、CI 与评审记录承接，Issue 按需。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
   - SC-7: 主链 Token 创世前具备一份 QA 审计清单，覆盖分配比例、custody/treasury 语义、个人上限、创世流通与首年释放上限，避免带着错误经济配置进入执行。
   - SC-8: testing root authorities define the `L1/L2/L3/L4A/L4B/L5` evidence boundaries and forbid writing an automation pass as proof that the game is fun.
   - SC-9: the durable authority defines standard-role review inputs, outputs, trigger matrix and escalation boundary for repeatable internal review.
   - SC-10: the durable authority defines a simulated-player persona panel as an internal hypothesis input to standard-role review, not a formal `player` role.
   - SC-11: the durable authority separates `L4A synthetic internal playability review` from `L4B embodied agent playtest`; internal human play is only optional L4B calibration and never L5.
-  - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
-  - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，按 [L4 构建与驱动](#l4-build-driver)选择产物，在[实际 hosted 操作会话](#l4-hosted-session)完成合法登录后执行真实操作，并把成功、失败或阻断的 [RunResult](#l4-execution-result) 留在同一 artifact；自动采集事实与[继续游玩/玩家杠杆评审](#l4-evidence-judgment)分开。
+  - [SC-12：离线 L4 scaffold](#testing-sc-12)。完整声明见对应精确条款。
+  - [SC-13：真实 L4B runner](#testing-sc-13)。完整声明见对应精确条款。
   - SC-14: testing 模块具备一份 canonical 模型视觉评审 SOP，使截图/布局/遮挡/层级/可读性等常规视觉 review 默认由模型完成，并明确何时必须升级人工 owner。
-  - SC-15: QA infrastructure verification has a finite, reusable source-to-scene method that binds each accepted product and professional clause to its environment, oracle, artifact, evidence tier, and retained gap; it preserves the distinction between designed coverage and executed proof.
+  - [SC-15：source-to-scene 方法](#testing-sc-15)。完整声明见对应精确条款。
+
+<a id="testing-sc-1"></a>
+### SC-1：测试层级映射
+
+  - SC-1: 关键改动路径均可映射到明确测试层级（S0~S10）。
+
+本条继续覆盖所有关键改动的 S0~S10 选择，不缩为自主试玩。仅在[自测反馈闭环](governance/agent-runtime-self-playtest.design.md#selftest-feedback-loop)所选失败→普通回归→修复→新候选独立复测子链中，承接 [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的证据层级不可代签和 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的同一候选/明确变更范围比较边界；不把层级映射、CI 工具或整个测试体系等同于产品能力，也不声称这两项产品要求覆盖全部测试触发义务。
+
+<a id="testing-sc-2"></a>
+### SC-2：required/full 门禁持续可用
+
+  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`；`full-support` 必须直接触达 workspace 内稳定可跑的 support crate 测试入口。
+
+required/full、稳定 check context、changed-path 剪裁、launcher Web 构建和 support crate 入口仍是本条完整的 testing 工程义务。仅其[自主试玩反馈与复测](governance/agent-runtime-self-playtest.design.md#selftest-feedback-loop)子链承接 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的当前候选/变更范围证据比较，以及 [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的普通回归不能代签真实自主试玩或 L5；该有限关联不把整个 required/full 门禁声明为产品验收，也不改变原命令、触发或必跑范围。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -85,7 +99,7 @@
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
   3. Flow-TST-003: `线上问题复盘 -> 回填触发矩阵 -> 增加回归用例 -> 验证闭环`
-  4. Flow-TST-004: `逐篇阅读 legacy 专题文档 -> 按 strict schema 人工重写 -> 改名为 .prd/.project -> 回归校验`
+  4. Flow-TST-004: `逐篇阅读 legacy 专题文档 -> 按 strict schema 人工重写 -> 按需求/设计/手册职责命名 -> 回归校验`
   5. Flow-TST-005: `触发 wasm hash 校验 -> 跨 runner 对账 -> required check 放行/阻断 -> 发布链路收口`
   6. Flow-TST-006: `识别工业引导体验改动 -> 运行自动化前置 -> 执行 playability 卡组 -> 回写 QA 阻断结论`
   7. Flow-TST-007: `读取 token 创世参数表 -> 逐项核对比例/recipient/vesting/流通边界 -> 输出 QA verdict -> 回流 producer 决策`
@@ -125,22 +139,42 @@
 | 模拟玩家 persona 面板 | `selected_personas`、`persona_card`、`persona_divergence_summary`、`handoff_recommended_to` | 按主观体验风险选择多个 simulated personas，生成风格化体验假设，再回流标准角色 review | `selected -> simulated -> handed_off -> absorbed` | 不新增正式 `player` 角色；persona 只能补内部假设，不能替代 agent 实操试玩、真人试玩或外部验证 | `producer_system_designer` 决定是否开启，命中的标准角色负责收口 |
 | L4 synthetic/agent 分层 | `synthetic_playability_verdict`、`agentic_playtest_verdict`、`optional_internal_human_corroboration`、`calibration_status` | 先区分当前结论属于 `L4A` 还是 `L4B`，再决定是否可以升级 claim | `synthetic_ready -> agent_ready -> external_ready` | `L4A` 不得冒充 `L4B`；内部真人佐证只可作为 `L4B` 校准，不得伪装成 `L5`；无 calibration 时不得宣称低层已替代高层 | `producer_system_designer` 定义边界，`qa_engineer` 守门 |
 
+<a id="testing-sc-12"></a>
+### SC-12：离线 L4 scaffold
+
+  - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
+
+本条只要求生成离线评审材料与推荐命令，具体输出与目录保护保持 [L4 scaffold 输出](#l4-scaffold-output)及 L4-C06 的原合同。产物存在不表示角色评审、真实子会话、游戏操作或 L4A/L4B 已执行；真实进入、执行、结果与体验判断由独立的 [SC-13](#testing-sc-13)保留，不能随 scaffold 工程范围一并豁免。
+
+<a id="testing-sc-13"></a>
+### SC-13：真实 L4B 进入、执行与结果
+
+  - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，按 [L4 构建与驱动](#l4-build-driver)选择产物，在[实际 hosted 操作会话](#l4-hosted-session)完成合法登录后执行真实操作，并把成功、失败或阻断的 [RunResult](#l4-execution-result) 留在同一 artifact；自动采集事实与[继续游玩/玩家杠杆评审](#l4-evidence-judgment)分开。
+
+产品关联仅承接 [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的真实操作与证据层级边界、[REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的同候选/入口/证据窗口比较；在本自主试玩设计已选择的范围内，分别落实 [AC-EXT-011](../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) 的正式 Skill 接入和 [AC-EXT-010](../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) 的两 Runtime 首局生命周期，按各自原适用条件采证。此关联不替代下列 build、hosted session、RunResult、自动事实/人工评审和入口兼容的完整专业合同，不声称覆盖全部玩家价值或产品要求；缺真实入口、执行或结果必须保留 blocked/inconclusive，不能按离线 scaffold 记为产品不适用。
+
 ### L4 工具链合同（SC-12/13、AC-20/21）
 
-本节规定 L4 工具链的目标行为和验收范围。引入本合同的文档修复不表示旧 `run-playability-l4b-agent.sh` 的 build/session 编排、评分预填或 scaffold 输出已修复；这些实现与执行义务仍由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 逐项验收，不能仅因文档合入而关闭。系统承接见 [testing design](design.md)，各项验证见[总手册 L4-C01..06](../../testing-manual.md#l4-toolchain-validation)。
+本节规定 L4 工具链的目标行为和验收范围。引入本合同的文档修复不表示旧 `run-playability-l4b-agent.sh` 的 build/session 编排、评分预填或 scaffold 输出已修复；这些实现与执行义务来自 [#4438](https://github.com/eng-cc/oasis7/issues/4438)，已由 [PR #4641](https://github.com/eng-cc/oasis7/pull/4641) 承接为现行文档合同；按[关闭决定](https://github.com/eng-cc/oasis7/issues/4438#issuecomment-6127544475)，原 Issue 已停止独立跟踪，关闭不表示驱动修复或行为验收完成。后续实现仍须逐项落实下列合同并保留对应执行证据，不恢复原 Issue 必须持续开放的安排。系统承接见 [testing design](design.md)，各项验证见[总手册 L4-C01..06](../../testing-manual.md#l4-toolchain-validation)。
 
 <a id="l4-build-driver"></a>
 #### L4 构建与驱动
+
+产品承接范围：[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的低层证据不得代签真实入口体验，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的候选与适用环境比较边界。本条仅规定 L4B 构建/驱动与该边界的对应；具体 build profile、API opt-in 和能力诊断是 testing/Viewer 专业合同，不据此声称产品全部验收已覆盖。
 
 默认 L4B 目标采用 release 产物与正式 UI 操作，证明该候选真实玩家入口的行为。`visual-test` 必须显式选择、隔离产物，并记录实际构建与驱动；其测试 API 自动化只证明声明的受控范围，不能代签 release UI 或自主试玩。release 不安装 `__AW_TEST__`，追加 `test_api=1` 不能改变构建 profile；要求测试 API 的驱动遇到缺 API 时必须在登录/玩法等待前明确报告构建能力不匹配。对应验证：L4-C01。
 
 <a id="l4-hosted-session"></a>
 #### L4 hosted 会话
 
+产品承接范围：[REQ-ENTRY-MODE-002](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-002) 中身份/会话前置失败、真实恢复与禁止 fallback 冒充成功的边界；[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 中 L4B 必须来自真实操作的证据边界。本条只消费既有 Hosted 登录/恢复能力；账号、认证、注册、授权和 owned cleanup 仍按专业合同，不能据此宣称 provider/模式/后端等所有失败路径已覆盖。
+
 默认 `hosted_public_join` 的干净操作会话必须先识别 guest，再经受支持的登录/注册成为 authenticated，确认同一执行 session 的 player 身份和 gameplay readiness 后才能提交动作。已认证恢复须重新核对当前 session/player；另一个 headed 窗口的登录状态不能代签。缺账号配置、登录失败和身份不一致分别记录 blocker；不得通过 Hosted 自动签发或静默切换 `trusted_local_only` 通过。对应验证：L4-C02。
 
 <a id="l4-execution-result"></a>
 #### L4 执行结果与当前尝试
+
+产品承接范围：[REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的当前候选、入口与证据窗口可回链，以及 [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的缺失/阻断证据不得升级结论。本条用逐次尝试记录保留该判断依据；RunResult 字段、状态枚举和清理机制属于专业实现合同，记录存在不证明产品要求通过。
 
 沿用 [RunResult 与逐项 verdict](governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)及[来源到场景记录](governance/agent-runtime-self-playtest.design.md#selftest-source-scene)，记录真实 `execution_mode`、`current_attempt`、候选/实际 build、执行 session、已到阶段、停止原因、证据、清理结果与未覆盖项。运行阶段沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`；任一阶段的阻断或取消都要保留当前尝试的结果，不依赖成功路径才写 summary。缺前置记 `blocked`，证据或结果未知记 `inconclusive`，只有已执行且违反约定才记 `fail`；未执行不写玩法失败或成功。
 
@@ -149,6 +183,8 @@
 <a id="l4-evidence-judgment"></a>
 #### L4 自动事实与体验判断
 
+产品承接范围：[REQ-WR-PE-001](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001) 的玩家可归因行动与下一选择、[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的证据层级不可代签，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的同一比较单位。本条约束采样与评审如何保留这些边界，不负责实现玩法因果链，也不证明真实玩家愿意继续。
+
 runner 只自动填写实际动作、状态/进度变化、返回结果、时间与证据路径。时间推进、progress 增长、ACK 或 player 一致性不能直接生成 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。继续结论和[玩家杠杆五分项](../playability_test_result/playability_test_card.md#30-玩家杠杆汇总)由 `producer_system_designer` / `qa_engineer` 逐项核对动作、可归因变化、结果解释、新决策与继续理由后填写；缺观察记未知，不能自动填 0 或 5。固定脚本路线保留实际 `execution_mode`，不能改名为自主规划证据。
 
 模板和旧 runner 导入的产物默认为 `unreviewed`；缺实际试玩证据时 L4B 保持 `missing`，证据不足时不推断“agent 不愿继续”。自动事实追加到本次 attempt，不自动覆盖已经评审的最终 verdict；复核须绑定当前候选和尝试，保留旧结论。对应验证：L4-C04。
@@ -156,16 +192,29 @@ runner 只自动填写实际动作、状态/进度变化、返回结果、时间
 <a id="l4-entry-compatibility"></a>
 #### L4 入口兼容与执行说明
 
+产品承接范围：[REQ-ENTRY-MODE-001](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001) 的 primary mode 证据独立性，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 中适用环境影响体验时的比较边界。本条只约束 L4 所选 Viewer canonical/compat 构建与入口；alias 不增加玩家模式，未覆盖 pure_api 的完整独立验收。具体 alias anchors、dist copy 和 test API 保留专业定义。
+
 [Viewer entry compatibility PRD](../world-simulator/viewer/viewer-web-entry-compatibility.prd.md)、[配套 design](../world-simulator/viewer/viewer-web-entry-compatibility.design.md)、[game-test design](../playability_test_result/game-test.design.md)和[总手册](../../testing-manual.md#l4-toolchain-validation)必须使用同一构建/驱动边界。保留 canonical/compat alias 与原有 anchors；API 一致性仅适用于显式测试产物。浏览器 URL/session 取自本次 harness/producer 输出，不能用固定端口或另一会话替代。锁定 game-test 原文的适用范围由其配套 design 明确，不以旧 `test_api=1` 示例恢复 release 测试接口。对应验证：L4-C05。
 
 <a id="l4-scaffold-output"></a>
 #### L4 scaffold 输出
+
+专业范围：本条的 JSON 序列化、路径传递和已有目录保护只保证离线评审材料生成工具的输出可用性，不定义玩家入口、玩法行为或产品结论。其验证仍完整保留 L4-C06；“不代表 L4A/L4B 已执行”是产物使用限制，不能把生成成功当作产品证据。
 
 scaffold 必须支持普通、含空格和含单引号的合法输出目录。离线 `--json` 成功时 stdout 是一个可解析 JSON 对象；`run_id`、`output_dir`、`packet_path`、`summary_path` 与写出的 manifest 一致，`manifest_path` 指向该 manifest，命令退出 0。诊断不混入 JSON。保留已存在目录的拒绝和原文件；生成后发生错误时明确报告已生成范围，不能静默覆写重试。scaffold 成功只证明离线产物合同，不代表 L4A/L4B 已执行。对应验证：L4-C06。
 
 ### QA infrastructure receiver
 
 This receiver turns accepted product and professional clauses into a reproducible verification plan and an auditable result. It is a QA evidence contract, not a product-rule authority, runtime implementation, or release approval. Product obligations start at [world-infrastructure Done](../product/world-infrastructure/prd.md#world-infrastructure-done); the P2P and deterministic-execution clauses remain in their professional PRDs and designs. The combined state-sync target inventory is the [GWSC design](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md), including its exact 17 negative cases, 10 runtime groups, and 8 SC-9 cells. Those inventories define planned coverage; their presence here does not say that the cases were implemented or run.
+
+<a id="testing-sc-15"></a>
+#### SC-15：source-to-scene 方法
+
+  - SC-15: QA infrastructure verification has a finite, reusable source-to-scene method that binds each accepted product and professional clause to its environment, oracle, artifact, evidence tier, and retained gap; it preserves the distinction between designed coverage and executed proof.
+
+The exact record and evaluation contract remains [Source-to-scene record and evaluation](#qa-infrastructure-source-scene-method), with its separate [scene families](#qa-infrastructure-scene-families) and [tier boundaries](#qa-infrastructure-tier-boundaries). Product links identify only each selected source obligation: [world-infrastructure SC-9](../product/world-infrastructure/prd.md#sc-infra-009) for outage cells, [SC-10](../product/world-infrastructure/prd.md#sc-infra-010) for world identity, [REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) and [REQ-DWE-004](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) for deterministic execution/version selection, and [AC-DCS-005](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005) for consumer state transitions. These clauses retain their own authorities, identities, inventories and acceptance conditions; this QA method neither replaces them nor claims their complete coverage.
+
+For the self-playtest receiver, bind only the selected [AC-EXT-010](../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010), [AC-EXT-011](../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011), and [AC-COLLAB-007](../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) obligations to their actual scene/cell/specimen/phase/profile/entry/tier and preserve unselected gaps. Source links and record validity do not prove their execution; SC-15 is not a shared product identity for all QA, and a self-playtest record does not stand in for the infrastructure scene inventory.
 
 <a id="qa-infrastructure-source-scene-method"></a>
 #### Source-to-scene record and evaluation
@@ -204,7 +253,7 @@ PWT-001 remains the documented bounded local provider-backed UI case. PWT-003/00
 The receiver includes the GWSC `MIG-01` specimen with structurally valid declared `PositiveU64` fields and `from_schema_version=to_schema_version="1"`. Shape validation is expected to accept this input shape. The semantic receiver must reject it before authoritative mutation, preserve the prior version/state/artifact bytes, and produce no partial charge, event, or world effect, following the existing [GWSC migration oracle](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator). This is a planned expected result, not a test execution or a schema rule; no runtime/WASM/schema implementation or proof is claimed here.
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
-  - AC-2: testing project 文档维护分层测试演进任务。
+  - AC-2: 分层测试的稳定策略由本 PRD 和配套设计维护，演进任务的动态状态由实际 PR、CI 与评审记录承接（Issue 按需）。
   - AC-3: 与 `testing-manual.md` 保持一致且互相引用。
   - AC-4: 新增测试流程需标注 `test_tier_required` 或 `test_tier_full`。
   - AC-5: 每个迁移批次必须提供“原文约束点 -> 新章节映射”并通过文档治理检查。
@@ -219,7 +268,7 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - AC-10: `release-gate-runtime` 必须允许将 `ci-tests.sh full` 拆为至少两个并行 shard，并与 builtin wasm sync 检查独立聚合，保证放行语义不变。
   - AC-11: runtime shard 划分必须按关键路径持续重平衡；`oasis7 --lib --bins` 等中重量级套件不应长期挤占最重 shard。
   - AC-12: `doc/testing/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` / `oasis7 Runtime` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
-  - AC-13: `token-genesis-allocation-audit-checklist` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
+  - AC-13: `token-genesis-allocation-audit-checklist` 专题文档与执行模板落盘，保留 `TASK-TESTING-062` 为原始专题来源，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
   - AC-14B: 仓库必须维护 Playwright 实跑测试系列入口，记录 `PWT-###` 用例矩阵、真实本地栈/真实 provider/真实 UI 输入的覆盖边界、mock 禁用规则、证据产物要求和新增用例规则；首个用例为 `PWT-001 Real Agent Chat`，后续玩家操作流程必须从该入口扩展。
@@ -294,7 +343,7 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - NFR-TST-3: 关键链路缺陷逃逸率持续下降（按月跟踪）。
   - NFR-TST-4: 测试手册与脚本口径冲突数为 0。
   - NFR-TST-5: 测试执行结果可在 30 分钟内完成追溯定位。
-  - NFR-TST-6: 文档迁移批次在不降低治理质量的前提下保持可审阅粒度（每任务对应单文档或单专题）。
+  - NFR-TST-6: 文档迁移批次在不降低治理质量的前提下保持可审阅粒度（按独立目的和可审阅范围组织，不强制每篇文档单独建任务）。
   - NFR-TST-7: builtin wasm hash 校验在多 runner 下可复现且差异可定位到模块与平台维度。
   - NFR-TST-8: Token 创世 QA 审计模板字段完整率必须为 `100%`，缺任何一项关键字段都不能给 `pass`。
   - NFR-TST-9: 正式 gameplay evidence 审查者必须能在 30 秒内看出“玩家是否真的改变了世界”，无需从长日志里二次拼装。
@@ -317,7 +366,11 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - 风险-5: runtime gate 若继续串行堆叠 full-tier 与 sync 检查，会长期锁死发布关键路径。
   - 风险-6: runtime shard 若长期失衡，即使已并行化，也会因为最长 shard 过重而回吐大部分收益。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
+
+下表 `TASK-TESTING-*`、旧里程碑与迁移编号保留历史来源和专业定位，不代表这些任务仍开放，也不要求恢复旧 Project、另建任务身份或通用回执。当前改动仍须追溯实际适用条款并完成相应验证；历史 ID 与旧绿色结果不能代替本轮 requirement Trace 或执行证据。当前任务组织遵循[开发流程规范](../engineering/workflow/source-of-truth.md)。
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |

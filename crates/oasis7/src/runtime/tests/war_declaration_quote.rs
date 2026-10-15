@@ -145,9 +145,65 @@ fn war_declaration_quote_fails_closed_when_the_m5_war_reducer_is_active() {
     let mut world = World::new();
     register_agents(&mut world, &["a", "b", "c", "d", "e"]);
     form_war_alliances(&mut world);
+    // This quote guard depends on a genuinely activated registry entry, not
+    // execution of the canonical M5 bytecode. Register a local module through
+    // the existing proposal lifecycle so this unit test cannot recursively
+    // build/download the full bootstrap while its parent Cargo holds locks.
+    // Canonical bootstrap and execution remain covered by the full-tier tests.
+    use crate::runtime::{
+        GameplayContract, GameplayModuleKind, M5_GAMEPLAY_MODULE_VERSION,
+        M5_GAMEPLAY_WAR_MODULE_ID, ModuleAbiContract, ModuleKind, ModuleLimits, ModuleManifest,
+        ModuleRole,
+    };
+    let bytes =
+        hex::decode("0061736d0100000001040160000003020100070a010672656475636500000a040102000b")
+            .expect("local valid module exporting reduce");
+    let hash = super::super::util::sha256_hex(&bytes);
     world
-        .install_m5_gameplay_bootstrap_modules("bootstrap")
-        .expect("install M5 war reducer");
+        .register_module_artifact(hash.clone(), &bytes)
+        .expect("register local module");
+    super::modules::activate_module_manifest(
+        &mut world,
+        ModuleManifest {
+            module_id: M5_GAMEPLAY_WAR_MODULE_ID.into(),
+            name: "Local war quote guard fixture".into(),
+            version: M5_GAMEPLAY_MODULE_VERSION.into(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Gameplay,
+            wasm_hash: hash.clone(),
+            interface_version: "wasm-1".into(),
+            artifact_identity: Some(super::signed_test_artifact_identity(&hash)),
+            abi_contract: ModuleAbiContract {
+                abi_version: Some(1),
+                input_schema: Some("gameplay.input@1".into()),
+                output_schema: Some("gameplay.output@1".into()),
+                gameplay: Some(GameplayContract {
+                    kind: GameplayModuleKind::War,
+                    game_modes: vec!["sandbox".into()],
+                    min_players: 2,
+                    max_players: None,
+                }),
+                ..Default::default()
+            },
+            exports: vec!["reduce".into()],
+            subscriptions: vec![],
+            required_caps: vec![],
+            limits: ModuleLimits {
+                max_mem_bytes: 64 * 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+    assert!(
+        world
+            .module_registry()
+            .active
+            .contains_key(M5_GAMEPLAY_WAR_MODULE_ID)
+    );
 
     assert_eq!(
         world.war_declaration_quote("a", "alliance.red", "alliance.blue", 3),

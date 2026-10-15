@@ -11,8 +11,11 @@ use super::World;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "tick_consensus_events.rs"]
+mod retained_events;
+
 const TICK_CONSENSUS_EPOCH_LEN: u64 = 360;
-const TICK_CONSENSUS_GENESIS_PARENT_HASH: &str = "genesis";
+pub(super) const TICK_CONSENSUS_GENESIS_PARENT_HASH: &str = "genesis";
 const TICK_CERT_SIGNATURE_PREFIX: &str = "sha256:";
 const MAX_TICK_CONSENSUS_REJECTION_AUDIT_EVENTS: usize = 2_048;
 
@@ -36,8 +39,26 @@ impl World {
     }
 
     pub fn first_tick_consensus_drift(&self) -> Option<TickConsensusDriftReport> {
-        let mut expected_parent = TICK_CONSENSUS_GENESIS_PARENT_HASH.to_string();
-        let mut expected_height = 1_u64;
+        let boundary = match self.formal_tick_consensus_boundary() {
+            Ok(boundary) => boundary,
+            Err(err) => {
+                return Some(TickConsensusDriftReport {
+                    tick: self.state.time,
+                    reason: format!("{err:?}"),
+                });
+            }
+        };
+        let mut expected_parent = boundary
+            .as_ref()
+            .map(|r| r.certificate.block_hash.clone())
+            .unwrap_or_else(|| TICK_CONSENSUS_GENESIS_PARENT_HASH.to_string());
+        let Some(mut expected_height) = self.formal_archived_tick_consensus_count.checked_add(1)
+        else {
+            return Some(TickConsensusDriftReport {
+                tick: self.state.time,
+                reason: "Tick height overflow".into(),
+            });
+        };
         for record in &self.tick_consensus_records {
             if let Err(err) = self.validate_tick_consensus_record_metadata(record) {
                 return Some(TickConsensusDriftReport {
@@ -287,10 +308,10 @@ impl World {
             tick_events.iter().map(|event| event.id).collect();
         let ordered_action_ids = Self::extract_ordered_action_ids(tick_events);
         let events_hash = self.hash_tick_events(tick_events)?;
-        let parent_hash = self.parent_hash_for_tick(tick);
+        let parent_hash = self.parent_hash_for_tick(tick)?;
         let executor_version = env!("CARGO_PKG_VERSION").to_string();
         let randomness_seed = Self::derive_tick_randomness_seed(parent_hash.as_str(), tick);
-        let consensus_height = self.consensus_height_for_tick(tick);
+        let consensus_height = self.consensus_height_for_tick(tick)?;
         let header = TickBlockHeader {
             schema_version: committed_context
                 .map(|_| TICK_BLOCK_HEADER_SCHEMA_V2)
@@ -336,7 +357,7 @@ impl World {
                 sha256_hex(format!("tickcert:v1|{}|{}", source_node_id, block_hash).as_bytes())
             ),
         );
-        Ok(TickConsensusRecord {
+        let candidate = TickConsensusRecord {
             block,
             certificate: TickCertificate {
                 block_hash,
@@ -346,7 +367,9 @@ impl World {
                 submission_role,
                 signatures,
             },
-        })
+        };
+        self.validate_formal_tick_immutability(&candidate)?;
+        Ok(candidate)
     }
 
     pub(super) fn validate_tick_consensus_candidate_for_prepared_publication(
@@ -355,6 +378,7 @@ impl World {
         prepared_tick_events: &[WorldEvent],
         prepared_state_root: &str,
     ) -> Result<(), WorldError> {
+        self.validate_formal_tick_immutability(candidate)?;
         // This candidate is an internal, authority-only publication assembled
         // from the validated configured authority source.  It is never an
         // externally submitted candidate, so a failed check aborts the
@@ -442,6 +466,11 @@ impl World {
             });
         }
 
+        if candidate.certificate.consensus_height <= self.formal_archived_tick_consensus_count {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "cannot submit an archived Tick slot".into(),
+            });
+        }
         let Some(existing) = self
             .tick_consensus_records
             .iter()
@@ -485,7 +514,8 @@ impl World {
     pub(super) fn install_prepared_tick_consensus_record(
         &mut self,
         candidate: TickConsensusRecord,
-    ) {
+    ) -> Result<(), WorldError> {
+        self.validate_formal_tick_immutability(&candidate)?;
         if let Some(index) = self
             .tick_consensus_records
             .iter()
@@ -495,12 +525,14 @@ impl World {
         } else {
             self.tick_consensus_records.push(candidate);
         }
+        Ok(())
     }
 
     fn commit_tick_consensus_record_submission(
         &mut self,
         candidate: TickConsensusRecord,
     ) -> Result<(), WorldError> {
+        self.validate_formal_tick_immutability(&candidate)?;
         let tick = candidate.block.header.tick;
         let existing_index = self
             .tick_consensus_records
@@ -728,39 +760,6 @@ impl World {
             });
         }
         Ok(())
-    }
-
-    fn hash_tick_events_from_ids(
-        &self,
-        tick: WorldTime,
-        ordered_event_ids: &[WorldEventId],
-    ) -> Result<String, WorldError> {
-        if ordered_event_ids.is_empty() {
-            let empty_inputs: Vec<TickEventHashInput<'_>> = Vec::new();
-            return hash_json(&empty_inputs);
-        }
-        let mut tick_events_by_id = BTreeMap::new();
-        for event in self
-            .journal
-            .events
-            .iter()
-            .filter(|event| event.time == tick)
-        {
-            tick_events_by_id.entry(event.id).or_insert(event);
-        }
-        let mut events = Vec::with_capacity(ordered_event_ids.len());
-        for event_id in ordered_event_ids {
-            let event = tick_events_by_id.get(event_id).copied().ok_or_else(|| {
-                WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick event missing during hash rebuild tick={} event_id={}",
-                        tick, event_id
-                    ),
-                }
-            })?;
-            events.push(event);
-        }
-        self.hash_tick_event_refs(events)
     }
 
     fn hash_tick_events(&self, events: &[WorldEvent]) -> Result<String, WorldError> {
@@ -1172,26 +1171,6 @@ impl World {
             manifest_hash: &manifest_hash,
             policy_hash: &policy_hash,
         })
-    }
-
-    fn consensus_height_for_tick(&self, tick: WorldTime) -> u64 {
-        match self
-            .tick_consensus_records
-            .iter()
-            .position(|record| record.block.header.tick == tick)
-        {
-            Some(index) => index as u64 + 1,
-            None => self.tick_consensus_records.len() as u64 + 1,
-        }
-    }
-
-    fn parent_hash_for_tick(&self, tick: WorldTime) -> String {
-        self.tick_consensus_records
-            .iter()
-            .rev()
-            .find(|record| record.block.header.tick < tick)
-            .map(|record| record.certificate.block_hash.clone())
-            .unwrap_or_else(|| TICK_CONSENSUS_GENESIS_PARENT_HASH.to_string())
     }
 
     fn derive_tick_randomness_seed(parent_hash: &str, tick: WorldTime) -> String {

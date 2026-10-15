@@ -48,6 +48,7 @@ enum Schema {
     ClosedRecordRoot,
     ArtifactObjects,
     ArtifactObject,
+    FormalWriterEnvelope,
 }
 struct Check<'a>(&'a mut Budget, Schema);
 impl<'de> DeserializeSeed<'de> for Check<'_> {
@@ -55,11 +56,12 @@ impl<'de> DeserializeSeed<'de> for Check<'_> {
     fn deserialize<D: serde::Deserializer<'de>>(self, decoder: D) -> Result<(), D::Error> {
         self.0.spend()?;
         match self.1 {
-            Schema::Generic => decoder.deserialize_any(self),
-            Schema::SnapshotRoot
-            | Schema::ModuleArtifacts
-            | Schema::ClosedRecordRoot
-            | Schema::ArtifactObject => decoder.deserialize_map(self),
+            Schema::Generic | Schema::ClosedRecordRoot | Schema::FormalWriterEnvelope => {
+                decoder.deserialize_any(self)
+            }
+            Schema::SnapshotRoot | Schema::ModuleArtifacts | Schema::ArtifactObject => {
+                decoder.deserialize_map(self)
+            }
             Schema::ArtifactObjects => decoder.deserialize_seq(self),
         }
     }
@@ -146,6 +148,19 @@ impl<'de> Visitor<'de> for Check<'_> {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
         self.0.enter(map.size_hint())?;
         let mut length = 0usize;
+        if matches!(self.1, Schema::FormalWriterEnvelope) {
+            while let Some(schema) = map.next_key_seed(WriterEnvelopeKey(self.0))? {
+                length += 1;
+                if length > self.0.container_limit {
+                    return Err(serde::de::Error::custom(
+                        "ResourceLimited: writer envelope map",
+                    ));
+                }
+                map.next_value_seed(Check(self.0, schema))?;
+            }
+            self.0.depth -= 1;
+            return Ok(());
+        }
         loop {
             let artifact_field = if matches!(
                 self.1,
@@ -278,6 +293,45 @@ impl<'de> Visitor<'de> for BytePayload<'_> {
         self.visit_bytes(&bytes)
     }
 }
+// Only the persisted writer DTO's declared material fields receive byte-aware
+// ClosedRecord traversal. Arbitrary nested arrays retain generic typed limits.
+struct WriterEnvelopeKey<'a>(&'a mut Budget);
+impl<'de> DeserializeSeed<'de> for WriterEnvelopeKey<'_> {
+    type Value = Schema;
+    fn deserialize<D: serde::Deserializer<'de>>(self, decoder: D) -> Result<Schema, D::Error> {
+        self.0.spend()?;
+        decoder.deserialize_str(self)
+    }
+}
+impl<'de> Visitor<'de> for WriterEnvelopeKey<'_> {
+    type Value = Schema;
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("writer DTO field")
+    }
+    fn visit_str<E: serde::de::Error>(self, key: &str) -> Result<Schema, E> {
+        if key.len() > self.0.string_limit {
+            return Err(E::custom("ResourceLimited: writer key"));
+        }
+        Ok(match key {
+            "material" | "frozen_material" => Schema::ClosedRecordRoot,
+            "candidate" => Schema::FormalWriterEnvelope,
+            _ => Schema::Generic,
+        })
+    }
+}
+
+pub(super) fn formal_writer_envelope_cbor(
+    bytes: &[u8],
+    limits: ObserverReadLimits,
+) -> Result<(), ObserverLoadError> {
+    let mut budget = Budget::new(limits);
+    let mut decoder = serde_cbor::Deserializer::from_slice(bytes);
+    Check(&mut budget, Schema::FormalWriterEnvelope)
+        .deserialize(&mut decoder)
+        .map_err(failure)?;
+    decoder.end().map_err(failure)
+}
+
 fn failure(error: impl fmt::Display) -> ObserverLoadError {
     let message = error.to_string();
     if message.contains("ResourceLimited") {
@@ -330,6 +384,33 @@ pub(super) fn closed_record_cbor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn formal_writer_envelope_budget_counts_only_declared_artifact_bytes_as_bytes() {
+        let limits = ObserverReadLimits {
+            max_file_bytes: 128 * 1024,
+            max_single_allocation_bytes: 32 * 1024,
+            max_elements: 64 * 1024,
+            ..ObserverReadLimits::default()
+        };
+        let value = serde_json::json!({"schema_version": 1, "candidate": {
+            "material": {"objects": [{"bytes": vec![7u8; 20_000], "content_hash": "abc", "references": []}]},
+            "frozen_material": null,
+        }});
+        let bytes = serde_cbor::to_vec(&value).unwrap();
+        assert!(formal_writer_envelope_cbor(&bytes, limits).is_ok());
+        assert!(cbor(&bytes, limits).is_err());
+        let ordinary = serde_cbor::to_vec(&serde_json::json!({"candidate": {
+            "opaque": vec![7u8; 20_000],
+        }}))
+        .unwrap();
+        assert!(formal_writer_envelope_cbor(&ordinary, limits).is_err());
+        let oversized = serde_cbor::to_vec(&serde_json::json!({"material": {
+            "objects": [{"bytes": vec![7u8; 40_000]}],
+        }}))
+        .unwrap();
+        assert!(formal_writer_envelope_cbor(&oversized, limits).is_err());
+    }
+
     #[test]
     fn refuses_small_inputs_with_excessive_typed_element_capacity() {
         let limits = ObserverReadLimits {

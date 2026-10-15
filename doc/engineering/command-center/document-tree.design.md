@@ -1,7 +1,7 @@
 # 指挥中心文档树系统设计
 
 - 文档 ID：`DESIGN-ENGINEERING-CC-DOCUMENT-TREE`
-- 状态：`draft`；目标方案，本次不交付程序或桌面验收
+- 状态：`draft`；树目标方案尚未完整实现，已有章节索引基础见 §4；未验收树桌面交互
 - owner_role：`runtime_engineer`
 - module：`engineering`
 - 上游：[REQ-CC-016](command-center.prd.md#REQ-CC-016)、[AC-CC-016](command-center.prd.md#AC-CC-016)
@@ -15,8 +15,8 @@
 
 | 对象 | 基线事实 | 目标与差距 |
 | --- | --- | --- |
-| 文档索引 | [index.rs](../../../tools/oasis7-command-center/core/src/index.rs)按 tracked 路径读取并生成章节，单文件/总量/数量有界 | 复用章节及生命周期解析；补文件级清单、明确遗漏原因、固定基线读取和树投影 |
-| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 文件节点须绑定同一快照；工作树并发编辑检测不能只检查 HEAD |
+| 文档索引 | [index.rs](../../../tools/oasis7-command-center/core/src/index.rs)按 tracked 路径读取并生成章节，单文件/总量/数量有界 | 复用章节及生命周期解析；已有工作树文件清单及逐项覆盖；固定基线读取和树投影待实现 |
+| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 已有章节索引复核 HEAD、tracked 清单、dirty 路径和已读内容摘要，变化时拒绝候选；已有文件覆盖记录；完整文件节点关系与独立树快照仍待实现 |
 | 导航与关系 | 仓库入口和配对链接存在；没有据此证明专用树 UI | 增加明确导航关系、配对关系和可见未归属集合 |
 | 桌面验证 | 本次仅源码与文档核对 | 未执行新 UI、读屏、性能或模型验收；不得以设计表认定已通过 |
 
@@ -26,9 +26,9 @@
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 三种层级、确定关系与来源 | [DES-CC-TREE-001](#DES-CC-TREE-001) | 文档 owner；产品 README、专业入口及显式配对 | 不推断语义主责或设计完成率 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 版本、覆盖、局部失败和只读边界 | [DES-CC-TREE-002](#DES-CC-TREE-002) | Git / Rust adapter、既有索引 | 不扫描私有库，不访问任意远端 |
-| [AC-CC-016](command-center.prd.md#AC-CC-016) | 定位、往返、恢复与可访问操作 | [DES-CC-TREE-003](#DES-CC-TREE-003) | Solid UI / Tauri 宿主 / QA | 设计交付不证明真实桌面通过 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 三种层级、确定关系与来源；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=三种层级、确定关系与来源 | [DES-CC-TREE-001](#DES-CC-TREE-001) | 文档 owner；产品 README、专业入口及显式配对 | 不推断语义主责或设计完成率 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 版本、覆盖、局部失败和只读边界；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=版本、覆盖、局部失败和只读边界 | [DES-CC-TREE-002](#DES-CC-TREE-002) | Git / Rust adapter、既有索引 | 不扫描私有库，不访问任意远端 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | AC-CC-016：定位、往返、恢复与可访问操作；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=定位、往返、恢复与可访问操作 | [DES-CC-TREE-003](#DES-CC-TREE-003) | Solid UI / Tauri 宿主 / QA | 设计交付不证明真实桌面通过 |
 
 <a id="DES-CC-TREE-001"></a>
 
@@ -36,7 +36,7 @@
 
 Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库相对路径、标题、kind、声明 ID、原始生命周期声明及独立规范化类别/解析状态、内容摘要、snapshot ID、dirty 状态。文件键使用项目/工作树身份与规范化路径；文档 ID 只作为检索字段，重复 ID 产生诊断，不合并文件。章节沿既有章节定位，关系的源/目标 fragment 保留完整路径及源位置。
 
-`DocumentEdge` 保存 from/to、kind（navigation / paired_design / upstream_requirement / reference / successor）、声明位置、源摘要及解析结果（resolved / missing / ambiguous / outside_scope / unread）。只有入口的模块/专题导航、明确配对字段及设计上游/承接表产生相应 typed edge；其他 Markdown 链接为 reference。解析支持相对路径、显式锚点和 Markdown 标题锚点，沿仓库治理解析规则保持一致；重复锚点不静默选第一项。链接不存在与目标超出本次读取范围分别记录。远端链接仅作为引用显示，刷新不跟随网络抓取。
+`DocumentEdge` 保存 from/to、kind（navigation / paired_design / upstream_requirement / reference / successor）、声明位置、源摘要及解析结果（resolved / missing / ambiguous / outside_scope / unread）。只有入口的模块/专题导航、明确配对字段及设计上游/承接表产生相应 typed edge；其他 Markdown 链接为 reference。解析支持相对路径、显式锚点和 Markdown 标题锚点，路径沿仓库治理范围规则；导航按下述大小写/标题合同定位，不继承治理校验的宽松 fragment 大小写匹配；重复锚点不静默选第一项。链接不存在与目标超出本次读取范围分别记录。远端链接仅作为引用显示，刷新不跟随网络抓取。
 
 产品投影固定从产品 README 的四域入口读取模块与专题声明；异常额外模块作为诊断，不自动新增第五域。专业系统投影从专业域入口与模块 design 导航展开，同域工程 PRD 可作为需求关联入口；专题归属来自明确导航，无法定位的文件进入“未归属/待核对”。目录投影按路径组织所有候选 PRD/design，README 仅作为结构入口；类型以根 prd/design 与专题后缀为默认，显式声明冲突保留诊断。
 
@@ -59,6 +59,8 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 升级采用独立版本化的 document_tree_v1 派生缓存键/表，不向当前持久 Snapshot 的反序列化模型新增必填字段。旧缓存仍可供既有视图读取；树缓存缺失、版本不兼容或损坏时只重建树派生对象，不清空个人表和原 Snapshot。节点、关系、覆盖与部分尝试可重建，个人阅读偏好使用独立版本化记录和可选默认值；失败只回退树入口，不阻止原项目打开。缓存 schema 初始化及写入采用事务，失败保留旧 schema；旧 App 忽略新表/键，回退不删除个人或未决数据。生成 DTO 与 bridge/UI 随同包原子更新，tree 查询携带 schemaVersion，未知版本返回明确 unsupported，旧客户端不消费新 DTO；既有查询响应保持原 shape。实施回归须覆盖旧数据库打开、损坏树缓存、迁移失败和旧版本回读，确认个人关联/草稿/未决操作保留。
 
 本功能不执行 fetch、checkout、模型调用或源文档写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
+
+现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；逐文件覆盖由下述清单切片承接；独立树 attempt/generation、树缓存与树 UI 合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
 
 <a id="DES-CC-TREE-003"></a>
 
@@ -122,9 +124,31 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 未验证工作树并发与完整 corpus 性能 |
-| [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 生命周期基础已有程序回归；树关系反例待实现 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 章节索引并发反例已有程序回归；独立树快照、迁移与完整 corpus 性能未验证 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | AC-CC-016：搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
+
+生命周期解析基础已由 [lifecycle_metadata.rs](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs) 和现有来源详情承接：原始声明与规范化类别分开，新增可选字段兼容旧阅读记录；[生命周期回归](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)覆盖附注、全角分隔符、未知原值和错误声明。这不提供文件级树、筛选或真实桌面验收。
+
+现有章节索引按 core PRD、工作流主责、结构入口（`AGENTS.md`、文档目录 `README.md`、项目地图）、产品正文/其他 `prd.md`、其余正文的顺序消费文件数量和字节预算；同级按路径稳定排序，入口也受相同单文件及总预算约束，不保证所有入口必然可读。入口优先回归见 `core/src/index_consistency_tests.rs`。
+
+现有章节索引的覆盖反馈由 [index_coverage.rs](../../../tools/oasis7-command-center/core/src/index_coverage.rs) 承接：来源状态显示候选/已读/遗漏数量、实际已读字节、完整遗漏原因计数与最多 20 条路径样本（标明样本/总数）；单文件实际读取受文件和剩余总量预算限制，空文件计为已读，全量遗漏不判为空结果。这是现有工作树章节索引的局部反馈，不提供逐文件持久覆盖、独立树快照/attempt、固定提交或树 UI；本节表内尚待实现的义务仍保留。
+
+文件清单切片由 [document_inventory.rs](../../../tools/oasis7-command-center/core/src/document_inventory.rs) 和 [DocumentInventory.tsx](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx) 承接：现有 tracked 工作树扫描保留所有候选路径，记录 read/skipped/deleted/error、具体原因、可得的标题/类型/生命周期、摘要、已读字节和 dirty；空文件保留记录，未读文件不虚构正文元数据。文件键按项目/路径生成，读取前去重，清单按路径稳定排序；不将文件类型推定为明确配对或主责关系。
+
+清单与章节/搜索在同一 SQLite 事务发布，使用独立 `document_inventory_v1:<project>` 派生键，不修改原持久 Snapshot shape 或数据库 schema 版本。查询 `query_document_inventory` 携带 schemaVersion=1、projectId、可选 snapshotId、标题/路径查询、读取结果筛选及游标；最多返回 100 项，计数不随分页裁剪，游标绑定清单摘要和筛选。来源变化后旧游标明确失效；失败保留原清单并显示 stale，首次缺清单、损坏或未来版本只使清单查询失败，用户刷新可重建，个人记录与未决操作不随清单删除。旧客户端忽略新键。清单仍沿现有章节索引的 partial 发布行为，不提供本设计 §7 独立树成功 pointer/partial attempt 的恢复合同。
+
+规范视图按文件查询读取结果，可查看遗漏、空文件与同摘要章节，项目切换或刷新使旧响应无效。此清单不宣称已经提供三种树投影、显式文档 ID/条款搜索、配对边、固定提交/untracked 基线、独立树快照、树偏好或完整 AC-CC-016。程序回归见 [文件清单测试](../../../tools/oasis7-command-center/core/tests/document_inventory.rs) 与 [界面测试](../../../tools/oasis7-command-center/ui/src/DocumentInventory.test.tsx)；真实界面与宿主验证的候选、环境和限制归实现 PR。
+
+显式配对前置切片在同一文件清单中保留 `pairings`：只识别首个非 H1 标题之前、顶层列表的精确“配对系统设计”字段内 Markdown 链接，普通引用、代码块、引用块、嵌套列表和正文不推断配对；每条保留声明行、原链接、规范化目标和文件级诊断。每文件最多 32 条，字段最多 4096 字节，跨行字段仅提取首行链接并显示解析不完整，超过预算或无法识别链接也显示解析不完整，不声称无配对。声明链接按源顺序保留，不合并多条声明。
+
+目标仅与本次候选清单比对，不沿链接读文件或访问网络：已读取且没有 fragment 的文件目标标 resolved，带 fragment 的目标仅在同次已读内容中定位；唯一显式 HTML `id` 或 Markdown 标题锚点标 resolved，未找到标 missing_fragment，重复显式/标题锚点及二者冲突标 ambiguous，不自动选择第一项或添加编号后缀。已列举但删除的目标标 missing，其他读取遗漏标 unread；未纳入清单、外部、越界或不安全目标标 outside_scope，不把未跟踪文件猜为不存在。详情展示诊断及源行，内容摘要沿所属文件绑定。已解析目标附可选 targetSection/targetRevision，UI 仅在目标路径、章节 ID 和内容摘要均匹配当前章节时开放跳转；无 fragment 时进入文件首个索引章节，空文件无章节可跳。显式锚点紧邻标题时定位该标题，正文/表格内锚点定位所属章节。
+
+锚点解析使用 CommonMark 事件，排除代码和 HTML 注释；标题按可见文本小写，仅保留 Unicode 字母/数字和连字符，移除格式符及包括中文标点在内的其他字符，并以连字符连接空白，支持 Setext 标题。显式 HTML `id` 按原始大小写精确匹配（Contract 与 contract 分开），生成的标题锚点使用小写值；HTML `id` 支持单/双引号及其他属性前置，raw-text HTML 块不提取内部伪锚点。旧清单缺少可选 `pairings` 时显示未解析并要求刷新，不将缺字段当作无配对；旧 App 忽略新增派生字段，原 Snapshot 不变。旧配对清单若仍有 fragment_unchecked 或没有章节定位字段，保留诊断并提示刷新，不按标题猜位置。跳转复用来源详情，关闭后回到原配对按钮并保留当前筛选、分页和文件选择；项目/源代次变化使原清单失效。此切片尚不解析正文上游承接表、导航、successor 边或显式文档 ID，不提供三种树投影。程序回归沿文件清单和界面测试入口，实际桌面验证归实现 PR。
+
+设计文件头的显式上游切片复用上述有界链接投影与同版本章节定位：仅对路径类型为 design 的已读文件，识别首个顶层非 H1 标题之前、顶层列表的精确“上游”字段；保留源行和链接顺序。普通正文、引用、代码、嵌套示例与其他字段不推断上游。目标 targetKind 来自同次候选清单的路径类型，prd 显示需求文档，design 显示设计引用，不能把上游设计引用提升为需求或配对，也不证明承接完整或实现完成。32 目标/4096 字节及跨行不完整提示分别作用于配对和上游字段组。
+
+派生文件记录新增可选 upstream，复用同一次扫描、摘要、事务及查询；没有新源读取或 IPC。旧清单缺字段显示未解析并提示刷新，未读取文件不产生虚构上游。已解析上游目标仅按同路径/章节 ID/内容摘要打开，关闭后返回原上游按钮，保留筛选、分页和文件选择。配对与上游在详情分组展示，解析不完整、缺失、歧义、未读取和范围外沿同一诊断合同；当前仍不解析“上游需求”等别名、文档身份二级章节或正文承接表，不提供完整双向关系图与树投影。回归入口为 [上游声明测试](../../../tools/oasis7-command-center/core/tests/document_upstream.rs)及既有文件清单界面测试。
 
 先实现文件清单与覆盖反馈，再实现关系和快照投影，随后接入树/详情及恢复，最后验证真实 App。只到前两步时可以交付索引切片，但不宣称 AC-CC-016 已通过。纯设计不改变游戏 Agent Skill/API/runtime 行为，开发自主试玩不适用；功能实现仍需上述真实桌面验证。
 

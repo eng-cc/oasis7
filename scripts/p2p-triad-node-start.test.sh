@@ -42,7 +42,7 @@ EXECUTION_RECORDS_DIR=$TMP_DIR/data/execution-records
 STORAGE_ROOT=$TMP_DIR/data/storage
 REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/127.0.0.1/tcp/19085
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/127.0.0.1/tcp/19086/p2p/12D3KooWLegacyPeer
-REPLICATION_REMOTE_WRITERS_CSV=
+REPLICATION_FETCH_REQUESTERS_CSV=
   TRAFFIC_MONITOR_ENABLE=0
 EOF
   if [[ -n "$manifest_path" ]]; then
@@ -138,5 +138,27 @@ grep -q -- "12D3KooWLegacyPeer" <<<"$legacy_output"
 override_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/manifest.env" OASIS7_NODE_START_DRY_RUN=1 ALLOW_NETWORK_TIER_REPLICATION_PEER_ENV_OVERRIDE=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
 grep -q -- "--replication-network-peer" <<<"$override_output"
 grep -q -- "12D3KooWLegacyPeer" <<<"$override_output"
+
+# New naming and the deployed-env adapter preserve fetch-only argv.
+write_env "$TMP_DIR/requester.env"
+printf 'REPLICATION_FETCH_REQUESTERS_CSV=aaaa,bbbb\n' >>"$TMP_DIR/requester.env"
+requester_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/requester.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
+grep -q -- "--replication-fetch-requester-public-key" <<<"$requester_output"
+if grep -q -- "--replication-remote-writer-public-key" <<<"$requester_output"; then
+  echo "node-start must emit canonical fetch requester flags" >&2
+  exit 1
+fi
+write_env "$TMP_DIR/old-requester.env"
+sed -i.bak '/^REPLICATION_FETCH_REQUESTERS_CSV=/d' "$TMP_DIR/old-requester.env"
+printf 'REPLICATION_REMOTE_WRITERS_CSV=aaaa\n' >>"$TMP_DIR/old-requester.env"
+old_requester_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/old-requester.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" 2>"$TMP_DIR/old-requester.warning")
+grep -q -- "--replication-fetch-requester-public-key" <<<"$old_requester_output"
+grep -q -- "deprecated REPLICATION_REMOTE_WRITERS_CSV" "$TMP_DIR/old-requester.warning"
+printf 'REPLICATION_FETCH_REQUESTERS_CSV=bbbb\n' >>"$TMP_DIR/old-requester.env"
+if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/old-requester.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >"$TMP_DIR/requester-conflict.out" 2>&1; then
+  echo "node-start must reject conflicting requester env names" >&2
+  exit 1
+fi
+grep -q -- "conflicting REPLICATION_FETCH_REQUESTERS_CSV" "$TMP_DIR/requester-conflict.out"
 
 echo "p2p-triad-node-start checks passed"

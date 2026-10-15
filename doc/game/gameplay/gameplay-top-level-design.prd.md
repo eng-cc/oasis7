@@ -391,24 +391,10 @@
 - 可回退候选必须说明回退窗口、主要代价和回退后保留/失去的价值；不可回退或没有安全回退时须明确告知，而非用“可调整”淡化承诺。
 - 本合同只定义玩家决策与验收语义；路线是否可达、行动细节、成本、状态字段与 Viewer 呈现由相应专业域和权威状态决定。
 
-## 2.7 当前两周收口重点（2026-04-09）
+<a id="27-当前两周收口重点2026-04-09"></a>
+## 2.7 历史 early-retention 优先级来源
 
-在当前 `internal_playable_alpha_late` 阶段，当前 gameplay scope 必须继续冻结在 early-retention recovery，而不是重新发散到更宽的宏系统曝光。
-
-当前短周期 focus order 固定为：
-
-1. 恢复并守住 active-LLM formal lane 的 `10-minute trust gate` 地板，确保首次控制、世界推进、主目标可读与“愿意继续玩”的基础判断重新成立。
-2. 收口 `PostOnboarding -> first capability gate` 的正式承接，保证玩家在后续 `15~45` 分钟或 `1~3` 次会话内持续得到 `goal / progress / blocker / next_step`，而不是完成新手后掉回自由漂浮观察态。
-3. 把工业链状态、停机原因与修复动作收成 canonical 玩家语义，让玩家能判断“为什么没产出、现在该修哪里”，而不是靠 raw log 或猜测推进。
-4. 收口间接控制下的 control-feeling：必须持续给出动作状态、主因果、阻塞分类与最可执行的下一步，避免体验退化成“看 AI 自己决定”。
-5. 只有在前 4 项稳定后，才允许重新扩大治理、元进度等宏系统在首局和早期 session 里的曝光或承诺。
-
-范围冻结规则：
-
-- 任何新增玩法提案如果不能直接改善前 4 项之一，默认延后，不进入当前冲刺主路径。
-- 如果某项工作主要扩大世界复杂度、卖点数量或系统展示面，但不能降低 early-retention blocker，则必须记为 deferred，而不是与 trust/capability 修复并行抢优先级。
-- `--no-llm`、operator-only、Prompt Ops 或其他 debug/probe lane 只能用于排障，不得作为“当前 focus order 已完成”的放行依据。
-- producer 正式口径保持双层判定：`10-minute trust gate` 与 `first capability gate` 分开记录。历史 hold/not_run 或 pass 样本不代表当前候选；当前判断绑定对应任务、候选与证据窗口，不能跳过 release/liveops 边界复核。
+2026-04-09 的两周 focus order、延期顺序与冲刺冻结记录见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/1192#issuecomment-6162409697)。它不是当前排期；长期 gate、恢复和 control-feeling 合同由下节及[间接控制合同](gameplay-indirect-control-agency-contract.prd.md)持有。`10-minute trust gate` 与 `first capability gate` 分别判定，debug/probe 不代签正式玩法验收；历史 hold/not_run/pass 不代表当前候选。
 
 ### 2.7.1 PRD-GAME-012 稳定 early-retention 合同
 

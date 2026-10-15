@@ -341,7 +341,7 @@ impl World {
         let (pending_effects, pending_effects_evicted) =
             self.prepare_pending_effect_queue(intent.clone())?;
         Ok(PreparedEventStateDelta::EffectQueued {
-            intent_id: intent.intent_id.clone(),
+            intent_id: intent.identity_key(),
             pending_effects,
             pending_effects_evicted,
         })
@@ -351,11 +351,12 @@ impl World {
         &self,
         receipt: &EffectReceipt,
     ) -> Result<PreparedEventStateDelta, WorldError> {
+        let identity_key = self.effect_receipt_key(receipt)?;
         let mut pending_effects = self.pending_effects.clone();
         let mut inflight_effects = self.inflight_effects.clone();
-        let mut removed = inflight_effects.remove(&receipt.intent_id).is_some();
+        let mut removed = inflight_effects.remove(&identity_key).is_some();
         let before = pending_effects.len();
-        pending_effects.retain(|intent| intent.intent_id != receipt.intent_id);
+        pending_effects.retain(|intent| intent.identity_key() != identity_key);
         removed |= before != pending_effects.len();
         if !removed {
             return Err(WorldError::ReceiptUnknownIntent {
@@ -363,7 +364,7 @@ impl World {
             });
         }
         Ok(PreparedEventStateDelta::ReceiptAppended {
-            intent_id: receipt.intent_id.clone(),
+            intent_id: identity_key,
             pending_effects,
             inflight_effects,
         })
@@ -426,6 +427,7 @@ impl World {
             consensus_record,
             state_delta,
         } = prepared;
+        self.install_prepared_tick_consensus_record(consensus_record)?;
         state_delta.install_infallible(self);
         self.state.time = event.time;
         self.next_event_id = next_event_id;
@@ -435,7 +437,7 @@ impl World {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(journal_events_evicted);
-        self.install_prepared_tick_consensus_record(consensus_record);
+
         if let Some(release) = release {
             release.install_routed(&mut self.state);
         } else if let WorldEventBody::Domain(domain_event) = &event.body {

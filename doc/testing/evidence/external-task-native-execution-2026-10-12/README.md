@@ -41,6 +41,7 @@ Post-attempt ordinary diagnosis used the actual worker/TCP fixture at 100 ms tic
 
 After public evidence was retained, all three exited owned prepared-world fixtures, their private credentials/goal records and temporary full-goal CLI output were deleted. [Disposable cleanup](disposable-world-cleanup.json) records process/world closure; it does not manufacture canonical Stop/revoke receipts for the failed attempts. Shared Cargo storage was preserved.
 
-After the attempt, main was integrated at `90fc53b26` to resolve two document-metadata conflicts. Upstream changes include the private encryption library upgrade; the recorded model run continues to refer to `b59d01055`. Native World Service integration on `5b61c3673` passed 34 tests with 2 explicit live/old-diagnosis ignores, including complete private goal G1/G2 action, restart, expiry cleanup, Stop, retention and recovery faults. Final CI and applicable delta review remain separate obligations; this report does not relabel the model run as a new-head run.
-
 Retained gaps: full Game HTTP writes/catalog, token pairing, full collaboration TaskSnapshot, social/approval/report flows, legacy Hosted goal consumer, cold entry, first production/production-block recovery, full disconnect/restart lifecycle, OpenClaw, GUI and production deployment. Full AC-EXT-010 remains unverified. No new paid external Runtime was started; infrastructure/model fees are unknown, not zero. Both model attempts exhausted this bounded scenario allowance; further cleanup diagnosis uses ordinary tests.
+
+
+Delivery, ordinary test failures/repairs, integration and CI history are archived in [the original delivery PR](https://github.com/eng-cc/oasis7/pull/4628#issuecomment-6162407180). They do not change this run's actual source/build/Skill, verdict, budget, oracle or cleanup facts. No current delivery obligation is maintained in this historical run report.

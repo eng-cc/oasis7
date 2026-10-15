@@ -33,6 +33,10 @@ def validate_candidate_graph(workflow, config):
         raise ValueError('fleet must run all three hosts and POSIX cleanup smoke')
     for group in config['groups']:
         job = jobs[group.replace('_', '-')]
+        if group == 'formal_process':
+            if 'always()' not in job or 'ci-formal-plan.py --selected' not in job:
+                raise ValueError('formal aggregation must execute and validate results')
+            continue
         if ("needs.select.result == 'success'" not in job
                 or "fromJSON(needs.select.outputs.plan).scope == 'full'" not in job):
             raise ValueError('group requires successful select and full migration fallback')
@@ -44,6 +48,29 @@ def validate_candidate_graph(workflow, config):
 
 
 class Workflow(unittest.TestCase):
+    def test_formal_suites_share_build_and_propagate_all_failures(self):
+        matrix = JOBS['formal-process-tests']
+        self.assertIn('needs: [select, oasis7-test-build]', matrix)
+        self.assertNotIn('needs: oasis7-required', matrix)
+        self.assertIn('fail-fast: false', matrix)
+        self.assertIn('max-parallel: 5', matrix)
+        self.assertIn('suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]', matrix)
+        self.assertIn('actions/download-artifact@', matrix)
+        self.assertNotIn('cargo build', matrix)
+        self.assertNotIn('cargo test', matrix)
+        self.assertNotIn('rust-cache@', matrix)
+        self.assertIn('--results output/formal-process/results.jsonl', matrix)
+        self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', JOBS['formal-process'])
+        for name in ['full-regression', 'candidate-full-regression']:
+            self.assertIn('./scripts/ci-tests.sh full-standard', JOBS[name])
+            self.assertIn('needs: oasis7-test-build', JOBS[name])
+        self.assertIn('compression-level: 0', JOBS['oasis7-test-build'])
+        self.assertIn('overwrite: true', JOBS['oasis7-test-build'])
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        required_body = driver.split('run_oasis7_required_tier_tests() {', 1)[1].split('run_scenario_regression_tests()', 1)[0]
+        self.assertNotIn('formal-live-local-tests.sh', required_body)
+        self.assertIn('if [[ "$tier" == full ]]; then run_group formal_process; fi', driver)
+
     def test_manual_candidate_full_is_read_only_and_not_scheduled(self):
         candidate = JOBS['candidate-full-regression']
         self.assertIn("if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'", candidate)
@@ -64,11 +91,11 @@ class Workflow(unittest.TestCase):
         writer = JOBS['full-regression'].split('    steps:\n', 1)[1]
         candidate = JOBS['candidate-full-regression'].split('    steps:\n', 1)[1]
         candidate = re.sub(r'      - name: Record exact candidate identity\n.*?(?=      - name: Resolve)', '', candidate, flags=re.S)
-        writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - name: Run full)', '', writer, flags=re.S)
+        writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - (?:name: Run full|uses: actions/download-artifact))', '', writer, flags=re.S)
         writer = re.sub(r'      - name: Save prepared wasm-bindgen tool cache\n.*?(?=      - name:)', '', writer, flags=re.S)
         candidate = candidate.replace('          save-if: false\n', '')
         candidate = candidate.replace('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0',
-                                      'actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5')
+                                      'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0')
         self.assertEqual(candidate.strip(), writer.strip())
 
     def test_pinned_trunk_helper_failure_and_success_paths(self):
@@ -257,7 +284,7 @@ class Workflow(unittest.TestCase):
                 self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2'))
         for name in ('launcher-web','full-regression'):
             job=JOBS[name]
-            self.assertIn('uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25',job)
+            self.assertIn('uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9',job)
             self.assertIn("hashFiles('scripts/install-ci-trunk.sh')",job)
             self.assertNotIn('cargo install trunk',job)
             self.assertNotIn('restore-keys:',job)
@@ -273,7 +300,12 @@ class Workflow(unittest.TestCase):
         self.assertIn('ci-required-result.py', gate)
         for group in CONFIG['groups']:
             job = JOBS[group.replace('_', '-')]
-            self.assertIn('    needs: select\n', job)
+            if group == 'formal_process':
+                self.assertIn('always()', job)
+                self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', job)
+                continue
+            dependency = 'needs: [select, oasis7-test-build]' if group == 'oasis7_required' else 'needs: select'
+            self.assertIn(dependency, job)
             self.assertIn(f"needs.select.outputs.run_{group} == 'true'", job)
             self.assertIn("needs.select.result == 'success'", job)
             self.assertIn("fromJSON(needs.select.outputs.plan).scope == 'full'", job)
@@ -311,7 +343,7 @@ class Workflow(unittest.TestCase):
         self.assertNotIn('cp scripts/', select)
         self.assertEqual(WORKFLOW.count('name: ci-authority'), 2)
         self.assertNotIn('matrix.group', WORKFLOW)
-        self.assertEqual(WORKFLOW.count('uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803'), WORKFLOW.count('persist-credentials: false'))
+        self.assertEqual(len(re.findall(r'uses: actions/checkout@[0-9a-f]{40}\b', WORKFLOW)), WORKFLOW.count('persist-credentials: false'))
         self.assertNotIn('secrets.', WORKFLOW)
         self.assertNotIn('GH_TOKEN:', WORKFLOW)
         self.assertNotIn('scripts/pm/', WORKFLOW)

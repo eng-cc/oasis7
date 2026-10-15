@@ -186,3 +186,88 @@ fn commonmark_indentation_preserves_top_level_identity_and_example_boundaries() 
         assert!(section(&core).lifecycle.is_none(), "{nested}");
     }
 }
+
+#[test]
+fn lifecycle_retains_raw_declaration_and_normalizes_only_the_first_token() {
+    for (raw, category) in [
+        ("`draft`；目标方案", "draft"),
+        ("ACTIVE（owner：runtime）", "active"),
+        ("retired(历史)", "retired"),
+        ("superseded, replacement pending", "superseded"),
+        ("proposed; awaiting decision", "proposed"),
+        ("target-contract", "other"),
+        ("`draft extra`；说明", "other"),
+        ("unknown", "other"),
+        ("`draft`` note`", "other"),
+        ("``draft` note``", "other"),
+        ("``draft``；说明", "draft"),
+        ("`ACTIVE`（owner）", "active"),
+        ("draft，说明", "draft"),
+    ] {
+        let (_, core) = fixture(&format!("# Source\n状态：{raw}\n## Rules\n"));
+        let meta = section(&core).lifecycle.unwrap();
+        let json = serde_json::to_value(meta).unwrap();
+        assert_eq!(json["rawStatus"], raw);
+        assert_eq!(json["category"], category, "{raw}");
+    }
+}
+#[test]
+fn invalid_lifecycle_is_diagnosed_and_old_cache_remains_readable() {
+    for raw in ["", "`draft", "``", "`draft``", "；说明"] {
+        let (_, core) = fixture(&format!("# Source\n状态：{raw}\n## Rules\n"));
+        let meta = section(&core).lifecycle.unwrap();
+        let json = serde_json::to_value(&meta).unwrap();
+        assert_eq!(json["rawStatus"], raw);
+        assert!(json["category"].is_null());
+        assert!(meta.issue.is_some(), "{raw}");
+    }
+    let (_, core) = fixture("# Source\n后继文档：`无`\n");
+    assert_eq!(
+        section(&core).lifecycle.unwrap().category.as_deref(),
+        Some("unknown")
+    );
+    let (_, core) = fixture("# Source\n状态：active\n状态：retired\n");
+    let meta = section(&core).lifecycle.unwrap();
+    let mut json = serde_json::to_value(meta).unwrap();
+    assert!(json["category"].is_null());
+    assert_eq!(json["rawStatus"], "active | retired");
+    json.as_object_mut().unwrap().remove("rawStatus");
+    json.as_object_mut().unwrap().remove("category");
+    let legacy: oasis7_command_center_core::domain::DocumentLifecycle =
+        serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&legacy).unwrap()["status"],
+        json["status"]
+    );
+}
+
+#[test]
+fn successor_fragments_decode_once_and_reject_malformed_or_unsafe_values() {
+    for fragment in ["%73ource-anchor", "source%2Danchor"] {
+        let (_, core) = fixture(&format!(
+            "# Source\n后继文档：[Next](../next.md#{fragment})\n"
+        ));
+        let meta = section(&core).lifecycle.unwrap();
+        assert_eq!(meta.successor_targets, ["doc/next.md#source-anchor"]);
+        assert!(
+            core.snapshot()
+                .sections
+                .iter()
+                .any(|s| s.id == meta.successor_targets[0])
+        );
+        assert!(meta.issue.is_none());
+    }
+    for fragment in ["%", "%GG", "%FF", "source%0Aanchor", "source%20anchor"] {
+        let (_, core) = fixture(&format!(
+            "# Source\n后继文档：[Next](../next.md#{fragment})\n"
+        ));
+        let meta = section(&core).lifecycle.unwrap();
+        assert!(meta.successor_targets.is_empty(), "{fragment}");
+        assert!(meta.issue.is_some(), "{fragment}");
+    }
+    let (_, core) = fixture("# Source\n后继文档：[Next](../next.md#%2573ource-anchor)\n");
+    assert_eq!(
+        section(&core).lifecycle.unwrap().successor_targets,
+        ["doc/next.md#%73ource-anchor"]
+    );
+}

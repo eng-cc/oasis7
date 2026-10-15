@@ -106,11 +106,12 @@ pub use execution_hook::{
     NodeExecutionBootstrap, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor,
     NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitOutcome,
-    NodeExecutionCommitResult, NodeExecutionHook, NodeLocalExecutionContinuation,
-    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
-    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
-    REPLICATED_EXECUTION_INPUT_VERSION, bind_replicated_execution_input_action,
-    decode_replicated_execution_input_action, validate_replicated_execution_input_actions,
+    NodeExecutionCommitResult, NodeExecutionGenesisBootstrap, NodeExecutionHook,
+    NodeLocalExecutionContinuation, NodeReplicatedExecutionInputV1,
+    PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND, REPLICATED_EXECUTION_INPUT_ACTION_ID,
+    REPLICATED_EXECUTION_INPUT_SUBMITTER, REPLICATED_EXECUTION_INPUT_VERSION,
+    bind_replicated_execution_input_action, decode_replicated_execution_input_action,
+    validate_replicated_execution_input_actions,
 };
 use gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipEndpoint, GossipMessage,
@@ -243,6 +244,7 @@ fn with_execution_hook<T>(
 pub struct NodeRuntime {
     config: NodeConfig,
     local_execution_bootstrap: Option<execution_hook::NodeExecutionBootstrap>,
+    local_execution_genesis_bootstrap: Option<execution_hook::NodeExecutionGenesisBootstrap>,
     replication_network: Option<NodeReplicationNetworkHandle>,
     replication_network_consensus_enabled: bool,
     gossip_endpoint: Option<Arc<GossipEndpoint>>,

@@ -54,6 +54,24 @@ All four designs consume the existing product requirements and preserve Runtime
 world authority. The new Game API is not the old Provider callback under an alias;
 its rollout may retire unnecessary Bridge code after checking real consumers.
 
+## First-party Harness as a game client
+
+The [product boundary](../../product/agents-world-simulation/provider-agent-experience-continuity.prd.md#first-party-agent-client)
+defines the builtin Harness as a first-party client, not part of world authority.
+The [client-boundary system design](agent-game-client-boundary.design.md#des-agc-001)
+reuses the extracted Harness and ordinary signed client: shared SDK reliability,
+one game contract and one Runtime admission/effect path. External Runtimes keep
+their own planning; neither the official Harness nor SDK is a protocol prerequisite.
+
+This is a migration target, not a completed cutover. Existing native task slices
+and read-only Game HTTP bootstrap retain their actual scope. Internal calls may
+avoid network serialization only if they preserve the same identity, capability,
+fence and receipt checks. World-owned tasks, leases, deterministic jobs, durable
+results and recovery stay in Runtime. See [migration and verification](agent-game-client-boundary.design.md#des-agc-006)
+and [implementation tracking](https://github.com/eng-cc/oasis7/issues/4726).
+The external Skill/HTTP product goal and independent Runtime acceptance remain
+unchanged; SDK extraction does not turn the product into a CLI-only interface.
+
 ## Authority map
 
 - `decision-provider-contract.prd.md` and `.design.md` define the provider-

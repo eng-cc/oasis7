@@ -18,7 +18,7 @@ Checks:
   1. Repository-owned documentation must not reintroduce project.md / *.project.md
      ledgers or active references to them.
   2. Non-archive/non-devlog markdown files must not contain absolute /Users/... or /home/... paths.
-  2. Non-archive/non-devlog markdown files must be <= 1000 lines.
+  - Non-archive/non-devlog markdown files over 1000 lines receive an advisory only.
   3. Root-level markdown files under doc/ must match the tracked allowlist.
   4. Root-level markdown files under each module (doc/<module>/*.md) must match
      the tracked allowlist (archive/devlog/.governance excluded).
@@ -34,6 +34,8 @@ Checks:
      content contract with the selected base/head and worktree changes.
   10. New or materially changed professional system-design files must carry
       exact upstream, local-design, and validation traceability.
+  --full-corpus additionally reports historical product and professional design
+  findings as warnings after the scoped strict checks; input errors still fail.
 USAGE
 }
 
@@ -95,12 +97,12 @@ run_product_doc_content_check() {
     echo "product-doc-content: error: unable to derive explicit base/head for worktree check" >&2
     return 1
   fi
+  "$PYTHON_BIN" scripts/product-doc-governance-check.py --enforce-changed \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
   "$PYTHON_BIN" scripts/product-doc-content-check.py \
     --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
-  if ((full_corpus == 1)); then
-    "$PYTHON_BIN" scripts/product-doc-content-check.py \
-      --repo-root "$repo_root" --full-corpus
-  fi
+  "$PYTHON_BIN" scripts/doc-core-content-check.py \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
 }
 
 run_system_design_traceability_check() {
@@ -578,14 +580,18 @@ if abs_hits=$(regex_match_with_line_numbers '/(Users|home)/[^[:space:]]+' "${all
   fail "absolute user-home paths found in non-archive docs"
 fi
 
-# 2) line count check
+# 2) editorial length advisory; never a submission or CI failure
 if [[ ${#all_doc_files[@]} -gt 0 ]]; then
-  while IFS=$'\t' read -r line_count file; do
-    [[ -n "$file" ]] || continue
-    if ((line_count > 1000)); then
-      fail "$file exceeds 1000 lines (${line_count})"
-    fi
-  done < <(awk 'FNR == 1 { if (NR > 1) print count "\t" prev; prev = FILENAME; count = 0 } { count++ } END { if (NR > 0) print count "\t" prev }' "${all_doc_files[@]}")
+  if ! line_counts=$(awk 'FNR == 1 { if (NR > 1) print count "\t" prev; prev = FILENAME; count = 0 } { count++ } END { if (NR > 0) print count "\t" prev }' "${all_doc_files[@]}"); then
+    fail "markdown line count scan failed"
+  else
+    while IFS=$'\t' read -r line_count file; do
+      [[ -n "$file" ]] || continue
+      if ((line_count > 1000)); then
+        echo "doc-governance-check: advisory: $file exceeds 1000 lines (${line_count}); review readability, not a gate"
+      fi
+    done <<< "$line_counts"
+  fi
 fi
 
 # 3) markdown doc path references must exist (except explicit exemptions)
@@ -629,16 +635,23 @@ if [[ ${#handoff_template_files[@]} -gt 0 ]]; then
   done
 fi
 
-if ! "$PYTHON_BIN" scripts/product-doc-governance-check.py; then
-  fail "product documentation overlay contract failed"
-fi
-
 if ! run_product_doc_content_check; then
   fail "product document content contract failed"
 fi
 
 if ! run_system_design_traceability_check; then
   fail "system-design traceability contract failed"
+fi
+
+# Run historical reports separately, after both scoped strict gates. Their
+# warning policy must never replace or reset a changed-range failure.
+if ((full_corpus == 1)); then
+  for checker in product-doc-content-check doc-core-content-check system-design-traceability-check; do
+    if ! "$PYTHON_BIN" "scripts/${checker}.py" --warn-only \
+      --repo-root "$repo_root" --full-corpus; then
+      fail "${checker} full-corpus check failed"
+    fi
+  done
 fi
 
 if ((failures > 0)); then

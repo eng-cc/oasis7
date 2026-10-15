@@ -34,12 +34,7 @@ pub const DEFAULT_ELEMENT_RECOVERABILITY_PPM: i64 = 850_000;
 // Resource Types
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceKind {
-    Electricity,
-    Data,
-}
+pub use oasis7_agent_api::world_action::ResourceKind;
 
 // ============================================================================
 // Location Physical Profile
@@ -422,15 +417,7 @@ pub enum ResourceOwner {
     Location { location_id: LocationId },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(tag = "type", content = "data", rename_all = "snake_case")]
-pub enum ModuleInstallTarget {
-    #[default]
-    SelfAgent,
-    LocationInfrastructure {
-        location_id: LocationId,
-    },
-}
+pub use oasis7_agent_api::world_action::ModuleInstallTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

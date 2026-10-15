@@ -9,6 +9,7 @@ fn world_service_submission_does_not_hold_shared_viewer_mutex_and_preserves_unkn
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .unwrap();
     server.config.world_service = Some(crate::world_service::client::WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key: hex::encode(service_key.verifying_key().to_bytes()),
         expected_world: oasis7_client_api::world_service::WorldIdentity {

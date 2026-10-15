@@ -247,6 +247,8 @@ fn read_public_cursor_at(
     );
     let view = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: config.expected_world.clone(),
             scope_id: config.scope_id.clone(),
@@ -309,6 +311,8 @@ pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
     );
     let pinned = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),

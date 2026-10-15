@@ -305,6 +305,13 @@ Replay 使用同一 reducer 和 typed buffer，但只能应用 canonical event�
 <a id="runtime-generation-persistence-contract"></a>
 #### 普通 generation 保存与恢复合同（目标）
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：完整同代候选与历史恢复连续性；本地保存只是恢复链的子边界，不证明正式可服务或独立故障域。
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)：持久结果与调用方一致，已提交或未知时不伪造无效果终态；不代替全部验证者的确定性组合。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 普通 runtime 保存必须向调用方区分 `NotCommitted`、`Committed` 与 `StatusUnknown`，并独立表达提交后的维护降级。候选绑定稳定操作身份、原 base generation 与完整持久内容；确认已提交时安装或恢复该候选，未知时禁止旧 World 再发布，按同一身份核对后才解除写入隔离。此处描述本地 generation 的持久结果，不代替[合法 authority profile 的正式提交证明和独立故障域条件](#runtime-authority-profile-commit)。
 
 专业要求和独立验收由存储专题的 [G1 提交判定与调用方一致性](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g1)、[G2 当前 index 引用闭包保护](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g2)、[G3 完整同代候选恢复](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g3)及[提交判定与恢复选择边界](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-cross-boundary)承接，技术映射见[根设计](design.md#runtime-generation-persistence-design)。健康旧候选不证明新代未提交，也不自行恢复当前写权；涉及事件后缀时，完整候选还须满足 [J1/J2 恢复与续跑合同](#runtime-journal-suffix-recovery)，不能仅由同代材料可读推断控制状态已正确重建。重新服务仍受[恢复闸门](#runtime-recovery-acceptance)约束。文档采纳不证明普通保存入口或这些故障验收已实现。
@@ -333,6 +340,8 @@ native、WASM、tick module 和 compatibility fallback 必须最终进入一条�
 
 `step_with_modules()` 不是绕过 native 规则的特殊真值；当前 gameplay module 激活时的整体 directive/fallback 语义继续兼容。wrapper 与 `step()` 现已共享“clone 后执行、成功才发布”的 coarse staged boundary，但内部执行顺序仍是 legacy/current compatibility behavior，不能宣称已经满足上述统一 pipeline。迁移完成后，quote/resolve、final affordability、atomic apply、receipt 与 replay conformance 必须证明两个入口的状态转换等价；在证据闭合前，ExecutionReceipt 只属于 target contract。后续拆分 `WorldExecutor`、`KernelSystem`、`PhysicsSystem`、`ResourceSystem`、`ModuleSystem`、`JobSystem`、`CommitSystem` 应按阶段逐步完成，保留固定顺序与既有 replay fixture；不进行一次性 ECS 或 WorldState 大迁移。
 
+<a name="executionreceipt、tick-compatibility-与-finality-边界"></a>
+
 ### ExecutionReceipt、tick compatibility 与 finality 边界
 
 目标状态下，world-runtime 的权威输出是 deterministic `ExecutionReceipt`/execution commitment，而不是共识证书；在迁移完成前，现有 execution record 与 tick compatibility record 仍是 current/legacy surface，不能被描述为已完成的 receipt contract。receipt 至少绑定 `world_id`、runtime/manifest version、parent state identity、确定排序的 `action_root`、执行/事件 commitment、next `state_root`、逻辑 tick/执行高度、journal/checkpoint references，以及 accepted/rejected/fault 的结构化结果。字段的具体编码和签名方式由对应接口/共识专题约束；runtime 不以本地 threshold 或 process-local 签名宣称 finality。
@@ -347,6 +356,8 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
 4. 只有在版本化 snapshot/replay migration、receipt equivalence 和下游读者证据齐全后，才允许停止生成 legacy 写入；删除旧读取路径另行走兼容周期。
 
 迁移窗口内，`WorldTick`、consensus height 与 wall-clock slot 可以继续沿用当前实现的兼容耦合，但文档与 receipt 必须能区分三者。未来批量 tick、快进、停滞恢复或逻辑 region 不得借此隐式改变 single canonical timeline；解耦应通过版本化 execution protocol 与 replay fixture 另行验证。
+
+<a name="snapshot、replay、version-与-canonical-timeline-兼容"></a>
 
 ### Snapshot、replay、version 与 canonical timeline 兼容
 

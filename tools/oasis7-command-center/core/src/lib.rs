@@ -1,5 +1,6 @@
 pub mod codex;
 pub mod context;
+pub mod document_inventory;
 pub mod domain;
 pub mod github;
 mod index;
@@ -173,7 +174,7 @@ impl CommandCenter {
                 ));
             }
             context::register_project(&self.db, Path::new(&p.path))?;
-            index::read(&p).map(|(sections, git)| (p, sections, git))
+            index::read_with_inventory(&p).map(|candidate| (p, candidate))
         });
         let previous = self
             .current
@@ -187,11 +188,33 @@ impl CommandCenter {
             .and_then(|s| s.generation.parse::<u64>().ok())
             .unwrap_or(0)
             + 1;
+        let mut inventory = None;
         match result {
-            Ok((p, sections, git)) => {
-                self.current.sources.push(SourceStatus { kind: "local".into(), state: if sections.is_empty() { "empty" } else { "partial" }.into(),
-                    last_attempt: Some(attempt.clone()), last_success: Some(attempt), source_revision: Some(p.head.clone()),
-                    generation: generation.to_string(), coverage: "tracked Markdown in doc, AGENTS.md and project map; 3000 paths, 1 MiB/file, 16 MiB total; untracked files excluded".into(), error: None });
+            Ok((p, candidate)) => {
+                let index::IndexCandidate {
+                    sections,
+                    git,
+                    coverage,
+                    omitted,
+                    inventory: mut files,
+                } = candidate;
+                files.source_generation = generation.to_string();
+                inventory = Some(files);
+                self.current.sources.push(SourceStatus {
+                    kind: "local".into(),
+                    state: if sections.is_empty() && !omitted {
+                        "empty"
+                    } else {
+                        "partial"
+                    }
+                    .into(),
+                    last_attempt: Some(attempt.clone()),
+                    last_success: Some(attempt),
+                    source_revision: Some(p.head.clone()),
+                    generation: generation.to_string(),
+                    coverage,
+                    error: None,
+                });
                 self.current.project = Some(p);
                 self.current.sections = sections;
                 self.current.git = git;
@@ -235,6 +258,14 @@ impl CommandCenter {
             )?;
         }
         save(&tx, "cache", "snapshot", &self.current)?;
+        if let Some(inventory) = inventory {
+            save(
+                &tx,
+                "cache",
+                &format!("document_inventory_v1:{}", inventory.project_id),
+                &inventory,
+            )?;
+        }
         save(&tx, "personal", "preferences", &self.current.preferences)?;
         save(
             &tx,

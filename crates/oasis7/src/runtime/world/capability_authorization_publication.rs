@@ -118,6 +118,7 @@ impl World {
             .map(|event| event.id)
             .expect("capability authorization publication contains an event");
 
+        self.install_prepared_tick_consensus_record(consensus_record)?;
         self.capability_grants_v2 = capability_grants_v2;
         self.capability_revocation_state = capability_revocation_state;
         self.capability_invocation_contexts = capability_invocation_contexts;
@@ -130,7 +131,7 @@ impl World {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(journal_events_evicted);
-        self.install_prepared_tick_consensus_record(consensus_record);
+
         Ok(event_id)
     }
 

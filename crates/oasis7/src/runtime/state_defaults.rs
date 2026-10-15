@@ -62,6 +62,7 @@ impl Default for WorldState {
     fn default() -> Self {
         Self {
             time: 0,
+            retained_history_root: None,
             agents: BTreeMap::new(),
             agent_intent_ledger: BTreeMap::new(),
             resources: BTreeMap::new(),

@@ -22,7 +22,8 @@ struct PreparedModuleChangeBatch {
 
 #[cfg(any(test, feature = "test_tier_required"))]
 impl PreparedModuleChangeBatch {
-    fn install(self, world: &mut World) {
+    fn install(self, world: &mut World) -> Result<(), WorldError> {
+        world.install_prepared_tick_consensus_record(self.consensus_record)?;
         world.module_registry = self.module_registry;
         world.module_artifacts = self.module_artifacts;
         world.module_tick_schedule = self.module_tick_schedule;
@@ -33,13 +34,14 @@ impl PreparedModuleChangeBatch {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(self.journal_events_evicted);
-        world.install_prepared_tick_consensus_record(self.consensus_record);
+
         for record_key in self.cache_invalidations {
             let prefix = format!("{record_key}|");
             world
                 .prepared_subscription_cache
                 .retain(|key, _| !key.starts_with(prefix.as_str()));
         }
+        Ok(())
     }
 }
 
@@ -129,7 +131,7 @@ impl World {
             journal_events_evicted,
             consensus_record: consensus_record.expect("nonempty batch has consensus"),
         }
-        .install(self);
+        .install(self)?;
         Ok(())
     }
 }

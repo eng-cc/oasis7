@@ -242,7 +242,10 @@ systemctl is-active oasis7-hosted-login-prod.service
 
 云上 operator 检查时只允许输出 env key 名，不允许输出 env value。
 
-## 13. 后续缺口
+<a id="13-后续缺口"></a>
+## 13. 历史窗口的后续建议
+
+以下只记录 2026-05-29 当时的建议，不描述今天的缺口或产生新的建设义务；尚未核到唯一原执行 Task，故原文保留。当前环境、lane 与 readiness 必须取当轮 deployment truth 和实际验证，不从旧建议推断。
 1. 为 hosted-login 增加可自动读取测试邮箱 OTP 的 `login/start -> login/complete` 云上 smoke。
 2. 为 public_testnet 生成非 placeholder manifest、lanes TSV 与公开 endpoint evidence。
 3. 为 mainnet readiness 增加独立环境矩阵，明确 signer/custody/genesis/bootstrap/RPC/explorer/faucet 的 test/prod 隔离。

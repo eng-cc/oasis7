@@ -51,8 +51,10 @@ FEEDBACK TIMING LAYERS:
 
 ## Combat Mechanics
 
+This is an illustrative, unverified Unity/C# example, not a complete production implementation. It calls `RecoverFromStagger()` without defining it and depends on project-provided types such as `IDamageable`; complete and validate the integration before reuse.
+
 ```csharp
-// ✅ Production-Ready: Combat State Machine
+// Illustrative example: Combat State Machine (unverified)
 public class CombatStateMachine : MonoBehaviour
 {
     public enum CombatState { Idle, Attacking, Blocking, Recovering, Staggered }

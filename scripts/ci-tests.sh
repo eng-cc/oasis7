@@ -8,11 +8,12 @@ tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH] [--group NAME] [--support-plan JSON|--support-profiles JSON]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-standard|full-core|full-support] [--repo-root PATH] [--group NAME] [--support-plan JSON|--support-profiles JSON]
 
   commit        Run the lightweight local commit gate used by pre-commit.
   required      Run the explicit heavier required gate for local validation and PR gate.
   full          Run required checks plus all extended feature/integration tests.
+  full-standard Run full checks excluding the independent formal-process suites.
   full-core     Run doc/fmt plus the heaviest `oasis7 --tests` full-tier shard.
   full-support  Run the remaining support crates/viewer shard plus `oasis7 --lib --bins`.
 
@@ -29,7 +30,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$tier" in
-  commit|required|full|full-core|full-support) ;;
+  commit|required|full|full-standard|full-core|full-support) ;;
   *)
     usage
     exit 1
@@ -91,7 +92,7 @@ prepare_local_cargo_target() {
 run_cargo() {
   prepare_local_cargo_target
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
-    run env -u RUSTC_WRAPPER cargo "$@" --verbose
+    run env -u RUSTC_WRAPPER cargo --verbose "$@"
   else
     run env -u RUSTC_WRAPPER cargo "$@"
   fi
@@ -115,6 +116,10 @@ run_cargo_clippy() {
 
 
 run_oasis7_required_tier_tests() {
+  if [[ -n "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then
+    run python3 "$driver_dir/ci-test-artifacts.py" run --repo-root "$repo_root" --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
+    return
+  fi
   local viewer_manifest viewer_binary
   viewer_manifest="$(mktemp)"
   run_cargo build -p oasis7 --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
@@ -157,11 +162,12 @@ run_oasis7_consensus_clippy() {
 }
 
 run_oasis7_distfs_tests() {
-  run_cargo test -p oasis7_distfs --lib
+  # Keep independent RPC deadline fixtures from contending with other storage fixtures.
+  run_cargo test -p oasis7_distfs --lib --bin oasis7_durability_endpoint -- --test-threads=1
 }
 
 run_oasis7_distfs_clippy() {
-  run_cargo_clippy -p oasis7_distfs --lib
+  run_cargo_clippy -p oasis7_distfs --lib --bin oasis7_durability_endpoint
 }
 
 run_oasis7_node_tests() {
@@ -198,8 +204,10 @@ run_oasis7_net_libp2p_clippy() {
 run_oasis7_workspace_support_crate_tests() {
   run_cargo_clippy -p oasis7_agent_api --all-targets
   run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo_clippy -p oasis7_game_client --all-targets
   run_cargo test -p oasis7_agent_api
   run_cargo test -p oasis7_agent_harness --lib
+  run_cargo test -p oasis7_game_client --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \
@@ -244,8 +252,6 @@ if raw.startswith('plan:'):
         raise SystemExit('unknown support profile plan version')
     else:
         profiles = plan.get('workspace_support_profiles')
-        if plan.get('scope') == 'full' and set(profiles or []) != set(module.SUPPORT_PROFILES):
-            raise SystemExit('full plan omitted support profiles')
 else:
     profiles = json.loads(raw)
 if (not isinstance(profiles, list) or not profiles or
@@ -253,6 +259,11 @@ if (not isinstance(profiles, list) or not profiles or
         len(set(profiles)) != len(profiles) or
         not set(profiles).issubset(module.SUPPORT_PROFILES)):
     raise SystemExit('invalid or missing workspace support profiles')
+# A trusted base planner cannot name newly extracted packages. Full scope
+# always expands to the candidate inventory after validating its known input,
+# so an additive profile never narrows or breaks the full support job.
+if raw.startswith('plan:') and plan.get('scope') == 'full':
+    profiles = list(module.SUPPORT_PROFILES)
 print('\n'.join(sorted(profiles)))
 PY
   ) || return 2
@@ -260,7 +271,7 @@ PY
     echo "+ support profile: $profile"
     case "$profile" in
       oasis7_agent_api) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" ;;
-      oasis7_agent_harness) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
+      oasis7_agent_harness|oasis7_game_client) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
       oasis7_wasm_executor) run_cargo test -p "$profile" --features wasmtime --lib ;;
       oasis7_secure_envelope|oasis7_context) run_cargo test -p "$profile" --all-targets --locked ;;
       oasis7_local_signer) run_cargo test -p "$profile" --lib; run_cargo test -p "$profile" --test context_cli --locked ;;
@@ -289,10 +300,13 @@ run_provider_remote_https_smoke() {
 }
 
 run_doc_checker_contract_tests() {
+  run python3 ./scripts/resolve-product-doc-ci-range.test.py
   run python3 ./scripts/document-corpus-inventory-check.test.py
   run python3 ./scripts/doc-evidence-inventory-check.test.py
   run python3 ./scripts/product-doc-governance-check.test.py
   run python3 ./scripts/product-doc-content-check.test.py
+  run python3 ./scripts/doc-core-content-check.test.py
+  run python3 ./scripts/doc-content-warnings.test.py
   run_system_design_traceability_tests
   run bash ./scripts/product-doc-content-callers.test.sh
   run bash ./scripts/doc-governance-check.test.sh
@@ -319,6 +333,7 @@ run_cargo_tooling_contract_tests() {
 run_workflow_governance_baseline_contract_tests() {
   run node ./scripts/cache-permission-probe.test.cjs
   run python3 ./scripts/plan-rust-required-scope.test.py
+  run python3 ./scripts/ci-formal-process.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
   run python3 ./scripts/ci-support-profiles.test.py
@@ -386,6 +401,7 @@ run_operational_node_contract_tests() {
   run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
   run bash ./scripts/p2p-public-testnet-service-readback.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
+  run bash ./scripts/p2p-public-testnet-package-node-operation-transaction.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-order.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh
@@ -649,7 +665,8 @@ run_group() {
   case "$1" in
     baseline) run_required_gate_checks ;;
     rust_baseline) run_rust_baseline ;;
-    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
+    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; if [[ -z "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields; fi ;;
+    formal_process) run bash "$driver_dir/formal-live-local-tests.sh" "$repo_root" ;;
     consensus) run_oasis7_consensus_clippy; run_oasis7_consensus_tests ;;
     distfs) run_oasis7_distfs_clippy; run_oasis7_distfs_tests ;;
     node) run_oasis7_node_clippy; run_oasis7_node_tests ;;
@@ -686,7 +703,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 --features wasmtime --lib --bins ;;
+    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac

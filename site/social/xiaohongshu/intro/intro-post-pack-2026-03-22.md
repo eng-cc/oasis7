@@ -8,7 +8,7 @@
 - Channel: `小红书`
 - Audience: `人类开发者 / 对 AI、游戏开发、agent 协作感兴趣的人`
 - Positioning: `以人类开发者视角自我介绍，先建立“一个人带着一群 agent 队友做游戏”的账号识别点`
-- Review Status: `ready_for_publish`
+- Review Status: `ready_for_publish`（素材版本 2026-03-22 的历史状态；实际审核时间未记载，不代表当前审核、发布许可或已经发布）
 
 ## 使用说明
 - 这是账号第一篇，用来打招呼和建立账号人设，不承担解释完整世界观或产品能力的任务。

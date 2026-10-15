@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "8fc1f573583cb7289df12986d57dcfec87d5c06d6caf24b57d587f1dc53ff0aa",
-    "current_authority": "doc/site/manual/site-manual-static-docs.prd.md",
+    "content_sha256": "60e87f406fd64a8b730c525f6c0ac9342c74acc53677f69cc126cfdfdea08989",
+    "current_authority": "doc/site/design.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current mirror design; retired workflow metadata updated, domain authority retained",
+    "note": "2026-10-13 #4659: canonical body received by doc/site/design.md; this path retains compatible routing and old anchors. Owner, disposition and lifecycle decisions are unchanged; no file deletion or runtime acceptance claim.",
     "path": "doc/site/manual/site-manual-static-docs.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

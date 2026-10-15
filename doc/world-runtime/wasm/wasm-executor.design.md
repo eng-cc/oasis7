@@ -42,7 +42,7 @@
 - 修改 capability、sandbox limits 或 cache 格式时，同步更新 ABI 兼容与损坏恢复测试。
 
 <a id="wasmtime-49-coordinated-release"></a>
-### Wasmtime 48.0.3 → 49.0.2 执行兼容与发布边界
+### Wasmtime 48.0.3 → 49.0.3 执行兼容与发布边界
 
 Wasmtime 49 将 bulk operation 的 fuel debit 移到操作成功完成后；同时触发越界与
 fuel 不足的调用，48 与 49 可能分别返回 `OutOfFuel` 与 `Trap`。两者都拒绝调用且不
@@ -52,7 +52,7 @@ fuel 不足的调用，48 与 49 可能分别返回 `OutOfFuel` 与 `Trap`。两
 package version，不标识或强制校验 Wasmtime 依赖版本。
 
 本次依赖升级必须采用同一 world 的完整执行集合协调切换：所有能够 author 或独立
-execute/validate tick 的进程须在维护边界全部停止，在完整目标 49.0.2 工件回读通过后
+execute/validate tick 的进程须在维护边界全部停止，在完整目标 49.0.3 工件回读通过后
 才恢复；不得使用重叠 48/49 执行窗口。具体 inventory、quiescence、readback、恢复与
 回滚 hold 见 [Wasmtime49 维护流程](../../p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance)。
 现有单节点升级、health/preflight 或 checkpoint 一致性检查均不构成自动 fleet engine
@@ -79,8 +79,8 @@ WASM owns wire/codec/schedule；runtime owns host publication；P2P owns finalit
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
 | [req-dcs-005](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005) | actual same-candidate semantic attachment | [sr2-dc5-semantic-validator](wasm-executor.design.md#sr2-dc5-semantic-validator) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | schema pass 无真实 proof |
-| [sr2-execution-contract](wasm-interface.md#sr2-execution-contract) | successful receipt bound to charge/state and no partial output | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | located tests 未运行且不覆盖全目标 |
-| [sr2-metering-contract](wasm-interface.md#sr2-metering-contract) | old schedule recorded, local clocks excluded | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | process metrics 不是 authority |
+| [req-dwe-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) | successful receipt bound to charge/state and no partial output；专业约束 [execution contract](wasm-interface.md#sr2-execution-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | located tests 未运行且不覆盖全目标 |
+| [req-dwe-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) | old schedule recorded, local clocks excluded；专业约束 [metering contract](wasm-interface.md#sr2-metering-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | process metrics 不是 authority |
 | [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | pending replacement and version authority | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | current prepared seam 非完整 durable lineage |
 
 ## 3. 当前状态、目标状态与差距
@@ -139,8 +139,8 @@ Physical closed JSON receiver 是 [actual target schema](../../testing/schemas/w
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [req-dcs-005](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005) | [sr2-dc5-semantic-validator](wasm-executor.design.md#sr2-dc5-semantic-validator) | actual same-candidate semantic attachment | DC5-01..05, SR2-RT-01/09; required swap candidate/world/window, missing proof/consumer, regressing head, absent append, waiting intent proof revoked; full actual execution+state-sync+consumer joins；[located partial source](../../../scripts/game-world-state-sync-commit-module-required.test.sh) | GWSC #sr2-qa-negative-matrix / Task candidate artifact | schema pass 无真实 proof |
-| [sr2-execution-contract](wasm-interface.md#sr2-execution-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | successful receipt bound to charge/state and no partial output | MET-02, SR2-RT-07/08; overflow/fuel/balance/collection and each prepare failure; located crates/oasis7_wasm_executor/src/tests.rs + module_output_publication_transaction_regressions.rs；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | required before/after roots/journal/receipt comparison | located tests 未运行且不覆盖全目标 |
-| [sr2-metering-contract](wasm-interface.md#sr2-metering-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | old schedule recorded, local clocks excluded | MET-01, SR2-RT-10; change clock/reset/degraded/current prices, expect identical core IDs/charges; full historical replay original schedule；[located partial source](../../../scripts/oasis7-node-wasm-metrics-monitor.test.sh) | candidate-bound canonical bytes and replay | process metrics 不是 authority |
+| [req-dwe-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | successful receipt bound to charge/state and no partial output；专业约束 [execution contract](wasm-interface.md#sr2-execution-contract) | MET-02, SR2-RT-07/08; overflow/fuel/balance/collection and each prepare failure; located crates/oasis7_wasm_executor/src/tests.rs + module_output_publication_transaction_regressions.rs；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | required before/after roots/journal/receipt comparison | located tests 未运行且不覆盖全目标 |
+| [req-dwe-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | old schedule recorded, local clocks excluded；专业约束 [metering contract](wasm-interface.md#sr2-metering-contract) | MET-01, SR2-RT-10; change clock/reset/degraded/current prices, expect identical core IDs/charges; full historical replay original schedule；[located partial source](../../../scripts/oasis7-node-wasm-metrics-monitor.test.sh) | candidate-bound canonical bytes and replay | process metrics 不是 authority |
 | [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | pending replacement and version authority | LIN-01..04 / ACT-01 / SR2-RT-02..05; required both winner orders, crash reservation/pre/post commit, old/new activation; located governed_module_lifecycle_transaction_regressions.rs；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | lifecycle + GWSC runtime scenarios | current prepared seam 非完整 durable lineage |
 
 ## 12. 决策、长期风险与未决问题
