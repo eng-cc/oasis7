@@ -4,7 +4,8 @@
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - 本地会话产品要求：[本地启动会话连续性与恢复](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md)
 
-## 1. 设计定位
+<a id="1-设计定位"></a>
+## 1. 设计定位与目标
 定义“安装在用户机器上的 `Local Provider` 如何通过本地 HTTP 参与 world-simulator 的 agent 决策”的首期工程方案，覆盖本地发现、握手、配置、决策请求、反馈回写、状态可观测与失败回退。
 
 ## 2. 设计结构
@@ -19,9 +20,9 @@
 
 | 上游要求 | 承接与分配 | 本设计条款 | 主责与消费方 | 边界 |
 | --- | --- | --- | --- | --- |
-| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | target/legacy 路由、身份与 Runtime 裁决保持独立 | [Harness 对齐](#41-harness-contract-alignment) | runtime_engineer、agent_engineer；HTTP adapter | 本地 callback 不替代完整 Runtime/Game API |
-| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 共享产物选择、有效配置和自有进程停止 | [交付与生命周期](#local-provider-delivery-contract) | 启动脚本与 Launcher；runtime_engineer、QA | 不停止独立 Provider，不撤销世界已接受请求 |
-| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 同请求重试、模型 SSE 完成及 URL/许可分离 | [HTTP 边界](#local-provider-http-boundaries) | adapter、模型桥接器；agent_engineer、QA | Rust/Python 分别验证，不新增自动降级 |
+| [REQ-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-005)；Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7 | target/legacy 路由、身份与 Runtime 裁决保持独立 | [Harness 对齐](#41-harness-contract-alignment) | runtime_engineer、agent_engineer；HTTP adapter | 本地 callback 不替代完整 Runtime/Game API |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)；Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1 | 共享产物选择、有效配置和自有进程停止 | [交付与生命周期](#local-provider-delivery-contract) | 启动脚本与 Launcher；runtime_engineer、QA | 不停止独立 Provider，不撤销世界已接受请求 |
+| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002)；Trace refs: O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676 | 同请求重试、模型 SSE 完成及 URL/许可分离 | [HTTP 边界](#local-provider-http-boundaries) | adapter、模型桥接器；agent_engineer、QA | Rust/Python 分别验证，不新增自动降级 |
 
 ## 3. 关键接口 / 入口
 - `GET /v1/provider/info`
@@ -41,6 +42,8 @@
 - required 回归不依赖真实用户安装的 `Local Provider`，必须使用 mock 服务即可跑通。
 
 ### 4.1 Harness contract alignment
+
+本条只承接 REQ-EXT-005 的 loopback feedback correlation 与 Runtime 结果边界；专业细项沿用[Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows)，不证明结果已进入所有真实 Runtime 的后续认知。
 
 Loopback is an adapter with a strict target lane and a fenced legacy compatibility lane for the Continuous Harness. Its tagged `decision` response
 preserves `wait/wait_ticks/act/query/module_command/module_command_response` variants; `query` is
@@ -98,6 +101,8 @@ bootstrap 的模型 base URL 在其自身边界内遵循：显式 `--base-url` �
 <a id="local-provider-http-boundaries"></a>
 ## 7. HTTP 失败、终结和地址边界
 
+本条承接本地 session 恢复中的有界等待、失败真实表达和不自动切换，不将 HTTP 成功当作会话/世界已恢复；专业细项沿用[Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows)。停止后完整重新验证仍由会话连续性专业设计负责。
+
 ### 7.1 一个决策请求的重试
 
 transport 与 adapter 使用一致的 retryable 分类。对现有允许重试一次的失败（包括首次 429），总尝试数最多为二；两次尝试仍属于同一 session/turn/request，保留 request digest，只增加 `transport_attempt`。重试、等待和请求读取共同受已有总 deadline/取消预算约束，不能叠加成新的回合预算。
@@ -133,8 +138,12 @@ transport 与 adapter 使用一致的 retryable 分类。对现有允许重试�
 
 | 上游要求 | 本设计条款 | 机制与场景 | 验证来源 | 执行证据 | 未覆盖与状态 |
 | --- | --- | --- | --- | --- | --- |
-| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [Harness 对齐](#41-harness-contract-alignment) | target outer/feedback correlation 与 legacy 隔离；沿用 mock 合同，真实 Runtime 单独验收 | [测试手册](../../../testing-manual.md)；按其中 provider/Agent 合同入口执行 | 实际 source、命令、退出码和失败反例，记录在 PR/Issue | 本次只建立映射，未执行；mock 不证明真实首局 |
-| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [交付与生命周期](#local-provider-delivery-contract) | §8 的产物、配置、Ready 前/后 TERM 与 HUP 独立反例；扩展已有 shell 回归 | [本地 LetAI 回归](../../../scripts/run-local-letai-game-test.test.sh) | source、选中产物、净化配置、真实自有子树退出和端口释放 | planned；现有测试入口不表示这些新增用例已实现或通过 |
-| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [HTTP 边界](#local-provider-http-boundaries) | §8 的同请求两次尝试、DONE 后保持连接/禁止额外读取和 IPv6 反例 | [测试手册](../../../testing-manual.md)；按 provider HTTP/mock 与对应 Rust/Python suite 分别扩展执行 | source、客户端类型、尝试/读取计数、结果和命令退出码 | planned；不以 shell 通过或任一客户端结果代签全部 HTTP 验收 |
+| [REQ-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-005)；Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7 | [Harness 对齐](#41-harness-contract-alignment) | target outer/feedback correlation 与 legacy 隔离；沿用 mock 合同，真实 Runtime 单独验收 | [HTTP合同测试](../../../crates/oasis7/src/simulator/tests/provider_loopback_http.rs)：`env -u RUSTC_WRAPPER cargo test -p oasis7 provider_loopback_http_client_round_trips_info_health_decision_and_feedback -- --nocapture` 当前仅验证bare legacy DTO往返；target outer/feedback关联与legacy不能关闭target的场景按§4.1另补并记录真实测试ID，不以该legacy正例代签 | 实际 source、命令、退出码和失败反例，记录在 PR/Issue | 本次只建立映射，未执行；mock 不证明真实首局 |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)；Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1 | [交付与生命周期](#local-provider-delivery-contract) | §8 的产物、配置、Ready 前/后 TERM 与 HUP 独立反例；扩展已有 shell 回归 | [本地 LetAI 回归](../../../scripts/run-local-letai-game-test.test.sh)：`bash scripts/run-local-letai-game-test.test.sh` 现有检查包括help/preflight、缺配置/产物和占用端口诊断；§8全部真实进程停止条件仍是待补/单独验证场景 | source、选中产物、净化配置、真实自有子树退出和端口释放 | planned；现有测试入口不表示这些新增用例已实现或通过 |
+| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002)；Trace refs: O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676 | [HTTP 边界](#local-provider-http-boundaries) | §8 的同请求两次尝试、DONE 后保持连接/禁止额外读取和 IPv6 反例 | [HTTP合同测试](../../../crates/oasis7/src/simulator/tests/provider_loopback_http.rs)：运行 `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_http_failure_retryability_is_deterministic -- --nocapture`，只证明RequestFailed/429/503可重试与401/400不可重试分类；`provider_loopback_http_client_surfaces_http_401_on_decision`只证明401映射。两次尝试/耗尽/取消、SSE完成边界与Rust/Python URL组合仍须各自新增fixture和准确测试ID，不借分类单测声称已证明 | source、客户端类型、尝试/读取计数、结果和命令退出码 | planned；不以 shell 通过或任一客户端结果代签全部 HTTP 验收 |
 
 新增场景与已存在测试入口明确区分。实现任务须把本表场景落实到对应测试并记录真实结果；本表不构造已通过证据，也不以通用手册引用免除 §8 的逐项验收。
+
+## 12. 决策与残余风险
+
+审读基线为 `4e94163a3dff9ba69f6959b406ca3fcedf8aa097`。保留 target/legacy 路由隔离与单次 JSON callback，不把上游 SSE 或 URL 解析能力扩大为公网 callback 许可。§8 与 §11 是分层验证计划，不声明全部负例已有测试；agent/runtime/launcher owner 在重试预算、进程所有权、配置选择或协议版本变化时复核。真实 provider 鉴权、完整首局与跨入口玩家反馈仍需独立证据。
