@@ -4,9 +4,14 @@
 - 可变任务状态与历史: GitHub task issue evidence comments
 
 ## 1. 设计定位
+
+### 目标与范围
+
 定义发布前真实玩家闭环测试设计，统一启动脚本、`agent-browser` 进入方式、卡片填写与证据沉淀路径。由测试编排者准备环境，实际玩家保持 PRD 的黑盒游玩限制；本设计不要求玩家阅读实现。
 
-本次合同核对基线为 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056`。旧 L4B runner 的 build/session、自动评分和失败结果写出尚未满足新合同；scaffold 的 JSON 输出实现也仍待修复。文档纠正不代表这些实现、真实登录或试玩已经通过，[#4438](https://github.com/eng-cc/oasis7/issues/4438) 继续承接剩余实现验收。
+### 当前风险与未决
+
+本次合同核对基线为 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056`。旧 L4B runner 的 build/session、自动评分和失败结果写出尚未满足新合同；scaffold 的 JSON 输出实现也仍待修复。文档纠正不代表这些实现、真实登录或试玩已经通过，[#4438](https://github.com/eng-cc/oasis7/issues/4438) 保留为历史来源；按其[关闭决定](https://github.com/eng-cc/oasis7/issues/4438#issuecomment-6127544475)，后续依据 [PR #4641](https://github.com/eng-cc/oasis7/pull/4641) 承接的现行规范落实，停止独立 Issue 跟踪不表示实现验收完成。
 
 ## 2. 设计结构
 - 启动编排层：当前 worktree 内回归优先通过 `scripts/worktree-harness.sh up` 启动隔离栈；制作人 / 发布前人工验收优先通过 `scripts/run-producer-playtest.sh --open-headed` 启动真实产品链路；只有高级排障或专项回归需要直接复用 bundle / 底层 launcher bootstrap 时才使用 `scripts/run-launcher-stack.sh`。
@@ -18,7 +23,8 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [game-test 入口](game-test.prd.md#game-test-entry-contract) | 默认 release 正式 UI，使用当前隔离栈实际 URL；测试 API 仅限显式测试产物 | [构建与入口](#game-test-build-entry) | Viewer 构建、harness/producer；QA 编排者 | 不为 release 安装测试 API，不改变 alias |
+| [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) | L4B 真实入口与受控回归不互相代签；完整保留 [game-test 入口专业合同](game-test.prd.md#game-test-entry-contract) 的默认 release 正式 UI、当次隔离栈实际 URL 和显式测试产物限制 | [构建与入口](#game-test-build-entry) | Viewer 构建、harness/producer；QA 编排者；锁定 PRD 继续规定启动操作 | 不为 release 安装测试 API，不改变 alias；不证明实际试玩或 L5 |
+| [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) | 本条仅保留实际候选/build、当前 worktree 与入口来源，使证据可回链；沿用 [game-test 入口专业合同](game-test.prd.md#game-test-entry-contract)，不得复用另一 worktree/历史 URL | [构建与入口](#game-test-build-entry) | harness/producer 输出及当次产物身份；QA 编排者 | 不覆盖产品结论比较单位的全部评审维度，不以 URL 或构建记录代签游玩 |
 | [L4 Hosted 会话](../testing/prd.md#l4-hosted-session) | 登录/恢复、player 和 readiness 在实际执行 session 核对 | [会话与失败路径](#game-test-session) | Hosted 正式接入、账号环境；玩家/QA | 不自动签发身份，不以其他会话或 trusted local 代签 |
 | [L4 执行结果](../testing/prd.md#l4-execution-result) | 每次尝试保留 RunResult、停止阶段、清理与当前指针 | [结果与评审](#game-test-evidence) | 自主试玩 RunResult、L4 summary；QA | 不借旧成功覆盖新阻断，不新增通用运行状态机 |
 | [L4 事实与判断](../testing/prd.md#l4-evidence-judgment) | 五项观察分别给证据，体验结论由制作人/QA 评审 | [结果与评审](#game-test-evidence) | playability card、producer/QA | 不用 ACK/进度自动评分，不宣称 L5 |
@@ -71,7 +77,8 @@ worktree 回归用 `worktree-harness.sh url` 读取当次地址；producer 试�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 与条件 | 证据落点 | 未覆盖项与原因 |
 | --- | --- | --- | --- | --- | --- |
-| [game-test 入口](game-test.prd.md#game-test-entry-contract) | [构建与入口](#game-test-build-entry) | release/测试产物边界正确，动态 URL，alias 保留，不误等 API | [L4-C01 / L4-C05](../../testing-manual.md#l4-toolchain-validation)：同候选构建四格与不同 worktree 入口 | 当次产物身份、入口检查和 browser evidence | 不证明 Hosted 或游玩完成 |
+| [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) | [构建与入口](#game-test-build-entry) | 沿用 [game-test 入口专业合同](game-test.prd.md#game-test-entry-contract)：release/测试产物边界正确，动态 URL，alias 保留，不误等 API；受控回归不代签 release 试玩 | [L4-C01 / L4-C05](../../testing-manual.md#l4-toolchain-validation)：同候选构建四格与不同 worktree 入口 | 当次产物身份、入口检查和 browser evidence | 不证明 Hosted 或游玩完成，不证明 L5 |
+| [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) | [构建与入口](#game-test-build-entry) | 按 [game-test 入口专业合同](game-test.prd.md#game-test-entry-contract) 记录实际候选/build和当次URL，不复用其他worktree/历史入口 | [L4-C01 / L4-C05](../../testing-manual.md#l4-toolchain-validation)：核对同候选产物、四格入口和两个隔离 worktree 的各自输出；将历史/其他 worktree URL 作为拒用负例 | 各自候选/build、harness/producer URL来源与未串用记录 | 不证明完整比较单位评审、Hosted或玩法结果 |
 | [L4 Hosted 会话](../testing/prd.md#l4-hosted-session) | [会话与失败路径](#game-test-session) | 同一执行 session 完成正式登录/恢复；负路径停止且不降级 | [L4-C02](../../testing-manual.md#l4-toolchain-validation)：guest、恢复及缺配置/错会话负路径 | 当前 attempt 的身份脱敏记录和 blocker | 不以 transport/W3 或另一窗口代签 |
 | [L4 执行结果](../testing/prd.md#l4-execution-result) | [结果与评审](#game-test-evidence) | 早退、取消和新阻断可追溯，当前指针不借旧成功 | [L4-C03](../../testing-manual.md#l4-toolchain-validation)：可控故障、中断与旧成功后新阻断 | RunResult、summary、清理记录 | 输出目录不可写时报告无法落盘 |
 | [L4 事实与判断](../testing/prd.md#l4-evidence-judgment) | [结果与评审](#game-test-evidence) | 机械事实不能代签继续/满分，五项缺证未知且评审不被覆写 | [L4-C04](../../testing-manual.md#l4-toolchain-validation)：机械事实、五项完整/缺项及重跑样本 | 原始会话、playability card、评审记录 | 固定脚本不证明自主决策，L4B 不代签 L5 |

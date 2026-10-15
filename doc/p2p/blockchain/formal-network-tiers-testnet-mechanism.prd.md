@@ -65,14 +65,41 @@ v2 在同一 manifest 增加 `release_policy.stage`、`world_policy.world_id/ret
 | Claims gate | `allowed_claims/denied_claims/required_gates` | 根据 tier 决定允许哪些公开口径 | `draft -> enforced` | legacy `shared_devnet` 与 `public_testnet` 默认 deny `mainnet-grade live network` | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
   - AC-1: 本专题必须落地 PRD / design；任务追溯写入 GitHub，并接入 `doc/p2p/prd.md`、GitHub Issue / GitHub Project、`doc/p2p/prd.index.md` 与 `testing-manual.md`。
+<a id="tier-model-acceptance"></a>
+### 网络分层验收
+
   - AC-2: 本专题必须明确 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime network-tier 模型，且明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不是目标 test 环境，也不是玩家世界模型。
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003)。适用子义务：网络 tier 是运行/验证载体而不是多个玩家世界；本组为公开说明提供该专业适用范围，不把目标分层作为当前可用性。原验收和专业 owner 保持有效，不代表该产品要求完整实现或验证。
+<a id="tier-manifest-fields-acceptance"></a>
+### Manifest 字段验收
+
   - AC-3: `public_testnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`explorer_ref`、`faucet_ref`、`reset_policy`、`validator_admission`、`allowed_claims` 与 `denied_claims`。
   - AC-4: `mainnet` 的最小 manifest 字段必须至少包含 `network_id`、`chain_id`、`release_candidate_bundle_ref`、`genesis_ref`、`bootstrap_peer_ref`、`rpc_ref`、`reset_policy=frozen`、`faucet_mode=none`、`validator_admission=governance_registry_only`，并把 `MAINNET-1~4` 写入 required gates。
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003)。适用子义务：各 tier 的字段和 reset/faucet/准入/gates 差异是公开表述的专业输入；字段齐备不等于运行、readiness 或发布。原验收和专业 owner 保持有效，不代表该产品要求完整实现或验证。
+<a id="tier-skeleton-manual-acceptance"></a>
+### Skeleton 与手册验收
+
   - AC-5: 仓库内必须新增 repo-owned `scripts/network-tier-manifest.sh` 与 smoke，并提供 `public_testnet` rehearsal、`public_testnet`、`mainnet` example manifests；旧 shared-devnet 模板路径不再作为正常 validation artifact。
   - AC-6: `testing-manual.md` 必须新增正式 network-tier skeleton 入口，并明确当前仍无 live `public_testnet` / `mainnet`。
+
+产品适用性：N/A；理由：本组只要求 repo-owned create/validate/smoke/example 和测试手册入口，属于专业开发与验证工具，不新增玩家能力或公开服务承诺；范围：AC-5/6 的脚本、样例和手册交付；本组原验收及测试责任不豁免。
+<a id="tier-test-value-acceptance"></a>
+### 测试价值声明验收
+
   - AC-7: 本专题必须明确 `public_testnet` 的资产与 faucet 只用于 rehearsal/test surface，不得被写成 `OC` 的 mainnet 价值承诺。
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003)。适用子义务：测试资产与 faucet 的专业语义不得升级成 mainnet 价值事实；本组不规定新的资产价格或经济资格。原验收和专业 owner 保持有效，不代表该产品要求完整实现或验证。
+<a id="tier-verdict-evidence-acceptance"></a>
+### 候选证据与公开边界验收
+
   - AC-8: 本专题必须明确 current verdict 以后续 companion project/runbook 为准；在 formal all-pass lane TSV / readiness verdict 出现前，不提升 public claims，不宣称 live `public_testnet` 或 mainnet ready。
   - AC-9: 必须新增 companion runbook，至少列出 `public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/world_resource_provenance_ready/provider_resource_provenance_ready/resource_delta_replay_ready/api_viewer_projection_ready/same_world_hosted_entry_ready/claims_boundary_review` required lanes 的 owner、最小 evidence、阻断条件、建议执行顺序与 canonical 命令，并明确在真实证据补齐前仍只能维持 rehearsal/skeleton 口径。
+
+Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff；[REQ-ENTRY-CLAIM-001](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-001)。适用子义务：current verdict 与 required lanes 必须绑定候选证据；runbook/checklist 或历史全绿不单独证明当前 live 状态或允许发布。原验收和专业 owner 保持有效，不代表该产品要求完整实现或验证。
+### 专题非目标
+
 - Non-Goals:
   - 不在本专题内直接部署 live `public_testnet` 或 live `mainnet`。
   - 不在本专题内落 runtime 的多 network profile 切换实现。
@@ -101,12 +128,34 @@ v2 在同一 manifest 增加 `release_policy.stage`、`world_policy.world_id/ret
   - 若 `mainnet` manifest 仍带 `faucet_mode != none`、`reset_policy != frozen` 或缺 `MAINNET-*` gates，则 validate 必须失败。
   - 若 `public_testnet` 允许 claim phrase 包含 `mainnet live`、`production OC settlement` 之类语句，则必须判为 policy 越界。
   - 若 tier manifest 引用的 candidate bundle、genesis 或 bootstrap ref 为空，则该 tier 只能停留在 `draft`，不得进入 release review。
-- Non-Functional Requirements:
+- Non-Functional Requirements：以下精确分组保留原五项专业要求，不改变 v1 兼容与目标 schema 解耦边界。
+
+<a id="tier-manifest-encoding-and-public-fields"></a>
+### Manifest 编码与公开字段专业要求
+
   - NFR-P2P-TIER-1: network tier manifest 必须保持 ASCII JSON，可在 repo 中追踪并可由脚本 create/validate。
+  - NFR-P2P-TIER-5: tier manifest 中只允许记录 public refs、bundle refs 与政策字段，不得落私钥、助记词或 operator 私密登录信息。
+
+产品适用性：N/A；理由：本组仅约束专业 manifest 的 ASCII 序列化、可追踪性及禁止写入凭据，不定义玩家能力或对外可用性承诺；范围：NFR-P2P-TIER-1/5 的配置格式与信息卫生。原 schema 校验、人工检查和安全义务全部保留。
+
+<a id="tier-policy-semantic-validation"></a>
+### Tier policy 语义校验与声明边界
+
   - NFR-P2P-TIER-2: `public_testnet` 与 `mainnet` 的 validate 必须显式检查 tier 语义冲突，不能只做字段存在性校验。
   - NFR-P2P-TIER-3: 任何 `mainnet` manifest 都不得允许 `resettable`、`guarded_testnet_faucet` 或 `value_semantics=testnet`。
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385；[REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003)。本组仅提供该产品要求的专业 tier 语义输入：拒绝互相矛盾的测试/正式配置，不能把 schema-valid 或目标配置当作当前正式能力。它不更改既有 v1 reset/faucet 规则，不替代完整公开审核、当前证据或运行激活。
+
+<a id="tier-public-availability-evidence-boundary"></a>
+### Public availability 的证据边界
+
   - NFR-P2P-TIER-4: 在 live `public_testnet` 尚未建立前，对外文档不得把示例 manifest、skeleton script 或 `shared_devnet` rehearsal 当成 public availability 证据。
-  - NFR-P2P-TIER-5: tier manifest 中只允许记录 public refs、bundle refs 与政策字段，不得落私钥、助记词或 operator 私密登录信息。
+
+Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff；[REQ-ENTRY-CLAIM-001](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-001)。本组承接同一候选/版本与证据窗口的公开事实边界，具体禁止以示例、skeleton 或历史 rehearsal 代签当前 public availability；不声称已执行渠道发布或全量证据审核。
+
+
+### 安全与隐私边界
+
 - Security & Privacy: 本专题只冻结网络层级真值与验证约束，不新增密钥管理方案。凡涉及 signer、custody、genesis freeze 的敏感部分，继续由主网安全、治理与创世就绪度专题约束，禁止把任何私密凭据写入 manifest 示例或测试文档。
 
 ## 5. Risks & Roadmap

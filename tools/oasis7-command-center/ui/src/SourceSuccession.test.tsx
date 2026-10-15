@@ -36,3 +36,24 @@ it('labels old declarations as historical when current metadata is absent or inc
   expect(screen.getByText(/当前文档声明缺失、未读取或不一致/)).toBeInTheDocument();
   expect(screen.getByText(/所选原文版本声明来源/)).toHaveTextContent('old-version');
 });
+
+it('shows raw lifecycle notes separately from the normalized category', () => {
+  const declared=source({lifecycle:{status:'draft；目标方案',rawStatus:'`draft`；目标方案',category:'draft',successorDeclaration:null,successorTargets:[],successorReason:null,issue:null}});
+  render(() => <SourceSuccession source={declared} sections={[declared]} showSource={vi.fn()}/>);
+  expect(screen.getByText('声明 `draft`；目标方案')).toBeInTheDocument();
+  expect(screen.getByText('生命周期类别：草案 · 仅用于文档分类')).toBeInTheDocument();
+});
+
+it('keeps an explicit empty declaration distinct from missing metadata', () => {
+  const declared=source({lifecycle:{status:'',rawStatus:'',successorDeclaration:null,successorTargets:[],successorReason:null,issue:'empty or malformed lifecycle declaration'}});
+  render(() => <SourceSuccession source={declared} sections={[declared]} showSource={vi.fn()}/>);
+  expect(screen.getByText('生命周期声明为空 · 尚未核实')).toBeInTheDocument();
+  expect(screen.getByText(/声明投影尚未核实：empty or malformed/)).toBeInTheDocument();
+});
+
+it('does not interpret a literal unknown declaration as a conflict sentinel', () => {
+  const declared=source({lifecycle:{status:'unknown',rawStatus:'unknown',category:'other',successorDeclaration:null,successorTargets:[],successorReason:null,issue:null}});
+  render(() => <SourceSuccession source={declared} sections={[declared]} showSource={vi.fn()}/>);
+  expect(screen.getByText('声明 unknown')).toBeInTheDocument();
+  expect(screen.getByText('生命周期类别：其他已声明状态 · 仅用于文档分类')).toBeInTheDocument();
+});

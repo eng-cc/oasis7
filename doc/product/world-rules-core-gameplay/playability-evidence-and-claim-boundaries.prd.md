@@ -17,6 +17,8 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 是证据层级与产品 claim 的判断合同，不定义独立玩家交互；测试、LiveOps 和发行 authority 保留相应实现与证据职责。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
 ## 1. 产品目标
 
 oasis7 的持续世界、自动化回归或活跃模拟本身都不是可玩性的替代品。产品需要让玩家从自己的行动中获得可理解、可归因且能打开下一决策的世界后果，并在此基础上形成继续游玩的理由。
@@ -79,12 +81,23 @@ fixture、live 自动化和真人记录分别汇总；结构代理计数及默�
 <a id="req-wr-pe-001"></a>
 ### REQ-WR-PE-001：玩家行动必须打开可理解的下一决策
 
+Trace ID: O7-REQ-d2b0b0b0-51b3-4dc6-a6a5-de4c1a3ac4f3
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：有局部工业行动/结果和继续选择证据，但未逐条核清全部受支持路径的玩家杠杆→世界变化→持续价值→下一决策；不能以世界自主活跃替代。
+
 - 要求：每个受支持的游玩路径都必须形成“玩家行动 -> 可归因世界变化 -> 新选择或持续价值 -> 下一决策/回访理由”的链路；环境活跃、Agent 自主推进或静态展示不能代替玩家杠杆。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`首局与持续游玩`](first-session-and-continuation.prd.md)
 - 验收：[AC-WR-PE-001](#ac-wr-pe-001)
 
 <a id="ac-wr-pe-001"></a>
 ### AC-WR-PE-001：动作后玩家能归因并继续选择
+
+Trace refs: O7-REQ-d2b0b0b0-51b3-4dc6-a6a5-de4c1a3ac4f3；声明：[REQ-WR-PE-001](#req-wr-pe-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-PE-001
 - 给定：一个有明确 formal 玩家入口、体验目标和初始状态的代表性路径。
@@ -94,12 +107,23 @@ fixture、live 自动化和真人记录分别汇总；结构代理计数及默�
 <a id="req-wr-pe-002"></a>
 ### REQ-WR-PE-002：证据层级不得越级代签玩家价值
 
+Trace ID: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已读取历史独立 Agent 样本的严格范围限制；尚未逐项核对所有 claim 消费者防止 L4 代签 L5，且本轮没有真实人类外部反应证据。
+
 - 要求：自动化、受控探针、L4A synthetic 和 L4B 具身 Agent 只能支持各自层级的规则、困惑或受限继续游玩结论；只有相应范围的 L5 真实人类/真实环境信号才可支持外部玩家反应，且不能扩写为广泛市场成功。
 - 专业权威：[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md)
 - 验收：[AC-WR-PE-002](#ac-wr-pe-002)
 
 <a id="ac-wr-pe-002"></a>
 ### AC-WR-PE-002：低层正向证据保持低层结论
+
+Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1；声明：[REQ-WR-PE-002](#req-wr-pe-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-PE-002
 - 给定：自动化规则探针通过，或 L4A/L4B 样例出现正向继续信号，但没有相应 L5 证据。
@@ -109,12 +133,23 @@ fixture、live 自动化和真人记录分别汇总；结构代理计数及默�
 <a id="req-wr-pe-003"></a>
 ### REQ-WR-PE-003：产品建议必须绑定同一比较单位
 
+Trace ID: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：尚未核清每个 go/watch/hold/block 消费入口绑定同体验目标、formal入口、候选/变更、窗口/环境的完整比较单位及缺证拒绝。
+
 - 要求：`go/watch/hold/block` 只能比较同一体验目标、formal 玩家入口、候选版本/变更范围、证据窗口及适用环境（若环境影响解释）的证据；范围不明或证据不可回链时不得升级结论。
 - 专业权威：[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md)
 - 验收：[AC-WR-PE-003](#ac-wr-pe-003)
 
 <a id="ac-wr-pe-003"></a>
 ### AC-WR-PE-003：不匹配样本不能抵消阻断
+
+Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07；声明：[REQ-WR-PE-003](#req-wr-pe-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-PE-003
 - 给定：两个样本在入口、体验目标、候选版本、证据窗口或适用环境中至少有一项不同。
@@ -158,3 +193,9 @@ fixture、live 自动化和真人记录分别汇总；结构代理计数及默�
 | [REQ-WR-PE-001](#req-wr-pe-001) / [AC-WR-PE-001](#ac-wr-pe-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-PE-002](#req-wr-pe-002) / [AC-WR-PE-002](#ac-wr-pe-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-PE-003](#req-wr-pe-003) / [AC-WR-PE-003](#ac-wr-pe-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+
+## 未决问题与证据边界
+
+每项产品建议仍需匹配实际意图、入口、候选版本/观察窗口与环境；低层证据不能替代玩家价值或扩大公开结论。尚未核清的样本与专业承接保持未核实，不据文档检查填补证据。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

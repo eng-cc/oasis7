@@ -43,9 +43,7 @@
 - 如果继续玩唯一能得到的只是更高产量、库存、吞吐或重复次数，而没有新的局部用途、恢复弹性、协调位置或选择空间，这条线应判定为 grind-only，而不是 mature-world lane 成立。
 - 如果专业化推荐缺少第一单交付预览，应标记 `specialization_delivery_preview_missing`，不得只用 `recovery_operator` / `conversion_specialist` / `regional_service_runner` 标签替代玩家侧收益说明。
 
-这条线与当前 `PRD-GAME-012` 的 early-retention 冲刺边界保持分离：
-
-- 当前 trust gate / first capability gate 仍是最近两周主优先级。
+这条线与 `PRD-GAME-012` 的 early-retention gate 保持分离；历史短期 focus order 见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/1192#issuecomment-6162409697)：
 - `#165` 解决的是“首个持续能力之后如何继续有独立价值”，不是重新改写首个 10 分钟。
 - 只有当成熟世界下的小玩家样本能持续给出 `player leverage != world activity only` 的证据时，这条线才算正式成立。
 

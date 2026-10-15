@@ -1,5 +1,9 @@
 # Public Testnet Current Required Lanes (2026-07-03)
 
+证据窗口边界：本文的 `current`、`live`、`fresh`、lane verdict 和后续建议仅指文中记录的采集窗口，不证明当前端点可用、节点健康、发布 readiness 或持续任务义务。当前部署/恢复以[governed bootstrap runbook](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md)为准，当前 readiness 以[formal network runbook](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)及新采集的同窗证据裁决；保留本次失败、通过与未验证范围，不以较晚结果覆盖。
+
+`original_packet_task`、`current_refresh_task` 和 `faucet_recovery_task` 均是该 2026-07 packet 的历史来源字段，不是本文维护的待办。`ready_for_live_candidate=true` 仅保留所列 readiness run 的输出。
+
 ## Meta
 - owner_role: `tpm` integration
 - original_packet_task: GitHub issue #1846 / `task_c345e90f2bf24cfd9ae60b4d1f2756dd`

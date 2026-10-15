@@ -153,22 +153,199 @@
 <a id="world-infrastructure-done"></a>
 ## 5. Done：成功标准与验收
 
+<a id="sc-infra-001"></a>
+### SC-1：成功标准与状态
+
 - SC-1：唯一世界按合法激活的 profile 验证提交证明。首次开放的 `controlled_single_authority` 必须证明单故障域恢复不丢已确认效果、唯一追加权与幂等；后续 `bft` 必须形成受治理验证者集合的 deterministic BFT certificate 并通过 H/H+1 交接。错误签名、profile、epoch、parent 或适用阈值/集合/round 均不能推进历史。
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39, O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46。
+- 引用定位与组合边界：O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39（[REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)）；O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46（[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-1
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39, O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46。
+- 引用定位与组合边界：O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39（[REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)）；O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46（[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：合法 profile、持久提交和交接的 [P2P 编排](../../p2p/design.md#des-p2p-authority-profiles)、[目标 BFT 证书验证](../../p2p/design.md#des-p2p-target-bft)及 [runtime 证明绑定](../../world-runtime/design.md#runtime-deterministic-design)已有明确接收；错误 profile/epoch/证书拒绝与 H/H+1 不可撤回分别保留。
+- 实现状态：未核实
+- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
+- 剩余范围：设计：BFT lock/unlock、timeout/new-round、anti-double-sign、集合转换和分区恢复的完整算法/接口仍未闭合；受控权威目标设计不代签真实旧写者隔离或独立故障域执行。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-002"></a>
+### SC-2：成功标准与状态
+
 - SC-2：验证者、full/state-sync、archive、light companion 与公开服务在各自角色内复制、提供和验证状态；任何非权威服务不取得最终性或写入权。
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39, O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3。
+- 引用定位与组合边界：O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39（[REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)）；O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3（[REQ-DCS-003](distributed-consensus-and-state-availability.prd.md#req-dcs-003)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-2
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39, O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3。
+- 引用定位与组合边界：O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39（[REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)）；O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3（[REQ-DCS-003](distributed-consensus-and-state-availability.prd.md#req-dcs-003)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[角色隔离](../../p2p/design.md#des-p2p-layer-authority)和[复制边界](../../p2p/design.md#des-p2p-replication-scope)明确非权威服务只供材料、不取得投票/写入权；[恢复设计](../../p2p/design.md#des-p2p-target-recovery)明确 pruning 前的可重建、hash/root 与冗余 archive 条件。
+- 实现状态：未核实
+- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
+- 剩余范围：设计：完整角色存储/serving 接口、archive 可用性和 pruning 联合判定仍未核实；运行权限负例及同窗口运维事实另验。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-003"></a>
+### SC-3：成功标准与状态
+
 - SC-3：bootstrap、snapshot、replay、state sync、pruning 和灾难恢复证明同一历史/状态根可重建；任一证明缺失或不匹配时停止 serving/voting。
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-3
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[P2P 信任链](../../p2p/design.md#des-p2p-target-recovery)与 [runtime 恢复](../../world-runtime/design.md#runtime-recovery-design)已逐环接收身份、激活、checkpoint、snapshot、replay、root 及失败隔离；QA V-RECOVERY 保留不同恢复入口。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计：bootstrap/state-sync/pruning/archive/灾备所有入口的具体材料与恢复编排尚未全核清；现有局部恢复不能替代 BFT/灾备证明及停止 serving/voting 的全组合。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-004"></a>
+### SC-4：成功标准与状态
+
 - SC-4：两种 profile 使用同一版本化确定性执行；BFT 下全部活动验证者在 attestation 前重执行相同输入；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
+
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607, O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc。
+- 引用定位与组合边界：O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607（[REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)）；O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc（[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-4
+
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607, O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc。
+- 引用定位与组合边界：O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607（[REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)）；O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc（[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[确定性与证明绑定](../../world-runtime/design.md#runtime-deterministic-design)、[版本激活与历史重放](../../world-runtime/design.md#runtime-version-design)及 [P2P 重执行](../../p2p/design.md#des-p2p-receipt-finality)分别承接相同输入、全活动验证者和版本拒绝边界。
+- 实现状态：部分实现
+- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计：完整 activation ledger、工件/readiness/rollback 及两 profile 的跨验证者组合仍未闭合；已有本地 release lane 不能代替治理激活历史。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-005"></a>
+### SC-5：成功标准与状态
+
 - SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时，待决 intent 不产生下游资格或世界效果，消费者能区分仍待决与须重新规划的结果，并只在恢复后取得的 committed receipt 上更新结论。明确互斥的同 lineage 成员中，首个产生有效世界效果的 receipt 唯一获胜并原子终止其余成员；拒绝/过期只终止自身，独立 intent 保持并发；原请求与撤回/替代请求的关联及各自真实状态可读。
+
+- Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405, O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6。
+- 引用定位与组合边界：O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405（[REQ-DWE-002](deterministic-world-execution.prd.md#req-dwe-002)）；O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6（[REQ-DWE-003](deterministic-world-execution.prd.md#req-dwe-003)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-5
+
+- Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405, O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6。
+- 引用定位与组合边界：O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405（[REQ-DWE-002](deterministic-world-execution.prd.md#req-dwe-002)）；O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6（[REQ-DWE-003](deterministic-world-execution.prd.md#req-dwe-003)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[pending](../../world-runtime/design.md#runtime-pending-design)与 [lineage 原子处置](../../world-runtime/design.md#runtime-lineage-design)已有重审、唯一有效胜者、原子终止其他成员、拒绝/过期只终止自身和独立并发条款；[原决定接收](../../world-runtime/design.md#runtime-controlled-candidate-recovery-receiver)区分未知提交与已知无效果。
+- 实现状态：未核实
+- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
+- 剩余范围：设计：通用 pending 持久字段、domain 互斥标记/排序及 consumer 状态 DTO 尚待批准；跨读面原请求/替代关联与所有恢复竞态的实际执行未证明。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-006"></a>
+### SC-6：成功标准与状态
+
 - SC-6：恢复路径只在同一 `world_id` 的 checkpoint/snapshot、canonical replay 与 state root 验证链成立时恢复世界结论；缺失、冲突或其他 `world_id` 的候选保持原世界不可用和隔离，不接受新权威 intent，也不把本地/测试/替代世界、缓存或部分数据表述为连续恢复。已 committed receipt 保留其原历史，未 final intent 不被静默结算、取消、重放或迁移；任何替代世界或受治理迁移必须作为独立产品决策，而非恢复副作用。
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-6
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[runtime 同世界恢复](../../world-runtime/design.md#runtime-recovery-design)和 [P2P 恢复信任链](../../p2p/design.md#des-p2p-target-recovery)明确错误/缺失/冲突世界隔离、保留历史、不以替代 endpoint 或本地世界冒充恢复。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计：全部恢复入口与消费者的 unavailable/isolation 表达、pending/receipt 连续性 DTO 仍未全闭合；Viewer 的恢复表述及完整同世界组合仍需各自运行证据。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-007"></a>
+### SC-7：成功标准与状态
+
 - SC-7：同一候选的恢复演练至少各覆盖一例“恢复只读”“恢复可服务”和“恢复受阻/隔离”，并覆盖一次闸门在提交或恢复中回退；同一 `world_id` 的历史验证链是必要但不足以重新接受写入，追加/最终性/版本化执行或 head 连续性未重新成立时，所有新 intent 尝试均原子拒绝或保持无效果待决（每个受测新 intent 的 committed receipt 数为 `0`）。进入可服务后，既有 pending 按当前条件和 canonical 顺序重新裁决；停机排队与历史 receipt 不延长期限、不继承优先级；每个被接受的新 intent 最多产生一个 committed receipt，且不产生第二次效果。还须通过 [AC-DCS-002](distributed-consensus-and-state-availability.prd.md#ac-dcs-002) 的正向续跑对照，分别证明新请求不与历史任务混淆、模块行动时点与结算延续，并至少完成一条合法新配方；仅“至多一次”不能判恢复可服务通过。闸门再次失效时回到只读/隔离且不撤销、重放或改写已确认 receipt。玩家/Agent 能读到当前服务语义、主要 blocker 与下一步。测试层级：`test_tier_full`。
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4, O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b。
+- 引用定位与组合边界：O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）；O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b（[REQ-DCS-005](distributed-consensus-and-state-availability.prd.md#req-dcs-005)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+#### 功能状态卡：SC-7
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4, O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b。
+- 引用定位与组合边界：O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）；O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b（[REQ-DCS-005](distributed-consensus-and-state-availability.prd.md#req-dcs-005)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[P2P 服务闸门](../../p2p/design.md#des-p2p-target-service-gate)、[runtime 恢复](../../world-runtime/design.md#runtime-recovery-design)与[日志后缀独立续跑](../../world-runtime/design.md#runtime-journal-suffix-recovery-design)分别承接只读/可服务/隔离、闸门回退、receipt 0/1 和非空历史后正向对照。
+- 实现状态：未核实
+- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
+- 剩余范围：设计：DC-5 状态转换、manifest/head 负例、逐 intent receipt 与 consumer blocker/下一步的结构化 attachment/schema 仍待 owner 批准；正向新请求和模块行动续跑、合法新配方以及同候选/同窗口组合未执行。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+
+- 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
+
+<a id="sc-infra-008"></a>
+### SC-8：成功标准与状态
+
 - SC-8：同一条代表性 `factory → recipe/input join → raw-material handoff → logistics/transit → output or terminal` 流水线在同一 `world_id`、版本化执行规则和 immutable root 下完成可追溯的 accepted/blocked/terminal 结果；任何 child effect 在缺失或冲突 root、revision、parent 或目的状态时于首个不可逆 sink 前 fail closed。已接受意图不得被表述为已获得容量或原料预留；每个 hold/reservation 必须有界、独占并绑定 root/阶段/边/批次，且每条中间边和目的地 buffer 满载时只能保留未消费投入、接收仍有容量的已结算产出，或原子拒绝/延期新的承诺，不得丢弃、瞬移、无限堆积、自动改道或伪造完成。同一权威释放/到达事件对同一 hold 的释放与其 fresh snapshot 重评各最多产生一次效果；后续不同事件只能从新的权威快照重评仍有效意图的未满足部分。改变产出因果的工厂、配方、输入/输出、物流边或终端条件必须产生 parent-linked revision/child root；retry、reconnect、restore 与 replay 只能重读同一 disposition，不产生第二次 sink、credit、进度、receipt 或奖励。玩家/Agent 可读最早 blocker、仍占用/已消费投入、未满足/剩余量与下一次复查边界，但不能把局部完成、在途或本地缓存当作交付/生产完成。测试层级：`test_tier_full`。
+
+- Trace ID: O7-REQ-05c84021-ee48-41ef-b94a-8aa9ceb8048c
+- 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
+#### 功能状态卡：SC-8
+
+- Trace refs: O7-REQ-05c84021-ee48-41ef-b94a-8aa9ceb8048c；[SC-8 唯一声明](#sc-infra-008)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-design)；工业因果、pre-sink校验、有界hold/背压及一次处置已有runtime条款与同Trace五/六列表；通用root/join/window/bundle字段及全消费者义务未闭合。
+- 实现状态：部分实现
+- 实现与验证依据：world_service_execution保留已认证配方提交的consensus/action/payload/主体来源；回归定义验证来源关联、重复输入与保存恢复。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/world_service_execution.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，此为配方来源与重复请求子范围，非整条工业流水线；root/revision/parent、全边容量/hold、fan-in/out、终端、消费者数量和完整同候选full证据仍缺。
+
+<a id="sc-infra-009"></a>
+### SC-9：成功标准与状态
+
 - SC-9：同一代表性流水线必须通过一组**成对的 outage injection** 与恢复证据，分别覆盖：
+
+- Trace ID: O7-REQ-4792541c-aaa4-4ac1-9a2d-374df44eba6a
+- 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
+#### 功能状态卡：SC-9
+
+- Trace refs: O7-REQ-4792541c-aaa4-4ac1-9a2d-374df44eba6a；[SC-9 唯一声明](#sc-infra-009)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-outage-design)；八格outage的独立失败边界和验收分层已有runtime精确承接；工业通用字段、consumer DTO及同候选证据合同仍待闭合。
+- 实现状态：未核实
+- 实现与验证依据：尚未核清本条八格独立义务的当前实现及同候选运行证据；设计承接见上，不能作为实现或通过记录。[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，字段与全消费者具体实现未闭合；required确定性八格/active-provider API和full真实provider Agent/外部headed浏览器分别尚无本基线完整执行证据。
+
   - **权威 finality/append/execution/industrial-service outage：** 在 committed finality 前注入时不得产生 root、hold、sink、WIP、物流 credit、产出、资格或 `W` 进度；在 root 已提交但下一 child effect 尚未形成时注入，保留既有 root、window/lease lineage、已消费/仍占用投入、WIP、在途/到达数量与 receipts，不产生第二次 child effect、delivery credit、隐式续租、优先级刷新或奖励。恢复必须从 fresh authoritative snapshot 重新校验，并最多沿同一 root 形成一次 continuation/hold/defer/reject/expire/compensation disposition；若 gameplay authority 为当前未完成 candidate 形成 canonical interruption disposition，只允许该 disposition 将 `W` reset 一次，历史里程碑与既有 receipts 不变，因果变化才建立 linked revision/child root。
   - **非权威 Viewer/API/hosting/read-surface outage：** 在 canonical service 可继续或已提交结果可读取的样例中注入读面不可用；注入本身不得改变 world state、root、投入/数量、window/lease lineage、`W`、receipts、历史里程碑或 `progression_effect`。Viewer、Agent 与 pure API 先表达 `stale/unknown`，重连后从 authoritative snapshot/journal 只 reconcile 真实 committed 结果，不补发、回滚、续租、重置 `W` 或生成第二次 sink/credit/reward；若权威执行在读面不可用期间完成，三类读面必须一致呈现其真实状态而不伪造 outage 处置。
   - **跨读面一致性：** 两类 injection 的每个样例都必须让 Agent、Viewer、pure API 对 `state_class`/primary blocker、root/window/lease lineage、held/consumed/unmet/residual 数量、receipt identity 与单次效果、`progression_effect`（`W` reset 一次或保持不变、历史里程碑保留）以及 `next_action`/`next_recheck` 给出同义结果；不得把 stale/unknown、accepted ack、局部完成或本地恢复表达为生产/交付完成。测试层级：`test_tier_full`。
   - **确定性成对注入矩阵：** 以上两类 outage 必须在同一 baseline 下分别注入 `stage_finish`、`transit`、`buffer_admission`、`terminal_settlement` 四个边界；baseline 至少固定同一 `world_id`、root、revision、child、stage、edge、batch、requested/committed/executed/held/consumed/unmet/residual quantities、canonical state bucket、window identity/lease lineage、receipts、`W`、`progression_effect`、`next_action` 与 `next_recheck`。同一有序输入只允许一次 fresh-snapshot revalidation、一次 canonical disposition 和一次效果，并由 receipt identity/idempotency 约束：authority outage 服从 no-new-child-effect/一次性 `W` disposition/continuation-or-termination，read-surface outage 服从 stale/unknown/reconcile 且不改 world/W；retry、reconnect、restore、replay、重复 arrival/submit 不得复制 sink、credit、receipt、hold release、`W`、progression 或奖励。
   - **验证层级（目标态验收，不宣称测试已存在或已通过）：** `test_tier_required` 覆盖上述四边界的 deterministic protocol matrix，并在 active-LLM/provider-backed lane 验证 pure API 与同一权威结果的 parity；`test_tier_full` 在此基础上增加真实本地栈/真实 provider 上的 external headed browser S6/Playwright desktop+narrow 截图与 console 证据，以及 provider-backed Agent parity，记录 `agent_decision_source`、`agent_provider_backend`、`agent_provider_contract`、`agent_provider_transport`。`provider_local_mock` 只用于 deterministic plumbing/fixture 预检，不能替代 active LLM、真实 provider、headed S6/Playwright 或 provider-backed Agent parity；本条不扩展 UI 布局、算法、数值平衡或当前 readiness claim。
 
+<a id="sc-infra-010"></a>
+### SC-10：成功标准与状态
+
 - SC-10：玩家、Agent 与入口在提交动作前能区分目标 `world_id` 属于 global-authoritative 世界还是隔离的 local/development 世界；intent、committed receipt 与其世界结果始终绑定同一身份。来自 local/development 世界的 receipt 不能证明 global 世界发生了效果；身份缺失或跨世界不匹配时，不接受也不呈现为 global effect。surface-specific scope 表达由对应专业 authority 定义。测试层级：`test_tier_required`。
+
+- Trace ID: O7-REQ-2b7cfef9-d917-46ea-a3a9-e3a4fb96d730
+- 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
+#### 功能状态卡：SC-10
+
+- Trace refs: O7-REQ-2b7cfef9-d917-46ea-a3a9-e3a4fb96d730；[SC-10 唯一声明](#sc-infra-010)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-world-scope-design)；runtime-world-scope-design和同Trace承接行覆盖target identity、跨world拒绝及receipt/replay边界；全部消费者scope表达仍须逐项核对。
+- 实现状态：部分实现
+- 实现与验证依据：driver按context/record world_id拒绝跨world恢复；other-world restore回归给出具体负例。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅执行桥恢复入口；全部Agent/Viewer/API提交前global/local区分、缺身份、receipt reuse、replay及可见表达未完整核清。
+
 
 ### 5.1 验收追踪
 
@@ -187,7 +364,7 @@
 
 ### 5.2 根成功标准的义务分配
 
-下表保留根 SC 的独立判定边界，分配的是产品义务与专业责任，不是已完成的系统设计映射或任务状态。专题叶子与组合验收共同承接相关义务；SC-8、SC-9、SC-10 仍由根条款及跨模块专业合同承担，不能因为两个专题共有九组 REQ/AC 就从验收范围中消失。具体系统设计条款与验证场景须由对应专业 owner 确认，缺少它们时仍是映射缺口。
+下表保留根 SC 的独立判定边界，分配产品义务与专业责任；后续接收表给出已核对的具体设计关系，覆盖程度仍分别由各 SC 状态卡判定。专题叶子与组合验收共同承接相关义务；SC-8、SC-9、SC-10 仍由根条款及跨模块专业合同承担，不能因为两个专题共有九组 REQ/AC 就从验收范围中消失。以下链接仅证明已列条款可定位，未列明的字段、算法、外部消费者与证据合同仍按状态卡保留真实缺口。
 
 | 根 SC | 必须分别判定的义务与前置条件 | 产品承接与专业分工 |
 | --- | --- | --- |
@@ -223,17 +400,17 @@ SC-5/7/8/9/10 的跨读面合同还由 [`Agent 消费`](../../world-simulator/ll
 
 ### 5.3 事实边界与未决承接
 
-已合并的 P2P/runtime/GWSC 专业设计和本任务实际编写的 QA/Agent/Viewer 接收文档现可定位；[本次文档接收结果 #4180](https://github.com/eng-cc/oasis7/issues/4180)仅记录文档与追踪检查。其结果不构成 17/10/8 场景执行、active-provider API、真实 provider Agent、external headed desktop+narrow、同候选完整证明或发布通过。以下问题按“设计/接收可定位，当前实现与执行证明仍须各 owner 判定”复核，不以文档采用删除 proof gap。
+已合并的 P2P/runtime/GWSC 专业设计和历史任务编写的 QA/Agent/Viewer 接收文档现可定位；[历史文档接收结果 #4180](https://github.com/eng-cc/oasis7/issues/4180)仅记录文档与追踪检查。其结果不构成 17/10/8 场景执行、active-provider API、真实 provider Agent、external headed desktop+narrow、同候选完整证明或发布通过。以下问题按“设计/接收可定位，当前实现与执行证明仍须各 owner 判定”复核，不以文档采用删除 proof gap。
 
 本文记录目标产品合同。共识原型与执行、恢复、消费者的当前能力边界分别由[分布式专题的现状](distributed-consensus-and-state-availability.prd.md#5-当前与目标的分离)、[执行专题的现状](deterministic-world-execution.prd.md#3-当前与目标的分离)及专业 authority 说明。文档采纳、设计承接、实现、已执行验证与公开发行是不同事实；本节和追踪表中的场景说明是验证要求，不能读作已有测试或已经通过。
 
 | 未决问题 / 影响 | 决策 role 与所需信息 | 解决触发与临时边界 |
 | --- | --- | --- |
-| SC-1～SC-10 的哪些准确专业接受条款、系统设计和验证场景分别承接各项义务？当前模块路径或泛化锚点不足以判定全量覆盖 | 对应 P2P/runtime 专业 owner、消费者 owner 与 QA；逐项核对真实条款、环境、判定条件和未覆盖范围，产品 owner 核对产品含义 | 专业承接条款获批准并可定位后复核产品回链；此前不得宣称跨层映射闭合，缺设计或可判断计划不能以未来任务代替 |
+| SC-1～SC-10 的准确接收已由 §5.2 及各状态卡逐项定位；其中尚缺哪些完整技术合同与跨域输入？ | 对应 P2P/runtime 专业 owner、消费者 owner 与 QA；依据各卡已列的 BFT 算法、pending/lineage/activation、工业字段、消费者 DTO 和 DC-5 attachment 缺口补技术合同；产品 owner 核对原义务不缩减 | 已有接收关系无需重新发号或重建；新增或修订技术合同批准后复核覆盖状态，当前部分覆盖不等于全量设计、实现或验收闭合 |
 | SC-1/SC-4 等组合 full 验收与专题 required 局部检查分别覆盖哪些义务？ | 对应专业 owner 与 QA；提供相同义务的局部范围、组合范围和证据身份 | 验证设计明确覆盖边界后确认；此前保留根及正文更完整的验收条件，不以局部绿色结果降低组合要求 |
 | SC-7/DC-5 的结构化 attachment/schema 是否覆盖状态转换、manifest/head 负例、receipt 0/1 与消费者 blocker/下一步？ | runtime/P2P、运维、消费者 owner 与 QA；核对同候选、同证据窗口的字段与判定 | 验证设计及附件合同可定位后复核；仅有 state-sync 模板或 health/transport 成功不能判通过 |
 
-上述问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；交付身份、依赖、处置和结果证据仅由 GitHub Issue/Project-backed task truth 维护，本文件不复制可变任务进度。技术设计或测试尚未安排时也不虚构任务、锚点或执行结果。
+上述问题的历史接收来源为[已关闭的文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)；该任务已关闭，不恢复其当前义务；交付身份、依赖、处置和结果证据由 Git、PR、实际 CI 与评审记录维护，Issue/Project 按需使用，本文件不复制可变任务进度。技术设计或测试尚未安排时也不虚构任务、锚点或执行结果。
 
 ## 6. Non-Goals
 

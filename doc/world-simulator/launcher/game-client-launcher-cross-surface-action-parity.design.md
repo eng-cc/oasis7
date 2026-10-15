@@ -3,12 +3,18 @@
 > 对应需求: `doc/world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md`
 > 历史迁移、验证与 task 状态：GitHub task issue evidence。
 
+## 目标与范围
+
+保持 native/Web 受控动作的真实输入、接受/失败、读回与恢复语义；平台适配可以不同。本文覆盖既有设置与当前 action 结果连续性，不修改 runtime 结算、provider 鉴权或凭据注入合同。
+
 ### 2.1 需求承接与分配表
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
 | [LLM 读回结果](game-client-launcher-cross-surface-action-parity.prd.md#llm-settings-reload-result) | native/Web Reload 的最终状态与草稿由真实结果决定 | [结果连续性](#action-result-continuity) | Launcher settings / native 文件与 Web storage / QA | 不改变 provider 鉴权或凭据注入 |
 | [当前转账 action](game-client-launcher-cross-surface-action-parity.prd.md#transfer-current-action) | 新 action 受理后，旧状态/迟到响应不能改变当前追踪 | [结果连续性](#action-result-continuity) | Launcher transfer / runtime 查询 / QA | 不改变经济执行、结算或持久账本 |
+| Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1；[REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | Reload 成功才替换草稿/发布成功；失败保留草稿并反馈错误，合法默认回退保持原义；只接收本地配置结果及恢复子义务 | [已有设计](#action-result-continuity) | Launcher 控制面/本地存储/QA；session 与世界 authority 独立 | 不证明 provider 鉴权、runtime 凭据注入、完整 session 或世界结果 |
+| Trace refs: O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676；[REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | Reload 成功才替换草稿/发布成功；失败保留草稿并反馈错误，合法默认回退保持原义；只接收本地配置结果及恢复子义务 | [已有设计](#action-result-continuity) | Launcher 控制面/本地存储/QA；session 与世界 authority 独立 | 不证明 provider 鉴权、runtime 凭据注入、完整 session 或世界结果 |
 
 ## 设计分层
 
@@ -55,3 +61,9 @@ native 与 Web 的 loader 应把本次读回的成功/失败明确返回给调�
 | --- | --- | --- | --- | --- | --- |
 | [LLM 读回结果](game-client-launcher-cross-surface-action-parity.prd.md#llm-settings-reload-result) | [结果连续性](#action-result-continuity) | C3 两表面失败保草稿、修复成功与合法默认回退 | [测试手册](../../../testing-manual.md) launcher/S6；在 `llm_settings.rs`、`llm_settings_web.rs` 按上述错误矩阵执行真实按钮 handler 并检查最终状态；planned | 实现 PR 的当前候选和各表面结果 | 本次未运行，loader 单测不证明 handler，读回不证明 provider |
 | [当前转账 action](game-client-launcher-cross-surface-action-parity.prd.md#transfer-current-action) | [结果连续性](#action-result-continuity) | A confirmed→B accepted→B 首查失败恢复；A 在途→B 受理→A 迟到分别取证 | [测试手册](../../../testing-manual.md) launcher/Transfer；`transfer_window.rs` 受控 transport 贯通结果消费和下一轮实际请求，保留 B 终态/拒绝正例，非空 accounts/history；planned | 实现 PR 的状态及实际请求 action ID | 本次未运行，不执行真实转账，不证明 runtime 结算 |
+| Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1；[REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [已有设计](#action-result-continuity) | Reload 成功才替换草稿/发布成功；失败保留草稿并反馈错误，合法默认回退保持原义 | [测试手册](../../../testing-manual.md)；原 C3 native/Web 按钮路径的格式/I/O 错误、草稿保留、修复成功及合法默认回退，同候选分别验证，适用可见变化另验 S6 | 实现 PR 的真实 handler/状态/存储结果；planned，本轮未运行 | 配置读回或画像成功不能代签全部设置应用、跨 profile、世界恢复或发行 |
+| Trace refs: O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676；[REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [已有设计](#action-result-continuity) | Reload 成功才替换草稿/发布成功；失败保留草稿并反馈错误，合法默认回退保持原义 | [测试手册](../../../testing-manual.md)；原 C3 native/Web 按钮路径的格式/I/O 错误、草稿保留、修复成功及合法默认回退，同候选分别验证，适用可见变化另验 S6 | 实现 PR 的真实 handler/状态/存储结果；planned，本轮未运行 | 配置读回或画像成功不能代签全部设置应用、跨 profile、世界恢复或发行 |
+
+## 决策、风险与未决
+
+沿用共享语义和平台适配分离的决定；主要风险是 loader 失败被按钮成功覆盖、旧 action 迟到响应污染当前追踪，以及本地保存被误解为 provider 或世界成功。解除条件为下列 C3 与转账追踪目标矩阵的真实结果消费验证；完整跨平台可用性和世界结算仍须独立证据。

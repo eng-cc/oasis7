@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-07-24
+更新时间：2026-10-14
 
 ## 入口
 - 模块 PRD：`doc/site/prd.md`
@@ -16,6 +16,7 @@
 - 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/README.md`
 - 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/prd.md`；执行状态再读 PR、实际 CI 与评审记录（Issue 按需）
 - 想先看“正式公告仍在准备中”的当前公开口径：先读 `doc/site/prd.md`、`doc/site/prd.md`，再对照 `site/index.html` 与 `site/doc/cn/index.html`
+- 想看玩家优先官网的产品、系统和生成式设计稿：从[官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md)进入；目标设计不代表页面已实现或上线。
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
 ## 密度快照
@@ -26,16 +27,17 @@
 | --- | --- | --- |
 | `github-pages/` 当前补充设计 | 动态统计 | 公开首页页面级层级、首屏内容与后果链节奏；当前合同回到模块 root authority |
 | `github-pages/` 已退役删除旧专题 | 见下方清单 | 完成态公告占位、CTA、视觉打磨与 dated batch 增量已删除；只从当前入口、PR、实际 CI 与评审记录（Issue 按需） 与 git history 追溯 |
-| `manual/` 路由入口与正式专题三件套 | 7 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
+| `manual/` 路由、专题 PRD 与共享设计 | 动态统计 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
-- `doc/site/prd.md`：站点主叙事、docs hub、下载链路、质量门禁、镜像与公开版本说明的当前 authority。
-- `doc/site/prd.md`：当前站点任务、验证状态与历史追溯入口。
+- `doc/site/prd.md`：站点主叙事、docs hub、下载链路、质量门禁、镜像、公开版本说明的当前 authority。
+- 当前站点任务、验证状态与历史追溯：Git、PR、实际 CI 与评审记录；Issue/Project 按需，PRD 不承载可变台账。
 - `doc/site/manual/README.md`：静态 docs hub、Viewer 手册镜像与 canonical/manual 映射的首读入口；再分流到主专题或已完成增量记录。
 - `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`：首页页面级层级基线；它是 Image2 设计证据，不是新的 visual-designer signoff。
-- `doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`：当前首屏内容、概念图边界与响应式验收。
-- `doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`：当前后果链节奏与渐进披露。
+- `doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`：双语、响应式与概念图边界；旧三列布局已被 [Site 当前布局](design.md#homepage-layout-authority)替代。
+- `doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`：后果链节奏与渐进披露；当前布局与图注优先关系见 [Site 设计](design.md#homepage-layout-authority)。
+- [官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md)：承接[产品 PRD](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md)与[产品体验设计/生成稿](../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#visual-board)，定义静态内容、入口分流、失败恢复及验证；继承 root 布局约束，不复制新专业 PRD。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 github-pages 与 manual 专题表。
@@ -44,7 +46,7 @@
 - 公开 HTML 页面、同步脚本和镜像页继续保留可检索性，但默认不与专题三件套同屏平铺成长名单。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/site/{github-pages,manual}/*.prd.md` 与同名 `*.design.md` / PR、实际 CI 与评审记录（Issue 按需） 的当前默认活跃专题三件套。
+- 纳入规则：列出适用专题 PRD、实际承接的独立或共享设计及相关交付记录；本次 manual 专题直接使用 root design 的静态手册章节，不要求复制同名设计正文。
 - 活跃补充：仍承担当前公开边界判断职责的高频专题，可在“活跃补充文档”区定向列出，但不再替代完整清单。
 - 历史压缩：已完成、无下一步、由模块 project 或后续主专题覆盖当前真值的专题，可先从默认活跃清单降级；当当前入口、task evidence 与 git history 足以追溯时，继续删除旧专题文件并转入“已退役删除的旧专题”。
 - 排除规则：`site/**` 下的公开 HTML 页面、同步脚本与镜像产物不并入专题三件套长表，只在补充入口中定向说明。
@@ -53,7 +55,8 @@
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/site/manual/site-manual-static-docs.prd.md` | `doc/site/manual/site-manual-static-docs.design.md` | `doc/site/manual/site-manual-static-docs.prd.md` |
+| `doc/site/manual/site-manual-static-docs.prd.md` | [Site 静态手册共享设计](design.md#static-manual-design) | Git、PR、实际 CI 与评审记录；Issue 按需 |
+| [官网发现产品 PRD](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md) | [官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md) | Git、PR、实际 CI 与评审记录；Issue 按需 |
 
 ## 历史压缩专题清单
 当前无保留原址的历史压缩专题；已完成且有当前承接面的旧专题已转入下方退役删除清单。

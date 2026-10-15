@@ -2,14 +2,18 @@
 
 审计轮次: 6
 
+本页承载跨模块专业治理与导航，不是第五个产品模块。通用开发与交付流程以[开发流程规范](../engineering/workflow/source-of-truth.md)为准；历史 ROUND、Task 和审计标记不构成当前任务准入材料。
+
+本文的阶段收口、发布评审、角色矩阵和计量目标仅适用于明确开展的跨模块阶段/发布工作，不是普通 PR 的固定角色组合、额外审批材料或另建台账要求。普通修改按受影响行为选择验证；真实发布阻断、已确认历史/权限/数据安全风险和有效暂停仍须满足，历史模板不能豁免它们。
+
 ## 目标
 - 作为项目级总 PRD，提供 oasis7 的全局设计全貌入口。
 - 统一跨模块边界、关键链路、术语口径与验收基线。
-- 确保各模块改动可追溯到 PRD-ID、GitHub task issue evidence 与测试证据。
+- 确保各模块改动可追溯到适用要求、实际 PR 与测试证据；Issue 和 Project 按需使用。
 
 ## 范围
 - 覆盖全项目模块地图、端到端链路、关键分册导航与治理基线。
-- 覆盖 PRD-ID 到 GitHub task issue evidence 的任务映射。
+- 覆盖适用 PRD-ID 到实际 PR、按需 Issue 与验证记录的关系。
 - 不覆盖各模块实现细节正文（由模块 PRD 与专题分册承载）。
 
 ## 接口 / 数据
@@ -71,7 +75,7 @@
   1. Flow-CORE-001: `读取模块地图 -> 识别改动所属模块 -> 定位上下游依赖 -> 形成影响面清单`
   2. Flow-CORE-002: `读取关键链路 -> 映射到模块 PRD-ID -> 对照测试分层 -> 输出发布风险判断`
   3. Flow-CORE-003: `发现口径冲突 -> 回溯分册来源 -> 在 core 基线中统一术语与边界 -> 回写模块文档`
-  4. Flow-CORE-004: `评估当前项目状态 -> 划分 P0/P1/P2 -> 指定跨角色 owner / 输入 / 输出 / Done -> 回写对应模块 project`
+  4. Flow-CORE-004: `评估当前项目状态 -> 划分 P0/P1/P2 -> 指定跨角色 owner / 输入 / 输出 / Done -> 在当前 PR 或按需 Issue 记录执行范围`
   5. Flow-CORE-005: `收集玩法 / runtime / testing / playability / headless 证据 -> 对照阶段收口门禁 -> 形成 go / no-go 结论`
   6. Flow-CORE-006: `确认本轮 completed -> 汇总候选缺口 -> 划分 P0/P1/P2 -> 选定下一条执行主路径`
   7. Flow-CORE-007: `读取玩家访问模式产品 REQ/AC -> 按其 primary mode 约束映射产品/专业 authority 与适用 evidence -> 保留 core PRD-ID 和跨模块验收追踪 -> 输出不越界的跨模块结论`
@@ -80,9 +84,9 @@
 | --- | --- | --- | --- | --- | --- |
 | 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD/design 与 PR 与实际验证记录 | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
-| 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
-| 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并回写模块 project | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
-| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 PR、实际 CI 与评审记录（Issue 按需） / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
+| 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 按条款内容与 scope 回到对应 authority；core 词典只汇总 | 相关专业 owner 裁定本域语义，core 同步跨模块引用 |
+| 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并记录在实际 PR 或按需 Issue | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
+| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 PR、实际 CI 与评审记录（Issue 按需） / role review evidence，接收方确认责任边界，owner 回写正式 PRD 与实际 PR/CI/评审记录（Issue 按需） | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
 | 玩家访问模式与跨模块验收 | 产品模式 REQ/AC 引用、PRD-ID、对应模块 owner、模式适用 evidence | 评审时引用[玩家访问模式产品要求](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001)及其[验收](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#ac-entry-mode-001)，再核对相关产品/专业 authority 的输入与 core 验收映射 | `unclassified -> authority-mapped -> evidenced -> reviewed` | 按产品 REQ/AC 确定 primary mode 与产品边界；provider、execution lane 和其他专业约束按各自 authority 核验；core 不维护第二份模式 taxonomy | `producer_system_designer` 负责跨模块验收与追踪，产品/专业 owner 维护各自规则并参与联审 |
@@ -90,19 +94,19 @@
   - AC-1: core PRD 包含模块职责矩阵。
   - AC-2: core PRD 包含至少 4 条关键端到端链路描述。
   - AC-3: core PRD 给出关键分册导航并可从 `doc/README.md` 到达。
-  - AC-4: GitHub task issue evidence 中的任务与 PRD-CORE-ID 可映射。
-  - AC-5: 文档级 `审计轮次` 仅可对应已落档的正式 ROUND 台账；在 `ROUND-NNN` 正式启动文件落档前，不得保留脱离台账的 `审计轮次 > NNN` 标记。
+  - AC-4: 实际 PR 或按需 Issue 中的相关修改与适用 PRD-CORE-ID 可映射，不强制另建任务。
+  - AC-5: 文档级 `审计轮次` 保留对应历史 ROUND 的来源语义，不因日常修订上调，也不作为当前复审或验收通过证明；现行工作不要求新建 ROUND 启动文件或台账。
   - AC-6: core PRD 明确列出当前阶段 `P0/P1/P2` 收口项、对应 owner、输入、输出、验收标准与阻断条件。
   - AC-7: 全局 P0 按当前路径、连续性和必要验证缺口准入，首次开放按当前里程碑退出条件验收。
   - AC-8: 工作包 明确启动条件、依赖与退出条件，后续扩展不自动阻断受控试玩。
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
-  - AC-10: `PRD-CORE-004` 可映射到 GitHub task issue evidence 中的任务与 `test_tier_required` 验证方法。
+  - AC-10: `PRD-CORE-004` 可映射到实际 PR 或按需 Issue 及适用的 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
 - Non-Goals:
   - 不在 core PRD 中替代模块详细技术分册。
-  - 不在 core PRD 中维护逐版本实现变更流水（该信息在 devlog）。
+  - 不在 core PRD 中维护逐版本实现变更流水（该信息在实际 PR 与按需 Issue 的时间线）。
   - 不在本 PRD 中重写各模块的实现细节或替代 Git、PR 与实际 CI 记录 中的执行计划。
   - 不把 launcher / explorer 体验新增功能作为当前阶段的主发布驱动。
 
@@ -196,14 +200,14 @@
   - 按现行开发流程进行的适用评审记录（不要求额外通用放行材料）
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
-  - 信息缺失：若模块 PRD 尚未更新，标记“口径待同步”并阻断发布结论。
+  - 信息缺失：若缺失内容影响本次发布判断，标记“口径待同步”并阻断该发布结论；无依赖的已授权分析、修复与测试继续。
   - 版本漂移：先按争议内容和声明 scope 确定 authority，再在同一 authority 内比较审定版本；较新日期不产生跨域覆盖权。范围不明或跨域冲突由对应责任人显式决定，并同步受影响条款，见 [权威裁决](../engineering/doc-governance/doc-structure-standard.design.md#doc-authority-resolution)。
   - 依赖冲突：同一链路被多个模块修改时，需合并影响面并重跑 required 级验证。
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
-  - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
+  - 术语冲突：先按争议内容与 scope 定位专业或产品 authority，core 词典同步其定义；跨域矛盾在当前 PR/评审中显式裁定，不以 core 总览覆盖专业合同。
   - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按正式专题的职责范围与当前明确负责人协调；core 记录跨域决定，PR/评审及按需 Issue 记录执行事实，不依赖退役 `.pm` task owner 或额外角色回执。
   - Git、PR 与实际 CI 记录 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
-  - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
+  - 证据缺口：不能核对本次候选、适用范围或真实结果时，不得宣称 fully ready；沿用适用专业证据合同，不因未套用统一模板而另增普通 PR 门禁。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
 - Non-Functional Requirements:
   - NFR-CORE-1: 核心入口文档链接可用率 100%。
@@ -213,7 +217,7 @@
   - NFR-CORE-5: core 文档长度仅作编辑参考；按语义与维护成本决定是否拆分，不因超过 1000 行阻断或要求长度豁免。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
-  - NFR-CORE-8: 跨角色证据交接在 PRD / project / PR、实际 CI 与评审记录（Issue 按需） / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
+  - NFR-CORE-8: 跨角色证据交接在 PRD / PR、实际 CI 与评审记录（Issue 按需） / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
   - NFR-CORE-9: 一轮模块主项目全部收口后 1 个工作日内必须形成下一轮优先级清单。
 - Security & Privacy: core 仅维护结构与治理口径；涉及密钥、签名、隐私数据的要求由对应模块 PRD 细化并执行。
   发布收口文档仅记录工程与玩法证据，不引入额外敏感数据；若引用线上/远程环境信息，需与对应模块 owner 联审后落档。
@@ -230,21 +234,23 @@
 - Technical Risks:
   - 风险-1: 模块新增能力未及时回填全局链路。
   - 风险-2: 总览与分册的口径同步依赖人工流程。
-  - 风险-3: 若局部修订直接上调 `审计轮次` 而未建立正式 ROUND 台账，字段会失去可比性，并破坏 reviewed-files / progress-log 对账。
+  - 风险-3: 若局部修订直接上调历史 `审计轮次`，会混淆旧 ROUND 的 reviewed-files / progress-log 对账语义与当前验证事实；历史记录不能代替当前 PR 的实际检查与评审。
   - 风险-4: 若继续把 launcher / explorer 体验扩展排在玩法与发布治理前，项目会强化“能展示”而非“能稳定发布”的错配。
   - 风险-5: 若 runtime / testing / playability 的证据标准不同步，发布评审会退化为口头判断。
 - 风险-6: 若当前排序与下一步未同步到 Git、PR 与实际 CI 记录，团队会重新回到平均发力与隐式尾注推进。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+
+旧 TASK-CORE 与 ROUND-005/006 的建档、补齐、清零记录保留为历史来源，不构成当前任务准入、审计轮次完成或发布结论。没有唯一原 Task 时不迁入任意治理 Issue；可复用跨模块追踪与验证方法仍保留。
+| PRD-ID | 历史来源或验证入口 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-CORE-001 | TASK-CORE-001/002/006/007 | `test_tier_required` | 入口完整性扫描、模块地图与导航可达检查 | 全项目入口与架构总览一致性 |
 | PRD-CORE-002 | TASK-CORE-002/003/004/007 | `test_tier_required` | 关键链路映射核验、跨模块依赖抽样复核 | 跨模块设计兼容性与发布评审效率 |
 | PRD-CORE-003 | TASK-CORE-004/005/007 | `test_tier_required` | 发布门禁证据映射校验、轮次一致性审查记录检查（含文档级审计轮次标记，缺省按0） | 发布决策可审计性与长期治理稳定性 |
 | PRD-CORE-003 | TASK-CORE-008 | `test_tier_required` | `审计轮次 > 5` 漂移扫描、ROUND-005 基线回写、devlog 与 git 证据核对 | 审计标记口径恢复为正式台账语义 |
 | PRD-CORE-003 | TASK-CORE-009 | `test_tier_required` | 全仓 `审计轮次 > 5` 扫描清零、缺失标记补齐为 5、devlog 与 git 证据核对 | 审计标记口径对齐到“全仓不高于 ROUND-005 基线” |
-| PRD-CORE-004 | TASK-CORE-011/012/013/014 | `test_tier_required` | 阶段收口优先级、owner 分工、交付矩阵、go/no-go 模板与模块 project 映射抽样核验 | 当前阶段发布前闭环目标与责任边界一致性 |
+| PRD-CORE-004 | TASK-CORE-011/012/013/014 | `test_tier_required` | 阶段收口优先级、owner 分工、交付矩阵、go/no-go 模板与实际 PR / 按需 Issue 来源抽样核验 | 当前阶段发布前闭环目标与责任边界一致性 |
 | PRD-CORE-005 | TASK-CORE-016/017/018/019/020/021 | `test_tier_required` | 下一轮优先级清单、候选级入口、版本级扩展与 runtime 联合证据抽样核验 | 新一轮跨模块执行一致性 |
 | PRD-CORE-006 | TASK-CORE-022 | `test_tier_required` | 正式版本候选 go/no-go 记录、风险附注与角色交接抽样核验 | 版本候选正式裁决一致性 |
 | PRD-CORE-007 | TASK-CORE-023 | `test_tier_required` | `doc/README.md` 含根 README / site 阅读入口 | 全局导航准确性 |

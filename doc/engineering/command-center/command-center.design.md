@@ -31,22 +31,22 @@
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-001](command-center.prd.md#REQ-CC-001) | App 独立启动，打开正确项目和工作树，恢复个人上下文 | [DES-CC-001](#DES-CC-001) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；runtime_engineer；Tauri / 系统 Git | 不以游戏栈或终端后端为前提 |
-| [REQ-CC-002](command-center.prd.md#REQ-CC-002) | 来源、版本、覆盖与失败分别保留；局部可用 | [DES-CC-002](#DES-CC-002) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；各 adapter；上游查询能力 | 不推定完整全局快照 |
-| [REQ-CC-003](command-center.prd.md#REQ-CC-003) | 当前与长期目标关联到适用验收，进度有可核实分母 | [DES-CC-003](#DES-CC-003) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；producer_system_designer；core PRD / 交付事实 | 不按提交数或活动量计算完成率 |
-| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
-| [REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
-| [REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；真实请求方；已有授权 | 不将普通实现转为待批准 |
-| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | [src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx)；agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
-| [REQ-CC-008](command-center.prd.md#REQ-CC-008) | 不确定副作用持久保留，恢复不自动重发 | [DES-CC-008](#DES-CC-008) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；源端可核实事实 | 不承诺上游幂等或完整事件重放 |
-| [REQ-CC-009](command-center.prd.md#REQ-CC-009) | 关窗留后台，完整退出明确处理自管活跃或未知工作 | [DES-CC-009](#DES-CC-009) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；进程所有权 | 不保证崩溃、强退、重启后继续 |
-| [REQ-CC-010](command-center.prd.md#REQ-CC-010) | 中文短查询、IME、键盘、读屏和有界长列表可用 | [DES-CC-010](#DES-CC-010) | [src/App.test.tsx](../../../tools/oasis7-command-center/ui/src/App.test.tsx)；UI 实现 / qa_engineer；真实 macOS | 浏览器模拟不证明系统体验 |
-| [REQ-CC-011](command-center.prd.md#REQ-CC-011) | 缓存重建保留个人与未决数据，凭据和展示内容有边界 | [DES-CC-011](#DES-CC-011) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；SQLite / Keychain | 不默认记录或上传完整会话 |
-| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | 本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它 | [DES-CC-012](#DES-CC-012) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；产品负责人；环境和协议能力 | 不把 stdio 或非实验 API 当生产支持承诺 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 首页聚合重点、成果、真实请求及返回工作，三场景可用 | [DES-CC-013](#DES-CC-013) | producer_system_designer；主责文档/状态摘要与来源适配器 | 不随刷新运行模型或伪造排序、事实时间 |
-| [REQ-CC-014](command-center.prd.md#REQ-CC-014) | 明确关联复用、失效修复、统一详情及已有现场接续 | [DES-CC-014](#DES-CC-014) | application/domain、UI与受支持原工具定位 | 不从分支名移交运行控制，不自动合并个人/私有数据 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机工具作为独立辅助入口接续原工作 | [DES-CC-015](#DES-CC-015) | 本机工具设计、context与既有 signer | 原暂停和私有隔离合同继续约束；工具不成为全部工作的前置 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 文档全局树、配对与覆盖透明 | [DES-CC-016](#DES-CC-016) | Rust 索引、文档 owner、Solid UI / QA | 本次仅设计；不推断完成状态 |
+| [REQ-CC-001](command-center.prd.md#REQ-CC-001) | App 独立启动，打开正确项目和工作树，恢复个人上下文；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=App 独立启动，打开正确项目和工作树，恢复个人上下文 | [DES-CC-001](#DES-CC-001) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；runtime_engineer；Tauri / 系统 Git | 不以游戏栈或终端后端为前提 |
+| [REQ-CC-002](command-center.prd.md#REQ-CC-002) | 来源、版本、覆盖与失败分别保留；局部可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=来源、版本、覆盖与失败分别保留；局部可用 | [DES-CC-002](#DES-CC-002) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；各 adapter；上游查询能力 | 不推定完整全局快照 |
+| [REQ-CC-003](command-center.prd.md#REQ-CC-003) | 当前与长期目标关联到适用验收，进度有可核实分母；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=当前与长期目标关联到适用验收，进度有可核实分母 | [DES-CC-003](#DES-CC-003) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；producer_system_designer；core PRD / 交付事实 | 不按提交数或活动量计算完成率 |
+| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
+| [REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
+| [REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；真实请求方；已有授权 | 不将普通实现转为待批准 |
+| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | [src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx)；agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
+| [REQ-CC-008](command-center.prd.md#REQ-CC-008) | 不确定副作用持久保留，恢复不自动重发；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=不确定副作用持久保留，恢复不自动重发 | [DES-CC-008](#DES-CC-008) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；源端可核实事实 | 不承诺上游幂等或完整事件重放 |
+| [REQ-CC-009](command-center.prd.md#REQ-CC-009) | 关窗留后台，完整退出明确处理自管活跃或未知工作；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=关窗留后台，完整退出明确处理自管活跃或未知工作 | [DES-CC-009](#DES-CC-009) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；进程所有权 | 不保证崩溃、强退、重启后继续 |
+| [REQ-CC-010](command-center.prd.md#REQ-CC-010) | 中文短查询、IME、键盘、读屏和有界长列表可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=中文短查询、IME、键盘、读屏和有界长列表可用 | [DES-CC-010](#DES-CC-010) | [src/App.test.tsx](../../../tools/oasis7-command-center/ui/src/App.test.tsx)；UI 实现 / qa_engineer；真实 macOS | 浏览器模拟不证明系统体验 |
+| [REQ-CC-011](command-center.prd.md#REQ-CC-011) | 缓存重建保留个人与未决数据，凭据和展示内容有边界；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=缓存重建保留个人与未决数据，凭据和展示内容有边界 | [DES-CC-011](#DES-CC-011) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；SQLite / Keychain | 不默认记录或上传完整会话 |
+| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | 本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它 | [DES-CC-012](#DES-CC-012) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；产品负责人；环境和协议能力 | 不把 stdio 或非实验 API 当生产支持承诺 |
+| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 首页聚合重点、成果、真实请求及返回工作，三场景可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=首页聚合重点、成果、真实请求及返回工作，三场景可用 | [DES-CC-013](#DES-CC-013) | producer_system_designer；主责文档/状态摘要与来源适配器 | 不随刷新运行模型或伪造排序、事实时间 |
+| [REQ-CC-014](command-center.prd.md#REQ-CC-014) | 明确关联复用、失效修复、统一详情及已有现场接续；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=明确关联复用、失效修复、统一详情及已有现场接续 | [DES-CC-014](#DES-CC-014) | application/domain、UI与受支持原工具定位 | 不从分支名移交运行控制，不自动合并个人/私有数据 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机工具作为独立辅助入口接续原工作；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=本机工具作为独立辅助入口接续原工作 | [DES-CC-015](#DES-CC-015) | 本机工具设计、context与既有 signer | 原暂停和私有隔离合同继续约束；工具不成为全部工作的前置 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 文档全局树、配对与覆盖透明；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=文档全局树、配对与覆盖透明 | [DES-CC-016](#DES-CC-016) | Rust 索引、文档 owner、Solid UI / QA | 本次仅设计；不推断完成状态 |
 
 ## 3. 初始设计基线、目标状态与差距
 
@@ -430,12 +430,16 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 | 目标 | 当前基础 | 尚待实施或证明 |
 | --- | --- | --- |
-| 首页直接形成判断 | core 章节阅读，项目状态可检索 | 状态摘要直接入口、四区投影、排序/冲突/变化解释 |
+| 首页直接形成判断 | core 章节阅读，项目状态/架构摘要章节直接入口，缺失来源独立提示 | 四区投影、排序/冲突/变化解释及真实 App 整体验收 |
 | 同一工作上下文 | PR、多目标手工关系及独立 runtime 信息 | 统一工作详情、跨视图返回、普通草稿恢复 |
 | 接续既有现场 | 自管会话及 PR/工作树来源 | 外部会话的明确关联与安全原工具入口；按实际能力观察 |
 | 低维护关联 | 已确认关系持久保存，显式后继可读 | 明确源引用复用、失效检测及有依据的修复 |
 | 可理解的发起与反馈 | 建会话和发送输入分开，未决操作记录 | 可预览实际输入的单次明确发起、跨视图结果更新 |
 | 日常价值验收 | 局部单元、UI、协议和桌面验证入口 | PRD三个用户任务的真实 App 结果与额外操作记录 |
+
+普通决定编辑、关联输入与检索文本由 `ui/src/App.tsx` 按 Project/worktree 身份在当前 App 会话内隔离；同项目刷新保留，切换其他项目不沿用输入，返回恢复对应输入，旧查询结果不得进入新项目。该基础不提供工作级返回栈或重开持久草稿，不包含私有资料与秘密回复。
+
+首页来源阅读降级由 `ui/src/SummarySources.tsx` 承接 [DES-CC-013](#DES-CC-013)：按完整路径列出两个摘要的已索引章节，沿现有来源详情读取原版本；缺失来源分别提示，读取时间不更新正文核验时间。该切片不新增聚合结论、关系或执行动作，不宣称 AC-CC-013 的完整首页与三场景通过。
 
 ### 11.1 验证映射表
 
@@ -527,4 +531,4 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 
 ## 文档全局阅读增量
 
-[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；本次仅文档设计，尚未实现或验收，不改变既有 §11 的验证结论。
+[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；完整树能力尚未实现或验收。已有章节索引现由 [覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)提供候选、读取、遗漏、原因计数和有界路径样本，并限制实际读取量；具体范围与缺口见专题设计 §11。这不证明文件级树、独立快照、配对或真实桌面验收。

@@ -1,5 +1,7 @@
 # P2P 私有 observer triad follow-up 验证（2026-04-07）
 
+历史运行边界：本文只保留所列 candidate/window 的原始观测、失败、修复尝试和操作记录；“当前”、后续安排、部署/恢复命令不构成今日环境真值或执行授权。退役环境的总体归属见[legacy shared-devnet provenance](legacy-shared-devnet-provenance-2026-07-26.md)，当前操作使用[正式网络 runbook](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)并重新采集同窗证据；不得据此恢复退役网络或改写旧判定。
+
 - 对应专题: `doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
 - 对应任务: `P2PARCH-6`
 - PM task: `task_c0fa78756f6e4105abdd0d7f5f96de2d`

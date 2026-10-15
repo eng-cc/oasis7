@@ -146,20 +146,20 @@ Web/桌面玩家不直接控制 OpenClaw/Codex 的聊天进程，而是将有权
 
 | 产品要求 | 产品验收 | 本文设计承接 |
 | --- | --- | --- |
-| [REQ-EXT-001](external-agent-runtime-play.prd.md#req-ext-001) | [AC-EXT-001](external-agent-runtime-play.prd.md#ac-ext-001) | §2.1 推荐路径、真实 Runtime 与就绪表达。 |
-| [REQ-EXT-002](external-agent-runtime-play.prd.md#req-ext-002) | [AC-EXT-002](external-agent-runtime-play.prd.md#ac-ext-002) | §2.1 委托摘要；§3 资格与恢复。 |
-| [REQ-EXT-003](external-agent-runtime-play.prd.md#req-ext-003) | [AC-EXT-003](external-agent-runtime-play.prd.md#ac-ext-003) | §2.2 合法能力、前置变化与首局结果。 |
-| [REQ-EXT-004](external-agent-runtime-play.prd.md#req-ext-004) | [AC-EXT-004](external-agent-runtime-play.prd.md#ac-ext-004) | §2.1–2.2 自主推进；§4 计划与反馈层次。 |
-| [REQ-EXT-005](external-agent-runtime-play.prd.md#req-ext-005) | [AC-EXT-005](external-agent-runtime-play.prd.md#ac-ext-005) | §2.2 权威后果；§3 未知结果与核对。 |
-| [REQ-EXT-006](external-agent-runtime-play.prd.md#req-ext-006) | [AC-EXT-006](external-agent-runtime-play.prd.md#ac-ext-006) | §2.3 目标应用与停止后续委托；§2.6 跨 Runtime 协作。 |
-| [REQ-EXT-007](external-agent-runtime-play.prd.md#req-ext-007) | [AC-EXT-007](external-agent-runtime-play.prd.md#ac-ext-007) | §2.3 回访；§3.1 分开的四类状态。 |
-| [REQ-EXT-008](external-agent-runtime-play.prd.md#req-ext-008) | [AC-EXT-008](external-agent-runtime-play.prd.md#ac-ext-008) | §3.2 故障恢复与原世界历史。 |
-| [REQ-EXT-009](external-agent-runtime-play.prd.md#req-ext-009) | [AC-EXT-009](external-agent-runtime-play.prd.md#ac-ext-009) | §3.2 预算限制；§5 两类成本与继续选择。 |
-| [REQ-EXT-010](external-agent-runtime-play.prd.md#req-ext-010) | [AC-EXT-010](external-agent-runtime-play.prd.md#ac-ext-010) | §2 完整首局经历；§5 两个 Runtime 分别验证。 |
-| [REQ-EXT-011](external-agent-runtime-play.prd.md#req-ext-011) | [AC-EXT-011](external-agent-runtime-play.prd.md#ac-ext-011) | §2.1 与 §2.4 官方 Skill 可信分发、适配引导与失败修复。 |
-| [REQ-EXT-012](external-agent-runtime-play.prd.md#req-ext-012) | [AC-EXT-012](external-agent-runtime-play.prd.md#ac-ext-012) | §2.4 与 §4.3 标准 API 的主动调用、回执及增量结果。 |
-| [REQ-EXT-013](external-agent-runtime-play.prd.md#req-ext-013) | [AC-EXT-013](external-agent-runtime-play.prd.md#ac-ext-013) | §3.2 与 §4.3 身份授权、错误和安全恢复。 |
-| [REQ-EXT-014](external-agent-runtime-play.prd.md#req-ext-014) | [AC-EXT-014](external-agent-runtime-play.prd.md#ac-ext-014) | §4.3 旧 Bridge 的非默认地位与替换条件。 |
-| [REQ-EXT-015](external-agent-runtime-play.prd.md#req-ext-015) | [AC-EXT-015](external-agent-runtime-play.prd.md#ac-ext-015) | §2.5 Web/native 大世界分别可用。 |
-| [REQ-EXT-016](external-agent-runtime-play.prd.md#req-ext-016) | [AC-EXT-016](external-agent-runtime-play.prd.md#ac-ext-016) | §2.5 世界概览、缩放、搜索与对象选择。 |
-| [REQ-EXT-017](external-agent-runtime-play.prd.md#req-ext-017) | [AC-EXT-017](external-agent-runtime-play.prd.md#ac-ext-017) | §2.5 世界现场、合法指导和回执。 |
+| Trace refs: O7-REQ-b3e367c3-c72d-4959-b599-613ac652dab8；[REQ-EXT-001](external-agent-runtime-play.prd.md#req-ext-001) | [AC-EXT-001](external-agent-runtime-play.prd.md#ac-ext-001) | §2.1 推荐路径、真实 Runtime 与就绪表达。 |
+| Trace refs: O7-REQ-d30925fe-d798-4056-9641-062255931a61；[REQ-EXT-002](external-agent-runtime-play.prd.md#req-ext-002) | [AC-EXT-002](external-agent-runtime-play.prd.md#ac-ext-002) | §2.1 委托摘要；§3 资格与恢复。 |
+| Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb；[REQ-EXT-003](external-agent-runtime-play.prd.md#req-ext-003) | [AC-EXT-003](external-agent-runtime-play.prd.md#ac-ext-003) | §2.2 合法能力、前置变化与首局结果。 |
+| Trace refs: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1；[REQ-EXT-004](external-agent-runtime-play.prd.md#req-ext-004) | [AC-EXT-004](external-agent-runtime-play.prd.md#ac-ext-004) | §2.1–2.2 自主推进；§4 计划与反馈层次。 |
+| Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7；[REQ-EXT-005](external-agent-runtime-play.prd.md#req-ext-005) | [AC-EXT-005](external-agent-runtime-play.prd.md#ac-ext-005) | §2.2 权威后果；§3 未知结果与核对。 |
+| Trace refs: O7-REQ-091d6c22-fca5-4284-91dd-2edce9ef440b；[REQ-EXT-006](external-agent-runtime-play.prd.md#req-ext-006) | [AC-EXT-006](external-agent-runtime-play.prd.md#ac-ext-006) | §2.3 目标应用与停止后续委托；§2.6 跨 Runtime 协作。 |
+| Trace refs: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e；[REQ-EXT-007](external-agent-runtime-play.prd.md#req-ext-007) | [AC-EXT-007](external-agent-runtime-play.prd.md#ac-ext-007) | §2.3 回访；§3.1 分开的四类状态。 |
+| Trace refs: O7-REQ-4a8be58c-bcda-4efe-b199-1cf9bd9b3330；[REQ-EXT-008](external-agent-runtime-play.prd.md#req-ext-008) | [AC-EXT-008](external-agent-runtime-play.prd.md#ac-ext-008) | §3.2 故障恢复与原世界历史。 |
+| Trace refs: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43；[REQ-EXT-009](external-agent-runtime-play.prd.md#req-ext-009) | [AC-EXT-009](external-agent-runtime-play.prd.md#ac-ext-009) | §3.2 预算限制；§5 两类成本与继续选择。 |
+| Trace refs: O7-REQ-7283b901-ea06-49e3-956d-2bad46b6c89d；[REQ-EXT-010](external-agent-runtime-play.prd.md#req-ext-010) | [AC-EXT-010](external-agent-runtime-play.prd.md#ac-ext-010) | §2 完整首局经历；§5 两个 Runtime 分别验证。 |
+| Trace refs: O7-REQ-a5bbf6e4-3e71-4d48-9eba-68c50867c95c；[REQ-EXT-011](external-agent-runtime-play.prd.md#req-ext-011) | [AC-EXT-011](external-agent-runtime-play.prd.md#ac-ext-011) | §2.1 与 §2.4 官方 Skill 可信分发、适配引导与失败修复。 |
+| Trace refs: O7-REQ-8120dffe-17cc-458a-9c70-8121217e6f7b；[REQ-EXT-012](external-agent-runtime-play.prd.md#req-ext-012) | [AC-EXT-012](external-agent-runtime-play.prd.md#ac-ext-012) | §2.4 与 §4.3 标准 API 的主动调用、回执及增量结果。 |
+| Trace refs: O7-REQ-7d6cef7f-9419-49ed-b445-663382383458；[REQ-EXT-013](external-agent-runtime-play.prd.md#req-ext-013) | [AC-EXT-013](external-agent-runtime-play.prd.md#ac-ext-013) | §3.2 与 §4.3 身份授权、错误和安全恢复。 |
+| Trace refs: O7-REQ-68ffc843-8679-4ad9-8cef-10a239a29c73；[REQ-EXT-014](external-agent-runtime-play.prd.md#req-ext-014) | [AC-EXT-014](external-agent-runtime-play.prd.md#ac-ext-014) | §4.3 旧 Bridge 的非默认地位与替换条件。 |
+| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[REQ-EXT-015](external-agent-runtime-play.prd.md#req-ext-015) | [AC-EXT-015](external-agent-runtime-play.prd.md#ac-ext-015) | §2.5 Web/native 大世界分别可用。 |
+| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[REQ-EXT-016](external-agent-runtime-play.prd.md#req-ext-016) | [AC-EXT-016](external-agent-runtime-play.prd.md#ac-ext-016) | §2.5 世界概览、缩放、搜索与对象选择。 |
+| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[REQ-EXT-017](external-agent-runtime-play.prd.md#req-ext-017) | [AC-EXT-017](external-agent-runtime-play.prd.md#ac-ext-017) | §2.5 世界现场、合法指导和回执。 |

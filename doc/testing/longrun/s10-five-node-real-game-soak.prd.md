@@ -64,7 +64,7 @@
   - AC-2: `summary.json` 含所有 S10 门禁字段，并与 `summary.md` 一致。
   - AC-3: settlement 应用统计字段（attempts/failures/failure_ratio）稳定输出。
   - AC-4: 真实短跑与长跑样本证明关键验签失败告警为 0。
-  - AC-5: 文档迁移完成 strict schema + `.prd.md plus GitHub task issue evidence` 命名。
+  - AC-5: 文档保持专题 PRD、设计与实际运行证据可追溯；交付记录使用 PR、实际 CI 与评审，Issue 按需，不要求额外任务身份。
   - AC-6: DistFS seed 只在空集写入且可重复启动；短窗仍缺样本时必须保留 `insufficient_data`，不能因 seed 存在伪造 pass。
 - Non-Goals:
   - 不新增 `oasis7_viewer_live` 内建五节点拓扑枚举。

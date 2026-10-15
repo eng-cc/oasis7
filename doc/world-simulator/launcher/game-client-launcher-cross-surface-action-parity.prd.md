@@ -23,6 +23,8 @@
 <a id="llm-settings-reload-result"></a>
 ### LLM 设置的本地存储与读回边界
 
+Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676；产品上游为 [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) 的配置保存/阶段结果不代签可用与世界结果，以及 [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) 的失效旧配置不沿用和失败后重新验证。本节仅承接 native/Web 设置保存与 Reload 的真实结果，不证明 provider 鉴权或 runtime 获得凭据。
+
 - native 表面将当前 LLM 设置读写到本地 launcher 配置的 `[llm]` 字段（`api_key`、`base_url`、`model`）；保存后重载应以实际读回或明确错误呈现，空值移除仅适用字段。配置缺失、解析、读取或写入失败必须保留失败结果和修复入口，不得显示为已保存。
 - Web 表面以浏览器本地存储适配当前 LLM 设置；保存后的读回只说明当前浏览器本地状态。存储不可用、读取或写入失败必须可诊断，且不应把旧值、草稿或缺省值伪装为新设置已持久化。
 - Reload 的最终可见状态取决于本次读取和解析结果。native 的无效 TOML / I/O 错误、Web 的无效 JSON / storage 错误必须保留原可编辑草稿并显示 Failed；按钮 handler 不得在 loader 失败后覆盖为 Success。来源修复后，成功重载才替换草稿并显示 Success；既有 NotFound、空文件/空值和缺 key 的默认回退保持。重载本身不写回或启动 provider。
@@ -39,6 +41,8 @@
 
 <a id="transfer-current-action"></a>
 ### 转账窗口的当前 action
+
+Trace refs: O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270；产品上游为 [REQ-ENTRY-MODE-002](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-002) 在受控动作结果查询失败时的真实 blocker 与恢复子义务：当前 B 的结果待查须保持 B 身份，不能借 A 的旧成功或迟到响应伪装恢复。受控 Launcher 的适用范围见同专题 §2.2；本节不扩展转账权限、资金结算、持久账本或全部模式可玩性。
 
 - 新转账 B 被受理并返回 action ID 时，窗口在一次状态更新中切换当前追踪身份，清除 A 的状态与轮询完成标记，为 B 安排状态查询。B 的 acceptance 只证明提交阶段受理。
 - 在途查询的成功、错误和终态只影响其所属的当前 action。A 的迟到响应不能把 B 的追踪身份改回 A，也不能让 A 的 confirmed 停止 B 的轮询。

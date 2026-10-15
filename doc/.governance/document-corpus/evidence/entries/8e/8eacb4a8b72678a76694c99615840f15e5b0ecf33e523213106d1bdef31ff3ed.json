@@ -3,7 +3,7 @@
     "authority": "doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
-    "content_sha256": "7a6e68385eb36d22f95c5cd66b6ed94c5e130d4d9ea3b45ab264ff8811832bc5",
+    "content_sha256": "b587665aa55f0c4f7bc090ee3d333debab93cf45c9ca3cb5e94b537da7167632",
     "disposition": "retain",
     "domain_owner": "blockchain_ops_engineer",
     "evidence_window": "2026-05-live-candidate-transition",

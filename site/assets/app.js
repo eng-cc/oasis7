@@ -2,18 +2,19 @@
   document.documentElement.setAttribute("data-js", "true");
   const LANGUAGE_REDIRECT_KEY = "oasis7_pages_lang_redirect_done_v1";
   const LANGUAGE_MANUAL_CHOICE_KEY = "oasis7_pages_lang_manual_choice_v1";
-  const RELEASE_ASSET_BASE = "https://github.com/eng-cc/oasis7/releases/download";
   const releaseRefreshCallbacks = [];
 
-  const releaseAssetUrl = (fallbackUrl) => {
-    const tagNode = document.querySelector("[data-release-tag]");
-    const tagName = tagNode ? tagNode.textContent.trim() : "";
-    const fallback = String(fallbackUrl || "").trim();
-    const filename = fallback.split("/").pop() || "";
-    if (!tagName || !filename || tagName === "latest") {
-      return fallback;
+  let releaseCandidate = null;
+  const releaseAssetUrl = (fallbackUrl) => window.oasis7Release.assetUrl(releaseCandidate, fallbackUrl);
+  const setDownloadLink = (node, url) => {
+    if (!node) return;
+    if (url) {
+      node.setAttribute("href", url);
+      node.removeAttribute("aria-disabled");
+    } else {
+      node.removeAttribute("href");
+      node.setAttribute("aria-disabled", "true");
     }
-    return `${RELEASE_ASSET_BASE}/${encodeURIComponent(tagName)}/${filename}`;
   };
 
   const safeGetStorage = (key) => {
@@ -42,24 +43,6 @@
     return String(firstLanguage || window.navigator.language || "").toLowerCase();
   };
 
-  const isChineseEntryPath = (pathname) => {
-    const onEnglishPage = /\/en\/(?:index\.html)?$/.test(pathname);
-    if (onEnglishPage) {
-      return false;
-    }
-    return /\/(?:index\.html)?$/.test(pathname);
-  };
-
-  const toEnglishEntryPath = (pathname) => {
-    if (pathname.endsWith("/index.html")) {
-      return `${pathname.slice(0, -"index.html".length)}en/`;
-    }
-    if (pathname.endsWith("/")) {
-      return `${pathname}en/`;
-    }
-    return `${pathname}/en/`;
-  };
-
   const isDocsPath = (pathname) => /\/doc\/(?:cn|en)\//.test(pathname);
 
   const maybeRedirectByLanguageOnFirstVisit = () => {
@@ -72,27 +55,16 @@
       return;
     }
 
-    const { pathname, search, hash } = window.location;
-    if (isDocsPath(pathname)) {
-      return;
-    }
-
-    const preferredLanguage = resolvePreferredLanguage();
-    const prefersEnglish = preferredLanguage.startsWith("en");
-
-    // Entry-page visits are checked once; docs paths are intentionally excluded.
+    const targetAttribute = resolvePreferredLanguage().startsWith("en") ? "data-locale-en" : "data-locale-zh";
+    const declared = document.documentElement.getAttribute(targetAttribute);
+    if (!declared || isDocsPath(window.location.pathname)) return;
+    const target = new URL(declared, window.location.href);
+    if (target.origin !== window.location.origin) return;
     safeSetStorage(LANGUAGE_REDIRECT_KEY, "1");
-
-    if (!prefersEnglish) {
-      return;
-    }
-
-    if (!isChineseEntryPath(pathname)) {
-      return;
-    }
-
-    const targetPath = toEnglishEntryPath(pathname);
-    window.location.replace(`${targetPath}${search}${hash}`);
+    if (target.pathname === window.location.pathname) return;
+    target.search = window.location.search;
+    target.hash = window.location.hash;
+    window.location.replace(target.href);
   };
 
   const bindLanguageChoicePersistence = () => {
@@ -967,6 +939,9 @@
       const currentRequest = requestId + 1;
       requestId = currentRequest;
       setActiveButton(button);
+      content.innerHTML = "";
+      const original = reader.querySelector("[data-story-original]");
+      if (original) original.setAttribute("href", src);
       setStatus(`正在加载：${button.textContent.trim()}`, "loading");
 
       try {
@@ -979,13 +954,15 @@
               return response.text();
             });
 
-        if (!cache.has(src)) {
-          cache.set(src, markdown);
-        }
         if (currentRequest !== requestId) {
           return;
         }
+        cache.set(src, markdown);
 
+        if (!String(markdown).trim()) {
+          setStatus(`当前章节暂无内容：${button.textContent.trim()}。可查看原文或重试。`, "empty");
+          return;
+        }
         content.innerHTML = renderMarkdown(markdown);
         setStatus(`已加载：${button.textContent.trim()}`, "ready");
       } catch (error) {
@@ -1003,6 +980,14 @@
     buttons.forEach((button) => {
       button.setAttribute("aria-pressed", "false");
       button.addEventListener("click", () => loadChapter(button));
+    });
+
+    const retry = reader.querySelector("[data-story-retry]");
+    if (retry) retry.addEventListener("click", () => {
+      const selected = buttons.find((button) => button.getAttribute("aria-pressed") === "true");
+      if (!selected) return;
+      cache.delete(selected.getAttribute("data-story-src"));
+      loadChapter(selected);
     });
 
     const defaultSrc = String(reader.getAttribute("data-story-default") || "").trim();
@@ -1049,20 +1034,15 @@
         return response.json();
       })
       .then((release) => {
-        const tagName = typeof release.tag_name === "string" ? release.tag_name.trim() : "";
-        const publishedAt = Date.parse(String(release.published_at || ""));
-        if (!tagName || !Number.isFinite(publishedAt)) {
-          throw new Error("release metadata is incomplete");
-        }
-
+        const candidate = window.oasis7Release.fromRelease(release);
+        const tagName = candidate.tag;
+        const publishedAt = candidate.publishedAt;
+        releaseCandidate = candidate;
         tagNodes.forEach((node) => {
           node.textContent = tagName;
         });
 
-        const releaseUrl =
-          typeof release.html_url === "string" && release.html_url.trim().length > 0
-            ? release.html_url.trim()
-            : `${RELEASE_ASSET_BASE.replace("/download", "")}/tag/${encodeURIComponent(tagName)}`;
+        const releaseUrl = candidate.notes;
         notesLinks.forEach((node) => {
           node.setAttribute("href", releaseUrl);
         });
@@ -1080,7 +1060,10 @@
           node.textContent = prefix ? `${prefix}: ${formattedDate}` : formattedDate;
         });
         document.querySelectorAll('a[href*="oasis7-checksums.txt"]').forEach((node) => {
-          node.setAttribute("href", releaseAssetUrl(node.getAttribute("href")));
+          setDownloadLink(node, releaseAssetUrl(node.getAttribute("href")));
+        });
+        document.querySelectorAll("[data-release-status]").forEach((node) => {
+          node.textContent = pageLang.startsWith("zh") ? "已读取发行元数据；未代签安装或玩法验收。" : "Release metadata loaded; not installation or gameplay validation.";
         });
         releaseRefreshCallbacks.forEach((refresh) => refresh());
       })
@@ -1157,7 +1140,9 @@
       const isMobile =
         (uaData && uaData.mobile === true) ||
         /android|iphone|ipad|ipod|mobile/.test(candidateText);
-      if (isMobile) {
+      // The advertised packages are x64. An explicitly ARM device must not
+      // inherit an automatic x64 recommendation from its operating-system name.
+      if (isMobile || /\barm(?:64)?\b|aarch64/.test(candidateText)) {
         return "";
       }
 
@@ -1226,10 +1211,19 @@
       const applyPlatform = (platformId, selectionMode) => {
         const next = sourceMap.get(platformId);
         if (!next) {
+          surface.setAttribute("data-download-active-platform", "");
+          setDownloadLink(linkNode, "");
+          if (titleNode) titleNode.textContent = isZh ? "请选择下载目标平台" : "Choose the target platform";
+          if (badgeNode) badgeNode.textContent = isZh ? "未知或不支持的当前设备" : "Unknown or unsupported device";
+          if (copyNode) copyNode.textContent = isZh ? "不推荐本设备安装。可为其他受支持的桌面设备手动选择；也可以继续阅读。" : "No package is recommended for this device. You may manually choose a supported desktop target or keep reading.";
+          if (footnoteNode) footnoteNode.textContent = isZh ? "请选择目标平台；这里未确认本设备兼容性。" : "Choose a target platform; this device's compatibility is not confirmed.";
+          [requirementsNode, installNode, trustNode, supportNode].forEach((node) => { if (node) node.textContent = isZh ? "请先选择目标平台并核对对应发行说明。" : "Choose a target platform and check its release notes first."; });
+          buttons.forEach((button) => { button.setAttribute("aria-pressed", "false"); button.classList.remove("is-active"); });
           return;
         }
 
         surface.setAttribute("data-download-active-platform", platformId);
+        surface.setAttribute("data-download-selection-mode", selectionMode);
         buttons.forEach((button) => {
           const isActive = String(button.getAttribute("data-download-platform-button") || "") === platformId;
           button.classList.toggle("is-active", isActive);
@@ -1247,7 +1241,7 @@
           copyNode.textContent = next.copy;
         }
         if (linkNode && next.url) {
-          linkNode.setAttribute("href", releaseAssetUrl(next.url));
+          setDownloadLink(linkNode, releaseAssetUrl(next.url));
         }
         if (linkNode && next.linkLabel) {
           linkNode.textContent = next.linkLabel;
@@ -1265,7 +1259,9 @@
           supportNode.textContent = next.support;
         }
         if (footnoteNode) {
-          footnoteNode.textContent = recommendationText.footnote;
+          footnoteNode.textContent = releaseCandidate && !releaseAssetUrl(next.url)
+            ? (isZh ? "本候选缺少此平台资产或 checksum，下载推荐已停止。请查看发行说明或换平台。" : "This candidate lacks the platform asset or checksum. Download recommendation stopped; see release notes or choose another platform.")
+            : recommendationText.footnote;
         }
       };
 
@@ -1276,22 +1272,37 @@
       });
 
       const detected = detectPreferredPlatform();
-      const fallback =
-        buttons.length > 0
-          ? String(buttons[0].getAttribute("data-download-platform-button") || "")
-          : "";
-      const initialPlatform = sourceMap.has(detected) ? detected : fallback;
+      const initialPlatform = sourceMap.has(detected) ? detected : "";
       const initialMode = detected && sourceMap.has(detected) ? "auto" : "neutral";
       releaseRefreshCallbacks.push(() => {
-        const activePlatform = surface.getAttribute("data-download-active-platform");
-        const activeSource = sourceMap.get(activePlatform);
-        if (linkNode && activeSource && activeSource.url) {
-          linkNode.setAttribute("href", releaseAssetUrl(activeSource.url));
-        }
+        const active = surface.getAttribute("data-download-active-platform");
+        const mode = surface.getAttribute("data-download-selection-mode") || initialMode;
+        applyPlatform(active, mode);
       });
       applyPlatform(initialPlatform, initialMode);
     });
   };
+
+  document.querySelectorAll("[data-decision-walkthrough]").forEach((root) => {
+    const buttons = Array.from(root.querySelectorAll("[data-decision-step]"));
+    const panels = Array.from(root.querySelectorAll("[data-decision-panel]"));
+    const select = (id) => {
+      buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.decisionStep === id)));
+      panels.forEach((panel) => { panel.classList.toggle("is-active", panel.dataset.decisionPanel === id); });
+    };
+    buttons.forEach((button) => { button.hidden = false; button.disabled = false; button.addEventListener("click", () => select(button.dataset.decisionStep)); });
+    select("0");
+  });
+  document.querySelectorAll(".proof-figure img").forEach((img) => {
+    img.addEventListener("error", () => {
+      const figure = img.closest("figure");
+      if (!figure || figure.querySelector(".media-error")) return;
+      const note = document.createElement("p");
+      note.className = "media-error";
+      note.textContent = document.documentElement.lang.startsWith("zh") ? "参考图不可用；文字与来源仍可阅读。" : "Reference image unavailable; text and source remain readable.";
+      figure.append(note);
+    });
+  });
 
   maybeRedirectByLanguageOnFirstVisit();
   bindLanguageChoicePersistence();
@@ -1416,6 +1427,26 @@
     langPopover.querySelectorAll("a").forEach((link) => {
       link.addEventListener("click", () => {
         closePopover();
+      });
+    });
+  }
+
+  const previewDetails = document.querySelector("[data-preview-details]");
+  if (previewDetails) {
+    let previewLinkHashPending = false;
+    const openPreviewFromHash = () => {
+      if (window.location.hash !== "#download") { previewLinkHashPending = false; return; }
+      // The link already opened it before native navigation; a later hash event must not undo a quick close.
+      if (previewLinkHashPending) { previewLinkHashPending = false; return; }
+      previewDetails.open = true;
+    };
+    openPreviewFromHash();
+    window.addEventListener("hashchange", openPreviewFromHash);
+    document.querySelectorAll('a[href="#download"]').forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (window.location.hash !== "#download") previewLinkHashPending = true;
+        previewDetails.open = true;
       });
     });
   }
