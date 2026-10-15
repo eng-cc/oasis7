@@ -111,7 +111,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - 2026-10-14 局部摘要（仅原生任务执行）：owner 私有目标控制、fenced executor/Context、物流、权威配方和 prepared claimed Agent 建厂到首产物的代码切片已交付。实际试玩源、失败与 targeted 范围从 [Game API 专业合同及证据入口](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)读取，逐次 CI/清理流水归原交付 PR。本摘要不证明完整 TaskSnapshot、两 Runtime 首局、GUI、稳定生产或部署；部署暂停保持，其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
-**实施候选（2026-10-15，仅客户端拆分）：** [共享 SDK PR](https://github.com/eng-cc/oasis7/pull/4734)与[固定工业任务执行器候选](https://github.com/eng-cc/oasis7/tree/50e128cbe369f8f6adca6556ff99784c7f7c93ad)尚未合入。执行方复用普通签名 HTTP、原操作恢复与本地有限预算；模型连接和规划在执行方，目标、executor fence、资源、世界时间和收据仍在 Runtime。节点进程组合启动执行器，Viewer 生命周期不构成托管承诺。旧生产能力仍有明确旧入口，不能由工业切片推出全部迁移；边界与剩余范围见 [Game API 专业合同](../../../world-simulator/llm/external-agent-game-api.design.md)及 [#4726](https://github.com/eng-cc/oasis7/issues/4726)。源码拆分、世界准入、运行位置或支持能力变化时重新核对本项。
+**实施候选（2026-10-15，仅客户端拆分）：** [共享 SDK PR](https://github.com/eng-cc/oasis7/pull/4734)已合入 `25b4d211a612d783172e6266307c71c62b8c00c0`；[固定工业任务执行器候选](https://github.com/eng-cc/oasis7/tree/50e128cbe369f8f6adca6556ff99784c7f7c93ad)由 [#4744](https://github.com/eng-cc/oasis7/pull/4744)承接，尚未合入。执行方复用普通签名 HTTP、原操作恢复与本地有限预算；模型连接和规划在执行方，目标、executor fence、资源、世界时间和收据仍在 Runtime。节点进程组合启动执行器，Viewer 生命周期不构成托管承诺。旧生产能力仍有明确旧入口，不能由工业切片推出全部迁移；边界与剩余范围见 [Game API 专业合同](../../../world-simulator/llm/external-agent-game-api.design.md)及 [#4726](https://github.com/eng-cc/oasis7/issues/4726)。源码拆分、世界准入、运行位置或支持能力变化时重新核对本项。
 
 **实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合。上述候选只执行私有测试节点的脚本协议验证与只读浏览器验证，没有付费模型或生产部署证据；其他条目的环境基线不变。
 
