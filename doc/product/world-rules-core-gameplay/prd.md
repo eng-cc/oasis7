@@ -101,6 +101,8 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 只有 fresh authorization 通过且世界效果实际提交的调用，才在同一原子结果中将预算扣减一次并生成关联 receipt；操作不收费时记录零变化。预算 debit、能力状态变化、世界 effect 与授权审计结果不能拆成可分别成功的步骤。相同 nonce/request 的重试、重连、snapshot restore 或 replay 只能返回原 receipt/待决结果，不得第二次扣费、凭 replay 产生 credit、复活已撤销 grant 或把预算转给其他 subject。预算未知、超限、owner 失配或授权证据不完整时，产品结果只能是有界 pending/deny，并明确下一次复查或修复路径，不能部分执行、隐式透支或自动 top-up。
 
+<a name="跨资源承诺、失效与重复提交边界"></a>
+
 ### 跨资源承诺、失效与重复提交边界
 
 所有会影响资源、资格、设施库存或持续义务的玩家路径，都必须让玩家区分**预览**、**请求已送达/入队或 pending**、**经权威资源/规则校验的已接受承诺**与 **receipt 支持的已结算结果**。该区分适用于直接操作、Agent 代办、恢复重试和重连后的继续；它不定义专业域的字段、锁定实现、时钟、价格或状态机。
@@ -248,6 +250,8 @@ Power-dependent profile 必须为每个 stage/cycle/branch/terminal obligation �
 
 Renewal/extension 不能由重连、重试、Agent 推荐或 replay 隐式发生；必须从 fresh authoritative state 重新校验 owner、candidate、route/spec、容量与当前 lifecycle，并以链接 parent 的 continuation/new commitment identity 产生一次结果。Runtime replay 使用已记录的 world-time/order 与 expiry/renewal disposition，不能按恢复时墙钟重算；每项 expiry、release、renewal 与 fresh-snapshot re-evaluation 至多生效一次，也不能刷新共享容量顺位。稳定 `W` 与 terminal/delivery claim 只按已声明 window policy 计数，生产准时但 transit/terminal 迟到时保留 production receipt，却不能获得 on-time delivery receipt、奖励或里程碑。
 
+<a name="工业外部性与操作性缓释-profile（target-only）"></a>
+
 #### 工业外部性与操作性缓释 profile（target-only）
 
 工业运行目前已有输入、能源、物流、批次质量和终端结算的约束，但尚未定义某些工厂/配方持续运行是否会产生可归因的外部性，以及玩家何时应在吞吐与操作性缓释之间停下来作选择。本节只增加一个可选的产品承诺钩子：`industrial_externality` 由工厂/配方/operation 的专业 profile 声明，`operational_mitigation`（必要时也称 operational containment）是局部运行义务，不是新的 runtime 字段、污染模拟或系统性危机治理轨道。
@@ -381,6 +385,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该闭环的 `test_tier_required` 至少覆盖：同一三阶段 `join → stage → transit → buffer → terminal` 路径下四类读面的正向样例；缺料、批次不适用、工厂/配方不兼容、边容量不足、停电和终端失效各自保持正确 primary blocker 与下一动作；同一 production receipt 在 `production-only` profile 中可完成生产目标但保持 undelivered 且不减少交付需求，在 terminal-admission profile 中则必须等待匹配的 delivery/settlement receipt 才完成目标并打开交付型下一候选；因果换线从 `W=0` 开始，非因果恢复保留 root continuation；Viewer 与 pure API 的 `next_action`、`next_recheck`、`progression_effect` 同义，重复提交、重连、乱序、Agent retry、snapshot restore 与 replay 不复制 sink、交付、奖励或目标完成。
 
+<a name="工厂选址与网络拓扑决策（补齐-buildfactory-的地点选择产品缺口）"></a>
+
 #### 工厂选址与网络拓扑决策（补齐 BuildFactory 的地点选择产品缺口）
 
 现有工业路径已经定义了 `BuildFactory` 的 site/location/chunk 合法性和物流 path/edge 的执行规则，但如果玩家只看到“地点可建/不可建”，建厂就会退化为一次付款与前置检查，无法理解站点如何改变原料输入、产物输出、能源、容量和后续扩张。本文只补齐选址与网络拓扑的玩家决策语义，不新增地点、物流或迁移 runtime 能力。
@@ -434,6 +440,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该档案的 `test_tier_required` 至少以同一 deterministic fixture 覆盖：两类输入齐套后只启动一个合法 cycle 并产生一次 bundle；其中一类 input 为 `unknown/not_applicable` 时无 sink/WIP；物流满时保持可读 blocked，容量释放后仅重评未决 edge；power 在报价后不足时原子拒绝或按声明 mode 延期；mandatory 副产物 destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自声明边界完成目标。Viewer 与 pure API 必须从同一档案读出 factory/recipe、两类输入、path/loss/capacity、cycle、bundle/branch、terminal、primary blocker、机会成本、`next_action` 和 `next_recheck`；重复提交、重连、arrival reorder、Agent retry、snapshot restore 与 replay 不复制材料消费、hold、产出、交付、稳定进度或奖励。`test_tier_full` 再扩展到三阶段、三个以上输入/输出分支、cutover、长期持久化恢复和跨窗口 lineage。
 
+<a name="原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）"></a>
+
 #### 原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）
 
 现有合同已经禁止按材料名称推断适用、静默降级、隐藏混料和免费转换，却没有正面定义缺料、来源耗尽或批次不适用时何种“替代”可以进入玩家决策。产品必须区分三种不能互相冒充的选择：`替代来源` 是同一材料 profile 改用不同 source/ledger/path；`原料替代` 是不同材料 profile 经当前 pinned recipe 明确许可后满足同一 required input edge；`换配方` 则改变 recipe version、输入/输出因果或终端用途，属于新的配方候选。推荐、同名材料、相似品质、市场可买、Agent 判断或旧版本曾经接受都不能自动建立原料替代关系。
@@ -451,6 +459,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 这项合同保持 **world-first**：替代资格和效果来自 settled batch、profile 与权威 receipt，而非客户端或 Agent 猜测；保持 **emergence-first**：玩家在稀缺原料、转换损耗、物流/能源占用、产出质量与交付时机之间形成真实取舍；保持 **persistent / auditable**：所选批次、比例、损耗、owner、parent linkage 和 decision 跨恢复/replay 延续；保持 **extensible**：未来材料 profile 可以增加有限替代关系，但不能改写既有 recipe 或 settlement 历史。产品层拥有三类选择、确认与进度边界；`game` 拥有比例/损耗带来的节奏、价值和平衡；Recipe/Factory/M4/runtime 拥有 profile、批次、join、ledger、conversion 与 receipt 真值；Viewer/pure API/Agent 负责同义表达，QA 负责确定性与反套利验证。
 
 `test_tier_required` 至少以同一 blocked-input fixture 覆盖：默认禁止的异料替代无 sink；同料换来源、profile 许可的异料替代与换配方作为不同候选展示完整机会成本；preview 保持只读；fresh commit 只结算一次；ratio/rounding/residual 守恒；同名但不适用、错误 owner/quality/route、过期 profile 与 stale preview 原子拒绝；无因果变化的替代保持 pinned recipe 并只建立一个 child decision，有因果变化或换配方建立新 candidate 且 `W=0`。重复提交、切换、重连、Agent retry、restore 与 replay 不复制 sink、conversion、receipt、产出、稳定进度或奖励。`test_tier_full` 扩展到多阶段 join、并发 root 争用同一替代批次、品质/保管漂移、in-transit/buffer 状态、跨窗口 cutover 与持久化恢复；Viewer、pure API 与 Agent 对候选、blocker、成本/损耗、lineage、`next_action` 和 `next_recheck` 保持一致，并证明不能通过廉价替代、反复切换或拆分提交制造高价值产出、刷新顺位或重复成长。
+
+<a name="配方生命周期、版本兼容与受控退役"></a>
 
 #### 配方生命周期、版本兼容与受控退役
 

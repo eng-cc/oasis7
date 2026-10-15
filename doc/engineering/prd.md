@@ -277,6 +277,8 @@ Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本页的现行流程�
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
 | DEC-ENG-023 | 先冻结“阅读面分层”而不是立刻重组目录树；`活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的差异先体现在 root README、模块 README、`prd.index.md` 与专题互链上 | 立即重引入 `archive/` 树或直接批量移动 `reviews/governance/evidence` 文件 | 当前问题首先是默认阅读面过宽，而不是路径本身不可存放；先压缩入口和消费层，风险最小，也不破坏现有引用稳定性。 |
 
+<a id="PRD-ENGINEERING-035"></a>
+
 ## PRD-ENGINEERING-035 私有资料管理工具
 
 机器、环境与操作说明保存在独立私有 Markdown 库，支持条件更新、本地历史与加密新目录恢复。需求与验收见 [私有资料产品需求](private-context/private-context.prd.md)，实现合同见 [系统设计](private-context/private-context.design.md)。

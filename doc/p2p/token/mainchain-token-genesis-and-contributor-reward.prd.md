@@ -17,6 +17,8 @@
   - SC-7: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`。
   - SC-8: 7 个 bucket 在 `10,000,000,000 OC` 口径下的绝对分配额、首年释放绝对边界与 freeze gate 已回写到正式文档，且不改变当前 `genesis_liquid=0` 与低流通治理约束。
 
+<a name="2-user-experience-functionality"></a>
+
 ## 2. User Experience & Functionality
 - User Personas:
   - `producer_system_designer`：需要在主网上线前冻结长期经济结构与控盘边界。

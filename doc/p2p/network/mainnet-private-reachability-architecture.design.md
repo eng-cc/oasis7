@@ -126,6 +126,8 @@
 - `oasis7_net` 现在按 lane 选择 subscription inbox 配额，并在 req/resp 路径优先筛掉不具备对应 lane capability 的 peer record。
 - `oasis7_node` 现在把 replication / consensus 的 topic-protocol 绑定提升为 traffic lane registry，并在 runtime config 的 `node_role_claim` 上执行 lane publish/subscribe/request/serve 权限校验；`observer-light` 仍可主动请求 `sync/blob_state`，但不会注册对应 serve handler，也不能通过 `feedback_p2p` 绕过 `blob_state` lane 的 publish/subscribe gate。
 
+<a name="anti-eclipse-anti-spam-基线"></a>
+
 ## Anti-Eclipse / Anti-Spam 基线
 - Active peer set 至少来自两类 discovery source。
 - 同一 operator、同一 ASN、同一 `/24` 的 active peer 占比默认上限 `25%`。

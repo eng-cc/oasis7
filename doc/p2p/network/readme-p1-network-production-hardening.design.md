@@ -20,6 +20,8 @@
 - 目标平台层：native `oasis7_node` 单向依赖 `oasis7_net`；wasm32 通过 target cfg 使用保持 API 形状的 unavailable stub，不承诺完整 node/libp2p runtime。
 - 稳定性回归层：围绕 node 网络桥接与共识广播路径维持 required-tier 回归稳定。
 
+<a name="3-关键接口-入口"></a>
+
 ## 3. 关键接口 / 入口
 - `Libp2pReplicationNetworkConfig::allow_local_handler_fallback_when_no_peers`
 - `aw.<world_id>.consensus.proposal`
