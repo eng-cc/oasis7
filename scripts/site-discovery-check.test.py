@@ -23,9 +23,11 @@ def copy_fixture(root):
   tree.write(p,encoding="unicode")
 
 cases=[
+ *[('index.html', field + '=', 'missing-' + field + '=') for field in ['data-source-build', 'data-runtime-profile', 'data-source-scenario', 'data-source-window']],
+ ('index.html','data-evidence-provenance="runtime_capture"','data-evidence-provenance="illustrative"'),
  ('index.html','data-decision-panel="3"','data-decision-panel="0"'),
  ('index.html','id="decision-2"','id="decision-2" hidden'),
- ('en/index.html','data-provenance="source-bound"','data-provenance="runtime_capture"'),
+ ('en/index.html','data-provenance="runtime_capture"','data-provenance="illustrative"'),
  ('index.html','data-evidence-source=','missing-evidence-source='),
  ('index.html','data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b"','data-source-version="unknown"'),
  ('devlog/discovery-first/index.html','data-content-status="published"','data-content-status="draft"'),
@@ -46,6 +48,12 @@ with tempfile.TemporaryDirectory() as tmp:
   target=root/file;source=target.read_text();assert old in source,(file,old)
   target.write_text(source.replace(old,new,1))
   assert module.check(root),(file,old,new)
+  target.write_text(source)
+ for field in ['data-source-build', 'data-runtime-profile', 'data-source-scenario', 'data-source-window']:
+  target=root/'index.html';source=target.read_text()
+  for value in ['', '   ', 'unknown']:
+   target.write_text(module.re.sub(field + r'="[^"]*"', field + '="' + value + '"', source, count=1))
+   assert any('incomplete case runtime provenance: ' + field in e for e in module.check(root)), (field, value)
   target.write_text(source)
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)

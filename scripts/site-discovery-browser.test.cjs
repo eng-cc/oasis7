@@ -54,6 +54,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
    const box=await p.evaluate(()=>({title:document.querySelector('h1').getBoundingClientRect().top,header:document.querySelector('.topbar').getBoundingClientRect().bottom,width:innerWidth,scroll:document.documentElement.scrollWidth}));
    assert.ok(box.title>=box.header,JSON.stringify(box));assert.equal(box.scroll,box.width);
    assert.equal(await p.locator('meta[property="og:type"]').getAttribute('content'),'article');
+   assert.equal(await p.locator(".content-meta time:visible").getAttribute("datetime"),"2026-10-15");
    const cover=await p.locator('meta[property="og:image"]').getAttribute('content');assert.ok(cover.includes('first-iron-batch-'));
    assert.equal(await p.locator('.case-verification').getAttribute('open'),null);
   }

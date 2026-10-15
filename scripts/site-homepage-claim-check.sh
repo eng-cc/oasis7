@@ -417,8 +417,12 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
     else:
         case = proof["case"]
         nodes = proof["nodes"]
-        if case is None or case.attrs.get("data-provenance") != "source-bound":
-            errors.append(f"{path}: exactly one source-bound case required")
+        if case is None or case.attrs.get("data-provenance") != "runtime_capture":
+            errors.append(f"{path}: exactly one runtime_capture case required")
+        if case is not None:
+            for field in ["data-source-build", "data-runtime-profile", "data-source-scenario", "data-source-window"]:
+                if case.attrs.get(field, "").strip().lower() in {"", "unknown", "n/a", "none"}:
+                    errors.append(f"{path}: incomplete case runtime provenance: {field}")
         if proof["steps"] != ["0", "1", "2", "3"]:
             errors.append(f"{path}: four ordered real-case steps required")
         import re
@@ -445,16 +449,12 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
     else:
         provenance_node = provenance[0]
         semantics = provenance_node.attrs.get("data-evidence-provenance", "")
-        if semantics not in {"illustrative", "source-bound"}:
+        if semantics != "runtime_capture":
             errors.append(
-                f"{path}: provenance-story must declare data-evidence-provenance=illustrative or source-bound"
+                f"{path}: provenance-story must declare data-evidence-provenance=runtime_capture"
             )
-        elif semantics == "illustrative":
-            expected_word = "示例性" if language == "zh" else "illustrative"
-            if expected_word not in provenance_node.text_content().lower():
-                errors.append(f"{path}: illustrative proof must visibly disclose {expected_word}")
         elif not provenance_node.attrs.get("data-evidence-source", "").strip() or provenance_node.attrs.get("data-evidence-source") != proof.get("source"):
-            errors.append(f"{path}: source-bound proof must identify data-evidence-source")
+            errors.append(f"{path}: runtime_capture proof must identify data-evidence-source")
 
     return landing_sections, dict(claims), (proof_root, proof), errors
 
