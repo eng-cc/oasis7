@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import re
@@ -271,6 +272,85 @@ run_cargo() {
                 else:
                     self.assertTrue(any(call.startswith('TEST|') and '--features test_tier_full,wasmtime,viewer_live_integration' in call
                                         for call in failure_calls))
+
+    def test_full_tail_keeps_strict_wasmtime_profile_and_fixture_viewer(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        functions = [re.search(r'^' + name + r'\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+                     for name in ('build_oasis7_viewer_binary', 'run_oasis7_test_tier_with_viewer')]
+        full = re.search(r'^    full\) (.*?) ;;$', driver, re.M).group(1)
+        with tempfile.TemporaryDirectory() as temporary:
+            viewer = Path(temporary) / 'oasis7_viewer_live'
+            viewer.write_text('test viewer executable')
+            viewer.chmod(0o755)
+            script = """set -euo pipefail
+ci_python=python3
+run_full_required_superset() { :; }
+run_rust_baseline() { :; }
+run_oasis7_full_tier_tests() { :; }
+run_oasis7_llm_baseline_fixture_smoke() { :; }
+run_oasis7_production_mock_guard() { printf 'GUARD\\n' >> "$CI_LOG"; [[ "${FAIL_PHASE:-}" != guard ]] || return 49; }
+run_cargo() {
+  if [[ "$1" == build ]]; then
+    printf 'BUILD|%s\\n' "$*" >> "$CI_LOG"
+    [[ "${FAIL_PHASE:-}" != build ]] || return 47
+    printf '{"reason":"compiler-artifact","target":{"name":"oasis7_viewer_live"},"executable":"%s"}\\n' "$VIEWER_BIN"
+  else
+    printf 'TEST|%s|VIEWER=%s\\n' "$*" "${PRE2_VIEWER_BINARY:-}" >> "$CI_LOG"
+    [[ "${FAIL_PHASE:-}" != test ]] || return 48
+  fi
+}
+""" + "\n".join(functions) + "\n" + full + "\n"
+            environment = dict(os.environ, VIEWER_BIN=str(viewer))
+            environment.pop('PRE2_VIEWER_BINARY', None)
+            for phase, expected in (('', 0), ('guard', 49), ('build', 47), ('test', 48)):
+                log = Path(temporary) / (phase + 'calls.log')
+                result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
+                                        env=dict(environment, CI_LOG=str(log), FAIL_PHASE=phase))
+                self.assertEqual(result.returncode, expected, result.stderr)
+                calls = log.read_text().splitlines()
+                self.assertEqual(calls.pop(0), 'GUARD')
+                if phase == 'guard':
+                    self.assertEqual(calls, [])
+                    continue
+                self.assertTrue(calls[0].startswith('BUILD|'), calls)
+                self.assertIn('--features test_tier_required,wasmtime ', calls[0])
+                self.assertNotIn('test_tier_full', '\n'.join(calls))
+                self.assertNotIn('viewer_live_integration', '\n'.join(calls))
+                tests = [call for call in calls if call.startswith('TEST|')]
+                self.assertEqual(len(tests), 0 if phase == 'build' else 1)
+                if tests:
+                    self.assertIn('--lib --bins', tests[0])
+                    self.assertIn('--features test_tier_required,wasmtime|', tests[0])
+                    self.assertIn(f'VIEWER={viewer}', tests[0])
+
+    def test_production_mock_guard_checks_actual_exit_and_rejection(self):
+        import runpy
+        guard = runpy.run_path(str(ROOT / 'scripts/hosted-local-mock-production-guard.py'))
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            manifest = directory / 'artifacts.jsonl'
+            executables = {}
+            for name in guard['TARGETS']:
+                executable = directory / name
+                executable.write_text(f'#!{sys.executable}\nprint({guard["REJECTION"]!r})\nraise SystemExit(1)\n')
+                executable.chmod(0o755)
+                executables[name] = executable
+            def write_manifest(features):
+                manifest.write_text('\n'.join(json.dumps({
+                    'reason': 'compiler-artifact', 'target': {'name': name},
+                    'executable': str(executable), 'features': features,
+                }) for name, executable in executables.items()))
+            write_manifest(['wasmtime'])
+            guard['verify'](manifest)
+            write_manifest(['wasmtime', 'test_tier_required'])
+            with self.assertRaises(AssertionError):
+                guard['verify'](manifest)
+            write_manifest(['wasmtime'])
+            executable = executables['oasis7_chain_runtime']
+            for output, code in ((guard['REJECTION'], 0), ('unrelated failure', 1)):
+                executable.write_text(f'#!{sys.executable}\nprint({output!r})\nraise SystemExit({code})\n')
+                with self.assertRaises(AssertionError):
+                    guard['verify'](manifest)
 
     def test_network_wasm_tools_precede_group_execution(self):
         net = JOBS['net']

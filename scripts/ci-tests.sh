@@ -151,9 +151,13 @@ PY_VIEWER
 
 run_oasis7_test_tier_with_viewer() {
   local features="$1"
+  shift
+  if [[ "$#" -eq 0 ]]; then
+    set -- --tests
+  fi
   local viewer_binary
   viewer_binary="$(build_oasis7_viewer_binary "$features")"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features "$features"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 "$@" --features "$features"
 }
 
 run_oasis7_required_tier_tests() {
@@ -170,6 +174,25 @@ run_oasis7_required_tier_clippy() {
 
 run_oasis7_full_tier_tests() {
   run_oasis7_test_tier_with_viewer "test_tier_full,wasmtime,viewer_live_integration"
+}
+
+run_oasis7_production_mock_guard() {
+  local manifest
+  manifest="$(mktemp)"
+  if run_cargo build -p oasis7 --bin oasis7_chain_runtime --bin oasis7_game_launcher --features wasmtime --message-format=json > "$manifest"; then
+    :
+  else
+    local status=$?
+    rm -f "$manifest"
+    return "$status"
+  fi
+  if "$ci_python" "$repo_root/scripts/hosted-local-mock-production-guard.py" "$manifest"; then
+    rm -f "$manifest"
+  else
+    local status=$?
+    rm -f "$manifest"
+    return "$status"
+  fi
 }
 
 run_oasis7_consensus_tests() {
@@ -710,7 +733,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 --features wasmtime --lib --bins ;;
+    full) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_oasis7_production_mock_guard; run_oasis7_test_tier_with_viewer "test_tier_required,wasmtime" --lib --bins ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac
