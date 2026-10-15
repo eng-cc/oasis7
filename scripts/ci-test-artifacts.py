@@ -14,7 +14,7 @@ CONFIG = ROOT / 'scripts/ci-formal-process-suites.json'
 
 
 def output(command):
-    return subprocess.check_output(command, text=True).strip()
+    return subprocess.check_output(command, text=True, cwd=ROOT).strip()
 
 
 def digest(path):
@@ -234,12 +234,16 @@ def execute(bundle, suite, results):
 
 
 def main():
+    global ROOT, CONFIG
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['build', 'run'])
+    parser.add_argument('--repo-root', type=Path, default=ROOT)
     parser.add_argument('--bundle', required=True, type=Path)
     parser.add_argument('--suite', default='ordinary')
     parser.add_argument('--results', type=Path, default=ROOT / 'output/formal-process/results.jsonl')
     args = parser.parse_args()
+    ROOT = args.repo_root.resolve()
+    CONFIG = ROOT / 'scripts/ci-formal-process-suites.json'
     if args.action == 'build':
         build(args.bundle.resolve())
     else:

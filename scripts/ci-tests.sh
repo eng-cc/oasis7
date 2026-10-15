@@ -117,7 +117,7 @@ run_cargo_clippy() {
 
 run_oasis7_required_tier_tests() {
   if [[ -n "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then
-    run python3 "$driver_dir/ci-test-artifacts.py" run --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
+    run python3 "$driver_dir/ci-test-artifacts.py" run --repo-root "$repo_root" --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
     return
   fi
   local viewer_manifest viewer_binary
