@@ -1431,6 +1431,26 @@
     });
   }
 
+  const previewDetails = document.querySelector("[data-preview-details]");
+  if (previewDetails) {
+    let previewLinkHashPending = false;
+    const openPreviewFromHash = () => {
+      if (window.location.hash !== "#download") { previewLinkHashPending = false; return; }
+      // The link already opened it before native navigation; a later hash event must not undo a quick close.
+      if (previewLinkHashPending) { previewLinkHashPending = false; return; }
+      previewDetails.open = true;
+    };
+    openPreviewFromHash();
+    window.addEventListener("hashchange", openPreviewFromHash);
+    document.querySelectorAll('a[href="#download"]').forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (window.location.hash !== "#download") previewLinkHashPending = true;
+        previewDetails.open = true;
+      });
+    });
+  }
+
   bindSectionReveal();
   bindHeroCanvas();
   bindCounters();
