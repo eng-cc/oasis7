@@ -206,6 +206,16 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 
 待决项只有材料和验证输入：视觉/QA owner 在实现前选定可公开案例与原图，发行 owner 在发布前核对版本/费用/平台，内容 owner 决定首篇文章。没有来源时排除 runtime_capture，没有真实译文时不发布该语言文章；不阻止当前文档 PR 创建，也不强制新 Issue。
 
+### 概念板构图的实现边界
+
+首页主图作为 hero 内的绝对定位视觉层，以渐变遮罩融入底色；窄屏不再堆叠独立图片块，文字和主操作保留实色对比。四步桌面以方向连接符和明确标为概念氛围的裁切配图形成阅读链，手机使用纵向连接线。案例类型与无世界效果说明始终可见，较长来源说明使用可键盘展开的原生 disclosure。记录、进展、预览与规则入口采用紧凑图文节奏；小说仍留在后面的次级展开区，真实空记录和小说次级地位不因构图改变。预览入口合并到首页图文区，保留本地环境、模型配置与未开放公共加入的预览摘要；平台与安装详情在原生 disclosure 中按需展开，预览 CTA 和 `#download` 深链在增强模式下自动打开。无 JS 时手动展开仍可访问平台包，完整风险提示与下载按钮同在展开内容中。
+
 ### 公开首页概念主图
 
-首页使用原创生成式氛围图 `site/assets/images/hero/asteroid-industrial-cluster-20261015.webp`（1536 × 864），由内置 imagegen 按本概念板的墨绿工业小行星方向生成，再压缩为 WebP。生成工具未提供可核验模型版本或 seed，不作补写。它只表达文明制图的世界氛围，图注与替代文字明确其概念性质；不属于运行截图或世界结果证据。四步中的裁切同属该氛围素材。
+步骤裁切使用原创生成式氛围图 `site/assets/images/hero/asteroid-industrial-cluster-20261015.webp`（1536 × 864），由内置 imagegen 按本概念板的墨绿工业小行星方向生成，再压缩为 WebP。生成工具未提供可核验模型版本或 seed，不作补写。它只表达文明制图的世界氛围，图注与替代文字明确其概念性质；不属于运行截图或世界结果证据。四步中的裁切同属该氛围素材。
+
+首页当前主图 `site/assets/images/hero/asteroid-settlement-planet-20261015.webp`（1535 × 864）由内置 imagegen 参照已采用概念板重建工业聚落、远景行星与逆光，再压缩为 WebP；仅作概念氛围。原图保留，模型版本及 seed 未提供。
+
+四步中的回应与再选择配图分别使用 `site/assets/images/steps/decision-response-control-bay-20261015.webp` 与 `site/assets/images/steps/decision-choice-horizon-20261015.webp`（均为 864 × 288）。它们由内置 imagegen 参照概念板对应低清小图重建，再压缩为 WebP；前者为薄荷光工业控制空间，后者为带远景聚落与分叉物流线的地平线。配图仅用于氛围与阅读节奏，不构成 Agent 行动、运行回执或具身能力证据；沿用同一可见概念配图说明。未知模型版本与 seed 不补写。
+
+首页入口与剩余步骤使用 `site/assets/images/entries/` 下的 768px WebP 缩略副本（`industrial-cluster-thumb.webp`、`industrial-network-thumb.webp`、`civilization-orbit-thumb.webp`），分别从保留的同名方向原图等比例缩小与压缩；不改构图、不新增运行语义。尺寸覆盖 390px 手机与 1440px 桌面验收视口下入口及步骤横幅的两倍像素密度，避免给小图传输完整主图。
