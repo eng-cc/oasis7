@@ -5,6 +5,7 @@
 //! only its new immutable CAS nodes.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 pub const BUSINESS_INDEX_SCHEMA_V1: u32 = 1;
 pub const BUSINESS_INDEX_DEPTH: usize = 256;
@@ -683,6 +684,13 @@ pub(crate) fn empty_subtree_hashes() -> Result<[String; BUSINESS_INDEX_DEPTH + 1
 }
 
 fn empty_hashes() -> Result<Vec<String>, String> {
+    // These canonical sentinels depend only on the fixed codec and depth.
+    // Reusing them does not cache a business root, object, or authority.
+    static HASHES: OnceLock<Result<Vec<String>, String>> = OnceLock::new();
+    HASHES.get_or_init(build_empty_hashes).clone()
+}
+
+fn build_empty_hashes() -> Result<Vec<String>, String> {
     let mut hashes = vec![String::new(); BUSINESS_INDEX_DEPTH + 1];
     // An unpersisted, unconstructible leaf marker defines the empty subtree.
     let mut empty_leaf = NODE_MAGIC.to_vec();
