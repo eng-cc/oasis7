@@ -6,7 +6,11 @@
 
 审计轮次: 1
 
-## Current supported local capability
+## Candidate availability gate
+
+This runbook describes the candidate implementation in [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683). It is not an operating procedure supported by current main. Do not run the commands below until #4683 has merged, the deployed binary has been built from that implementation, and its `--help` plus the relevant subcommand `--help` confirm `node` / `op` and the required options. Referenced implementation files and test scripts belong to that candidate and may be absent on main. A documentation merge alone does not make these commands available.
+
+## Candidate local capability
 
 `node init/start/status/stop` manages one owner's local Unix process and its persistent identity. On Unix, the supported profiles are `compatibility_observer_v1`, `formal_public_observer_v1`, and `formal_full_state_sync_read_only_v1`; each has a separate trust and readiness contract. The compatibility observer uses the existing public-testnet v1 runtime. The formal public observer verifies and serves a public projection only. The formal full-state sync profile downloads and cold-restores the latest qualified full state under an issuer-signed node grant; it is read-only and does not grant proposal, validator, archive, or BFT membership rights. A public projection never means the node has the owner's private Snapshot or Journal.
 

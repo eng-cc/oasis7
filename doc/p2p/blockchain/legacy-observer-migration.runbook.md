@@ -6,6 +6,10 @@
 
 审计轮次: 1
 
+## Candidate availability gate
+
+This runbook describes the candidate implementation in [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683). It is not an operating procedure supported by current main. Do not run the commands below until #4683 has merged, the deployed binary has been built from that implementation, and its `--help` plus the relevant subcommand `--help` confirm `legacy-migrate` / `legacy-run` and the required options. Referenced implementation files and test scripts belong to that candidate and may be absent on main. A documentation merge alone does not make these commands available.
+
 ## Source contract and supported boundary
 
 `legacy-migrate` consumes the old flat runtime launch contract. Its `--config` argument inside `argv` remains the original keypair TOML. It does not accept a new local `node.json` as an old runtime source. Only a stopped legacy observer without auto-attest, provider authority, guarded authority or formal authority is supported. The original execution world must already have its world/chain/genesis binding and a complete Snapshot/Journal. Missing state or keys fail; the importer never provisions them.
