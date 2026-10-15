@@ -25,6 +25,8 @@ Agent guardrail、记忆或世界约束若使工业/资源动作改道、裁剪�
 
 Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185; O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63；产品适用承接：[REQ-WR-IA-001](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)、[REQ-WR-IA-002](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)。 本承接仅对应意图/世界结果区分与受阻后的下一决策，不将工业专属规则归入本条。
 
+<a name="2-user-experience-functionality"></a>
+
 ## 2. User Experience & Functionality
 
 - User Personas:

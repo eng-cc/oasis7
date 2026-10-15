@@ -44,6 +44,8 @@
 - validator/finality admission 保持 `apply -> approved_candidate -> probation_ready -> active -> revoke/rotate` 生命周期。准入、activation、stake-weighted quorum 与 finality signer binding 必须由 world-state 及其治理动作验证。
 - genesis import 只适用于空 execution world；已有 snapshot/journal world 必须走专用 registry migration/import，不得覆盖或伪造恢复状态。
 
+<a name="创世、ceremony-与-qa"></a>
+
 ### 创世、ceremony 与 QA
 
 - 创世 freeze 必须同时满足 slot registry、bucket execution、recipient/controller binding、signer policy、ceremony checklist 和 QA evidence bundle。

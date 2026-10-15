@@ -76,6 +76,8 @@ software_safe_src/
 - 组件内可以做轻量 derived view state；复杂 derivation 下沉到 pure helper 或 entity display model。
 - 大组件先按用户可见区域拆，再按数据/服务边界拆。
 
+<a name="state-service-策略"></a>
+
 ## State / Service 策略
 - WebSocket、hosted auth、storage、runtime loader、metrics、crypto、locale preference 属于 service/state module。
 - service module 应优先暴露 factory 或小 public API，便于测试注入。

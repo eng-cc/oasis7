@@ -329,6 +329,8 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - 风险-5: runtime gate 若继续串行堆叠 full-tier 与 sync 检查，会长期锁死发布关键路径。
   - 风险-6: runtime shard 若长期失衡，即使已并行化，也会因为最长 shard 过重而回吐大部分收益。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
 
 下表 `TASK-TESTING-*`、旧里程碑与迁移编号保留历史来源和专业定位，不代表这些任务仍开放，也不要求恢复旧 Project、另建任务身份或通用回执。当前改动仍须追溯实际适用条款并完成相应验证；历史 ID 与旧绿色结果不能代替本轮 requirement Trace 或执行证据。当前任务组织遵循[开发流程规范](../engineering/workflow/source-of-truth.md)。

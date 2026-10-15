@@ -78,6 +78,8 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 3. 多入口等价：主 Web、Launcher 与 pure API 在权威状态与核心动作上一致。
 4. 外部 Runtime 游玩：从契约验证推进到 OpenClaw、Codex 各自完成代表性首局，再按实际证据扩展持续玩法与 Runtime 范围；阶段范围见[产品分册](external-agent-runtime-play.prd.md#22-阶段目标)。
 
+<a name="5-done：成功标准与验收"></a>
+
 ## 5. Done：成功标准与验收
 
 SC-1～SC-14 的成功标准原文及独立组合状态见 §5.2；§5.1 保留对应六列验收责任与原测试层级。
