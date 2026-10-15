@@ -88,3 +88,5 @@ Existing compatible signer installs are observed via fixed protected paths and o
 Apple-signing/admin-helper integration is paused at the user's request. No system registration, privileged installation, custody management or production changes occur through this increment. See [local tools contract](../../doc/engineering/command-center/local-tools.design.md) for the held scope and actual acceptance gaps.
 
 For explicit private development inputs, choose a source in an owned session, preview the revision and send manually. The host commits private references before sending; later rounds and restored threads remain private. Dedicated runtime requests retain approval details, while `Runtime::public_snapshot` excludes private threads. The optional connector remains disabled by default.
+
+文件清单详情可查看文件头顶层列表的“配对系统设计”Markdown 链接、声明行及目标文件读取状态。普通引用不推断配对；带章节锚点的目标明确显示尚未核对。旧缓存需刷新后解析；未跟踪、外部和不安全路径不沿链接读取。此入口尚不提供配对跳转、上游承接表或产品/专业树，详细边界见[文档树设计](../../doc/engineering/command-center/document-tree.design.md)。

@@ -1,5 +1,7 @@
 #[path = "index_coverage.rs"]
 mod coverage;
+#[path = "document_pairings.rs"]
+mod document_pairings;
 #[path = "document_read.rs"]
 mod document_read;
 #[path = "lifecycle_metadata.rs"]
@@ -166,6 +168,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
             .map_or_else(|| name.to_owned(), |section| section.title.clone());
         file.revision = Some(revision);
         file.bytes = Some(content.len());
+        file.pairings = Some(document_pairings::parse(name, &content));
         inventory_files.push(file);
         sections.extend(parsed);
     }
@@ -174,6 +177,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
     for value in metadata.values_mut().flatten() {
         lifecycle_metadata::validate_indexed(value, &indexed);
     }
+    document_pairings::resolve(&mut inventory_files);
     for file in &mut inventory_files {
         file.lifecycle = metadata.get(&file.path).cloned().flatten();
     }

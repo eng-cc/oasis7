@@ -334,3 +334,132 @@ fn legacy_writer_refreshing_empty_files_cannot_make_old_inventory_look_current()
         before.candidates
     );
 }
+
+#[test]
+fn explicit_pairings_use_same_candidate_coverage_without_following_targets() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    fs::write(root.join("doc/prd.md"), r#"# Product
+
+- 配对系统设计：[empty](empty.md)、[fragment](empty.md#section)、[deleted](deleted.md)、[invalid](invalid.md)、[untracked](untracked.md)、[unsafe](../.env)、[encoded](%65mpty.md)
+- 普通引用：[not paired](other.md)
+
+> - 配对系统设计：[quoted](quoted.md)
+
+```markdown
+- 配对系统设计：[example](example.md)
+```
+
+- Example:
+  - 配对系统设计：[nested](nested.md)
+
+## Body
+- 配对系统设计：[body](body.md)
+"#).unwrap();
+    fs::write(root.join("doc/untracked.md"), "# Secret preview").unwrap();
+    core.refresh().unwrap();
+    let page = core.document_inventory(query.clone()).unwrap();
+    let file = page.files.iter().find(|f| f.path == "doc/prd.md").unwrap();
+    let pairings = file.pairings.as_ref().unwrap();
+    assert!(pairings.issue.is_none());
+    assert_eq!(pairings.targets.len(), 7);
+    assert_eq!(
+        pairings
+            .targets
+            .iter()
+            .map(|e| e.resolution.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "resolved",
+            "fragment_unchecked",
+            "missing",
+            "unread",
+            "outside_scope",
+            "outside_scope",
+            "resolved"
+        ]
+    );
+    assert!(pairings.targets.iter().all(|e| e.declaration_line == 3));
+    assert_eq!(pairings.targets[6].target.as_deref(), Some("doc/empty.md"));
+    let id = page.snapshot_id;
+    fs::write(
+        root.join("doc/prd.md"),
+        "# Product\n\n- 配对系统设计：[invalid](invalid.md)\n",
+    )
+    .unwrap();
+    core.refresh().unwrap();
+    assert_ne!(id, core.document_inventory(query).unwrap().snapshot_id);
+}
+
+#[test]
+fn pairing_bounds_and_legacy_caches_do_not_claim_complete_absence() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    let links = (0..33)
+        .map(|i| format!("[target{i}](empty.md)"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    fs::write(
+        root.join("doc/prd.md"),
+        format!("# Product\n\n- 配对系统设计：{links}\n"),
+    )
+    .unwrap();
+    core.refresh().unwrap();
+    let page = core.document_inventory(query.clone()).unwrap();
+    let pairs = page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap();
+    assert_eq!(pairs.targets.len(), 32);
+    assert!(pairs.issue.as_deref().unwrap().contains("incomplete"));
+    drop(core);
+    let db = rusqlite::Connection::open(tmp.path().join("db")).unwrap();
+    let key = format!("document_inventory_v1:{}", query.project_id);
+    let value: String = db
+        .query_row("SELECT value FROM cache WHERE key=?1", [&key], |r| r.get(0))
+        .unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&value).unwrap();
+    for file in value["files"].as_array_mut().unwrap() {
+        file.as_object_mut().unwrap().remove("pairings");
+    }
+    db.execute(
+        "UPDATE cache SET value=?1 WHERE key=?2",
+        [value.to_string(), key],
+    )
+    .unwrap();
+    let reopened = CommandCenter::open(tmp.path().join("db")).unwrap();
+    assert!(
+        reopened
+            .document_inventory(query)
+            .unwrap()
+            .files
+            .iter()
+            .all(|f| f.pairings.is_none())
+    );
+}
+
+#[test]
+fn multiline_pairing_declarations_are_never_reported_as_complete() {
+    let (tmp, mut core, query) = fixture();
+    fs::write(
+        tmp.path().join("repo/doc/prd.md"),
+        "# Product\n\n- 配对系统设计：[first](empty.md)\n  [second](deleted.md)\n",
+    )
+    .unwrap();
+    core.refresh().unwrap();
+    let page = core.document_inventory(query).unwrap();
+    let pairs = page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap();
+    assert_eq!(pairs.targets.len(), 1);
+    assert!(pairs.issue.as_deref().unwrap().contains("multiline"));
+}

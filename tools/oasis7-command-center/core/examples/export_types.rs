@@ -29,6 +29,8 @@ fn main() {
         SourceStatus::decl(),
         DocumentLifecycle::decl(),
         DocumentSection::decl(),
+        DocumentPairing::decl(),
+        DocumentPairings::decl(),
         IndexedDocument::decl(),
         DocumentInventoryQuery::decl(),
         DocumentInventoryPage::decl(),

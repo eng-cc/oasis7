@@ -32,7 +32,17 @@ rawStatus?: string, category?: string,
  */
 status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
-export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null, };
+export type DocumentPairing = { declarationLine: number, destination: string, target: string | null,
+/**
+ * resolved / fragment_unchecked / missing / unread / outside_scope
+ */
+resolution: string, };
+export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
+export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
+/**
+ * None in pre-pairing caches; refresh is required before claiming absence.
+ */
+pairings: DocumentPairings | null, };
 export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
 /**
  * all / read / omitted

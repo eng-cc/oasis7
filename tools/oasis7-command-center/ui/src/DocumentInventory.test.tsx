@@ -9,7 +9,7 @@ vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => Stri
 const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
 const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
   fileKey: path, path, title: path === section.path ? '设计文档' : path,
-  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, ...extra,
+  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, ...extra,
 });
 const snapshot = (id = 'project', generation = '1'): Snapshot => ({
   project: { id, path: '/repo', head: 'head', branch: 'main', gitCommonDir: '/repo/.git', environment: 'local' },
@@ -104,4 +104,16 @@ it('preserves filters, page and file selection when only personal snapshot data 
   expect(api.documentInventory).toHaveBeenCalledTimes(3);
   expect(input).toHaveValue('设计');
   expect(screen.getByRole('region', {name:'文件读取详情'})).toBeInTheDocument();
+});
+
+it('distinguishes legacy pairing coverage, explicit absence and unresolved targets', async () => {
+  api.documentInventory.mockResolvedValue(page([file(), file('doc/none.md', {pairings:{targets:[],issue:null}}), file('doc/paired.md', {pairings:{targets:[{declarationLine:8,destination:'design.md#section',target:'doc/design.md#section',resolution:'fragment_unchecked'}],issue:'incomplete'}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', {name:'设计文档'}));
+  expect(screen.getByText('旧清单尚未解析配对，请刷新本地事实。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/none.md'}));
+  expect(screen.getByText('本次范围未发现显式配对系统设计链接。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/paired.md'}));
+  expect(screen.getByText(/第 8 行 · doc\/design.md#section · 文件已读取，章节锚点尚未核对/)).toBeInTheDocument();
+  expect(screen.getByText('配对解析不完整：incomplete')).toBeInTheDocument();
 });

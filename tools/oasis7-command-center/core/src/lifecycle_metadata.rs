@@ -299,7 +299,7 @@ fn decode(value: &str) -> Result<String, String> {
     }
     String::from_utf8(result).map_err(|_| "invalid UTF-8 successor path".into())
 }
-fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
+pub(super) fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     let (path, fragment) = target
         .split_once('#')
         .map_or((target, None), |(p, f)| (p, Some(f)));
