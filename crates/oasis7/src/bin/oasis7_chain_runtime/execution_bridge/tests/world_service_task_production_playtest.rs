@@ -785,11 +785,18 @@ fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::V
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     let body = serde_json::to_vec(body).unwrap();
+    // A connected client may send its first request bytes later. Exercise that
+    // boundary even when the fixture listener polls with nonblocking accept.
+    std::thread::sleep(Duration::from_millis(50));
     write!(stream,"POST {TASK_RECIPE_QUOTE_PATH} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",body.len()).unwrap();
     stream.write_all(&body).unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
-    assert!(response.contains("Cache-Control: no-store"));
+    assert!(
+        response.contains("Cache-Control: no-store"),
+        "private quote response missing no-store header (response_bytes={})",
+        response.len()
+    );
     let (headers, body) = response.split_once("\r\n\r\n").unwrap();
     (
         headers.split_whitespace().nth(1).unwrap().parse().unwrap(),

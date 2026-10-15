@@ -14,52 +14,6 @@ pub(crate) struct PinnedWorld {
     pub commit: CommitRef,
 }
 
-#[cfg(test)]
-#[derive(Debug, Default)]
-struct PinMetrics {
-    record_select_us: u128,
-    cas_decode_proof_us: u128,
-    restore_us: u128,
-    binding_commit_us: u128,
-    phase: &'static str,
-    phase_started: Option<std::time::Instant>,
-}
-
-#[cfg(test)]
-impl PinMetrics {
-    fn begin_phase(&mut self, phase: &'static str) {
-        self.finish_phase();
-        self.phase = phase;
-        self.phase_started = Some(std::time::Instant::now());
-    }
-
-    fn finish_phase(&mut self) {
-        let Some(started) = self.phase_started.take() else {
-            return;
-        };
-        let elapsed = started.elapsed().as_micros();
-        match self.phase {
-            "record_select" => self.record_select_us = elapsed,
-            "cas_decode_proof" => self.cas_decode_proof_us = elapsed,
-            "restore" => self.restore_us = elapsed,
-            "binding_commit" => self.binding_commit_us = elapsed,
-            _ => {}
-        }
-        self.phase = "idle";
-    }
-
-    fn emit(&mut self, outcome: &'static str) {
-        self.finish_phase();
-        eprintln!(
-            "OASIS7_PIN_DIAG outcome={outcome} record_select_us={} cas_decode_proof_us={} restore_us={} binding_commit_us={}",
-            self.record_select_us,
-            self.cas_decode_proof_us,
-            self.restore_us,
-            self.binding_commit_us,
-        );
-    }
-}
-
 pub(crate) fn identity(world_dir: &Path, expected_world_id: &str) -> Result<WorldIdentity, String> {
     let bytes = std::fs::read(world_dir.join("world-service-identity.json"))
         .map_err(|_| "service identity configuration unavailable")?;
@@ -228,38 +182,6 @@ fn load_with_cache(
     fixed: Option<&CommitRef>,
     cache: &std::sync::Mutex<restore_cache::RestoreCache>,
 ) -> Result<PinnedWorld, String> {
-    #[cfg(test)]
-    {
-        let mut metrics = PinMetrics::default();
-        let result = load_with_cache_inner(
-            records,
-            storage,
-            identity,
-            height,
-            fixed,
-            cache,
-            &mut metrics,
-        );
-        metrics.emit(if result.is_ok() { "ok" } else { "error" });
-        result
-    }
-    #[cfg(not(test))]
-    {
-        load_with_cache_inner(records, storage, identity, height, fixed, cache)
-    }
-}
-
-fn load_with_cache_inner(
-    records: &Path,
-    storage: &Path,
-    identity: &WorldIdentity,
-    height: Option<u64>,
-    fixed: Option<&CommitRef>,
-    cache: &std::sync::Mutex<restore_cache::RestoreCache>,
-    #[cfg(test)] metrics: &mut PinMetrics,
-) -> Result<PinnedWorld, String> {
-    #[cfg(test)]
-    metrics.begin_phase("record_select");
     if let Some(commit) = fixed
         && &commit.world != identity
     {
@@ -276,9 +198,6 @@ fn load_with_cache_inner(
     if record.world_id != identity.world_id || record.height == 0 {
         return Err("record world or height invalid".into());
     }
-
-    #[cfg(test)]
-    metrics.begin_phase("cas_decode_proof");
     let store = LocalCasStore::new(storage);
     let snapshot_ref = record
         .snapshot_ref
@@ -329,14 +248,8 @@ fn load_with_cache_inner(
     {
         return Err("pinned proof does not bind execution record and CAS refs".into());
     }
-
-    #[cfg(test)]
-    metrics.begin_phase("restore");
     let world = restore_cache::restore(cache, &snapshot_bytes, &journal_bytes, snapshot, journal)
         .map_err(|e| format!("pinned world: {e:?}"))?;
-
-    #[cfg(test)]
-    metrics.begin_phase("binding_commit");
     let binding = world
         .current_cognition_runtime_binding()
         .map_err(|e| format!("binding unavailable: {e:?}"))?;

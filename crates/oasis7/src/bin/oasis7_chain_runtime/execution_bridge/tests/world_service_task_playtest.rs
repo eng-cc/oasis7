@@ -478,6 +478,9 @@ fn run_prepared_world_service_kind_with_cognition_503(
             while !stop.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // macOS inherits the listener's nonblocking mode on accept.
+                        // Header/body reads below rely on the bounded read timeout.
+                        stream.set_nonblocking(false).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(5)))
                             .unwrap();

@@ -634,6 +634,97 @@ fn retention_history_rejects_duplicate_canonical_owner_scope() {
 
     let error = validate_retention_history(&world).err().unwrap();
     assert!(error.contains("duplicate canonical task owner/history scope"));
+    let restore_error = World::from_snapshot(goal_snapshot(&world), world.journal().clone())
+        .err()
+        .unwrap();
+    assert!(matches!(
+        restore_error,
+        crate::runtime::WorldError::CapabilityAuthorizationDenied { ref reason }
+            if reason.contains("duplicate canonical task owner/history scope")
+    ));
+}
+
+#[test]
+fn world_snapshot_restore_rejects_corrupt_non_task_result_identity() {
+    let (mut world, private) = fixture();
+    let payload = WorldServicePayloadV1::Scheduler(
+        sign_read_request(
+            "scheduler",
+            SchedulerIntentV1 {
+                agent_id: "agent".into(),
+                request_id: "restore-corrupt-non-task".into(),
+                delegation_generation: 1,
+                captured_base_binding: world.current_cognition_base_binding().unwrap(),
+                operation: SchedulerOperationV1::ReleaseLease {
+                    lease_id: "missing-lease".into(),
+                },
+            },
+            &private,
+        )
+        .unwrap(),
+    );
+    let request = SubmitIntentRequest {
+        contract_version: 1,
+        correlation: derive_correlation(
+            WorldIdentity {
+                world_id: "world".into(),
+                genesis_digest: "fixture".into(),
+            },
+            &payload,
+        )
+        .unwrap(),
+        signed_payload: payload,
+        deadline_unix_ms: None,
+    };
+    let key = correlation::key_digest(&request.correlation.key).unwrap();
+    world
+        .record_world_service_result(CanonicalIntentResultV1 {
+            request,
+            action_id: 1,
+            committed_height: 1,
+            receipt: serde_json::Value::Null,
+            rejected: Some("lease_not_found".into()),
+        })
+        .unwrap();
+    let snapshot = goal_snapshot(&world);
+    assert!(World::from_snapshot(snapshot.clone(), world.journal().clone()).is_ok());
+    let assert_restore_denied = |candidate| {
+        let error = World::from_snapshot(candidate, world.journal().clone())
+            .err()
+            .unwrap();
+        assert!(matches!(
+            error,
+            crate::runtime::WorldError::CapabilityAuthorizationDenied { .. }
+        ));
+    };
+
+    let mut invalid_signature = snapshot.clone();
+    invalid_signature
+        .capability_revocation_state
+        .world_service_results
+        .get_mut(&key)
+        .unwrap()["request"]["signed_payload"]["payload"]["signature_hex"] = "00".repeat(64).into();
+    assert_restore_denied(invalid_signature);
+
+    let mut invalid_payload_digest = snapshot.clone();
+    invalid_payload_digest
+        .capability_revocation_state
+        .world_service_results
+        .get_mut(&key)
+        .unwrap()["request"]["correlation"]["payload_digest"] = "00".repeat(32).into();
+    assert_restore_denied(invalid_payload_digest);
+
+    let mut invalid_outer_key = snapshot;
+    let record = invalid_outer_key
+        .capability_revocation_state
+        .world_service_results
+        .remove(&key)
+        .unwrap();
+    invalid_outer_key
+        .capability_revocation_state
+        .world_service_results
+        .insert("wrong-outer-key".into(), record);
+    assert_restore_denied(invalid_outer_key);
 }
 
 fn goal_snapshot(world: &World) -> crate::runtime::Snapshot {

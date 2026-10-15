@@ -752,12 +752,9 @@ impl World {
         world.capabilities = snapshot.capabilities;
         world.capability_grants_v2 = snapshot.capability_grants_v2;
         world.capability_revocation_state = snapshot.capability_revocation_state;
-        // Result receipts are excluded from the authorization root; validate
-        // their immutable signed identities before accepting a checkpoint.
-        for (key, result) in &world.capability_revocation_state.world_service_results {
-            crate::world_service::correlation::validate_result(key, result)
-                .map_err(|reason| super::capability_authorization::deny(&reason))?;
-        }
+        // `validate_history` validates each canonical receipt while collecting
+        // task history, including non-task results, so a separate pass would
+        // repeat the same signature, correlation, and outer-key checks.
         crate::world_service::game_task::validate_history(&world)
             .map_err(|reason| super::capability_authorization::deny(&reason))?;
         world.capability_nonce_records = snapshot.capability_nonce_records;
@@ -837,12 +834,16 @@ impl World {
             world.enforce_pending_action_limit();
             world.enforce_pending_effect_limit();
             world.enforce_inflight_effect_limit();
+            let has_journal_tail = snapshot.journal_len < world.journal.len();
             world.replay_from(snapshot.journal_len)?;
-            // Individually valid tail receipts may still consume a missing or
-            // already-consumed task predecessor. Validate the replayed chain
-            // before publishing the recovered world or trimming its journal.
-            crate::world_service::game_task::validate_history(&world)
-                .map_err(|reason| super::capability_authorization::deny(&reason))?;
+            if has_journal_tail {
+                // Individually valid tail receipts may still consume a missing
+                // or already-consumed task predecessor. Validate the replayed
+                // chain before publishing the recovered world or trimming its
+                // journal. With no tail, the pre-replay history is unchanged.
+                crate::world_service::game_task::validate_history(&world)
+                    .map_err(|reason| super::capability_authorization::deny(&reason))?;
+            }
             world.enforce_journal_event_limit();
         }
         world.verify_tick_consensus_chain()?;
