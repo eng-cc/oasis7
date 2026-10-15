@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -36,6 +37,12 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertIn('cargo test -p oasis7_agent_harness --lib', result.stdout)
         self.assertNotIn('oasis7_local_signer', result.stdout)
         self.assertNotIn('full-inventory', result.stdout)
+
+    def test_application_keeps_native_sdk_out_of_wasm(self):
+        manifest = tomllib.loads((ROOT / "crates/oasis7/Cargo.toml").read_text())
+        self.assertNotIn("oasis7_game_client", manifest["dependencies"])
+        native = manifest["target"]["cfg(not(target_arch = \"wasm32\"))"]["dependencies"]
+        self.assertIn("oasis7_game_client", native)
 
     def test_game_client_isolated_and_strict(self):
         result = self.invoke(json.dumps(['oasis7_game_client']))
