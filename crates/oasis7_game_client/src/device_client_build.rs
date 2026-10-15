@@ -19,9 +19,15 @@ impl Client {
                 "next":"retain_original_action; capture a new context only after a settled result"}),
             );
         }
-        let captured = self.captured(operation)?;
-        serde_json::to_value(self.factory_quote(operation, &captured, site, factory, kind)?)
-            .map_err(|_| "factory quote encoding failed".into())
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return Ok(
+                json!({"original_operation":self.lookup(&original)?,"quote":null,"next":"retain_original_outcome"}),
+            );
+        }
+        let (_, quoted) = self.fresh_quote(operation, |captured| {
+            self.factory_quote(operation, captured, site, factory, kind)
+        })?;
+        serde_json::to_value(quoted).map_err(|_| "factory quote encoding failed".into())
     }
     fn factory_quote(
         &self,
@@ -30,12 +36,14 @@ impl Client {
         site: &str,
         factory: &str,
         kind: &str,
-    ) -> Result<TaskFactoryQuoteV1, String> {
+    ) -> Result<TaskFactoryQuoteV1, crate::WorldServiceClientError> {
         let request = authority::sign_read_request(
             TASK_FACTORY_QUOTE_PATH,
             TaskFactoryQuoteRequestV1 {
                 schema_revision: 1,
-                context_proof: self.context_read_proof(operation)?,
+                context_proof: self
+                    .context_read_proof(operation)
+                    .map_err(crate::WorldServiceClientError::Configuration)?,
                 expected_base_binding: captured
                     .current_public_context
                     .captured_base_binding
@@ -45,16 +53,13 @@ impl Client {
                 factory_kind: kind.to_owned(),
             },
             &self.key_hex,
-        )?;
-        let quoted = self.remote.quote_task_factory(&request).map_err(|error| {
-            format!(
-                "factory quote {}; no replacement action created",
-                failure_tag(&error)
-            )
-        })?;
+        )
+        .map_err(crate::WorldServiceClientError::Configuration)?;
+        let quoted = self.remote.quote_task_factory(&request)?;
         quoted
             .quote
-            .validate_selection(&self.agent, site, kind, factory)?;
+            .validate_selection(&self.agent, site, kind, factory)
+            .map_err(crate::WorldServiceClientError::Assurance)?;
         Ok(quoted)
     }
     pub fn build(
@@ -69,17 +74,23 @@ impl Client {
             validate_original_build(&original, &self.agent, site, factory, kind)?;
             return self.lookup(&original);
         }
-        let mut captured = self.captured(operation)?;
-        let quoted = self.factory_quote(operation, &captured, site, factory, kind)?;
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return self.lookup(&original);
+        }
+        let (mut captured, quoted) = self.fresh_quote(operation, |captured| {
+            self.factory_quote(operation, captured, site, factory, kind)
+        })?;
         if quoted.quote.rejection.is_some() {
             return Err("factory quote rejected; no action submitted; inspect quote-build".into());
         }
         captured.current_public_context = quoted.current_public_context;
+        self.ensure_quote_has_no_write(operation)?;
         let signed = authority::sign_read_request(
             "cognition",
             cognition_intent(&captured, quoted.quote.action)?,
             &self.key_hex,
         )?;
+        self.ensure_quote_has_no_write(operation)?;
         let original = self.cache_intent(
             ClientStateKind::Action,
             operation,

@@ -200,9 +200,15 @@ impl Client {
                 json!({"original_operation":response,"quote":null,"next":"retain_original_action; capture a new context only after a settled result"}),
             );
         }
-        let captured = self.captured(operation)?;
-        serde_json::to_value(self.recipe_quote(operation, &captured, factory, recipe, batches)?)
-            .map_err(|_| "recipe quote encoding failed".into())
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return Ok(
+                json!({"original_operation":self.lookup(&original)?,"quote":null,"next":"retain_original_outcome"}),
+            );
+        }
+        let (_, quoted) = self.fresh_quote(operation, |captured| {
+            self.recipe_quote(operation, captured, factory, recipe, batches)
+        })?;
+        serde_json::to_value(quoted).map_err(|_| "recipe quote encoding failed".into())
     }
     fn recipe_quote(
         &self,
@@ -211,8 +217,10 @@ impl Client {
         factory: &str,
         recipe: &str,
         batches: u32,
-    ) -> Result<TaskRecipeQuoteV1, String> {
-        let proof = self.context_read_proof(operation)?;
+    ) -> Result<TaskRecipeQuoteV1, crate::WorldServiceClientError> {
+        let proof = self
+            .context_read_proof(operation)
+            .map_err(crate::WorldServiceClientError::Configuration)?;
         let request = authority::sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -227,13 +235,9 @@ impl Client {
                 batches,
             },
             &self.key_hex,
-        )?;
-        self.remote.quote_task_recipe(&request).map_err(|error| {
-            format!(
-                "recipe quote {}; no replacement action created",
-                failure_tag(&error)
-            )
-        })
+        )
+        .map_err(crate::WorldServiceClientError::Configuration)?;
+        self.remote.quote_task_recipe(&request)
     }
     pub fn schedule(
         &self,
@@ -248,19 +252,25 @@ impl Client {
             validate_original_schedule(&original, &self.agent, factory, recipe, batches)?;
             return self.lookup(&original);
         }
-        let mut captured = self.captured(operation)?;
-        let quoted = self.recipe_quote(operation, &captured, factory, recipe, batches)?;
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return self.lookup(&original);
+        }
+        let (mut captured, quoted) = self.fresh_quote(operation, |captured| {
+            self.recipe_quote(operation, captured, factory, recipe, batches)
+        })?;
         if quoted.quote.rejection.is_some() {
             return Err(
                 "recipe quote rejected; no action submitted; inspect quote-schedule".into(),
             );
         }
         captured.current_public_context = quoted.current_public_context;
+        self.ensure_quote_has_no_write(operation)?;
         let signed = authority::sign_read_request(
             "cognition",
             cognition_intent(&captured, quoted.quote.action)?,
             &self.key_hex,
         )?;
+        self.ensure_quote_has_no_write(operation)?;
         let request = self.cache_intent(
             ClientStateKind::Action,
             operation,
@@ -413,49 +423,6 @@ impl Client {
         }
         Ok(*winner)
     }
-    pub fn lookup(
-        &self,
-        request: &SubmitIntentRequest<WorldServicePayloadV1>,
-    ) -> Result<IntentResponse<Value>, String> {
-        self.remote
-            .lookup(
-                LookupIntentRequest {
-                    contract_version: 1,
-                    key: request.correlation.key.clone(),
-                },
-                request.signed_payload.clone(),
-            )
-            .map_err(|_| "original result query unavailable; retain original operation".to_owned())
-    }
-    pub fn submit_and_poll(
-        &self,
-        request: &SubmitIntentRequest<WorldServicePayloadV1>,
-    ) -> Result<IntentResponse<Value>, String> {
-        // The original signed payload is already durable before the first send.
-        // A transport failure can only cause lookup/replay of this exact intent.
-        let submission = self.remote.submit(request.clone());
-        if let Ok(SubmitObservation::Response(response)) = submission
-            && matches!(
-                response.outcome,
-                IntentOutcome::Committed { .. }
-                    | IntentOutcome::Rejected { .. }
-                    | IntentOutcome::Expired
-            )
-        {
-            return Ok(*response);
-        }
-        for _ in 0..40 {
-            let response = self.lookup(request)?;
-            if !matches!(
-                response.outcome,
-                IntentOutcome::Received { .. } | IntentOutcome::Pending | IntentOutcome::Unknown
-            ) {
-                return Ok(response);
-            }
-            std::thread::sleep(Duration::from_millis(200));
-        }
-        self.lookup(request)
-    }
     pub fn prefix(
         &self,
         operation: &str,
@@ -464,15 +431,7 @@ impl Client {
             return Ok(request);
         }
         let original = self.original_prepare(operation)?;
-        let prepared = self
-            .remote
-            .prepare_task_context(&original)
-            .map_err(|error| {
-                format!(
-                    "private preparation {}; retry original operation",
-                    failure_tag(&error)
-                )
-            })?;
+        let prepared = self.prepare_original(&original)?;
         let signed =
             authority::sign_read_request("scheduler", public_prefix(&prepared)?, &self.key_hex)?;
         self.cache_intent(
@@ -506,7 +465,7 @@ impl Client {
     }
     pub fn captured(&self, operation: &str) -> Result<CapturedTaskContextV1, String> {
         let signed = self.context_read_proof(operation)?;
-        self.remote.read_task_context(&signed).map_err(|error| {
+        self.read_context_original(&signed).map_err(|error| {
             format!(
                 "private context {}; query original results and refresh",
                 failure_tag(&error)
@@ -529,21 +488,23 @@ fn context_next_step<T>(outcome: &IntentOutcome<T>) -> &'static str {
     }
 }
 
-/// Emit only a bounded public category/status, never response text or proofs.
-fn failure_tag(error: &crate::WorldServiceClientError) -> String {
-    use crate::WorldServiceClientError;
-    match error {
-        WorldServiceClientError::Configuration(_) => "configuration rejected".into(),
-        WorldServiceClientError::Transport(_) => "transport unavailable".into(),
-        WorldServiceClientError::Assurance(_) => "response not verified".into(),
-        WorldServiceClientError::Rejected { status, .. } => format!("rejected HTTP {status}"),
-        WorldServiceClientError::Cooldown { status, .. } => format!("cooldown HTTP {status}"),
-    }
-}
-
 #[path = "device_client_validation.rs"]
 mod validation;
 use validation::*;
 #[cfg(test)]
 #[path = "device_client_tests.rs"]
 mod tests;
+
+#[path = "device_client_poll.rs"]
+mod polling;
+
+use polling::failure_tag;
+
+#[path = "device_client_quote_retry.rs"]
+mod quote_retry;
+
+#[path = "device_client_prepare_retry.rs"]
+mod prepare_retry;
+
+#[path = "device_client_context_read_retry.rs"]
+mod context_read_retry;
