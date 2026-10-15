@@ -615,8 +615,8 @@ pub(super) fn exercise_with_fault(
     raw_seed::copy_objects(&case.primary_directory, &new_replica_directory)?;
     let mut new_primary = ManagedEndpointChild::start(&case.endpoint_binary, &pconfig)?;
     let mut new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &rconfig)?;
-    new_primary.wait_management(primary_management, Duration::from_secs(20))?;
-    new_replica.wait_management(replica_management, Duration::from_secs(20))?;
+    new_primary.wait_management(primary_management, case.scenario_deadline)?;
+    new_replica.wait_management(replica_management, case.scenario_deadline)?;
     let mut old_replica_stopped = false;
     let mut submitted_after_reopen = false;
     let mut successor_writer_lock_fault_injected = false;

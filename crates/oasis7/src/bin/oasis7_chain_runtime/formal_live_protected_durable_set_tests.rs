@@ -36,9 +36,9 @@ fn run_fixture(long_history: bool) {
         "healthy_set"
     };
     let started_at = Instant::now();
-    // Bound the whole scenario independently from each existing RPC/wait
-    // deadline. The long case includes 40 commits and two reopens; this budget
-    // does not extend any individual wait.
+    // Bound the whole scenario. Authenticated successor staging shares the
+    // remaining absolute budget across P/R; individual RPC and ordinary-ready
+    // deadlines stay unchanged. The long case includes 40 commits and two reopens.
     let budget = if long_history {
         Duration::from_secs(20 * 60)
     } else {
@@ -387,7 +387,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     case.scenario_deadline
         .report_stage("successor P/R management children started")?;
     new_primary
-        .wait_management(primary_management, Duration::from_secs(20))
+        .wait_management(primary_management, case.scenario_deadline)
         .map_err(|error| {
             format!(
                 "healthy primary management readiness pid={} config={}: {error}",
@@ -396,7 +396,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
             )
         })?;
     new_replica
-        .wait_management(replica_management, Duration::from_secs(20))
+        .wait_management(replica_management, case.scenario_deadline)
         .map_err(|error| {
             format!(
                 "healthy replica management readiness pid={} config={}: {error}",

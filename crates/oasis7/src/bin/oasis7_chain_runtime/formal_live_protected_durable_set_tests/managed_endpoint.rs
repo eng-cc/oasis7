@@ -66,16 +66,28 @@ impl ManagedEndpointChild {
     pub(crate) fn wait_management(
         &mut self,
         expected: std::net::SocketAddr,
-        timeout: Duration,
+        scenario: ScenarioDeadline,
     ) -> Result<(), String> {
-        self.wait_address("formal_endpoint_awaiting_management=", expected, timeout)
+        // Management readiness follows full authenticated closure staging, not
+        // just process spawn. Keep the existing scenario's absolute budget;
+        // sequential P/R waits must not each start a new staging allowance.
+        scenario.report_stage("waiting for authenticated successor staging")?;
+        self.wait_address(
+            "formal_endpoint_awaiting_management=",
+            expected,
+            scenario.expires_at,
+        )
     }
     pub(crate) fn wait_ordinary(
         &mut self,
         expected: std::net::SocketAddr,
         timeout: Duration,
     ) -> Result<(), String> {
-        self.wait_address("formal_endpoint_listening=", expected, timeout)
+        self.wait_address(
+            "formal_endpoint_listening=",
+            expected,
+            Instant::now() + timeout,
+        )
     }
     fn failure(&mut self, prefix: &str, seen: &[String]) -> String {
         use std::io::Read;
@@ -95,17 +107,48 @@ impl ManagedEndpointChild {
         &mut self,
         prefix: &str,
         expected: std::net::SocketAddr,
-        timeout: Duration,
+        deadline: Instant,
     ) -> Result<(), String> {
-        let deadline = Instant::now() + timeout;
+        let started = Instant::now();
+        let mut next_diagnostic = started + Duration::from_secs(20);
         let mut seen = Vec::new();
         loop {
             let remaining = deadline
                 .checked_duration_since(Instant::now())
                 .filter(|value| !value.is_zero())
                 .ok_or_else(|| self.failure(prefix, &seen))?;
-            match self.lines.recv_timeout(remaining) {
+            if self
+                .child
+                .try_wait()
+                .map_err(|error| error.to_string())?
+                .is_some()
+            {
+                return Err(self.failure(prefix, &seen));
+            }
+            if Instant::now() >= next_diagnostic {
+                eprintln!(
+                    "healthy endpoint readiness pending prefix={prefix} pid={} config={} wait_ms={} remaining_ms={}",
+                    self.child.id(),
+                    self.config.display(),
+                    started.elapsed().as_millis(),
+                    remaining.as_millis()
+                );
+                next_diagnostic = Instant::now() + Duration::from_secs(20);
+            }
+            match self
+                .lines
+                .recv_timeout(remaining.min(Duration::from_millis(100)))
+            {
                 Ok(line) if line.starts_with(prefix) => {
+                    if Instant::now() >= deadline
+                        || self
+                            .child
+                            .try_wait()
+                            .map_err(|error| error.to_string())?
+                            .is_some()
+                    {
+                        return Err(self.failure(prefix, &seen));
+                    }
                     let address = line[prefix.len()..]
                         .parse::<std::net::SocketAddr>()
                         .map_err(|error| format!("parse endpoint readiness {line:?}: {error}"))?;
@@ -117,9 +160,7 @@ impl ManagedEndpointChild {
                     return Ok(());
                 }
                 Ok(line) => seen.push(line),
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    return Err(self.failure(prefix, &seen));
-                }
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     return Err(self.failure(prefix, &seen));
                 }
@@ -136,3 +177,7 @@ impl Drop for ManagedEndpointChild {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "managed_endpoint_tests.rs"]
+mod tests;
