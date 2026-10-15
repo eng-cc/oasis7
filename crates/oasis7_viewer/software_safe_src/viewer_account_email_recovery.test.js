@@ -2,6 +2,23 @@ import { describe, it, expect, vi } from "vitest";
 import { renderAccountEmailRecovery } from "./viewer_account_email_recovery.js";
 
 describe("optional v2 email surface", () => {
+  it("does not offer first-passkey upgrade for an active server passkey", () => {
+    const root = document.createElement("div");
+    const render = (credentials) => {
+      root.replaceChildren();
+      renderAccountEmailRecovery(root, { state: {}, account: { id: "player-1" }, credentials,
+        capabilities: { email: { available: true } }, client: {}, run: vi.fn(), render: vi.fn() });
+    };
+
+    render([{ id: "passkey-1", state: "active", type: "passkey" }]);
+    expect([...root.querySelectorAll("button")].map((button) => button.textContent))
+      .not.toContain("验证邮箱并添加首个通行密钥");
+
+    render([{ id: "email-1", state: "active", type: "email" }]);
+    expect([...root.querySelectorAll("button")].map((button) => button.textContent))
+      .toContain("验证邮箱并添加首个通行密钥");
+  });
+
   it("uses the email adapter through explicit input and never invokes an authenticator automatically", async () => {
     const root = document.createElement("div");
     const state = {};

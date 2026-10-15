@@ -39,10 +39,20 @@ pub struct HostedAuthContextV2 {
     pub issuer_key_id: String,
 }
 
+pub fn hosted_identity_v2_enabled_checked() -> Result<bool, String> {
+    match std::env::var(HOSTED_IDENTITY_V2_ENABLED_ENV).as_deref() {
+        Ok("1") => Ok(true),
+        Ok("0" | "false" | "") | Err(std::env::VarError::NotPresent) => Ok(false),
+        _ => Err(format!(
+            "invalid identity v2 flag: {HOSTED_IDENTITY_V2_ENABLED_ENV} must be exactly 1, 0, false, or empty"
+        )),
+    }
+}
+
 pub fn hosted_identity_v2_enabled() -> bool {
-    // Invalid configured values must not silently re-enable the legacy lane.
-    std::env::var(HOSTED_IDENTITY_V2_ENABLED_ENV)
-        .is_ok_and(|value| !matches!(value.as_str(), "0" | "false" | ""))
+    // Startup rejects invalid settings; standalone runtime checks must also
+    // fail closed instead of silently re-enabling the legacy lane.
+    hosted_identity_v2_enabled_checked().unwrap_or(true)
 }
 
 pub(crate) fn require_legacy_registration_opt_in() -> Result<(), String> {

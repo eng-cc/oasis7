@@ -6,6 +6,8 @@
 
 记录候选 Git OID、构建来源、RP ID、精确 HTTPS origin、身份 namespace、外部 instance epoch、世界 ID、存储后端和浏览器版本。新注册默认关闭，原生密钥保持关闭。生产 RP 不从 Host、转发头或世界 URL 推导。
 
+`OASIS7_HOSTED_IDENTITY_V2_ENABLED` 只接受精确值：`1` 启用，未配置、空值、`0` 或 `false` 关闭。其他值（含 `true`、大小写变体或空白包裹的 `1`）必须在启动时拒绝；runtime 对非法配置继续拒绝 legacy 授权。关闭时已有 v2 存储的回退保护仍适用。
+
 启动 v2 至少配置：
 
 - `OASIS7_HOSTED_IDENTITY_V2_ENABLED=1`、`OASIS7_HOSTED_IDENTITY_SERVICE_ID`、`OASIS7_HOSTED_IDENTITY_ENVIRONMENT`。
