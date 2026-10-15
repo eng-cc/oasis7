@@ -238,6 +238,7 @@ fn private_task_production_prepared_world_live_service() {
 }
 #[test]
 fn private_task_production_signed_quote_first_product_and_restart() {
+    let _scenario_permit = super::private_task_resource_permit();
     use oasis7::world_service::private_task_context::*;
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-production-test-ready-{}-{}.json",
@@ -263,7 +264,9 @@ fn private_task_production_signed_quote_first_product_and_restart() {
     // starting before the host leaves at least 60 seconds of service reserve.
     let deadline = Instant::now() + Duration::from_secs(300);
     std::thread::scope(|scope| {
+        let host_permit = _scenario_permit.clone();
         let host = scope.spawn(|| {
+            let _host_permit = host_permit;
             super::run_prepared_world_service_kind_with_cognition_503(
                 ready.clone(),
                 cadence,

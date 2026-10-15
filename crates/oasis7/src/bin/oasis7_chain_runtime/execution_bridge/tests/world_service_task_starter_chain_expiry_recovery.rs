@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn starter_context_live_conflict_fails_closed_then_expiry_aborts_and_reprepares() {
+    let _scenario_permit = super::super::private_task_resource_permit();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-starter-expiry-recovery-{}-{}.json",
         std::process::id(),
@@ -24,7 +25,9 @@ fn starter_context_live_conflict_fails_closed_then_expiry_aborts_and_reprepares(
     let deadline = Instant::now() + Duration::from_secs(90);
     std::thread::scope(|scope| {
         let host_ready = ready.clone();
+        let host_permit = _scenario_permit.clone();
         let host = scope.spawn(move || {
+            let _host_permit = host_permit;
             super::super::run_prepared_world_service_kind(
                 host_ready,
                 Duration::from_secs(1),

@@ -175,6 +175,7 @@ fn private_task_starter_chain_prepared_world_live_service() {
 
 #[test]
 fn private_task_starter_chain_build_feed_first_product_and_restart() {
+    let _scenario_permit = super::private_task_resource_permit();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-starter-chain-ready-{}-{}.json",
         std::process::id(),
@@ -185,7 +186,9 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
     ));
     let deadline = Instant::now() + Duration::from_secs(300);
     std::thread::scope(|scope| {
+        let host_permit = _scenario_permit.clone();
         let host = scope.spawn(|| {
+            let _host_permit = host_permit;
             super::run_prepared_world_service_kind(
                 ready.clone(),
                 Duration::from_secs(5),

@@ -1030,3 +1030,9 @@ pub(super) fn retry_private<T>(
         }
     }
 }
+
+// Independent real-node scenarios share the QA host resource budget. Each scenario's
+// own host workers, transport, pressure and fault paths remain concurrent.
+fn private_task_resource_permit() -> Arc<super::super::scenario_resource::ScenarioResourcePermit> {
+    super::super::scenario_resource::ScenarioResourcePermit::acquire()
+}
