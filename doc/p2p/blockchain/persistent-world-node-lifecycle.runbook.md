@@ -21,7 +21,7 @@ fixture v87 / production v30 / endpoint release v14 的普通提交/重启、完
 
 ## 冷证明路径与最新长历史边界（2026-10-15）
 
-本节新路径 RPC 与 runtime 均属于 [代码 PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 候选，不是当前 main 已交付的操作能力。只有该 PR 合入且匹配的 P/R 端点与节点工件均已部署后，下面的运行合同才适用；文档先合入不启用该能力。
+在 [代码 PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 合入前，本节新路径 RPC 与 runtime 仅为候选；代码合入本身也不表示部署已启用。只有该 PR 已合入且匹配的 P/R 端点与节点工件均已部署后，下面的运行合同才适用；文档先合入不启用该能力。
 
 代码候选 [PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 的 `f033ef80ad91` 本机 full70 `v8` 通过，625.26 秒完成 70 次变更，捕获 74 条 Qualified、101696467 bytes，热 Tick 32 条、累计 Tick 76 条；全部周期及最终重开、原冷 Tick、原签名 CommitRef 和恰好一次效果断言通过。该结果取代本文仅针对同一长历史场景的“最新源码待重测/最终冷查询待验”状态，不改写历史失败，也不代签其他 TODO、最终 CI、真实部署或整套验收。`v7` 的 ENOSPC 是资源失败，释放空间后由本次完整重跑通过；原始记录见 `/tmp/oasis7-lifecycle-long-history-final-20261015-v8.log`。
 
