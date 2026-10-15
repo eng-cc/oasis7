@@ -10,8 +10,41 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale,javaScriptEnabled:false,viewport:{width:360,height:800}});const p=await c.newPage();await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
   assert.equal(await p.locator('[data-decision-panel]:visible').count(),4);assert.equal(await p.locator('.topbar .nav a:visible').count(),4);
+  await p.locator('[data-preview-details] > summary').click();
   assert.equal(await p.locator('noscript a:visible').count(),3);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),360);
   await p.screenshot({path:path.join(out,locale+'-nojs-360.png'),fullPage:true});await c.close();record(locale+' no-JS complete steps/nav/manual packages');
+ }
+ // Composition regression: illustration must not push the reading rail below a separate image block.
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
+  for(const width of [390,1440]){
+   await p.setViewportSize({width,height:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
+   const layout=await p.evaluate(()=>({proof:document.querySelector('#proof').getBoundingClientRect().top,
+    fourth:document.querySelector('[data-decision-step="3"]').getBoundingClientRect().bottom,
+    art:getComputedStyle(document.querySelector('.hero-visual')).position,
+    rail:getComputedStyle(document.querySelector('.decision-panels')).gridTemplateColumns.split(' ').length}));
+   assert.equal(await p.locator('.discovery-editorial-grid a[href*="story"]').count(),0);assert.equal(await p.locator('main > #world-laws').count(),1);assert.equal(await p.locator('#contribute #world-laws').count(),0);
+   assert.equal(layout.art,'absolute');assert.ok(layout.proof<550,JSON.stringify(layout));
+   assert.equal(layout.rail,width===390?1:4);assert.ok(layout.fourth<1000,JSON.stringify(layout));
+  }
+  await c.close();record(locale+' integrated hero and early four-step reading rail');
+ }
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
+  const route=locale==='zh-CN'?'/':'/en/';await p.goto(origin+route);
+  assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
+  await p.locator('.hero-overview-link').click();assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
+  assert.equal(await p.locator('[data-download-primary-trust]').isVisible(),true);
+  await p.locator('[data-preview-details] > summary').focus();await p.keyboard.press('Enter');assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
+  await p.goto(origin+route);
+  await p.evaluate(()=>{document.querySelector('.hero-overview-link').click();document.querySelector('[data-preview-details] > summary').click();});
+  await p.waitForTimeout(100);assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
+  await p.locator('.hero-overview-link').click();assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
+  const deep=await c.newPage();await deep.goto(origin+route+'#download');assert.equal(await deep.locator('[data-preview-details]').getAttribute('open'),'');
+  await p.goto(origin+route);await p.evaluate(()=>{window.location.hash='#download';});
+  await p.waitForFunction(()=>document.querySelector('[data-preview-details]').open);
+  assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
+  await c.close();record(locale+' compact preview opens by CTA, keyboard-native disclosure and deep link with visible risk');
  }
  const files=['oasis7-windows-x64.exe','oasis7-macos-x64.dmg','oasis7-linux-x64.deb','oasis7-checksums.txt'];
  for(const scenario of ['full','no-platform','no-checksum','invalid','timeout']){
@@ -19,7 +52,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
    if(scenario==='timeout')return r.abort();
    const names=files.filter(n=>!(scenario==='no-platform'&&n===files[0])&&!(scenario==='no-checksum'&&n===files[3]));
    await r.fulfill({json:{tag_name:'qa-candidate',published_at:scenario==='invalid'?'bad':'2026-10-14T00:00:00Z',assets:names.map(name=>({name,browser_download_url:`https://github.com/eng-cc/oasis7/releases/download/qa-candidate/${name}`}))}});
-  });const p=await c.newPage();await p.goto(origin+'/');await p.locator('[data-download-platform-button="windows"]').click();
+  });const p=await c.newPage();await p.goto(origin+'/');await p.locator('[data-preview-details] > summary').click();await p.locator('[data-download-platform-button="windows"]').click();
   await p.waitForTimeout(150);
   const tag=await p.locator('[data-release-tag]').innerText();const href=await p.locator('[data-download-primary-link]').getAttribute('href');
   if(scenario==='invalid'||scenario==='timeout'){assert.equal(tag,'2026-06-03_v2');assert.ok(href.includes('/2026-06-03_v2/'));assert.ok((await p.locator('[data-release-status]').innerText()).includes('未确认最新'));}

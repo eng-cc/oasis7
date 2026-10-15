@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：体验设计按信息和交互顺序组织，验证回到产品映射；范围：既有Prompt交互与恢复，不转成专业系统合同；风险：applied不可扩大为持久化或同步；映射：[目标与设计命题](#1-设计原则)、[代表性流程](#3-关键交互)、[验证追踪](#7-产品要求与验收映射)、[决策与风险边界](#6-设计边界)
+
 - 配对产品 PRD：[`doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`](agent-conversation-and-prompt-control.prd.md)
 - 上位产品 PRD：[`doc/product/agents-world-simulation/prd.md`](prd.md)
 - 生命周期：`active`
@@ -99,12 +101,12 @@
 
 | 设计内容 | 配对 PRD 叶子要求 | 验收场景 |
 | --- | --- | --- |
-| 对象确认、控制资格、对话/配置分层 | [REQ-PROMPT-001](agent-conversation-and-prompt-control.prd.md#req-prompt-001) / [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) | [AC-PROMPT-001](agent-conversation-and-prompt-control.prd.md#ac-prompt-001) / [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) |
-| 预设、草稿、默认、override、清除默认 | [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) / [REQ-PROMPT-003](agent-conversation-and-prompt-control.prd.md#req-prompt-003) | [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) / [AC-PROMPT-003](agent-conversation-and-prompt-control.prd.md#ac-prompt-003) |
-| accepted/applied 的分界、applied 范围、失败原因与下一步 | [REQ-PROMPT-004](agent-conversation-and-prompt-control.prd.md#req-prompt-004) / [REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) / [REQ-PROMPT-011](agent-conversation-and-prompt-control.prd.md#req-prompt-011) | [AC-PROMPT-004](agent-conversation-and-prompt-control.prd.md#ac-prompt-004) / [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) / [AC-PROMPT-011](agent-conversation-and-prompt-control.prd.md#ac-prompt-011) |
-| 过期草稿、控制权丢失优先和信息可见性 | [REQ-PROMPT-007](agent-conversation-and-prompt-control.prd.md#req-prompt-007) / [REQ-PROMPT-008](agent-conversation-and-prompt-control.prd.md#req-prompt-008) | [AC-PROMPT-007](agent-conversation-and-prompt-control.prd.md#ac-prompt-007) / [AC-PROMPT-008](agent-conversation-and-prompt-control.prd.md#ac-prompt-008) |
-| 提交时重新校验、竞态与单一结果 | [REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
-| 响应式、IME、焦点和历史布局边界 | [REQ-PROMPT-005](agent-conversation-and-prompt-control.prd.md#req-prompt-005) / [REQ-PROMPT-006](agent-conversation-and-prompt-control.prd.md#req-prompt-006) | [AC-PROMPT-005](agent-conversation-and-prompt-control.prd.md#ac-prompt-005) / [AC-PROMPT-006](agent-conversation-and-prompt-control.prd.md#ac-prompt-006) / [AC-7](agent-conversation-and-prompt-control.prd.md#ac-7) |
+| Trace refs: O7-REQ-14ddd9ba-2d94-48e8-b2e4-0dbae26ddc36；对象确认、控制资格、对话/配置分层 | [REQ-PROMPT-001](agent-conversation-and-prompt-control.prd.md#req-prompt-001) / [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) | [AC-PROMPT-001](agent-conversation-and-prompt-control.prd.md#ac-prompt-001) / [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) |
+| Trace refs: O7-REQ-a82f1ee8-9d70-442c-9972-5f49f6665293；预设、草稿、默认、override、清除默认 | [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) / [REQ-PROMPT-003](agent-conversation-and-prompt-control.prd.md#req-prompt-003) | [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) / [AC-PROMPT-003](agent-conversation-and-prompt-control.prd.md#ac-prompt-003) |
+| Trace refs: O7-REQ-59fca4ef-cd56-44ee-b982-b5eb9e15a111；accepted/applied 的分界、applied 范围、失败原因与下一步 | [REQ-PROMPT-004](agent-conversation-and-prompt-control.prd.md#req-prompt-004) / [REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) / [REQ-PROMPT-011](agent-conversation-and-prompt-control.prd.md#req-prompt-011) | [AC-PROMPT-004](agent-conversation-and-prompt-control.prd.md#ac-prompt-004) / [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) / [AC-PROMPT-011](agent-conversation-and-prompt-control.prd.md#ac-prompt-011) |
+| Trace refs: O7-REQ-458146d9-d3c2-4e14-935d-29a91594e8dd；过期草稿、控制权丢失优先和信息可见性 | [REQ-PROMPT-007](agent-conversation-and-prompt-control.prd.md#req-prompt-007) / [REQ-PROMPT-008](agent-conversation-and-prompt-control.prd.md#req-prompt-008) | [AC-PROMPT-007](agent-conversation-and-prompt-control.prd.md#ac-prompt-007) / [AC-PROMPT-008](agent-conversation-and-prompt-control.prd.md#ac-prompt-008) |
+| Trace refs: O7-REQ-92124092-6021-49e4-8def-33038e20b637；提交时重新校验、竞态与单一结果 | [REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
+| Trace refs: O7-REQ-b6140b6c-ca2c-4734-84ce-7963f9385fff；响应式、IME、焦点和历史布局边界 | [REQ-PROMPT-005](agent-conversation-and-prompt-control.prd.md#req-prompt-005) / [REQ-PROMPT-006](agent-conversation-and-prompt-control.prd.md#req-prompt-006) | [AC-PROMPT-005](agent-conversation-and-prompt-control.prd.md#ac-prompt-005) / [AC-PROMPT-006](agent-conversation-and-prompt-control.prd.md#ac-prompt-006) / [AC-7](agent-conversation-and-prompt-control.prd.md#ac-7) |
 
 这些链接只表达产品语义和验收追踪；profile schema、协议枚举、patch、鉴权和组件实现仍由本设计开头所列专业 authority 拥有。
 ## PRD REQ/AC fragment mapping
@@ -113,17 +115,17 @@ This design delegates product requirements and acceptance semantics to its paire
 
 | PRD requirement | PRD acceptance |
 | --- | --- |
-| [REQ-PROMPT-001](agent-conversation-and-prompt-control.prd.md#req-prompt-001) | [AC-PROMPT-001](agent-conversation-and-prompt-control.prd.md#ac-prompt-001) |
-| [REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) | [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) |
-| [REQ-PROMPT-003](agent-conversation-and-prompt-control.prd.md#req-prompt-003) | [AC-PROMPT-003](agent-conversation-and-prompt-control.prd.md#ac-prompt-003) |
-| [REQ-PROMPT-004](agent-conversation-and-prompt-control.prd.md#req-prompt-004) | [AC-PROMPT-004](agent-conversation-and-prompt-control.prd.md#ac-prompt-004) |
-| [REQ-PROMPT-005](agent-conversation-and-prompt-control.prd.md#req-prompt-005) | [AC-PROMPT-005](agent-conversation-and-prompt-control.prd.md#ac-prompt-005) |
-| [REQ-PROMPT-006](agent-conversation-and-prompt-control.prd.md#req-prompt-006) | [AC-PROMPT-006](agent-conversation-and-prompt-control.prd.md#ac-prompt-006) |
-| [REQ-PROMPT-007](agent-conversation-and-prompt-control.prd.md#req-prompt-007) | [AC-PROMPT-007](agent-conversation-and-prompt-control.prd.md#ac-prompt-007) |
-| [REQ-PROMPT-008](agent-conversation-and-prompt-control.prd.md#req-prompt-008) | [AC-PROMPT-008](agent-conversation-and-prompt-control.prd.md#ac-prompt-008) |
-| [REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
-| [REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) | [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) |
-| [REQ-PROMPT-011](agent-conversation-and-prompt-control.prd.md#req-prompt-011) | [AC-PROMPT-011](agent-conversation-and-prompt-control.prd.md#ac-prompt-011) |
+| Trace refs: O7-REQ-14ddd9ba-2d94-48e8-b2e4-0dbae26ddc36；[REQ-PROMPT-001](agent-conversation-and-prompt-control.prd.md#req-prompt-001) | [AC-PROMPT-001](agent-conversation-and-prompt-control.prd.md#ac-prompt-001) |
+| Trace refs: O7-REQ-a82f1ee8-9d70-442c-9972-5f49f6665293；[REQ-PROMPT-002](agent-conversation-and-prompt-control.prd.md#req-prompt-002) | [AC-PROMPT-002](agent-conversation-and-prompt-control.prd.md#ac-prompt-002) |
+| Trace refs: O7-REQ-395be972-59c0-4cd2-babc-f582ae659c5d；[REQ-PROMPT-003](agent-conversation-and-prompt-control.prd.md#req-prompt-003) | [AC-PROMPT-003](agent-conversation-and-prompt-control.prd.md#ac-prompt-003) |
+| Trace refs: O7-REQ-59fca4ef-cd56-44ee-b982-b5eb9e15a111；[REQ-PROMPT-004](agent-conversation-and-prompt-control.prd.md#req-prompt-004) | [AC-PROMPT-004](agent-conversation-and-prompt-control.prd.md#ac-prompt-004) |
+| Trace refs: O7-REQ-b6140b6c-ca2c-4734-84ce-7963f9385fff；[REQ-PROMPT-005](agent-conversation-and-prompt-control.prd.md#req-prompt-005) | [AC-PROMPT-005](agent-conversation-and-prompt-control.prd.md#ac-prompt-005) |
+| Trace refs: O7-REQ-6f348a2d-cb87-4838-8447-21c8eebf6d07；[REQ-PROMPT-006](agent-conversation-and-prompt-control.prd.md#req-prompt-006) | [AC-PROMPT-006](agent-conversation-and-prompt-control.prd.md#ac-prompt-006) |
+| Trace refs: O7-REQ-458146d9-d3c2-4e14-935d-29a91594e8dd；[REQ-PROMPT-007](agent-conversation-and-prompt-control.prd.md#req-prompt-007) | [AC-PROMPT-007](agent-conversation-and-prompt-control.prd.md#ac-prompt-007) |
+| Trace refs: O7-REQ-a9797fdb-39f7-48fb-9202-9700d9d86159；[REQ-PROMPT-008](agent-conversation-and-prompt-control.prd.md#req-prompt-008) | [AC-PROMPT-008](agent-conversation-and-prompt-control.prd.md#ac-prompt-008) |
+| Trace refs: O7-REQ-92124092-6021-49e4-8def-33038e20b637；[REQ-PROMPT-009](agent-conversation-and-prompt-control.prd.md#req-prompt-009) | [AC-PROMPT-009](agent-conversation-and-prompt-control.prd.md#ac-prompt-009) |
+| Trace refs: O7-REQ-3bbcade1-3f73-4899-b324-f857fd27b245；[REQ-PROMPT-010](agent-conversation-and-prompt-control.prd.md#req-prompt-010) | [AC-PROMPT-010](agent-conversation-and-prompt-control.prd.md#ac-prompt-010) |
+| Trace refs: O7-REQ-36cc9e9d-eaa7-436f-b16b-6f6af089b04c；[REQ-PROMPT-011](agent-conversation-and-prompt-control.prd.md#req-prompt-011) | [AC-PROMPT-011](agent-conversation-and-prompt-control.prd.md#ac-prompt-011) |
 |  | [AC-1](agent-conversation-and-prompt-control.prd.md#ac-1) |
 |  | [AC-2](agent-conversation-and-prompt-control.prd.md#ac-2) |
 |  | [AC-3](agent-conversation-and-prompt-control.prd.md#ac-3) |
