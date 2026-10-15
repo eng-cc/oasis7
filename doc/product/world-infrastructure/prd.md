@@ -347,6 +347,207 @@
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅执行桥恢复入口；全部Agent/Viewer/API提交前global/local区分、缺身份、receipt reuse、replay及可见表达未完整核清。
 
 
+### 既有生产模块发布承诺的精确接收
+
+以下子条款接收已经由 [SR2 专业 PRD](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-release-acceptance) 的 SC/AC/NFR 与 DEC-OMR-001..004 采纳的独立结果；这是旧承诺的产品定位与唯一身份登记，不是新增功能、重定参数或宣布可用。专业原文继续拥有全部字段、算法、阈值、条件、两条原 NFR-OMR-6、实施与验收细节；正文中的原数值只定位既有目标，冲突须交原专业 owner，不能由此副本更改参数。本根原 SC-1..10、现有 DWE-004 身份及其版本/激活语义保持不变。生产发布证书不因此取得完整 BFT 或任一正式 profile 的提交资格；任意合规节点触发也不是 permissionless 激活保证。专业声明/验收使用这里同一身份的 refs，不另发同义身份。
+
+<a id="req-infra-release-source"></a>
+#### REQ-INFRA-RELEASE-SOURCE：生产模块来源受治理清单约束
+
+Trace ID: O7-REQ-7a3866ed-cd66-48ea-9cc7-bb793575c957
+
+生产模块加载以治理确认的线上发布清单为主真源，不以仓库内置或任意本地构建结果替代。应急 bootstrap 的适用条件、默认关闭及生产 fallback 限制保持原专业合同。
+
+- 来源与独立验收：[SC-3、AC-1、PRD-WORLD_RUNTIME-016、DEC-OMR-001](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-1](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-1)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[生产模块来源受治理清单约束接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-identity"></a>
+#### REQ-INFRA-RELEASE-IDENTITY：生产模块身份与签名合法性
+
+Trace ID: O7-REQ-d01cf80e-1172-4963-8bc0-877dc9de8e00
+
+生产节点加载前校验清单、artifact 签名及 signer 信任根；任一失败拒绝执行，禁止生产宽松身份回退，未签名或伪签名模块误接纳率保持原目标 0。
+
+- 来源与独立验收：[SC-1、AC-2/3、NFR-OMR-4、DEC-OMR-002](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-2](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-2)、[AC-3](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-3)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[生产模块身份与签名合法性接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-certificate"></a>
+#### REQ-INFRA-RELEASE-CERTIFICATE：发布批准必须来自合法外部证书
+
+Trace ID: O7-REQ-1440a1a4-3240-4644-8ada-bf9a34771465
+
+原 SR2 生产安装、升级、回滚及发布应用不得本地自签或派生 finality 后自动 apply；只有满足原 epoch 快照、stake 与独立 signer 阈值条件的外部证书才能进入其授权应用路径。
+
+- 来源与独立验收：[SC-2、AC-4/8/9、PRD-WORLD_RUNTIME-017、DEC-OMR-003](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-4](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-4)、[AC-8](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-8)、[AC-9](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-9)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[发布批准必须来自合法外部证书接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-attestation-authorization"></a>
+#### REQ-INFRA-RELEASE-ATTESTATION-AUTHORIZATION：发布证明聚合满足当前授权门槛
+
+Trace ID: O7-REQ-b89862c6-6316-4511-afdc-1e2d1e9a5e8e
+
+ModuleReleaseApply 必须按当前 epoch 快照 signer 集聚合 attestation，仅快照内 signer 计入原阈值；聚合不足不得激活 release manifest。此证明与外部 finality certificate 各为独立必要条件，不互相替代。
+
+- 来源与独立验收：[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-14)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[发布证明聚合满足当前授权门槛接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-release-triage"></a>
+#### REQ-INFRA-RELEASE-RELEASE-TRIAGE：发布阻断故障可分诊
+
+Trace ID: O7-REQ-a5a2d539-b2c8-42dd-83e0-a6108b5ab288
+
+发布运行手册必须定义且可执行证明冲突、attestation 阈值不足、manifest 不可达/回滚/漂移三类阻断场景的分诊；保留原故障信号与主 CI 仅回归/对账的边界，不以 submit API 错误响应替代运行分诊。
+
+- 来源与独立验收：[AC-15、Technical Specifications 原 Edge Cases / S11](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-15](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-15)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[发布阻断故障可分诊接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-ci"></a>
+#### REQ-INFRA-RELEASE-CI：生产发布不依赖 CI
+
+Trace ID: O7-REQ-c9c94faf-43bb-474c-8cf9-7ed1441e5494
+
+生产发布在 CI 不可用时仍可完成，不降低阈值签名与审计约束；主 CI 仅承担开发回归和兼容性检查，不承担生产发布写入、激活或判定权。
+
+- 来源与独立验收：[SC-4/6、AC-6/11、NFR-OMR-5、DEC-OMR-004](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-6](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-6)、[AC-11](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-11)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[生产发布不依赖 CI接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-participation"></a>
+#### REQ-INFRA-RELEASE-PARTICIPATION：合规节点可触发并提交发布证据
+
+Trace ID: O7-REQ-c1427344-798f-47f1-9dab-790fd3693cf7
+
+任意合规节点可触发现有提案、复构建证明、阈值签名与归档流水，并通过既有 node-side 入口直接提交 attestation 到共识队列，不依赖 CI 或手工修改状态。合规、受信 node identity、计入阈值资格与激活条件仍由原专业合同限定；触发或提交不授予单节点批准权。
+
+- 来源与独立验收：[SC-4/7、AC-5/16、PRD-WORLD_RUNTIME-018](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-5](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-5)、[AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-16)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[合规节点可触发并提交发布证据接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-reproducibility"></a>
+#### REQ-INFRA-RELEASE-REPRODUCIBILITY：发布构建按平台可复现
+
+Trace ID: O7-REQ-f25099a9-5f30-466e-939a-48ac57cbead2
+
+发布端要求同平台可复现；跨平台差异按原 keyed token 合同表达，不要求跨平台 hash 相等；上线前不可复现构建必须阻断，最终仍以签名清单合法性判断。
+
+- 来源与独立验收：[SC-5、AC-7](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-7](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-7)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[发布构建按平台可复现接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-evidence"></a>
+#### REQ-INFRA-RELEASE-EVIDENCE：发布证据完整可追溯与可回放
+
+Trace ID: O7-REQ-80d9506a-b1e5-4ac2-8d68-eb73ecfccd51
+
+提案、证明、清单、签名、证书及链上高度保持原目标 100% 可追溯；proof payload 可归档、可读回、可回放并绑定同一发布身份，冲突证明拒绝且保留原审计证据，迁移期事件到清单映射保持可追溯。
+
+- 来源与独立验收：[SC-7、AC-5/10/13/17、AC-14/15 的证明绑定与审计子范围、NFR-OMR-2](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-5](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-5)、[AC-10](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-10)、[AC-13](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-13)、[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-14)、[AC-15](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-15)、[AC-17](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-17)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[发布证据完整可追溯与可回放接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-convergence"></a>
+#### REQ-INFRA-RELEASE-CONVERGENCE：信任根版本在既有窗口收敛
+
+Trace ID: O7-REQ-02b10123-7422-4509-9d04-ea43444890c6
+
+信任根变更具有版本与生效高度，所有节点在原约束的至多 2 个治理 epoch 内收敛；不以局部节点更新代替所有节点收敛。
+
+- 来源与独立验收：[NFR-OMR-3、AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-release-quality)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-12)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[信任根版本在既有窗口收敛接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-module-latency"></a>
+#### REQ-INFRA-RELEASE-MODULE-LATENCY：缓存命中时模块验证耗时
+
+Trace ID: O7-REQ-c2a3ca44-d9b3-4ae0-8245-d8f496f38673
+
+在原本地缓存命中条件下，单模块 manifest、identity 与 signature 校验的 p95 耗时不超过原 200ms 目标；测量范围和方法仍由专业合同定义。
+
+- 来源与独立验收：[NFR-OMR-1、AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-release-quality)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-12)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[缓存命中时模块验证耗时接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-certificate-latency"></a>
+#### REQ-INFRA-RELEASE-CERTIFICATE-LATENCY：既有快照规模下证书验证耗时
+
+Trace ID: O7-REQ-8d0fe4a1-7c99-42d2-8b5d-7c4990591993
+
+在原 100 signer 快照、热缓存命中条件下，stake/epoch finality 单证书校验的 p95 耗时不超过原 50ms 目标；不扩展为其他规模或冷缓存保证。
+
+- 来源与独立验收：[NFR-OMR-6（finality latency）、AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-release-quality)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-12](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-12)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[既有快照规模下证书验证耗时接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+<a id="req-infra-release-diagnostics"></a>
+#### REQ-INFRA-RELEASE-DIAGNOSTICS：节点证明提交结果可分诊
+
+Trace ID: O7-REQ-0ed26c5c-b1a1-4e51-a462-56bd4712e295
+
+node-side attestation submit 返回结构化成功或失败响应；无效请求、payload 编码失败、共识队列提交失败三类路径均保留原可分诊错误码要求。成功接收不等于 finalized、applied 或产生世界效果。
+
+- 来源与独立验收：[NFR-OMR-6（submit 响应）、AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-release-quality)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-16)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[节点证明提交结果可分诊接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
+- 实现状态：未核实
+- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
+- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
+- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+
+版本选择、激活证明及原 manifest 历史 replay 继续引用 [REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004) 原身份；本节未重发或扩展它。固定 benchmark 入口、100 signer 测量配置、summary 归档及具体 proof/schema 方法仍为专业验证机制，不另造产品功能或已通过结果。
+
 ### 5.1 验收追踪
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
