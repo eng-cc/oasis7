@@ -187,10 +187,10 @@
 - Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：未核实
 - 系统设计依据：[p2p 相关承接](../../p2p/design.md#des-p2p-target-recovery)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，bootstrap/state-sync/pruning/archive/灾备全部链环及停止serving/voting未核清。 本地子范围不代签根SC full组合。
 
 <a id="sc-infra-004"></a>
 ### 功能状态卡：SC-4
@@ -200,10 +200,10 @@
 - Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607（[REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)）；O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc（[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：未核实
 - 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-deterministic-design)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 实现状态：部分实现
+- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，两profile、全部活动验证者、混合版本/激活及历史重放完整组合未核清。 本地子范围不代签根SC full组合。
 
 <a id="sc-infra-005"></a>
 ### 功能状态卡：SC-5
@@ -226,10 +226,10 @@
 - Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：未核实
 - 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-recovery-design)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，未知提交/未final intent不被静默结算、全消费者隔离及同窗服务闸门未核清。 本地子范围不代签根SC full组合。
 
 <a id="sc-infra-007"></a>
 ### 功能状态卡：SC-7
@@ -251,12 +251,12 @@
 
 - Trace ID: O7-REQ-05c84021-ee48-41ef-b94a-8aa9ceb8048c
 - 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
-- 系统设计状态：未核实
-- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-design)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-design)；工业因果、pre-sink校验、有界hold/背压及一次处置已有runtime条款与同Trace五/六列表；通用root/join/window/bundle字段及全消费者义务未闭合。
+- 实现状态：部分实现
+- 实现与验证依据：world_service_execution保留已认证配方提交的consensus/action/payload/主体来源；回归定义验证来源关联、重复输入与保存恢复。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/world_service_execution.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，此为配方来源与重复请求子范围，非整条工业流水线；root/revision/parent、全边容量/hold、fan-in/out、终端、消费者数量和完整同候选full证据仍缺。
 
 <a id="sc-infra-009"></a>
 ### 功能状态卡：SC-9
@@ -265,12 +265,12 @@
 
 - Trace ID: O7-REQ-4792541c-aaa4-4ac1-9a2d-374df44eba6a
 - 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
-- 系统设计状态：未核实
-- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-outage-design)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-outage-design)；八格outage的独立失败边界和验收分层已有runtime精确承接；工业通用字段、consumer DTO及同候选证据合同仍待闭合。
 - 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 实现与验证依据：尚未核清本条八格独立义务的当前实现及同候选运行证据；设计承接见上，不能作为实现或通过记录。[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，字段与全消费者具体实现未闭合；required确定性八格/active-provider API和full真实provider Agent/外部headed浏览器分别尚无本基线完整执行证据。
 
   - **权威 finality/append/execution/industrial-service outage：** 在 committed finality 前注入时不得产生 root、hold、sink、WIP、物流 credit、产出、资格或 `W` 进度；在 root 已提交但下一 child effect 尚未形成时注入，保留既有 root、window/lease lineage、已消费/仍占用投入、WIP、在途/到达数量与 receipts，不产生第二次 child effect、delivery credit、隐式续租、优先级刷新或奖励。恢复必须从 fresh authoritative snapshot 重新校验，并最多沿同一 root 形成一次 continuation/hold/defer/reject/expire/compensation disposition；若 gameplay authority 为当前未完成 candidate 形成 canonical interruption disposition，只允许该 disposition 将 `W` reset 一次，历史里程碑与既有 receipts 不变，因果变化才建立 linked revision/child root。
   - **非权威 Viewer/API/hosting/read-surface outage：** 在 canonical service 可继续或已提交结果可读取的样例中注入读面不可用；注入本身不得改变 world state、root、投入/数量、window/lease lineage、`W`、receipts、历史里程碑或 `progression_effect`。Viewer、Agent 与 pure API 先表达 `stale/unknown`，重连后从 authoritative snapshot/journal 只 reconcile 真实 committed 结果，不补发、回滚、续租、重置 `W` 或生成第二次 sink/credit/reward；若权威执行在读面不可用期间完成，三类读面必须一致呈现其真实状态而不伪造 outage 处置。
@@ -285,12 +285,12 @@
 
 - Trace ID: O7-REQ-2b7cfef9-d917-46ea-a3a9-e3a4fb96d730
 - 声明范围：仅本 SC 的基础设施独立义务；玩法配方、容量、W/window 与消费者体验继续由原文引用的产品/专业 authority 拥有。
-- 系统设计状态：未核实
-- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-world-scope-design)及下方 §5.2 的组合关系可定位；本轮未确认它们覆盖本 SC 全部独立义务和主要失败边界。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：逐项重核 §5.2 已分配的设计组合、外部消费者及 QA 场景；当前实现和全部适用运行/失败边界未验证，不作可服务或发行声明。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-world-scope-design)；runtime-world-scope-design和同Trace承接行覆盖target identity、跨world拒绝及receipt/replay边界；全部消费者scope表达仍须逐项核对。
+- 实现状态：部分实现
+- 实现与验证依据：driver按context/record world_id拒绝跨world恢复；other-world restore回归给出具体负例。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅执行桥恢复入口；全部Agent/Viewer/API提交前global/local区分、缺身份、receipt reuse、replay及可见表达未完整核清。
 
 
 ### 5.1 验收追踪

@@ -100,10 +100,10 @@ Trace ID: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff
 - 适用范围：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
-- 实现状态：未核实
-- 实现与验证依据：按 AC 抽样同候选文案与 README/QA/专业证据，对比历史或局部 green 负例；待取得审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 实现状态：部分实现
+- 实现与验证依据：官网 release-candidate 快照将版本和下载资产绑定同一 tag，缺 checksum/platform 时阻断推荐；首页 claim 检查保留公开 preview 边界。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/site/assets/release-candidate.js)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-release-candidate.test.cjs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-homepage-claim-check.sh)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。 网站交付及原候选局部检查见[PR #4697](https://github.com/eng-cc/oasis7/pull/4697)，不延伸为全部渠道验收。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，该实现仅网站版本/资产及静态文案子范围；所有公开 claim 的 primary mode、专业事实、QA窗口与LiveOps审核记录仍未核清。
 
 <a id="ac-entry-claim-001"></a>
 ### AC-ENTRY-CLAIM-001：局部 green 不会升级公开状态
@@ -125,10 +125,10 @@ Trace ID: O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c
 - 适用范围：所有活跃公开 surface 的事实漂移纠正、降级与撤回；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
-- 实现状态：未核实
-- 实现与验证依据：按 AC 演练事实漂移，核对所有活跃 surface 的纠正/撤回及实际发布定位；待取得同步记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：所有活跃公开 surface 的事实漂移纠正、降级与撤回的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 实现状态：部分实现
+- 实现与验证依据：官网发布检查把撤回正文、列表/首页/RSS 派生、稳定ID和双语言状态一起核对；对应回归包含单语言撤回拒绝与双语纠正。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-discovery-check.py)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-discovery-check.test.py)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。 网站交付及原候选局部检查见[PR #4697](https://github.com/eng-cc/oasis7/pull/4697)，不延伸为全部渠道验收。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅覆盖网站观察/开发日志静态内容；所有 active public surfaces 的漂移检测、实际纠正/撤回同步和发布验证未核清。
 
 <a id="ac-entry-claim-002"></a>
 ### AC-ENTRY-CLAIM-002：撤回只改变 claim 状态

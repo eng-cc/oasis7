@@ -80,11 +80,11 @@
 Trace ID: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-001](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-001)；[gameplay-indirect-control-agency-contract.design / 1-intent-legibility-beforeat-commit](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#1-intent-legibility-beforeat-commit)；[gameplay-indirect-control-agency-contract.design / 2-execution-acknowledgement-with-causality](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#2-execution-acknowledgement-with-causality)；[gameplay-indirect-control-agency-contract.design / agency-interruption-hooks](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)；[gameplay-indirect-control-agency-contract.design / 4-bounded-consequence-readability](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#4-bounded-consequence-readability)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。 已有间接控制设计记录 native lane/读面局部接线及组织 issuer、完整经济转让等限制；本次未独立复验这些运行事实，不将其升级为全范围实现结论。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：各意图类型、入口、真实 provider、完整经济转让及跨版本恢复须逐候选核验；既有 native 局部接线不证明所有路径。
+- 实现与验证依据：已交付 exact intent/digest 重试和 accepted→completed 边界；completion 要求完整 authority tuple、effect intent 与先前已提交匹配 receipt。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/world/agent_intent.rs#L222-L261)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/world/agent_intent_terminal.rs#L289-L381)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/tests/agent_intent_v2.rs#L615-L711)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已核对 canonical intent accepted、exact retry 与 matching committed receipt completion；所有意图类型、领域结算、真实 provider 和各正式入口仍需独立证据。
 
 - 性质：`目标要求`
 - 适用条件：玩家通过 Agent 提交目标、行动、step、社交、治理或冲突意图。
@@ -100,11 +100,11 @@ Trace ID: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185
 Trace ID: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-003](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-003)；[indirect-control-agency-execution-and-continuation.design / des-wr-ia-006](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-006)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。 已有间接控制设计记录 native lane/读面局部接线及组织 issuer、完整经济转让等限制；本次未独立复验这些运行事实，不将其升级为全范围实现结论。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：各意图类型、入口、真实 provider、完整经济转让及跨版本恢复须逐候选核验；既有 native 局部接线不证明所有路径。
+- 实现与验证依据：已交付 pending feedback 的不安全等待说明、enabled action 过滤、修复/改道比较及无可用路径时返回 goal selection 的投影。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L6-L31)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L42-L76)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L123-L182)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L188-L224)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已有失效等待/修复/改道投影及无安全路径返还决策；跨版本恢复、真实可执行领域动作、全部重连入口与当前权限变化仍未闭合。
 
 - 性质：`目标要求`
 - 适用条件：路线不可行、被改道、玩家暂时离开或重新连接。
@@ -122,9 +122,9 @@ Trace ID: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-007](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-007)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。 已有间接控制设计记录 native lane/读面局部接线及组织 issuer、完整经济转让等限制；本次未独立复验这些运行事实，不将其升级为全范围实现结论。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：各意图类型、入口、真实 provider、完整经济转让及跨版本恢复须逐候选核验；既有 native 局部接线不证明所有路径。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已有专业因果 receipt 合同；本轮未完整核对 memory reason/evidence、stakes、alternative、correction earliest-effect 到结果的所有实际 producer 与真实 provider 证据。
 
 - 性质：`目标要求`
 - 适用条件：记忆驱动、社交、治理或冲突等会改变玩家取舍的 Agent 决策。

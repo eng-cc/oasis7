@@ -132,10 +132,10 @@ Trace ID: O7-REQ-41b03765-cccf-4a1f-814c-7b498dc975f6
 - 功能点：[REQ-AGENT-SURFACE-003](#req-agent-surface-003)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-003](#ac-agent-surface-003)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-feedback-isolation)：请求连接、已验证玩家及世界故障的隔离与身份切换；各正式表面的呈现及真实多人组合范围须另核。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：各正式表面的呈现及真实多人组合范围须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[固定生产源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_feedback_scope.rs#L60)：生产反馈按已验证player/key/session/world/binding归属并隔离旧代次；[对应隔离回归源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/tests/auth_actions_feedback.rs#L263)已审读但未重跑；实际交付PR映射未核清，文档Task [#4694](https://github.com/eng-cc/oasis7/issues/4694)不代签。剩余实际双玩家/匿名浏览器与跨surface验收。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：实际双玩家/匿名浏览器与跨surface验收。
 
 - 性质与适用条件：目标要求；适用于正式玩家表面的个人行动反馈及其重连、刷新和身份切换。
 - 要求：产品必须依据经确认的当前身份展示该玩家有权读取的行动反馈；无关玩家或匿名请求的失败不得覆盖、追加到或暴露为本人的个人反馈。匿名请求可以获得自身有权获得的拒绝说明，但不能借请求中的身份声明影响已鉴权玩家。

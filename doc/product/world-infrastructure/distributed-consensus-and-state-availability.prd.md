@@ -119,10 +119,10 @@ Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；唯一要求声明：[
 - 适用范围：本条要求及对应 AC-DCS-002，保留原文入口、前置条件及测试层级。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-target-recovery)；恢复链已有目标设计；日志后缀正向续跑、真实故障域与重新可服务组合仍须核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
-- 剩余范围：设计方面，恢复链已有目标设计；日志后缀正向续跑、真实故障域与重新可服务组合仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅本地driver/CAS恢复子范围；真实多节点、合法profile激活/authority链、pruning/archive与新请求/模块行动正向续跑对照仍缺完整验收。
 
 恢复只能沿同一 `world_id` 的 固定 genesis 身份、合法 manifest/profile/epoch 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
 

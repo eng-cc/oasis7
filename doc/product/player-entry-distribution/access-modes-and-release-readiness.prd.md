@@ -82,10 +82,10 @@ Trace ID: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b
 - 适用范围：同候选的两种 primary mode、runtime/P2P 恢复、经济、发行资产及公开口径组合门禁；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
-- 实现状态：未核实
-- 实现与验证依据：按 AC 同候选对账，并加入跨版本、缺证和局部 green 负例；待取得实际 QA/发行复核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：同候选的两种 primary mode、runtime/P2P 恢复、经济、发行资产及公开口径组合门禁的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 实现状态：部分实现
+- 实现与验证依据：候选 bundle 已固定 git commit、runtime/world/governance/evidence refs 并校验文件/目录 hash；release gate 分步骤保留 skipped/dry-run 的 claim 边界。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-candidate-bundle.sh)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-candidate-bundle-smoke.sh)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-gate.sh)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，两种 primary mode、恢复、长期经济、全部发行资产和公开 claim 的同候选/同窗口语义 join 尚未核清；bundle存在不是完整发行门禁通过。
 
 <a id="ac-entry-candidate-001"></a>
 ### AC-ENTRY-CANDIDATE-001：局部或跨候选证据不能代签整体验收
@@ -133,10 +133,10 @@ Trace ID: O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270
 - 适用范围：前置、身份/会话、provider、模式和后端失败时的分类与真实恢复；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
-- 实现状态：未核实
-- 实现与验证依据：按 AC 注入前置缺失、会话失效及后端不可用，核对 blocked/observer 和恢复下一步；待取得运行/表面记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：前置、身份/会话、provider、模式和后端失败时的分类与真实恢复中首次注册/返回以外的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 实现状态：部分实现
+- 实现与验证依据：Launcher 对配置无效、禁用和启动失败给出 ConfigError/Disabled/Unreachable；会话请求失败清空旧 authority 快照。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_client_launcher/src/main_chain_status.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，全部 viewer/pure_api 的 provider、身份、模式与后端失败及真实恢复尚未核清；局部错误分类不证明完整可玩路径。
 
 <a id="ac-entry-mode-002"></a>
 ### AC-ENTRY-MODE-002：blocked 与可玩不会被静默互换

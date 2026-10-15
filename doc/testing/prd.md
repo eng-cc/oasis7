@@ -127,20 +127,26 @@
 
 ### L4 工具链合同（SC-12/13、AC-20/21）
 
-本节规定 L4 工具链的目标行为和验收范围。引入本合同的文档修复不表示旧 `run-playability-l4b-agent.sh` 的 build/session 编排、评分预填或 scaffold 输出已修复；这些实现与执行义务仍由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 逐项验收，不能仅因文档合入而关闭。系统承接见 [testing design](design.md)，各项验证见[总手册 L4-C01..06](../../testing-manual.md#l4-toolchain-validation)。
+本节规定 L4 工具链的目标行为和验收范围。引入本合同的文档修复不表示旧 `run-playability-l4b-agent.sh` 的 build/session 编排、评分预填或 scaffold 输出已修复；这些实现与执行义务来自 [#4438](https://github.com/eng-cc/oasis7/issues/4438)，已由 [PR #4641](https://github.com/eng-cc/oasis7/pull/4641) 承接为现行文档合同；按[关闭决定](https://github.com/eng-cc/oasis7/issues/4438#issuecomment-6127544475)，原 Issue 已停止独立跟踪，关闭不表示驱动修复或行为验收完成。后续实现仍须逐项落实下列合同并保留对应执行证据，不恢复原 Issue 必须持续开放的安排。系统承接见 [testing design](design.md)，各项验证见[总手册 L4-C01..06](../../testing-manual.md#l4-toolchain-validation)。
 
 <a id="l4-build-driver"></a>
 #### L4 构建与驱动
+
+产品承接范围：[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的低层证据不得代签真实入口体验，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的候选与适用环境比较边界。本条仅规定 L4B 构建/驱动与该边界的对应；具体 build profile、API opt-in 和能力诊断是 testing/Viewer 专业合同，不据此声称产品全部验收已覆盖。
 
 默认 L4B 目标采用 release 产物与正式 UI 操作，证明该候选真实玩家入口的行为。`visual-test` 必须显式选择、隔离产物，并记录实际构建与驱动；其测试 API 自动化只证明声明的受控范围，不能代签 release UI 或自主试玩。release 不安装 `__AW_TEST__`，追加 `test_api=1` 不能改变构建 profile；要求测试 API 的驱动遇到缺 API 时必须在登录/玩法等待前明确报告构建能力不匹配。对应验证：L4-C01。
 
 <a id="l4-hosted-session"></a>
 #### L4 hosted 会话
 
+产品承接范围：[REQ-ENTRY-MODE-002](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-002) 中身份/会话前置失败、真实恢复与禁止 fallback 冒充成功的边界；[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 中 L4B 必须来自真实操作的证据边界。本条只消费既有 Hosted 登录/恢复能力；账号、认证、注册、授权和 owned cleanup 仍按专业合同，不能据此宣称 provider/模式/后端等所有失败路径已覆盖。
+
 默认 `hosted_public_join` 的干净操作会话必须先识别 guest，再经受支持的登录/注册成为 authenticated，确认同一执行 session 的 player 身份和 gameplay readiness 后才能提交动作。已认证恢复须重新核对当前 session/player；另一个 headed 窗口的登录状态不能代签。缺账号配置、登录失败和身份不一致分别记录 blocker；不得通过 Hosted 自动签发或静默切换 `trusted_local_only` 通过。对应验证：L4-C02。
 
 <a id="l4-execution-result"></a>
 #### L4 执行结果与当前尝试
+
+产品承接范围：[REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的当前候选、入口与证据窗口可回链，以及 [REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的缺失/阻断证据不得升级结论。本条用逐次尝试记录保留该判断依据；RunResult 字段、状态枚举和清理机制属于专业实现合同，记录存在不证明产品要求通过。
 
 沿用 [RunResult 与逐项 verdict](governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)及[来源到场景记录](governance/agent-runtime-self-playtest.design.md#selftest-source-scene)，记录真实 `execution_mode`、`current_attempt`、候选/实际 build、执行 session、已到阶段、停止原因、证据、清理结果与未覆盖项。运行阶段沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`；任一阶段的阻断或取消都要保留当前尝试的结果，不依赖成功路径才写 summary。缺前置记 `blocked`，证据或结果未知记 `inconclusive`，只有已执行且违反约定才记 `fail`；未执行不写玩法失败或成功。
 
@@ -149,6 +155,8 @@
 <a id="l4-evidence-judgment"></a>
 #### L4 自动事实与体验判断
 
+产品承接范围：[REQ-WR-PE-001](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001) 的玩家可归因行动与下一选择、[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002) 的证据层级不可代签，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 的同一比较单位。本条约束采样与评审如何保留这些边界，不负责实现玩法因果链，也不证明真实玩家愿意继续。
+
 runner 只自动填写实际动作、状态/进度变化、返回结果、时间与证据路径。时间推进、progress 增长、ACK 或 player 一致性不能直接生成 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。继续结论和[玩家杠杆五分项](../playability_test_result/playability_test_card.md#30-玩家杠杆汇总)由 `producer_system_designer` / `qa_engineer` 逐项核对动作、可归因变化、结果解释、新决策与继续理由后填写；缺观察记未知，不能自动填 0 或 5。固定脚本路线保留实际 `execution_mode`，不能改名为自主规划证据。
 
 模板和旧 runner 导入的产物默认为 `unreviewed`；缺实际试玩证据时 L4B 保持 `missing`，证据不足时不推断“agent 不愿继续”。自动事实追加到本次 attempt，不自动覆盖已经评审的最终 verdict；复核须绑定当前候选和尝试，保留旧结论。对应验证：L4-C04。
@@ -156,10 +164,14 @@ runner 只自动填写实际动作、状态/进度变化、返回结果、时间
 <a id="l4-entry-compatibility"></a>
 #### L4 入口兼容与执行说明
 
+产品承接范围：[REQ-ENTRY-MODE-001](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001) 的 primary mode 证据独立性，以及 [REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003) 中适用环境影响体验时的比较边界。本条只约束 L4 所选 Viewer canonical/compat 构建与入口；alias 不增加玩家模式，未覆盖 pure_api 的完整独立验收。具体 alias anchors、dist copy 和 test API 保留专业定义。
+
 [Viewer entry compatibility PRD](../world-simulator/viewer/viewer-web-entry-compatibility.prd.md)、[配套 design](../world-simulator/viewer/viewer-web-entry-compatibility.design.md)、[game-test design](../playability_test_result/game-test.design.md)和[总手册](../../testing-manual.md#l4-toolchain-validation)必须使用同一构建/驱动边界。保留 canonical/compat alias 与原有 anchors；API 一致性仅适用于显式测试产物。浏览器 URL/session 取自本次 harness/producer 输出，不能用固定端口或另一会话替代。锁定 game-test 原文的适用范围由其配套 design 明确，不以旧 `test_api=1` 示例恢复 release 测试接口。对应验证：L4-C05。
 
 <a id="l4-scaffold-output"></a>
 #### L4 scaffold 输出
+
+专业范围：本条的 JSON 序列化、路径传递和已有目录保护只保证离线评审材料生成工具的输出可用性，不定义玩家入口、玩法行为或产品结论。其验证仍完整保留 L4-C06；“不代表 L4A/L4B 已执行”是产物使用限制，不能把生成成功当作产品证据。
 
 scaffold 必须支持普通、含空格和含单引号的合法输出目录。离线 `--json` 成功时 stdout 是一个可解析 JSON 对象；`run_id`、`output_dir`、`packet_path`、`summary_path` 与写出的 manifest 一致，`manifest_path` 指向该 manifest，命令退出 0。诊断不混入 JSON。保留已存在目录的拒绝和原文件；生成后发生错误时明确报告已生成范围，不能静默覆写重试。scaffold 成功只证明离线产物合同，不代表 L4A/L4B 已执行。对应验证：L4-C06。
 
