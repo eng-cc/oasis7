@@ -112,6 +112,11 @@ pub trait NativeTaskHost: Send + Sync + 'static {
         operation: &str,
     ) -> Result<u32, String>;
     fn recover(&self, operation: &str) -> Result<NativeTaskRecovery, String>;
+    /// Settle only the original prepared context using the fixed public
+    /// transport_exhausted failure outcome. Never prepare, replace or cancel an
+    /// existing action. Settled requires a canonically committed termination;
+    /// uncertain/rejected/expired originals retain their recovery state.
+    fn settle_exhausted_context(&self, operation: &str) -> Result<NativeTaskRecovery, String>;
     fn prepare(&self, operation: &str) -> Result<NativeTaskContext, String>;
     fn current_control(&self) -> Result<NativeTaskControl, String>;
     /// The exact authenticated fence bound when this run budget was initialized.
@@ -197,7 +202,11 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                 continue;
             }
             if report.model_calls_spent >= self.config.max_model_calls {
-                report.stop_reason = NativeTaskStopReason::BudgetExhausted;
+                report.stop_reason = if state == NativeTaskRecovery::Ready {
+                    self.settle_exhausted_context(&operation, &run_fence)?
+                } else {
+                    NativeTaskStopReason::BudgetExhausted
+                };
                 break;
             }
             let initial = self.host.current_control()?;
@@ -217,7 +226,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     return Ok(report);
                 }
                 if report.model_calls_spent >= self.config.max_model_calls {
-                    report.stop_reason = NativeTaskStopReason::BudgetExhausted;
+                    report.stop_reason = self.settle_exhausted_context(&operation, &run_fence)?;
                     return Ok(report);
                 }
                 let request = tools::request(&self.config, &context, &transcript)?;
@@ -280,6 +289,24 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
             }
         }
         Ok(report)
+    }
+    fn settle_exhausted_context(
+        &self,
+        operation: &str,
+        run_fence: &GameTaskFenceV1,
+    ) -> Result<NativeTaskStopReason, String> {
+        let current = self.host.current_control()?;
+        if &current.fence != run_fence || current.fence.task_status != GameTaskStatusV1::Active {
+            return Ok(NativeTaskStopReason::ControlChanged);
+        }
+        let state = self.host.settle_exhausted_context(operation)?;
+        Ok(
+            terminal(state).unwrap_or(if state == NativeTaskRecovery::Settled {
+                NativeTaskStopReason::BudgetExhausted
+            } else {
+                NativeTaskStopReason::HostFailure
+            }),
+        )
     }
     fn control_reason(
         &self,

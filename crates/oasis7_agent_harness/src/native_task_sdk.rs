@@ -78,10 +78,10 @@ impl NativeTaskHost for SdkNativeTaskHost {
             return Err("context has conflicting original action and outcome; retain both".into());
         }
         if let Some(original) = action {
-            return Ok(state(&self.client.lookup(&original)?));
+            return Ok(state(&self.client.poll_original(&original)?));
         }
         if let Some(original) = outcome {
-            let result = state(&self.client.lookup(&original)?);
+            let result = state(&self.client.poll_original(&original)?);
             return Ok(if result == NativeTaskRecovery::Settled {
                 NativeTaskRecovery::Aborted
             } else {
@@ -89,7 +89,7 @@ impl NativeTaskHost for SdkNativeTaskHost {
             });
         }
         if let Some(original) = prefix {
-            let result = state(&self.client.lookup(&original)?);
+            let result = state(&self.client.poll_original(&original)?);
             return Ok(if result == NativeTaskRecovery::Settled {
                 NativeTaskRecovery::Ready
             } else {
@@ -97,6 +97,50 @@ impl NativeTaskHost for SdkNativeTaskHost {
             });
         }
         Ok(NativeTaskRecovery::Vacant)
+    }
+    fn settle_exhausted_context(&self, operation: &str) -> Result<NativeTaskRecovery, String> {
+        // An already signed action keeps its terminal lane; budget cleanup must
+        // never create a competing outcome or replace an unknown operation.
+        if self
+            .client
+            .cached_intent(ClientStateKind::Action, operation)?
+            .is_some()
+        {
+            return Err("context has an original action; recover that result instead".into());
+        }
+        if let Some(original) = self
+            .client
+            .cached_intent(ClientStateKind::Outcome, operation)?
+        {
+            return Ok(state(&self.client.poll_original(&original)?));
+        }
+        let prefix = self
+            .client
+            .cached_intent(ClientStateKind::Prefix, operation)?
+            .ok_or("original context prefix unavailable")?;
+        let oasis7_client_api::world_service_wire::WorldServicePayloadV1::Scheduler(signed) =
+            prefix.signed_payload
+        else {
+            return Err("invalid original context prefix".into());
+        };
+        let oasis7_client_api::world_service_wire::SchedulerOperationV1::TaskProviderPrefix {
+            context,
+        } = signed.request.operation
+        else {
+            return Err("invalid original context prefix".into());
+        };
+        let current = self.current_control()?;
+        if current.fence != self.initial_fence()?
+            || current.fence != context.fence
+            || current.fence.task_status != GameTaskStatusV1::Active
+        {
+            return Err("task control changed before context termination".into());
+        }
+        // Client persists this one original failure before its first submission,
+        // applies the existing expiry/base checks, and never advances world time.
+        Ok(state(
+            &self.client.outcome(operation, "transport_exhausted")?,
+        ))
     }
     fn prepare(&self, operation: &str) -> Result<NativeTaskContext, String> {
         if self.current_control()?.fence != self.initial_fence()? {

@@ -894,3 +894,7 @@ mod native_runner_conformance;
 #[cfg(unix)]
 #[path = "world_service_task_agc02_conformance.rs"]
 mod agc02_conformance;
+
+#[cfg(unix)]
+#[path = "world_service_task_budget_conformance.rs"]
+mod budget_conformance;

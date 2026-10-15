@@ -16,6 +16,7 @@ struct State {
     corrupt: bool,
     recover: BTreeMap<String, NativeTaskRecovery>,
     events: Vec<String>,
+    settlement: Option<NativeTaskRecovery>,
 }
 struct FakeHost {
     state: Mutex<State>,
@@ -89,6 +90,15 @@ impl NativeTaskHost for FakeHost {
             .get(op)
             .copied()
             .unwrap_or(NativeTaskRecovery::Vacant))
+    }
+    fn settle_exhausted_context(&self, op: &str) -> Result<NativeTaskRecovery, String> {
+        let mut s = self.state.lock().unwrap();
+        s.events.push(format!("settle:{op}:transport_exhausted"));
+        let result = s.settlement.unwrap_or(NativeTaskRecovery::Settled);
+        if result == NativeTaskRecovery::Settled {
+            s.recover.insert(op.into(), NativeTaskRecovery::Aborted);
+        }
+        Ok(result)
     }
     fn prepare(&self, op: &str) -> Result<NativeTaskContext, String> {
         self.state
@@ -288,7 +298,7 @@ fn reserved_calls_survive_restart_and_limits_cannot_be_topped_up() {
         .run()
         .unwrap();
     assert_eq!(second.model_calls_spent, 1);
-    assert_eq!(second.stop_reason, NativeTaskStopReason::BudgetExhausted);
+    assert_eq!(second.stop_reason, NativeTaskStopReason::Aborted);
     assert_eq!(
         host.events()
             .iter()
@@ -466,4 +476,103 @@ fn model_deadline_consumes_reservation_and_discards_late_effect() {
     release.send(()).unwrap();
     done.recv_timeout(Duration::from_secs(1)).unwrap();
     assert!(!host.events().iter().any(|event| event.starts_with("tool:")));
+}
+
+#[test]
+fn last_read_only_model_call_settles_original_context_before_budget_exit() {
+    let host = Arc::new(FakeHost::new());
+    let mut c = config();
+    c.max_model_calls = 1;
+    let report = NativeTaskRunner::new(
+        host.clone(),
+        provider(vec![vec![call("observe", json!({}))]]),
+        c.clone(),
+    )
+    .unwrap()
+    .run()
+    .unwrap();
+    assert_eq!(report.stop_reason, NativeTaskStopReason::BudgetExhausted);
+    assert_eq!(report.turns_completed, 0);
+    assert_eq!(report.model_calls_spent, 1);
+    assert_eq!(
+        host.events().last().unwrap(),
+        "settle:operator-run:0:transport_exhausted"
+    );
+    let events = host.events();
+    let restart = NativeTaskRunner::new(host.clone(), provider(vec![]), c)
+        .unwrap()
+        .run()
+        .unwrap();
+    assert_eq!(restart.stop_reason, NativeTaskStopReason::Aborted);
+    assert_eq!(&host.events()[events.len()..], &["recover:operator-run:0"]);
+}
+
+#[test]
+fn exhausted_restart_settles_ready_original_without_prepare_or_model_and_preserves_uncertainty() {
+    for (settlement, reason) in [
+        (
+            NativeTaskRecovery::Settled,
+            NativeTaskStopReason::BudgetExhausted,
+        ),
+        (
+            NativeTaskRecovery::Pending,
+            NativeTaskStopReason::PendingOriginal,
+        ),
+        (
+            NativeTaskRecovery::Rejected,
+            NativeTaskStopReason::RejectedOriginal,
+        ),
+        (
+            NativeTaskRecovery::Expired,
+            NativeTaskStopReason::ExpiredOriginal,
+        ),
+        (NativeTaskRecovery::Ready, NativeTaskStopReason::HostFailure),
+    ] {
+        let host = Arc::new(FakeHost::new());
+        let mut c = config();
+        c.max_model_calls = 1;
+        {
+            let mut s = host.state.lock().unwrap();
+            s.spent = 1;
+            s.settlement = Some(settlement);
+            s.recover
+                .insert(c.operation_id(0), NativeTaskRecovery::Ready);
+        }
+        let report = NativeTaskRunner::new(host.clone(), provider(vec![]), c)
+            .unwrap()
+            .run()
+            .unwrap();
+        assert_eq!(report.stop_reason, reason);
+        assert_eq!(report.model_calls_spent, 1);
+        assert_eq!(report.turns_completed, 0);
+        assert_eq!(
+            host.events(),
+            [
+                "recover:operator-run:0",
+                "settle:operator-run:0:transport_exhausted"
+            ]
+        );
+    }
+}
+
+#[test]
+fn exhausted_ready_context_does_not_terminate_after_task_stop() {
+    let mut fake = FakeHost::new();
+    fake.drift = Some("stop");
+    fake.started.store(true, Ordering::SeqCst);
+    let host = Arc::new(fake);
+    let mut c = config();
+    c.max_model_calls = 1;
+    {
+        let mut s = host.state.lock().unwrap();
+        s.spent = 1;
+        s.recover
+            .insert(c.operation_id(0), NativeTaskRecovery::Ready);
+    }
+    let report = NativeTaskRunner::new(host.clone(), provider(vec![]), c)
+        .unwrap()
+        .run()
+        .unwrap();
+    assert_eq!(report.stop_reason, NativeTaskStopReason::ControlChanged);
+    assert_eq!(host.events(), ["recover:operator-run:0"]);
 }

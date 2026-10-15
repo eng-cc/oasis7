@@ -1,5 +1,5 @@
 use super::*;
-use oasis7_agent_api::game::{DecimalU64, GAME_TASK_CREATE_DOMAIN, GameTaskCreateV1};
+use oasis7_agent_api::game::{GameTaskControlV1, GameTaskFenceV1, TaskContextIdentityV1};
 use oasis7_client_api::world_service_wire::AuthenticatedLookup;
 use std::{
     io::{Read, Write},
@@ -29,6 +29,9 @@ struct Probe {
     task: Option<thread::JoinHandle<()>>,
 }
 fn read_request(stream: &mut TcpStream) -> (String, Vec<u8>) {
+    // Accepted sockets can inherit the nonblocking listener mode on macOS.
+    // The fixture parses one complete bounded request before replying.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
@@ -105,19 +108,31 @@ impl Probe {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
-        let payload = WorldServicePayloadV1::GameTaskCreate(
+        let public = authority::sign_read_request("key", (), &hex::encode([7; 32]))
+            .unwrap()
+            .subject_public_key;
+        let control: GameTaskControlV1 = serde_json::from_value(json!({"schema_revision":1,"task_id":"task","world_id":"world","genesis_digest":"genesis","branch_id":"main","reorg_epoch":"0","agent_id":"a","owner_binding":"owner","owner_generation":"1","owner_public_key":public,"task_revision":"3","task_status":"active","latest_goal_revision":"1","active_goal_revision":"1","active_goal_reference":{"goal_revision":"1","goal_ref":"cd".repeat(32),"prepare_operation_id":"goal","publish_operation_id":"publish","activation_committed_height":"2"},"executor_epoch":"1","executor_id":"executor","executor_binding":{"executor_id":"executor","executor_public_key":public,"delegation_generation":"1","executor_epoch":"1"},"created_operation_id":"create"})).unwrap();
+        let context: TaskContextIdentityV1 = serde_json::from_value(json!({
+            "schema_revision":1,"fence":GameTaskFenceV1::from_control(&control),
+            "agent_session_id":"session","agent_turn_id":"turn","decision_request_id":"request",
+            "retry_seq":1,"transport_attempt":1,"request_commitment":format!("blake3:{}","11".repeat(32)),
+            "context_commitment":format!("blake3:{}","22".repeat(32)),"provider_invocation_commitment":format!("blake3:{}","33".repeat(32)),
+            "valid_until_tick":"16"}))
+        .unwrap();
+        let binding = serde_json::from_value(json!({"world_id":"world","branch_id":"main",
+            "finality_epoch":0,"finality_block_hash":null,"finality_status":"finalized",
+            "base_tick":0,"base_world_hash":format!("blake3:{}","1".repeat(64)),
+            "reorg_epoch":0,"runtime_manifest_hash":format!("blake3:{}","2".repeat(64))}))
+        .unwrap();
+        let payload = WorldServicePayloadV1::Scheduler(
             authority::sign_read_request(
-                GAME_TASK_CREATE_DOMAIN,
-                GameTaskCreateV1 {
-                    api_rev: 1,
-                    client_operation_id: "retained-original".into(),
-                    world_id: "world".into(),
-                    genesis_digest: "genesis".into(),
-                    branch_id: "main".into(),
-                    reorg_epoch: DecimalU64(0),
+                "scheduler",
+                SchedulerIntentV1 {
                     agent_id: "a".into(),
-                    owner_binding: "owner".into(),
-                    owner_generation: DecimalU64(1),
+                    request_id: "retained-original".into(),
+                    delegation_generation: 1,
+                    captured_base_binding: binding,
+                    operation: SchedulerOperationV1::TaskProviderPrefix { context },
                 },
                 &hex::encode([7; 32]),
             )
@@ -322,4 +337,58 @@ fn retry_policy_is_limited_to_transport_cooldown_and_http_503() {
         assert!(retry_delay(&error).is_none());
         assert!(!query_error(&error).contains("secret"));
     }
+}
+
+#[test]
+fn restarted_cached_original_retries_transient_queries_without_submit_or_new_identity() {
+    for fault in [
+        Fault::DropFirst,
+        Fault::UnavailableOnce,
+        Fault::CooldownOnce,
+    ] {
+        let probe = Probe::new(fault);
+        let cached = probe
+            .client
+            .cache_intent(
+                ClientStateKind::Prefix,
+                "retained-original",
+                probe.original.signed_payload.clone(),
+            )
+            .unwrap();
+        assert_eq!(cached, probe.original);
+        let restarted = Client {
+            remote: crate::WorldServiceTaskClient::new(probe.client.remote.config().clone())
+                .unwrap(),
+            world: probe.client.world.clone(),
+            agent: probe.client.agent.clone(),
+            public_key: probe.client.public_key.clone(),
+            key_hex: probe.client.key_hex.clone(),
+            state: crate::operation_store::OperationStore::open(&probe.root, [7; 32]).unwrap(),
+        };
+        let original = restarted
+            .cached_intent(ClientStateKind::Prefix, "retained-original")
+            .unwrap()
+            .unwrap();
+        let result = restarted.poll_original(&original).unwrap();
+        assert!(matches!(result.outcome, IntentOutcome::Committed { .. }));
+        assert_eq!(result.correlation, cached.correlation);
+        assert_eq!(probe.submits.load(Ordering::SeqCst), 0);
+        assert_eq!(probe.lookups.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            restarted
+                .cached_intent(ClientStateKind::Prefix, "retained-original")
+                .unwrap()
+                .unwrap(),
+            cached
+        );
+    }
+}
+
+#[test]
+fn query_only_original_assurance_failure_stops_without_submission() {
+    let probe = Probe::new(Fault::WrongSignature);
+    let error = probe.client.poll_original(&probe.original).unwrap_err();
+    assert!(error.contains("response not verified"));
+    assert_eq!(probe.submits.load(Ordering::SeqCst), 0);
+    assert_eq!(probe.lookups.load(Ordering::SeqCst), 1);
 }

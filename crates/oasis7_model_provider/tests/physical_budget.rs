@@ -195,6 +195,9 @@ impl NativeTaskHost for ControlHost {
     fn recover(&self, _: &str) -> Result<NativeTaskRecovery, String> {
         Ok(NativeTaskRecovery::Vacant)
     }
+    fn settle_exhausted_context(&self, _: &str) -> Result<NativeTaskRecovery, String> {
+        Err("unused context settlement in model transport fixture".into())
+    }
     fn prepare(&self, operation: &str) -> Result<NativeTaskContext, String> {
         Ok(NativeTaskContext {
             operation: operation.into(),

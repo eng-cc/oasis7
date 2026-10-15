@@ -75,7 +75,9 @@ impl Client {
         }
         self.poll_original(request)
     }
-    fn poll_original(
+    /// Query only the exact original signed intent within the existing bounded
+    /// recovery window. Never submits, signs, or creates an operation identity.
+    pub fn poll_original(
         &self,
         request: &SubmitIntentRequest<WorldServicePayloadV1>,
     ) -> Result<IntentResponse<Value>, String> {
