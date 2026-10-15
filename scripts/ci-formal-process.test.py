@@ -183,6 +183,12 @@ class Process(unittest.TestCase):
         with patch.object(Path, 'glob', return_value=[OtherUser()]):
             self.assertEqual(owned_processes('owned-test'), {})
 
+    def test_explicit_checkout_also_owns_default_results(self):
+        with patch.object(artifacts, 'ROOT', artifacts.ROOT), patch.object(artifacts, 'CONFIG', artifacts.CONFIG), patch.object(artifacts, 'execute') as execute:
+            with patch.object(sys, 'argv', ['ci-test-artifacts.py', 'run', '--repo-root', str(self.root), '--bundle', str(self.root / 'bundle')]):
+                artifacts.main()
+            self.assertEqual(execute.call_args.args[2], self.root.resolve() / 'output/formal-process/results.jsonl')
+
     def test_corrupt_executable_and_identity_fail_before_execution(self):
         bundle = self.root / 'bundle'
         bundle.mkdir(exist_ok=True)

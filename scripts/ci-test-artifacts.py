@@ -240,14 +240,14 @@ def main():
     parser.add_argument('--repo-root', type=Path, default=ROOT)
     parser.add_argument('--bundle', required=True, type=Path)
     parser.add_argument('--suite', default='ordinary')
-    parser.add_argument('--results', type=Path, default=ROOT / 'output/formal-process/results.jsonl')
+    parser.add_argument('--results', type=Path)
     args = parser.parse_args()
     ROOT = args.repo_root.resolve()
     CONFIG = ROOT / 'scripts/ci-formal-process-suites.json'
     if args.action == 'build':
         build(args.bundle.resolve())
     else:
-        execute(args.bundle.resolve(), args.suite, args.results)
+        execute(args.bundle.resolve(), args.suite, args.results or ROOT / 'output/formal-process/results.jsonl')
 
 
 if __name__ == '__main__':
