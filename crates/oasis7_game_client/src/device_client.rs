@@ -198,9 +198,15 @@ impl Client {
                 json!({"original_operation":response,"quote":null,"next":"retain_original_action; capture a new context only after a settled result"}),
             );
         }
-        let captured = self.captured(operation)?;
-        serde_json::to_value(self.recipe_quote(operation, &captured, factory, recipe, batches)?)
-            .map_err(|_| "recipe quote encoding failed".into())
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return Ok(
+                json!({"original_operation":self.lookup(&original)?,"quote":null,"next":"retain_original_outcome"}),
+            );
+        }
+        let (_, quoted) = self.fresh_quote(operation, |captured| {
+            self.recipe_quote(operation, captured, factory, recipe, batches)
+        })?;
+        serde_json::to_value(quoted).map_err(|_| "recipe quote encoding failed".into())
     }
     fn recipe_quote(
         &self,
@@ -209,8 +215,10 @@ impl Client {
         factory: &str,
         recipe: &str,
         batches: u32,
-    ) -> Result<TaskRecipeQuoteV1, String> {
-        let proof = self.context_read_proof(operation)?;
+    ) -> Result<TaskRecipeQuoteV1, crate::WorldServiceClientError> {
+        let proof = self
+            .context_read_proof(operation)
+            .map_err(crate::WorldServiceClientError::Configuration)?;
         let request = authority::sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -225,13 +233,9 @@ impl Client {
                 batches,
             },
             &self.key_hex,
-        )?;
-        self.remote.quote_task_recipe(&request).map_err(|error| {
-            format!(
-                "recipe quote {}; no replacement action created",
-                failure_tag(&error)
-            )
-        })
+        )
+        .map_err(crate::WorldServiceClientError::Configuration)?;
+        self.remote.quote_task_recipe(&request)
     }
     pub fn schedule(
         &self,
@@ -246,19 +250,25 @@ impl Client {
             validate_original_schedule(&original, &self.agent, factory, recipe, batches)?;
             return self.lookup(&original);
         }
-        let mut captured = self.captured(operation)?;
-        let quoted = self.recipe_quote(operation, &captured, factory, recipe, batches)?;
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return self.lookup(&original);
+        }
+        let (mut captured, quoted) = self.fresh_quote(operation, |captured| {
+            self.recipe_quote(operation, captured, factory, recipe, batches)
+        })?;
         if quoted.quote.rejection.is_some() {
             return Err(
                 "recipe quote rejected; no action submitted; inspect quote-schedule".into(),
             );
         }
         captured.current_public_context = quoted.current_public_context;
+        self.ensure_quote_has_no_write(operation)?;
         let signed = authority::sign_read_request(
             "cognition",
             cognition_intent(&captured, quoted.quote.action)?,
             &self.key_hex,
         )?;
+        self.ensure_quote_has_no_write(operation)?;
         let request = self.cache_intent(
             ClientStateKind::Action,
             operation,
@@ -496,3 +506,6 @@ mod outcomes;
 mod polling;
 
 use polling::failure_tag;
+
+#[path = "device_client_quote_retry.rs"]
+mod quote_retry;

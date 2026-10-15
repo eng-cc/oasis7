@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 
 pub const TASK_FACTORY_QUOTE_PATH: &str = "/v1/world/private-task/factory-quote";
 
+/// Fixed public categories for read-only snapshot races, never authority conflicts.
+pub const TASK_QUOTE_BASE_DRIFT: &str = "task_quote_base_drift";
+pub const TASK_QUOTE_DELIVERY_DRIFT: &str = "task_quote_delivery_drift";
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskFactoryQuoteRequestV1 {

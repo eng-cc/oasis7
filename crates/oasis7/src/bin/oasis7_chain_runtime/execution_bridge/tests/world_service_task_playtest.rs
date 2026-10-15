@@ -898,3 +898,6 @@ mod agc02_conformance;
 #[cfg(unix)]
 #[path = "world_service_task_budget_conformance.rs"]
 mod budget_conformance;
+
+#[path = "world_service_task_quote_drift.rs"]
+mod quote_drift;
