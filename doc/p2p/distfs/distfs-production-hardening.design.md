@@ -4,7 +4,7 @@
 
 本地文件索引/CAS、manifest及reward probe保持可诊断完整性；严格区分权威状态恢复与可丢弃scheduler cursor连续性。
 
-Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；固定审读基线 f9d5a552d9af04c1b1398262808198a58e560230，2026-09-26。本设计消费下表有限关系；旧章节保留作兼容详细条款，新增DES细化原义务而不改算法/schema/默认值/产品承诺。任务实际source/integration/tested tree/config/environment/window/结果由GitHub Issue/Project evidence维护，本文不伪造候选/通过结果。
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；固定源码审读基线 f97f2253cdcb163bf984e3c90d59d792fe1c9b19，2026-10-15。本设计消费下表有限关系；旧章节保留作兼容详细条款，新增DES细化原义务而不改算法/schema/默认值/产品承诺。任务实际source/integration/tested tree/config/environment/window/结果由GitHub Issue/Project evidence维护，本文不伪造候选/通过结果。
 
 非目标：不以文档active/合并、local fixture、历史MIG或CLI可编译宣称运行、BFT、部署、SLA或release。剩余215-object required set及root SC1..10/full组合不变。
 
@@ -26,11 +26,14 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | chain-runtime CLI严格范围；epoch aggregate-only、详细state local | [des-dh-report](#des-dh-report) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-decompression-bound](distfs-production-hardening.prd.md#dh-decompression-bound) | 缓存填充在产生实际解压字节时限制预算，完整验证后才入缓存 | [des-dh-decompression](#des-dh-decompression) | DistFS decoder/cache 与 runtime/QA | 目标；不改变合法大 blob 的非缓存合同，不证明全局 RSS/CPU/网络防护 |
 
+| Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) | manifest及其引用blob经get_verified、size/version/path完整校验后替换本地索引；只承接hash-bound材料校验子范围 | [材料校验子范围](#des-dh-manifest) | P2P/runtime拥有提交与权限，QA拥有组合判定 | 仅材料供应子范围；不覆盖DCS-002恢复、DCS-005可服务或完整AC |
+
 ## 3. 当前状态、目标状态与差距
 
 | 对象 | 当前专业合同（冻结source） | 目标 / 差距 | 实现 / 执行证据 |
 | --- | --- | --- | --- |
 | 本专题现行规则 | 配对PRD与保留旧章节的有界接口/失败合同 | manifest import可覆盖映射；probe坏state默认丢连续性但非权威恢复；shared refs/pins和failed-import nonmutation需独立验证。无remote challenge/PoRep/PoSt/ACL/lease/encryption/global恢复承诺。 | 本次source阅读，未运行behavior tests；具体测试定义存在不等于覆盖或通过 |
+| 缓存解压输出 | read_to_end后才比raw_len，失败前可插入空entry/淘汰旧项 | §13预算及失败缓存语义待实现/验证，其他codec不代签 | compressed_range_cache.rs静态审读；未运行 |
 | 跨节点组合能力 | local documented contract，历史完成是provenance | 依赖root/runtime/ops/consumer与full同candidate验证 | 运行/部署/发行未验证；不能由文档推导 |
 
 ## 4. 边界与结构
@@ -39,57 +42,71 @@ DistFS拥有local index/CAS/audit/manifest/probe算法；chain-runtime拥有CLI/
 
 ### des-dh-index
 
-path拒绝/CAS先于atomic index/local FileStore功能。
+`LocalCasStore` 规范化相对路径并拒绝 empty、absolute 和 ..；`write_file` 先落 CAS，再更新本地 files_index。原子文件替换不是 CAS、索引及调用方之间的跨组件事务；写失败时不能由错误反推不存在已写 CAS。read/stat/list/delete 保持本地 FileStore 抽象。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=本地路径映射与I/O接口不独立构成世界状态；scope=路径校验、CAS到索引的写入顺序。
+
 
 ### des-dh-precondition
 
-expected hash同进程匹配后操作，None兼容、冲突无分布式lock。
+`write_file_if_match` / `delete_file_if_match` 在当前索引 hash 匹配时继续操作；None 保留无前置条件兼容路径，非法 expected hash 拒绝。它是同进程逻辑 precondition，不提供跨进程/节点锁或分布式线性化；调用方处理冲突及重试节流。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=本地precondition不定义玩家版本或共识权威；scope=expected hash检查与None兼容。
+
 
 ### des-dh-audit-gc
 
-audit missing/dangling/orphan；delete只unreferenced且unpinned回收。
+`audit_file_index` 报告 missing file blob、dangling pin 与 orphan 集合。delete/overwrite 的旧 blob 只在无其他索引引用且 unpinned 时回收；`prune_orphan_blobs` 也排除被索引或 pin 的 blob。局部 GC 条件不证明世界 checkpoint/replay/archive 冗余，不能据此批准历史 pruning。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=本地引用回收不独立规定世界历史保留策略；scope=missing/dangling/orphan审计及本地引用/pin保护。
+
 
 ### des-dh-manifest
 
-sorted canonicalCBOR/CAS export，完整validate后atomic import。
+`manifest.rs` 从排序后的本地索引生成 canonical CBOR 并写 CAS。导入先验证 manifest hash、size、version，再验证每项规范化路径、blob hash/size 与重复路径，全部完成后替换本地索引。导入是受控替换而非 merge；缺 blob 拒绝，不能将此当世界快照或权威恢复。hash-bound 材料仍受本页产品边界约束。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=本地索引导出导入不独立定义世界恢复；材料验证边界另行承接；scope=排序、编码和本地index替换机制。
+
 
 ### des-dh-probe
 
-local challenge integrity/cursor rotation，不是remote attestation。
+`challenge_scheduler.rs` 从本地 CAS 集合按 cursor 选样，生成 request、receipt 并验证/聚合；轮转避免本轮重复命中。hash mismatch 等失败计入报告并影响调度状态。该自检没有远端 provider 的 custody 或 attestation 语义，也不是 PoRep/PoSt。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=本地自检不能独立证明生产数据可用性；scope=local CAS采样、轮转、验证与计数。
+
 
 ### des-dh-probe-state
 
-atomic scheduler persist；missing默认，坏state warning/default不阻main settlement/tick。
+`distfs_probe_runtime.rs` 的 load 对缺文件给默认 cursor，对读取/解析错误返回 Err；`reward_runtime_worker.rs` 捕获后 warning + default。persist 经 atomic helper 写 scheduler state，worker 对失败记 warning 并继续主循环。仅 best-effort 连续性，不能把默认化视作 checkpoint 或成功恢复；完整I/O失败路径的运行证据仍待补。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=可丢弃scheduler连续性不构成世界恢复；scope=probe state加载、默认化和原子持久化调用。
+
 
 ### des-dh-backoff
 
-budget/backoff/reason multiplier/old defaults兼容、不改算法/公式。
+`StorageChallengeAdaptivePolicy` 约束每轮检查预算、base/max backoff 和各原因 multiplier；失败轮设置 deadline，到期前 skip 并保留累计观察字段。旧快照新增字段采用 serde defaults。reason multiplier 改变本地调度间隔，不改变 challenge 验证、reward 公式或网络协议。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=局部I/O预算与退避不是经济或玩家结算规则；scope=检查数、backoff、原因分类和旧state默认值。
+
 
 ### des-dh-report
 
-chain-runtime CLI严格范围；epoch aggregate-only、详细state local。
+chain-runtime CLI 经 `parse_distfs_probe_runtime_option` 检查正整数/非负范围；probe worker 调用 policy 并持久化 cursor。epoch JSON 的 distfs 子对象仅累计 total_checks、failed_checks、failure_ratio；详细 cursor/config/backoff 留在本地 state。scheduler 单测不代签 CLI→worker→epoch 序列化全链。
 
-path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
+产品适用性：N/A；reason=专业诊断统计不新增玩家SLA或收费承诺；scope=CLI范围、worker调用及aggregate report。
+
+
+### des-dh-material-authority
+
+本页只供应 hash-bound 材料和局部诊断；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) 的世界状态结论仍要求合法 profile 提交证明及对应历史/root。[AC-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-003) 禁止存储服务、provider、缓存或 probe 借读取/发布成功取得最终写入权。现有 P2P [receipt/finality](../design.md#des-p2p-receipt-finality) 与[角色隔离](../design.md#des-p2p-layer-authority)拥有组合边界；本页不新增投票、激活、恢复或服务闸门。
+
+上面各机制的产品 N/A 只限定其局部调度/I/O义务，不排除此材料与权限关系。产品卡现有部分覆盖和未核实范围不因本页规范化提升；恢复链、真实故障域、正向续跑和消费者可服务仍须独立验证。
 
 ## 5. 关键运行流程
 
 path校验→CAS写→atomic index；if-match查当前hash再write/delete，None旧兼容；delete仅reclaim无索引ref且unpinned。manifest按canonical排序CBOR导出CAS，导入完整validation→atomic替换；fail保留原映射。probe load missing默认、unreadable/malformed warning默认→cursor轮转/预算/退避→aggregate→atomic scheduler state，不阻settlement主链。
 
-拒绝保留可定位原因；timeout/retry受原策略有界限制。并发冲突遵循原guard/precondition/共识authority，不能因接线或重连获得新权限。取消/替代只有外部专业合同明确支持时成立，本设计不新建取消或补偿schema。
+拒绝保留可定位原因；本页的候选数、轮次或检查配额不证明统一timeout、自动retry次数或时延上界。并发冲突遵循原guard/precondition/共识authority，不能因接线或重连获得新权限。取消/替代只有外部专业合同明确支持时成立，本设计不新建取消或补偿schema。
 
 ## 6. 接口与数据合同
 
@@ -134,13 +151,15 @@ MIG067..075、MIG080仅历史；旧probe state字段default兼容。Phase5细rep
 | --- | --- | --- | --- | --- | --- |
 | [professional_acceptance: dh-local-index](distfs-production-hardening.prd.md#dh-local-index) | [des-dh-index](#des-dh-index) | path拒绝/CAS先于atomic index/local FileStore功能 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/lib_tests.rs`；existing file_store_rejects_invalid_paths、file_store_write_read_roundtrip、file_store_overwrite_updates_hash_and_metadata；index-write故障完整oracle planned。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-local-index](distfs-production-hardening.prd.md#dh-local-index) | [des-dh-precondition](#des-dh-precondition) | expected hash同进程匹配后操作，None兼容、冲突无分布式lock | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/lib_tests.rs`；existing file_store_write_if_match_enforces_hash_precondition、file_store_delete_if_match_enforces_hash_precondition、file_store_if_match_rejects_invalid_expected_hash；只同进程。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dh-local-index](distfs-production-hardening.prd.md#dh-local-index) | [des-dh-audit-gc](#des-dh-audit-gc) | audit missing/dangling/orphan；delete只unreferenced且unpinned回收 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/lib_tests.rs`；existing file_index_audit_reports_missing_dangling_and_orphan_blobs、file_store_delete_preserves_blob_referenced_by_another_file；pin/shared-ref/GC完整负例需审读，非pruning世界证明。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dh-manifest](distfs-production-hardening.prd.md#dh-manifest) | [des-dh-manifest](#des-dh-manifest) | sorted canonicalCBOR/CAS export，完整validate后atomic import | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/manifest.rs`；existing file_index_manifest_export_import_restores_index、file_index_manifest_import_rejects_missing_blob；failed import非mutation/canonical order场景planned；仅local mapping。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dh-local-index](distfs-production-hardening.prd.md#dh-local-index) | [des-dh-audit-gc](#des-dh-audit-gc) | audit missing/dangling/orphan；delete只unreferenced且unpinned回收 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/lib_tests.rs`；existing file_index_audit_reports_missing_dangling_and_orphan_blobs、file_store_delete_preserves_blob_referenced_by_another_file；prune_orphan_blobs_removes_only_unreferenced_data断言live/pinned保留、orphan删除；shared-ref测试断言最后引用删除才回收。非世界pruning证明。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dh-manifest](distfs-production-hardening.prd.md#dh-manifest) | [des-dh-manifest](#des-dh-manifest) | sorted canonicalCBOR/CAS export，完整validate后atomic import | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/manifest.rs`；existing file_index_manifest_export_import_restores_index、file_index_manifest_import_rejects_missing_blob；roundtrip断言路径a/b排序、恢复2项及原字节；missing-blob测试仅断言错误，完整failed-import nonmutation仍planned；仅local mapping。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-local-probe](distfs-production-hardening.prd.md#dh-local-probe) | [des-dh-probe](#des-dh-probe) | local challenge integrity/cursor rotation，不是remote attestation | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/challenge_scheduler.rs`；existing probe_with_cursor_records_hash_mismatch_failure、probe_with_cursor_advances_and_accumulates_state；localCAS。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-local-probe](distfs-production-hardening.prd.md#dh-local-probe) | [des-dh-probe-state](#des-dh-probe-state) | atomic scheduler persist；missing默认，坏state warning/default不阻main settlement/tick | [testing-manual.md](../../../testing-manual.md)；S4 required planned chain-runtime load/persist：missing/unreadable/malformed/writefailure与worker进展；distfs_probe_runtime.rs仅implementation locator，尚未定位完整测试。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | [des-dh-backoff](#des-dh-backoff) | budget/backoff/reason multiplier/old defaults兼容、不改算法/公式 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/challenge_scheduler.rs`；existing probe_with_policy_limits_checks_per_round、probe_with_policy_applies_backoff_after_failure_round、probe_cursor_state_deserializes_from_legacy_snapshot、probe_with_policy_rejects_zero_reason_multiplier；local。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | [des-dh-report](#des-dh-report) | chain-runtime CLI严格范围；epoch aggregate-only、详细state local | [testing-manual.md](../../../testing-manual.md)；S4 required planned CLI拒非法值、legacy state/readback与epoch fields oracle；CLI/worker/report完整测试未定位，本地lib suite不足。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-decompression-bound](distfs-production-hardening.prd.md#dh-decompression-bound) | [des-dh-decompression](#des-dh-decompression) | 缓存解压实际输出预算与完整性后发布 | [testing-manual S4](../../../testing-manual.md)；§13 的有界 reader/sink 计数、损坏输入、缓存不变和大文件兼容场景；planned local fixture，入口为现有 DistFS lib suite | source、固定容量配置、输出计数、缓存前后结果与命令退出码 | 最终报错不足；未运行，不证明 decoder workspace、RSS、CPU 或网络 DoS 上界 |
+
+| Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) | [材料校验子范围](#des-dh-manifest) | manifest及其引用blob经get_verified、size/version/path完整校验后替换本地索引；只承接hash-bound材料校验子范围 | [testing-manual S9A](../../../testing-manual.md)；planned同candidate P2P/runtime消费负例：错误hash/缺提交证明/非权威服务输入拒绝，观察无canonical进展；本页局部fixture只验证材料机制 | source/config/world/profile与真实拒绝结果、canonical前后状态；QA独立判定 | 未运行，local CAS、manifest、probe或DHT成功均不足以证明完整AC |
 
 ## 12. 决策、长期风险与未决问题
 
@@ -182,7 +201,15 @@ runtime/P2P负责缺失技术/实现；ops负责环境事实；QA负责计划覆
 <a id="des-dh-decompression"></a>
 ## 13. 有界解压与缓存提交
 
+产品适用性：N/A；reason=本地缓存输出预算不独立定义玩家状态或服务等级；scope=缓存准入后的解压分配与失败提交，hash-bound材料/权限仍由本页材料边界承接。
+
 本节消费[缓存解压输出上界](distfs-production-hardening.prd.md#dh-decompression-bound)。它是待实现/验证的局部设计，不更改 blob 格式、缓存容量、合法大文件策略或现有完整性算法。
+
+### 13.0 当前实现与目标缺口
+
+冻结源码 `compressed_range_cache.rs` 仍在 `Vec::with_capacity(raw_len)` 后执行 `decoder.read_to_end(&mut bytes)`，最后才核对实际长度。`lib.rs::get_range` 的 32 MiB entry 准入只看头部 raw_len；它不能约束实际解压分配。本节预算是既有待实现目标，不能以 `local_blob_codec.rs` 另一条有budget路径代签。
+
+当前实现解码前已插入空 entry，满额时先 FIFO eviction；错误时不写 `Some(bytes)`，但不保证整个 cache/FIFO 不变。下述“无错误缓存项、无关缓存保持原合同”是目标验收，必须分别检查已解码数据、空占位及淘汰影响。现有合法压缩范围读取/并发/轮转测试不含小声明大输出计数oracle，不证明此缺口已关闭。
 
 ### 13.1 校验和分配顺序
 
