@@ -28,12 +28,7 @@ fn observe_triggers_chunk_generation_for_agent_chunk() {
     model.chunks.insert(coord, ChunkState::Unexplored);
     model.locations.insert(
         "origin".into(),
-        Location::new_with_profile(
-            "origin".into(),
-            "Origin".into(),
-            location_pos,
-            LocationProfile::default(),
-        ),
+        Location::new_with_profile("origin", "Origin", location_pos, LocationProfile::default()),
     );
     model.agents.insert(
         "agent-0".into(),
