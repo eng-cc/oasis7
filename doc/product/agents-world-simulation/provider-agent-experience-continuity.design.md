@@ -1,8 +1,14 @@
 # Agent/provider 体验连续性：执行方选择与共同游戏边界
 
-- 所属产品模块：智能体、世界模拟与交互；上位 [模块 PRD](prd.md)。
-- 配对需求：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md)。
-- 生命周期：`active`；Owner role：`producer_system_designer`；Last reviewed：2026-10-15。
+## 文档身份
+
+- 所属产品模块：智能体、世界模拟与交互
+- 上位产品 PRD：[模块 PRD](prd.md)
+- 配对产品 PRD：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md)
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- Last reviewed：2026-10-15
+- 专业域权威：[Provider parity](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
 - 适用范围：专业域声明支持的官方内置/外部执行方、平台和玩家入口。本文是目标体验，不是当前支持或发布报告。
 - 技术主责：[统一游戏客户端边界](../../world-simulator/llm/agent-game-client-boundary.design.md)；原在途意图技术语义仍由 [Provider Switch](../../world-simulator/llm/provider-switch-intent-continuity.design.md)拥有。
 
@@ -74,10 +80,10 @@ Trace refs: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01（[REQ-AGENT-PARITY-003]
 
 | 产品要求 | 体验验证 | 专业验证与范围限制 |
 | --- | --- | --- |
-| [REQ-AGENT-PARITY-001](provider-agent-experience-continuity.prd.md#req-agent-parity-001) | 不支持组合保持窄承诺，玩家理解限制 | 具体 provider 支持仍由 parity authority；本页不发布新支持矩阵 |
-| [REQ-AGENT-PARITY-002](provider-agent-experience-continuity.prd.md#req-agent-parity-002) | 切换前后的候选、未知、受理和完成清楚区分 | 原请求与世界后果由 Runtime/Provider Switch 验证，界面截图不代签 |
-| [REQ-AGENT-PARITY-003](provider-agent-experience-continuity.prd.md#req-agent-parity-003) | 相同授权能力的官方/外部执行不呈现不同游戏规则 | 系统 AGC-01..05、07..09；真实模型与玩家体验另取证 |
-| [REQ-AGENT-PARITY-004](provider-agent-experience-continuity.prd.md#req-agent-parity-004) | 完成选择、开始、离开、回来、预算失败、停止与恢复 | 系统 AGC-06、09..11，按实际平台与入口；不证明云托管 |
+| [REQ-AGENT-PARITY-001](provider-agent-experience-continuity.prd.md#req-agent-parity-001) / [AC-AGENT-PARITY-001](provider-agent-experience-continuity.prd.md#ac-agent-parity-001) | 不支持组合保持窄承诺，玩家理解限制 | 具体 provider 支持仍由 parity authority；本页不发布新支持矩阵 |
+| [REQ-AGENT-PARITY-002](provider-agent-experience-continuity.prd.md#req-agent-parity-002) / [AC-AGENT-PARITY-002](provider-agent-experience-continuity.prd.md#ac-agent-parity-002) | 切换前后的候选、未知、受理和完成清楚区分 | 原请求与世界后果由 Runtime/Provider Switch 验证，界面截图不代签 |
+| [REQ-AGENT-PARITY-003](provider-agent-experience-continuity.prd.md#req-agent-parity-003) / [AC-AGENT-PARITY-003](provider-agent-experience-continuity.prd.md#ac-agent-parity-003) | 相同授权能力的官方/外部执行不呈现不同游戏规则 | 系统 AGC-01..05、07..09；真实模型与玩家体验另取证 |
+| [REQ-AGENT-PARITY-004](provider-agent-experience-continuity.prd.md#req-agent-parity-004) / [AC-AGENT-PARITY-004](provider-agent-experience-continuity.prd.md#ac-agent-parity-004) | 完成选择、开始、离开、回来、预算失败、停止与恢复 | 系统 AGC-06、09..11，按实际平台与入口；不证明云托管 |
 
 设计假设：正式启动路径能隐藏模块拆分的部署细节而不隐藏运行责任。反证信号是用户必须自行猜测多个进程、停止状态被误读或不能辨认费用来源；由产品 owner 与 launcher/viewer owner 调整交互，不能以技术拆分为理由删去信息。
 
