@@ -232,7 +232,11 @@ fn wait_for_new_long_history_result(
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> Result<(), String> {
     let key = correlation::key_digest(&request.correlation.key).map_err(|e| e.to_string())?;
-    let deadline = Instant::now() + Duration::from_secs(20);
+    // Volatile admission has no execution SLO. Keep this fixture bounded while
+    // allowing a request to wait for an already-running Tick and its own Tick.
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(120);
+    let mut next_diagnostic = Duration::from_secs(20);
     loop {
         let current = runtime.published.current()?;
         // Each generation/nonce here is new and the next request is not
@@ -252,9 +256,15 @@ fn wait_for_new_long_history_result(
                 "long history task failed before publication: {error}"
             ));
         }
-        if Instant::now() >= deadline {
+        let now = Instant::now();
+        if now >= deadline {
+            // Publication may have advanced while the Node snapshot was read.
+            let current = runtime.published.current()?;
+            if fresh_long_history_result(&current.world, &key, request)?.is_some() {
+                return Ok(());
+            }
             return Err(format!(
-                "long history task {key} missing at position {}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
+                "long history task {key} missing after 120s at position {}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
                 current.anchor.head().record().position,
                 snapshot.running,
                 snapshot.tick_count,
@@ -266,6 +276,24 @@ fn wait_for_new_long_history_result(
                 snapshot.consensus.pending_proposal,
                 snapshot.consensus.last_status,
             ));
+        }
+        if now.duration_since(started) >= next_diagnostic {
+            eprintln!(
+                "long history task {key} still awaiting exact publication after {}s (diagnostic threshold {}s); position={} running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
+                now.duration_since(started).as_secs(),
+                next_diagnostic.as_secs(),
+                current.anchor.head().record().position,
+                snapshot.running,
+                snapshot.tick_count,
+                snapshot.consensus.slot,
+                snapshot.consensus.latest_height,
+                snapshot.consensus.committed_height,
+                snapshot.consensus.last_execution_height,
+                snapshot.consensus.pending_consensus_actions,
+                snapshot.consensus.pending_proposal,
+                snapshot.consensus.last_status,
+            );
+            next_diagnostic += Duration::from_secs(20);
         }
         thread::sleep(Duration::from_millis(25));
     }

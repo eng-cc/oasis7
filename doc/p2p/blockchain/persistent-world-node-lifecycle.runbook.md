@@ -41,7 +41,7 @@ fixture v87 / production v30 / endpoint release v14 的普通提交/重启、完
 | Zero/genesis 实际运行 | `46981`：33.52 秒 | 通过该场景 |
 | C03 持久重开 | 完整八阶段实际运行 `60429` 通过，536.86 秒；每阶段均由原请求恰好一次 Qualified，并精确重开两次。`primary_published` 另有强制删除本地 C0 材料缓存后的实际通过（80.95 秒） | 八阶段通过 |
 | 损坏候选拒绝 | `corrupt_existing_candidate_or_frozen_artifact_refuses_prepare_without_promotion`，运行 `3416`：通过，3.69 秒 | 通过该定向回归 |
-| World 长期历史 | `v13`：653.22 秒通过，70 次真实签名更新，捕获切面 73 条 Qualified、102233085 bytes，热 Tick 32 条；第 16/32/48/64 次及最终重开核验原请求、冷历史与恰好一次效果。端点使用 canonical release 构建，harness/runtime 为 debug test artifact，20 秒提交期限未变；debug 端点整轮仍受延迟限制 | 通过该构建组合，最新源码待重测 |
+| World 长期历史 | `v13`：653.22 秒通过，70 次真实签名更新，捕获切面 73 条 Qualified、102233085 bytes，热 Tick 32 条；第 16/32/48/64 次及最终重开核验原请求、冷历史与恰好一次效果。端点使用 canonical release 构建，harness/runtime 为 debug test artifact，当时使用 20 秒测试等待预算（非生产提交 SLO）；debug 端点整轮仍受延迟限制 | 通过该构建组合，最新源码待重测 |
 | World 初始激活 CLI | `1581`：实际 Prepare 中断后原请求重试、重复激活及签名冲突拒绝通过，40.98 秒 | 通过该场景 |
 | Full-state sync CLI | 原 C0 加入/重开、移动 head、死 seed 转独立固定信任 alternate 三项实际通过；`v4`：合法 epoch 更新后停止、安装新 grant、从不变 C0 重开通过，6.81 秒 | 四项分别通过，完整脚本待验 |
 | 单副本失联只读 | `v2`：SIGKILL R 后新提交暂停，签名状态报告 degraded；指定原已发布切面可读，未指定切面请求拒绝。R 原目录重开后原请求恰好一次提交，24.15 秒 | 通过该场景 |
@@ -77,6 +77,7 @@ fixture v87 / production v30 / endpoint release v14 的普通提交/重启、完
 
 用户授权小遗留在实施文档跟踪；这些项不表示当前已通过，也不解除切换、回滚与恢复正确性及 required CI 的合入要求。
 
+- TODO：按真实提交大小和状态规模测量写入至 Qualified 发布的延迟，再确定生产 SLO。长期历史夹具的新请求采用绝对 120 秒等待预算，20/40/60/80/100 秒输出原请求及发布/Node pending 阶段诊断；该预算不是生产 SLO，SDK、RPC 和生产期限不变。完整 70 次精确发布与冷历史断言仍须通过，120 秒后仍缺结果不能按性能 TODO 豁免。
 - TODO：在明确获准的真实部署环境验证 P/R 物理故障域、受保护 signer/HSM、服务管理器与部署回退。验收为原 C0/身份不变、故障后原请求恰好一次恢复及独立资格读回；本机协议模拟不代签。
 - TODO：在具有精确已提交 execution record/CAS 根的 qualified World 上验证真正不同 SHA 的正向 shipping 升级。当前 compatibility_observer 夹具只具备 materialized World 而没有执行资格，探针必须在停止原节点前拒绝；不同 SHA 的计划或拒绝、同映像真实失败启动回滚均不代签成功升级。不得通过放宽未证明 World 的兼容性检查完成该项。
 - TODO：补充 macOS 以外平台的 executable-image/no-follow 路径与真实不同版本产物升级矩阵。验收为合法 prior/candidate 通过、错误加载映像及不兼容持久格式在停止前拒绝；shell stub 不代签真实升级。
