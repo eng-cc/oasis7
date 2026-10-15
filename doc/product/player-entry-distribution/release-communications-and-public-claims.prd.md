@@ -57,6 +57,10 @@
 
 只有当当前事实、适用范围和证据边界已经对齐，且产品审核、QA 证据复核和根 README claim envelope 均通过时，才可形成可发布公开 claim（releasable public claim）。可发布 claim 是一条面向外部读者的受范围约束的现状陈述，不得把产品目标或假设改写成当前事实，也不得借此暗示更高阶段、无条件可用性或未批准的后续计划。
 
+## 2.2 阅读体验与发布决策
+
+读者应先辨认已证实事实及其范围，再决定使用当前受支持入口、等待或按真实恢复路径行动。发布者在证据不足或相互冲突时选择收窄、保留草稿或撤回；只有同一窗口支持的事实才进入可发布状态，亮点与目标不抵消限制。
+
 ## 3. 沟通生命周期
 
 - `draft`、`reviewed`、`publish_ready`、`published`、`withdrawn/stale` 是不同状态，不能互相代签。草稿和审核通过都不是发布证据。
@@ -86,8 +90,20 @@
 <a id="req-entry-claim-001"></a>
 ### REQ-ENTRY-CLAIM-001：公开 claim 必须绑定同一证据窗口
 
+Trace ID: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff
+
 - 要求：每条发行沟通必须绑定同一候选或版本、primary mode、适用入口、证据范围、更新时间和根 README claim envelope；内部 readiness、QA green、草稿或历史 verdict 不得单独生成公开事实。
 - 验收：AC-ENTRY-CLAIM-001
+
+
+- 功能点：[REQ-ENTRY-CLAIM-001](#req-entry-claim-001)；验收 [AC-ENTRY-CLAIM-001](#ac-entry-claim-001)。
+- 适用范围：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 抽样同候选文案与 README/QA/专业证据，对比历史或局部 green 负例；待取得审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-claim-001"></a>
 ### AC-ENTRY-CLAIM-001：局部 green 不会升级公开状态
@@ -99,8 +115,20 @@
 <a id="req-entry-claim-002"></a>
 ### REQ-ENTRY-CLAIM-002：事实漂移必须触发纠正或撤回
 
+Trace ID: O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c
+
 - 要求：当前事实、证据或限制漂移时，所有 active public surfaces 必须同步纠正、降级或撤回受影响文案；messaging rollback 不得被表达为软件回滚、QA 放行或事故恢复。
 - 验收：AC-ENTRY-CLAIM-002
+
+
+- 功能点：[REQ-ENTRY-CLAIM-002](#req-entry-claim-002)；验收 [AC-ENTRY-CLAIM-002](#ac-entry-claim-002)。
+- 适用范围：所有活跃公开 surface 的事实漂移纠正、降级与撤回；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 演练事实漂移，核对所有活跃 surface 的纠正/撤回及实际发布定位；待取得同步记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：所有活跃公开 surface 的事实漂移纠正、降级与撤回的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-claim-002"></a>
 ### AC-ENTRY-CLAIM-002：撤回只改变 claim 状态
@@ -112,8 +140,20 @@
 <a id="req-entry-claim-003"></a>
 ### REQ-ENTRY-CLAIM-003：当前事实、产品目标、假设与证据边界必须分离
 
+Trace ID: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
+
 - 要求：每个拟发布的公开 claim 必须同时给出当前事实、产品目标、假设和证据边界；只有当前事实在适用范围内得到根 README、对应专业 authority 与同一证据窗口支持时，才可将其标记为可发布公开 claim。
 - 验收：AC-ENTRY-CLAIM-003
+
+
+- 功能点：[REQ-ENTRY-CLAIM-003](#req-entry-claim-003)；验收 [AC-ENTRY-CLAIM-003](#ac-entry-claim-003)。
+- 适用范围：每个拟发布 claim 的事实、目标、假设、证据边界与可发布条件；沿用本条原有阶段和前置条件。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[认领经济公开口径边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)承接认领经济规则的四层区分与发布限制。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 审核四层字段与可发布条件；专业认领边界仅为一项输入，待取得完整公开 claim 审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：该条款仅覆盖认领经济输入，其他专业领域、全渠道发布与审核的组合承接未核清；实现：未取得同证据窗口的全量文案审核及发布记录。
 
 <a id="ac-entry-claim-003"></a>
 ### AC-ENTRY-CLAIM-003：目标或假设不会伪装成当前事实
@@ -166,6 +206,6 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-CLAIM-001](#req-entry-claim-001) / [AC-ENTRY-CLAIM-001](#ac-entry-claim-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-CLAIM-002](#req-entry-claim-002) / [AC-ENTRY-CLAIM-002](#ac-entry-claim-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-CLAIM-003](#req-entry-claim-003) / [AC-ENTRY-CLAIM-003](#ac-entry-claim-003) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-001](#req-entry-claim-001) / [AC-ENTRY-CLAIM-001](#ac-entry-claim-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 待执行方法：按 AC 抽样同候选文案与 README/QA/专业证据，对比历史或局部 green 负例；待取得审核记录；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-002](#req-entry-claim-002) / [AC-ENTRY-CLAIM-002](#ac-entry-claim-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 待执行方法：按 AC 演练事实漂移，核对所有活跃 surface 的纠正/撤回及实际发布定位；待取得同步记录；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-CLAIM-003](#req-entry-claim-003) / [AC-ENTRY-CLAIM-003](#ac-entry-claim-003) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md)、[`testing PRD`](../../testing/prd.md)、[`Gameplay Agent 认领经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`Gameplay Agent 认领经济合同 design`](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)、[`restricted grant LiveOps runbook`](../../game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md#public-claim-boundary)、[`README.md`](../../../README.md) | 待执行方法：按 AC 审核四层字段与可发布条件；专业认领边界仅为一项输入，待取得完整公开 claim 审核记录；导航关系不等于通过证据 | `test_tier_required` |

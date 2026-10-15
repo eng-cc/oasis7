@@ -42,7 +42,7 @@
 - 修改 capability、sandbox limits 或 cache 格式时，同步更新 ABI 兼容与损坏恢复测试。
 
 <a id="wasmtime-49-coordinated-release"></a>
-### Wasmtime 48.0.3 → 49.0.2 执行兼容与发布边界
+### Wasmtime 48.0.3 → 49.0.3 执行兼容与发布边界
 
 Wasmtime 49 将 bulk operation 的 fuel debit 移到操作成功完成后；同时触发越界与
 fuel 不足的调用，48 与 49 可能分别返回 `OutOfFuel` 与 `Trap`。两者都拒绝调用且不
@@ -52,7 +52,7 @@ fuel 不足的调用，48 与 49 可能分别返回 `OutOfFuel` 与 `Trap`。两
 package version，不标识或强制校验 Wasmtime 依赖版本。
 
 本次依赖升级必须采用同一 world 的完整执行集合协调切换：所有能够 author 或独立
-execute/validate tick 的进程须在维护边界全部停止，在完整目标 49.0.2 工件回读通过后
+execute/validate tick 的进程须在维护边界全部停止，在完整目标 49.0.3 工件回读通过后
 才恢复；不得使用重叠 48/49 执行窗口。具体 inventory、quiescence、readback、恢复与
 回滚 hold 见 [Wasmtime49 维护流程](../../p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance)。
 现有单节点升级、health/preflight 或 checkpoint 一致性检查均不构成自动 fleet engine

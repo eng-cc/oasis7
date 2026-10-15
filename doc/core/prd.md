@@ -2,14 +2,16 @@
 
 审计轮次: 6
 
+本页承载跨模块专业治理与导航，不是第五个产品模块。通用开发与交付流程以[开发流程规范](../engineering/workflow/source-of-truth.md)为准；历史 ROUND、Task 和审计标记不构成当前任务准入材料。
+
 ## 目标
 - 作为项目级总 PRD，提供 oasis7 的全局设计全貌入口。
 - 统一跨模块边界、关键链路、术语口径与验收基线。
-- 确保各模块改动可追溯到 PRD-ID、GitHub task issue evidence 与测试证据。
+- 确保各模块改动可追溯到适用要求、实际 PR 与测试证据；Issue 和 Project 按需使用。
 
 ## 范围
 - 覆盖全项目模块地图、端到端链路、关键分册导航与治理基线。
-- 覆盖 PRD-ID 到 GitHub task issue evidence 的任务映射。
+- 覆盖适用 PRD-ID 到实际 PR、按需 Issue 与验证记录的关系。
 - 不覆盖各模块实现细节正文（由模块 PRD 与专题分册承载）。
 
 ## 接口 / 数据
@@ -90,13 +92,13 @@
   - AC-1: core PRD 包含模块职责矩阵。
   - AC-2: core PRD 包含至少 4 条关键端到端链路描述。
   - AC-3: core PRD 给出关键分册导航并可从 `doc/README.md` 到达。
-  - AC-4: GitHub task issue evidence 中的任务与 PRD-CORE-ID 可映射。
-  - AC-5: 文档级 `审计轮次` 仅可对应已落档的正式 ROUND 台账；在 `ROUND-NNN` 正式启动文件落档前，不得保留脱离台账的 `审计轮次 > NNN` 标记。
+  - AC-4: 实际 PR 或按需 Issue 中的相关修改与适用 PRD-CORE-ID 可映射，不强制另建任务。
+  - AC-5: 文档级 `审计轮次` 保留对应历史 ROUND 的来源语义，不因日常修订上调，也不作为当前复审或验收通过证明；现行工作不要求新建 ROUND 启动文件或台账。
   - AC-6: core PRD 明确列出当前阶段 `P0/P1/P2` 收口项、对应 owner、输入、输出、验收标准与阻断条件。
   - AC-7: 全局 P0 按当前路径、连续性和必要验证缺口准入，首次开放按当前里程碑退出条件验收。
   - AC-8: 工作包 明确启动条件、依赖与退出条件，后续扩展不自动阻断受控试玩。
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
-  - AC-10: `PRD-CORE-004` 可映射到 GitHub task issue evidence 中的任务与 `test_tier_required` 验证方法。
+  - AC-10: `PRD-CORE-004` 可映射到实际 PR 或按需 Issue 及适用的 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
@@ -230,7 +232,7 @@
 - Technical Risks:
   - 风险-1: 模块新增能力未及时回填全局链路。
   - 风险-2: 总览与分册的口径同步依赖人工流程。
-  - 风险-3: 若局部修订直接上调 `审计轮次` 而未建立正式 ROUND 台账，字段会失去可比性，并破坏 reviewed-files / progress-log 对账。
+  - 风险-3: 若局部修订直接上调历史 `审计轮次`，会混淆旧 ROUND 的 reviewed-files / progress-log 对账语义与当前验证事实；历史记录不能代替当前 PR 的实际检查与评审。
   - 风险-4: 若继续把 launcher / explorer 体验扩展排在玩法与发布治理前，项目会强化“能展示”而非“能稳定发布”的错配。
   - 风险-5: 若 runtime / testing / playability 的证据标准不同步，发布评审会退化为口头判断。
 - 风险-6: 若当前排序与下一步未同步到 Git、PR 与实际 CI 记录，团队会重新回到平均发力与隐式尾注推进。
