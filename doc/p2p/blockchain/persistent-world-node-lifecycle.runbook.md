@@ -225,7 +225,7 @@ watch 为有界、只在 commit 变化时输出的 snapshot polling。`--cursor`
 | 本次本机代码交付 | 健康 durable set 的双安装激活、跨 epoch Normal 读取、原 operation 故障续做；Package stage/promote 与真实失败启动回滚；最新 source HEAD 的 required CI。真实主链失败仍阻断合入。 |
 | 后续 TODO | C01—C20、O01—O19、U01—U10 在真实部署环境中的剩余故障交错与平台组合，以及已明确 blocked 的正式 Skill/executor 自主试玩。表中旧场景保留实际版本范围，不外推为最新完整部署通过。 |
 
-2026-10-14 用户授权快速推进合入，小遗留在实施文档标记 TODO。本次以同一 PR 交付本机代码及管理基础设施；满足真实主链、独立评审和 required CI 后推进合入。合入不表示整套部署方案、生产故障域或完整 formal 玩法验收已完成。未实现的 BFT signer/成员写动作继续明确拒绝，不能以本地配置冒充生效。
+2026-10-14 用户授权快速推进合入，小遗留在实施文档标记 TODO。本次以关联的文档 PR 与代码 PR 交付本机代码及管理基础设施（代码候选 #4683）；满足真实主链、独立评审和 required CI 后推进合入。合入不表示整套部署方案、生产故障域或完整 formal 玩法验收已完成。未实现的 BFT signer/成员写动作继续明确拒绝，不能以本地配置冒充生效。
 
 2026-10-14 独立试玩前置预检读取了候选正式玩家 Skill `site/skills/oasis7.md`，SHA-256 为 `c103ef66284e18d23cfc9b6d39ad4bcad9c922d7e18eeb5e93762d12caa3dc92`。官方入口 `./scripts/run-local-letai-game-test.sh --local-world-playtest` 使用私有本机 LocalProvider 世界，不连接 formal/public testnet，但需要真实 LetAI 凭据与付费推理，公开说明含默认自动充值；本轮没有新增付费预算授权，因此未启动该入口。预检子任务未读取实现，但环境仍能访问源码，隔离级别为 `instruction_only/source_visible`。此结果仅是前置预检，不能代签自主试玩；正式网络玩家 Skill 及真实执行 profile 仍未在本轮证明。
 
