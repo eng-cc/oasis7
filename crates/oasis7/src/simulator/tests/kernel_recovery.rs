@@ -1,8 +1,4 @@
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
-)]
 fn observe_triggers_chunk_generation_for_agent_chunk() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 100.0;
