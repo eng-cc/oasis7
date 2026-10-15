@@ -36,6 +36,9 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   await p.locator('.hero-overview-link').click();assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
   assert.equal(await p.locator('[data-download-primary-trust]').isVisible(),true);
   await p.locator('[data-preview-details] > summary').focus();await p.keyboard.press('Enter');assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
+  await p.goto(origin+route);
+  await p.evaluate(()=>{document.querySelector('.hero-overview-link').click();document.querySelector('[data-preview-details] > summary').click();});
+  await p.waitForTimeout(100);assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
   await p.goto(origin+route+'#download');assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
   await c.close();record(locale+' compact preview opens by CTA, keyboard-native disclosure and deep link with visible risk');
  }
