@@ -3767,10 +3767,10 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .decision-panels h4 button[aria-pressed="true"] { color:#b4efd2; }
 .decision-panels article p { font-size:.78rem; line-height:1.55; margin:4px 0; }
 .decision-panels article p.hero-support-copy { font-size:.73rem; color:#a9c2b4; }
-.decision-atmosphere { height:60px; margin-top:auto; flex-shrink:0; background:url("images/hero/asteroid-industrial-cluster-20261015.webp") 12% center/180% auto; mask-image:linear-gradient(0deg,#000 65%,transparent); }
-.decision-panels article:nth-child(2) .decision-atmosphere { background-image:url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:80% 70%; }
+.decision-atmosphere { height:60px; margin-top:auto; flex-shrink:0; background:url("images/entries/industrial-cluster-thumb.webp") 12% center/180% auto; mask-image:linear-gradient(0deg,#000 65%,transparent); }
+.decision-panels article:nth-child(2) .decision-atmosphere { background-image:url("images/steps/decision-response-control-bay-20261015.webp"); background-position:center; background-size:cover; }
 .decision-panels article:nth-child(3) .decision-atmosphere { background-position:75% 70%; }
-.decision-panels article:nth-child(4) .decision-atmosphere { background-image:url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:35% 30%; }
+.decision-panels article:nth-child(4) .decision-atmosphere { background-image:url("images/steps/decision-choice-horizon-20261015.webp"); background-position:center; background-size:cover; }
 .decision-source { margin-top:9px; font-size:.72rem; color:#b8ccbf; }
 .decision-source summary { cursor:pointer; min-height:22px; }
 .decision-provenance { font-size:.7rem; color:#bbaa87; margin:4px 0; }
@@ -3781,10 +3781,10 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .discovery-page #world-laws::after { display:none; }
 .discovery-editorial-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:22px; border-top:1px solid #30483d; }
 .discovery-editorial-grid .section { position:relative; margin:0; padding:18px 0 14px; border:0; border-radius:0; background:none; box-shadow:none; display:flex; flex-direction:column; overflow:visible; }
-.discovery-editorial-grid .section::before { position:relative; display:block; order:2; content:""; height:86px; flex-shrink:0; margin:12px 0; border:0; border-radius:0; opacity:.8; mask:none; background:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-industrial-cluster-20261015.webp") center/cover; }
-.discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-image2-20260718.webp"); }
+.discovery-editorial-grid .section::before { position:relative; display:block; order:2; content:""; height:86px; flex-shrink:0; margin:12px 0; border:0; border-radius:0; opacity:.8; mask:none; background:linear-gradient(0deg,#06110f00,#06110f33),url("images/entries/industrial-cluster-thumb.webp") center/cover; }
+.discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/entries/civilization-orbit-thumb.webp"); }
 .discovery-editorial-grid .portal-preview::before { background-position:80% 70%; }
-.discovery-editorial-grid .portal-rules::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:30% center; }
+.discovery-editorial-grid .portal-rules::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/entries/civilization-orbit-thumb.webp"); background-position:30% center; }
 .discovery-editorial-grid .eyebrow { margin:0 0 5px; }
 .discovery-editorial-grid h2 { font-size:1.02rem; line-height:1.4; margin:0 0 6px; }
 .discovery-editorial-grid p { font-size:.76rem; line-height:1.6; margin:4px 0; }
@@ -3950,7 +3950,7 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .discovery-page .hero .button.primary { width:236px; }
 .discovery-page:not(.content-page) .lang-icon-button { width:auto; min-width:56px; border:0; border-radius:0; background:none; padding:8px; font-size:.72rem; color:#c8d9d0; }
 .discovery-page:not(.content-page) > .topbar .nav a { font-size:.82rem; }
-.discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-crisis-image2-20260719.webp"); background-position:75% center; }
+.discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/entries/industrial-network-thumb.webp"); background-position:75% center; }
 .discovery-editorial-grid .portal-preview::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-settlement-planet-20261015.webp"); background-position:95% center; }
 @media(max-width:760px) {
  .discovery-page .landing-hero .hero-key-art img { object-position:100% 20%; }
