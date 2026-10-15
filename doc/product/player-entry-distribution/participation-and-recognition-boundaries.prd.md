@@ -58,8 +58,20 @@
 <a id="req-entry-part-001"></a>
 ### REQ-ENTRY-PART-001：贡献信号必须与批准权益分离
 
+Trace ID: O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5
+
 - 要求：产品必须区分已收到/待核验、核验中、结果已记录、关闭/延期/需补充与已批准/执行的语义；参与、访问、游玩、互动或贡献本身不得自动产生代币、支付、所有权、治理权或后续访问权。
 - 验收：AC-ENTRY-PART-001
+
+
+- 功能点：[REQ-ENTRY-PART-001](#req-entry-part-001)；验收 [AC-ENTRY-PART-001](#ac-entry-part-001)。
+- 适用范围：贡献信号从收到、核验到记录/关闭与批准/执行的独立状态；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 抽样 intake、核验、记录、批准及执行，逐项对账适用治理状态；待取得审核和玩家反馈记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：贡献信号从收到、核验到记录/关闭与批准/执行的独立状态的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-part-001"></a>
 ### AC-ENTRY-PART-001：审核路径不会代签权益
@@ -71,8 +83,20 @@
 <a id="req-entry-part-002"></a>
 ### REQ-ENTRY-PART-002：重复或失效信号不得复制认可机会
 
+Trace ID: O7-REQ-ff67822b-5943-4728-ad4c-795c94fca95a
+
 - 要求：重复提交、跨渠道申报、重连重试、证据撤回/失效、超出计划范围或窗口关闭时，产品必须保持不可变 trace、来源和处置原因，不得产生第二条认可依据、优先权、资格或隐性债务。
 - 验收：AC-ENTRY-PART-002
+
+
+- 功能点：[REQ-ENTRY-PART-002](#req-entry-part-002)；验收 [AC-ENTRY-PART-002](#ac-entry-part-002)。
+- 适用范围：重复、跨渠道、重试、撤回、失效及窗口关闭时的来源、去重和处置；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 核对跨渠道重复、撤回、失效及窗口关闭负例，检查不可变来源和处置；待取得实际去重/审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：重复、跨渠道、重试、撤回、失效及窗口关闭时的来源、去重和处置的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-part-002"></a>
 ### AC-ENTRY-PART-002：失效证据回到真实补救路径
@@ -110,5 +134,5 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-001](#req-entry-part-001) / [AC-ENTRY-PART-001](#ac-entry-part-001) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 待执行方法：按 AC 抽样 intake、核验、记录、批准及执行，逐项对账适用治理状态；待取得审核和玩家反馈记录；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-PART-002](#req-entry-part-002) / [AC-ENTRY-PART-002](#ac-entry-part-002) | `producer_system_designer` | [`readme 产品与治理 PRD`](../../readme/prd.md#目标)、[`testing PRD`](../../testing/prd.md)、[`README.md`](../../../README.md) | 待执行方法：按 AC 核对跨渠道重复、撤回、失效及窗口关闭负例，检查不可变来源和处置；待取得实际去重/审核记录；导航关系不等于通过证据 | `test_tier_required` |

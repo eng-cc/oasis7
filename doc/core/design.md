@@ -36,8 +36,8 @@
 
 ### 3.3 跨模块主链路
 - 设计链路：`core -> <module>/prd.md -> <module>/design.md -> <topic>.design.md`
-- 执行链路：`GitHub Project task -> PR、实际 CI 与评审记录（Issue 按需） -> 专业 PRD/design/evidence`
-- 治理链路：`engineering/doc-structure-standard -> core ROUND 台账 -> 模块/专题改造`
+- 执行链路：`适用要求与修改范围 -> PR、实际 CI 与评审记录 -> 受影响的长期要求/设计与原始证据`；Issue/Project 按需使用，普通修改可以只有 PR。
+- 治理链路：`engineering/doc-governance 的适用规范 -> 模块/专题改造 -> 实际 PR 与检查/评审`；通用流程由[开发流程规范](../engineering/workflow/source-of-truth.md)主责，历史 ROUND 仅作来源。
 
 ### 3.4 当前交付依赖
 
@@ -47,6 +47,10 @@ game 拥有首产物与持续能力边界；runtime 拥有效果、授权与幂�
 
 固定世界身份与合法历史贯穿所有里程碑。网络环境、发行阶段、世界保留、权威与经济语义不能互相代签；隔离开发世界不能并入长期世界。已有实现、尚未闭合能力与目标承诺分别表达，可变通过结论回链候选与证据窗口。
 
+### 3.5 数据流与状态流
+
+各产品/专业 authority 提供要求与技术边界，core 将其映射为模块职责、主链路和阅读入口，再由模块设计承接具体实现。当前候选、检查、评审与交付状态由 Git、PR 和实际验证记录提供；core 只维护稳定依赖与证明边界，不将历史审计标记或目标规划转换为当前通过结论。
+
 ## 4. 集成点
 - `doc/README.md`
 - `doc/core/prd.md`
@@ -55,9 +59,10 @@ game 拥有首产物与持续能力边界；runtime 拥有效果、授权与幂�
 - 各模块入口：`doc/<module>/README.md`、`doc/<module>/prd.md`、`doc/<module>/design.md`
 
 ## 5. ROUND-006 入口职责
+本节保留历史入口分工；现行文档治理仍由对应专业规范承接，不恢复 ROUND 台账或强制 Issue。
 - ROUND 审计历史由 Git history 和 PR、实际 CI 与评审记录（Issue 按需） 追溯；`core` 不维护可变任务台账。
 - 文档结构治理的裁定依据来自 `doc/engineering/doc-governance/doc-structure-standard.prd.md`。
-- 任何模块入口补齐、专题文档治理和索引回写，都必须在 GitHub task issue evidence 中可追踪。
+- 模块入口补齐、专题文档治理和索引回写的实际修改、检查与评审在当前 PR 中可追溯；已有相关 Issue 时按需关联，只读分析无需创建任务。
 
 ## 设计目标
 - 提供 `core` 模块的总体设计入口。
@@ -72,8 +77,9 @@ game 拥有首产物与持续能力边界；runtime 拥有效果、授权与幂�
 - 索引入口：`doc/core/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+以下保留 ROUND-006 的历史规划来源，不表示当前排期或已完成验收；当前任务与结果以实际 PR、CI 和评审记录为准，Issue/Project 按需使用。
+- 历史 M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
+- 历史 M2（原规划，完成情况未在此核实）: 按专题继续补齐高复杂度主题的 `*.design.md`。
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。

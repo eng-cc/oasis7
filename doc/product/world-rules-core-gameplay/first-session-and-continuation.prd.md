@@ -170,6 +170,15 @@
 <a id="req-first-industrial-001"></a>
 #### REQ-FIRST-INDUSTRIAL-001：推荐前的安全可行性
 
+Trace ID: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 适用条件：系统准备把预设工业目标作为首局引导脊柱或当前主推荐。
 - 要求：系统必须先以同一份 fresh authority snapshot 通过 `Starter Industrial Feasibility Gate`，并只返回 `candidate_available` 或 `no_safe_starter_chain`；闸门不得扣资源、锁定库存/容量、排程或发放成长奖励。
 - 上位承诺：2.2.2、FS-7、FS-15。
@@ -178,6 +187,15 @@
 
 <a id="req-first-industrial-002"></a>
 #### REQ-FIRST-INDUSTRIAL-002：完整工业因果链
+
+Trace ID: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)；[industrial-resource-flow-contract.design / starter-quote-submit-binding](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
 
 - 适用条件：玩家选择一个可行的首局工业目标。
 - 要求：玩家必须能沿当前 `starter_completion_profile` 声明的完成边界理解“工厂就绪 → 配方与合法输入/电力 → 排程 → 生产 receipt”；来源获取/精炼、handoff、物流抵达和多输入齐套仅在所选配方/profile 明确依赖时展开，交付 receipt 仅由后续 terminal-admission 专题要求。每个适用节点都必须保留当前动作、完成边界、主 blocker、投入状态和下一步。当前 canonical `production_only` 在匹配的 owner-bound 正量铁锭结算与持久首产物里程碑后开放 Assembler 候选，并保持 `produced/undelivered`，不要求稳定窗口、建成 Assembler 或 delivery/terminal settlement；`terminal-admission` profile 才必须继续到匹配的 delivery/terminal settlement。适用的中间阶段不得被合并成单一成功。
@@ -188,6 +206,15 @@
 <a id="req-first-industrial-003"></a>
 #### REQ-FIRST-INDUSTRIAL-003：原料准备与物流边界
 
+Trace ID: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 适用条件：选定配方/profile 明确要求来源获取/精炼、source/owner ledger handoff 及物流供应输入；不适用于已由其专业 authority 证明无需这些阶段的 canonical 输入路径。
 - 要求：只有 source/refinement 结算后按适用的 source/owner ledger 规则完成 handoff、实际数量/损耗与来源 lineage 可对账，并形成带 lineage 的 `ready_for_logistics` material batch 后，原料准备才算完成；`source-settled` 是 source/refinement receipt 的结算状态，不是 `ready_for_logistics` 的别名。`preview` 不产生世界效果，`transfer submit`、`in-transit` 和 `destination arrival` 必须由后续物流节点独立表达并重新校验。
 - 上位承诺：2.2.1 原材料准备子循环、FS-15。
@@ -196,6 +223,15 @@
 
 <a id="req-first-industrial-004"></a>
 #### REQ-FIRST-INDUSTRIAL-004：生产与交付完成边界
+
+Trace ID: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
 
 - 适用条件：工业链路处于接受、执行、生产或终端阶段。
 - 要求：入口必须区分“已接受但未开始”“正在执行/在途”“已生产但未交付”和“已交付并产生目的地后果”，并按当前 `starter_completion_profile` 表达完成边界。`production_only` profile 可在匹配 production receipt 后完成首产物，但仍保持 `produced/undelivered`；只有声明终端准入的 profile 才要求匹配的 delivery/terminal settlement。生产 receipt 不得代替 delivery/terminal settlement receipt，也不得把 production-only 完成表现为已交付。
@@ -206,6 +242,15 @@
 <a id="req-first-industrial-005"></a>
 #### REQ-FIRST-INDUSTRIAL-005：事实漂移与重复无副作用
 
+Trace ID: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)；[industrial-resource-flow-contract.design / starter-quote-submit-binding](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)；[industrial-resource-flow-contract.design / request-outcome-observation-separation](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
+
 - 适用条件：报价后事实变化，或玩家重连、重复提交、乱序、Agent retry、snapshot restore 或 replay。
 - 要求：提交必须按当前 authority 重新校验；过期事实只能重新评估或无副作用拒绝，重复/回放只能重读同一 disposition，不得复制材料、资格、receipt、齐套进度、资源效果或奖励。
 - 上位承诺：2.2.1 子循环、2.2.2 Gate、FS-13、FS-15。
@@ -214,6 +259,15 @@
 
 <a id="req-first-industrial-006"></a>
 #### REQ-FIRST-INDUSTRIAL-006：阻塞与恢复路径
+
+Trace ID: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
 
 - 适用条件：工业链路出现来源、规格、权限、电力、物流、容量、输入齐套、产出接收或终端阻塞。
 - 要求：入口必须指出当前最早且可行动的 blocker、已保留/已消费价值、下一复查边界和真实可用的等待、补充、减量、改源、改配方、改道、延期、恢复或重新定目标路径；没有安全路径时必须停止并返还决策面。
@@ -224,6 +278,15 @@
 <a id="req-first-industrial-007"></a>
 #### REQ-FIRST-INDUSTRIAL-007：两入口玩家语义一致
 
+Trace ID: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 适用条件：Viewer 与 pure API 表达同一工业链路或恢复状态。
 - 要求：两入口必须消费同一权威事实，并对动作、主 blocker、完成边界、下一步和复查点保持同义；允许布局和操作方式不同，但不得让玩家猜测不同的世界结果。
 - 上位承诺：2.2.1、FS-6、FS-9、FS-15。
@@ -232,6 +295,15 @@
 
 <a id="req-first-industrial-008"></a>
 #### REQ-FIRST-INDUSTRIAL-008：首局成果承接持续能力
+
+Trace ID: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
 
 - 适用条件：玩家完成代表性首局工业阶段成果或安全结束不可达目标。
 - 要求：入口必须呈现已形成的能力或世界后果、当前主目标、主要 blocker 与可执行下一步；首次持续能力必须与一次动作成功、首局信任和后续分支分别判定，不得用静态总结或无限等待代替承接。
@@ -244,6 +316,8 @@
 <a id="ac-first-industrial-001"></a>
 #### AC-FIRST-INDUSTRIAL-001：正向 starter chain
 
+Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502; O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95; O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51; O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2；声明：[REQ-FIRST-INDUSTRIAL-001](#req-first-industrial-001)、[REQ-FIRST-INDUSTRIAL-002](#req-first-industrial-002)、[REQ-FIRST-INDUSTRIAL-003](#req-first-industrial-003)、[REQ-FIRST-INDUSTRIAL-004](#req-first-industrial-004)；适用范围沿用本 AC 原覆盖条件。
+
 给定：当前 canonical `starter-industrial-smelter-to-assembler-v1` / `production_only` 的工厂、配方、合法输入、电力与输出前置均有 fresh authority evidence；来源/handoff/物流/多输入只按所选配方/profile 的真实依赖增加前置。
 当：玩家从 feasibility card 选择候选并完成合法 Smelter 就绪、配方与输入/电力确认、排程和真实生产；仅执行该候选实际需要的来源准备、handoff、物流抵达或多输入齐套。
 则：每个适用节点显示可执行动作、完成边界、投入状态、主 blocker 和下一步；production receipt、owner-bound output ledger 首笔匹配正量 `iron_ingot`、对应持久首产物里程碑及 Assembler 候选相互一致；结果保持 `produced/undelivered`，不要求建成 Assembler、稳定窗口或 delivery，也不得产生交付/终端奖励或需求减少。需要物流时，`ready_for_logistics` 与 arrival 继续独立可追溯。后续 terminal-admission 专题使用本 AC 的适用节点并独立增加匹配 delivery/terminal settlement 正向验收，只有交付完成后才呈现目的地后果。
@@ -254,6 +328,8 @@
 <a id="ac-first-industrial-002"></a>
 #### AC-FIRST-INDUSTRIAL-002：不可达链路的安全恢复
 
+Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502; O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51; O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3；声明：[REQ-FIRST-INDUSTRIAL-001](#req-first-industrial-001)、[REQ-FIRST-INDUSTRIAL-003](#req-first-industrial-003)、[REQ-FIRST-INDUSTRIAL-006](#req-first-industrial-006)；适用范围沿用本 AC 原覆盖条件。
+
 给定：Gate 或链路的实际前置遇到缺料、低电、权限/规格未知或争用；来源耗尽、物流容量和终端不可用仅在所选配方/profile 明确依赖时适用。
 当：玩家查看当前推荐或提交下一节点。
 则：系统返回 `no_safe_starter_chain` 或当前最早 blocker，保留已发生价值与未满足量，提供真实的补充、减量、改源、改配方、改道、延期、恢复或重新定目标路径；没有安全路径时停止，不无限等待、不免费补料、不静默改道。
@@ -262,6 +338,8 @@
 
 <a id="ac-first-industrial-003"></a>
 #### AC-FIRST-INDUSTRIAL-003：漂移与重放不复制结果
+
+Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48；声明：[REQ-FIRST-INDUSTRIAL-005](#req-first-industrial-005)；适用范围沿用本 AC 原覆盖条件。
 
 给定：玩家已有 quote 或 accepted intent，之后库存、权限、质量、路径、容量、终端或 authority snapshot/version 发生变化，或玩家重连/重复/乱序/replay。
 当：入口再次提交或恢复该意图。
@@ -272,6 +350,8 @@
 <a id="ac-first-industrial-004"></a>
 #### AC-FIRST-INDUSTRIAL-004：回流、两入口与持续承接
 
+Trace refs: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812; O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3；声明：[REQ-FIRST-INDUSTRIAL-007](#req-first-industrial-007)、[REQ-FIRST-INDUSTRIAL-008](#req-first-industrial-008)；适用范围沿用本 AC 原覆盖条件。
+
 给定：玩家在首局工业链路中断、重连，或完成首个阶段成果后从 Viewer 与 pure API 继续。
 当：入口恢复目标、blocker、已形成能力和下一步。
 则：两入口对同一事实、完成边界、主 blocker、恢复路径和复查点保持同义；玩家能看到可达的持续主目标，或在当前条件允许时比较 2 至 3 个实质不同方向。后继目标可展示用途和真实缺口，只有当前可执行动作使用提交型入口；不能以数量要求伪造分支。自然离场保留成果、待决请求和有效委托，重入依据当前事实恢复第一动作，不复活旧授权或重复庆祝旧成果。首局信任、持续能力、Agent 主体感和继续动机分别可判定。
@@ -280,6 +360,8 @@
 
 <a id="ac-first-industrial-005"></a>
 #### AC-FIRST-INDUSTRIAL-005：生产完成但交付未完成
+
+Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2；声明：[REQ-FIRST-INDUSTRIAL-004](#req-first-industrial-004)；适用范围沿用本 AC 原覆盖条件。
 
 给定：本次工业候选已有匹配的 production receipt；当前 production_only 先验证不得冒充交付，terminal-admission 分支仅在该后续专题启动且选定相应 profile 后独立验证。
 当：玩家重连、重新打开该候选，或尝试使用产物的目的地用途。
@@ -336,6 +418,15 @@
 <a id="req-first-branch-001"></a>
 #### REQ-FIRST-BRANCH-001：分支解释与当前阶段保持同义
 
+Trace ID: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / branch-stage-projection](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-stage-projection)。已承接：分支当前阶段投影或样例回退窗口的一致性。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：真实 runtime 分支/回退能力、玩家理解与各入口组合验收不能由 Viewer 样例或结构回归代替。
+
 - 适用条件：当前主目标允许玩家从已形成的工业能力转向本地或区域专业化。
 - 要求：主指引、分支收益、后续两步、风险和回访动作必须表达同一阶段的可达用途。模块、工厂核心或合金等真实可用的生产选择应说明它们服务的本地需求；不得仅凭内部阶段名称暗示治理、投票、领土或冲突机制已经开放。
 - 上位承诺：3.1、FS-5、FS-10；合法工业动作和地理意义上的区域需求仍可作为专业化路径。
@@ -345,6 +436,8 @@
 <a id="ac-first-branch-001"></a>
 #### AC-FIRST-BRANCH-001：专业化指引不发布未开放的阶段承诺
 
+Trace refs: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1；声明：[REQ-FIRST-BRANCH-001](#req-first-branch-001)；适用范围沿用本 AC 原覆盖条件。
+
 - 给定：玩家处于本地或区域专业化阶段，部分工业动作可执行，另一些候选被权威状态禁用。
 - 当：玩家读取主指引、比较分支并查看后续用途。
 - 则：各处均说明当前可达的生产、服务或协作用途；禁用动作不会被推荐，合法工业动作不会因其类别被隐藏，也不会把内部阶段名称解释为已获得治理或冲突能力。
@@ -352,6 +445,15 @@
 
 <a id="req-first-branch-002"></a>
 #### REQ-FIRST-BRANCH-002：回退承诺随窗口关闭而失效
+
+Trace ID: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / fixture-rollback-window](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#fixture-rollback-window)。已承接：分支当前阶段投影或样例回退窗口的一致性。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：真实 runtime 分支/回退能力、玩家理解与各入口组合验收不能由 Viewer 样例或结构回归代替。
 
 - 适用条件：当前路线提供有明确有效窗口的回退选择。
 - 要求：玩家比较、进入下一阶段或完成恢复后，回退可用性、截止条件和解释必须一致。窗口关闭后说明不可回退的原因，保留真实可用的修复、重排或重新定目标路径；已兑现的收益和既有义务不因回退失效或换向而被抹去。状态不足或冲突时不能继续承诺可回退。
@@ -361,6 +463,8 @@
 
 <a id="ac-first-branch-002"></a>
 #### AC-FIRST-BRANCH-002：截止前、截止时和恢复后的回退信息一致
+
+Trace refs: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3；声明：[REQ-FIRST-BRANCH-002](#req-first-branch-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 给定：同一路线分别处于回退窗口内、窗口刚关闭和随后修复或完成的状态。
 - 当：玩家查看回退说明或尝试继续使用旧的回退选择。

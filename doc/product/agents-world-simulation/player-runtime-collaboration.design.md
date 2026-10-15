@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：按一次完整协作经历承载正常与恢复流程；范围：玩家与外部Runtime的产品协作体验；风险：体验状态不新增消息协议或实现结论；映射：[代表性体验流程](#2-一次完整的协作经历)
+
 - 配对产品 PRD：[player-runtime-collaboration.prd.md](player-runtime-collaboration.prd.md)
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
@@ -108,10 +110,10 @@ Skill 指导何时检查新目标、未答问题和权限，但不保活进程�
 
 | 产品要求 | 产品验收 | 本文设计承接 |
 | --- | --- | --- |
-| [REQ-COLLAB-001](player-runtime-collaboration.prd.md#req-collab-001) | [AC-COLLAB-001](player-runtime-collaboration.prd.md#ac-collab-001) | §2.1 绑定、§2.5 跨表面与交接 |
-| [REQ-COLLAB-002](player-runtime-collaboration.prd.md#req-collab-002) | [AC-COLLAB-002](player-runtime-collaboration.prd.md#ac-collab-002) | §2.1–2.2 发布/采纳、§4 版本竞态 |
-| [REQ-COLLAB-003](player-runtime-collaboration.prd.md#req-collab-003) | [AC-COLLAB-003](player-runtime-collaboration.prd.md#ac-collab-003) | §2.2 报告、§3.1 来源层级 |
-| [REQ-COLLAB-004](player-runtime-collaboration.prd.md#req-collab-004) | [AC-COLLAB-004](player-runtime-collaboration.prd.md#ac-collab-004) | §2.3 双向问答、§4 过时回复 |
-| [REQ-COLLAB-005](player-runtime-collaboration.prd.md#req-collab-005) | [AC-COLLAB-005](player-runtime-collaboration.prd.md#ac-collab-005) | §2.4 申请/决定、§4 失效与拒绝 |
-| [REQ-COLLAB-006](player-runtime-collaboration.prd.md#req-collab-006) | [AC-COLLAB-006](player-runtime-collaboration.prd.md#ac-collab-006) | §2.5 恢复、§3.2 增量读取、§4 缺口 |
-| [REQ-COLLAB-007](player-runtime-collaboration.prd.md#req-collab-007) | [AC-COLLAB-007](player-runtime-collaboration.prd.md#ac-collab-007) | §2.5 停止与重启、§3.2 实际执行路径 |
+| Trace refs: O7-REQ-62007da5-b12a-4b8c-98bb-82ab53a35069；[REQ-COLLAB-001](player-runtime-collaboration.prd.md#req-collab-001) | [AC-COLLAB-001](player-runtime-collaboration.prd.md#ac-collab-001) | §2.1 绑定、§2.5 跨表面与交接 |
+| Trace refs: O7-REQ-edd52061-73c0-433c-9531-30d86b1db459；[REQ-COLLAB-002](player-runtime-collaboration.prd.md#req-collab-002) | [AC-COLLAB-002](player-runtime-collaboration.prd.md#ac-collab-002) | §2.1–2.2 发布/采纳、§4 版本竞态 |
+| Trace refs: O7-REQ-b100c55e-5c35-46dc-aaf6-e66c02b323d8；[REQ-COLLAB-003](player-runtime-collaboration.prd.md#req-collab-003) | [AC-COLLAB-003](player-runtime-collaboration.prd.md#ac-collab-003) | §2.2 报告、§3.1 来源层级 |
+| Trace refs: O7-REQ-2f463269-c3c0-4da1-95f8-90011c35799a；[REQ-COLLAB-004](player-runtime-collaboration.prd.md#req-collab-004) | [AC-COLLAB-004](player-runtime-collaboration.prd.md#ac-collab-004) | §2.3 双向问答、§4 过时回复 |
+| Trace refs: O7-REQ-f5341eef-d8f6-42ae-b7b6-751803abd588；[REQ-COLLAB-005](player-runtime-collaboration.prd.md#req-collab-005) | [AC-COLLAB-005](player-runtime-collaboration.prd.md#ac-collab-005) | §2.4 申请/决定、§4 失效与拒绝 |
+| Trace refs: O7-REQ-6044cb04-5fbb-4c68-81a6-fc57cfdd608a；[REQ-COLLAB-006](player-runtime-collaboration.prd.md#req-collab-006) | [AC-COLLAB-006](player-runtime-collaboration.prd.md#ac-collab-006) | §2.5 恢复、§3.2 增量读取、§4 缺口 |
+| Trace refs: O7-REQ-8dad5caa-d064-4ac8-8c98-40a702b13685；[REQ-COLLAB-007](player-runtime-collaboration.prd.md#req-collab-007) | [AC-COLLAB-007](player-runtime-collaboration.prd.md#ac-collab-007) | §2.5 停止与重启、§3.2 实际执行路径 |

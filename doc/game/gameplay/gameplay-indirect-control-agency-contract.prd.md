@@ -18,7 +18,12 @@
   - SC-4: future UX / runtime / agent contract 变更可以被 QA 按本专题直接判定为 `strengthens / preserves / weakens control-feeling`，而不是只看 smoke 是否还能跑。
   - SC-5: 本专题不改变 `PRD-GAME-012` 当前正式 verdict；它负责定义 trust/capability 修复所依赖的“控制感合同”，而不是替代 active-LLM 留存验证本身。
 - SC-6: 若 agent 使用长期记忆影响当前行动，玩家必须能看到“记住了什么 / 来自哪里 / 为什么影响当前行动 / 如何纠正”的最小可读合同。
-- SC-7: Agent guardrail、记忆或世界约束若使工业/资源动作改道、裁剪或拒绝，必须保留原 accepted intent、替换/override 原因和下一步恢复面；不得把自动改写或 debug 工具结果包装成玩家已经完成的世界后果。
+<a id="sc-7"></a>
+### SC-7：工业行动的因果与恢复
+
+Agent guardrail、记忆或世界约束若使工业/资源动作改道、裁剪或拒绝，必须保留原 accepted intent、替换/override 原因和下一步恢复面；不得把自动改写或 debug 工具结果包装成玩家已经完成的世界后果。
+
+Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185; O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63；产品适用承接：[REQ-WR-IA-001](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)、[REQ-WR-IA-002](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)。 本承接仅对应意图/世界结果区分与受阻后的下一决策，不将工业专属规则归入本条。
 
 ## 2. User Experience & Functionality
 
@@ -60,6 +65,8 @@
 
 ### 2.1 Reusable causal-decision receipt
 
+Trace refs: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376；产品适用承接：[REQ-WR-IA-003](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)。
+
 所有会由 Agent 解释、自动推进、改道或可被玩家修正的动作，共用一份语义上的 causal-decision receipt；它适用于记忆驱动、社交、治理与冲突动作，而不是为每类动作另造一条玩家因果链。receipt 必须让玩家读懂：
 
 1. 被接受的玩家意图是什么；
@@ -77,24 +84,94 @@
 同一边界适用于采集、精炼、移动和排程等工业恢复动作：若 Agent 因资源不足、地点不可达、世界约束或 guardrail 改写而不能按原意图推进，receipt 必须把原意图与替换动作/拒绝原因连接起来，并进入既有的 wait、repair、reroute 或 reprioritize 恢复面。仅 debug/probe 可用的资源注入不属于玩家意图、玩家奖励或正式 playability 样本，不能用于伪造该因果链。
 
 <a id="prd-game-014-acceptance"></a>
-- Acceptance Criteria:
-  - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
-  - AC-2: “间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
-  - AC-3: 当前正式主路线不要求玩家获得第一人称逐帧操控；但若 accepted intent、主因果、打断重排或续玩恢复四者缺一，则不得宣称 control-feeling 合格。
-  - AC-3A: 若 accepted intent 之后连续出现无主因果、无升级解释、无 fallback 建议的静默等待，则即便世界仍在 tick，也必须判定为 agency weakened。
-  - AC-3B: 若系统进入 `fallback_ready` 但缺少 `fallback_tradeoff_preview`，或只能展示单个推荐动作而无法比较 `wait / repair / reroute` 的成本、保留进度、损失机会和推荐理由，则判定为 `fallback_tradeoff_missing`，不得把 fallback CTA 本身当作 control-feeling 通过。
-  - AC-3C: 若系统推荐 `safe_wait` 但缺少完整 `wait_resolution_quote`，玩家无法回答“在等什么、何时复查、何时换方案”，或到了复查 tick/event 仍未发生预期状态变化却继续静默等待，则判定为 `safe_wait_resolution_missing`；系统必须重新分类为 `repair_now / reroute_now / no_safe_fallback`。若重新分类为 `no_safe_fallback` 却缺少原因和 `reprioritize_goal / escalate_constraint / return_to_goal_selection` 之一的下一决策动作，则判定为 `no_safe_fallback_dead_end`，不得通过 control-feeling 验收。
-  - AC-4: 本专题必须显式承接 `PRD-GAME-012` 第 4 条 lane“间接控制因果与下一步”，并解释它与 `PRD-GAME-004` 微循环反馈可见性、`PRD-GAME-007` PostOnboarding、`PRD-GAME-008` pure API parity 的边界。
-  - AC-5: headed Web/UI 与 pure API 都必须具备同等级的 agency surface；API 可以更简洁，但不允许缺少 accepted intent、主因果、阻塞分类或 next-step 语义。
-  - AC-6: 若系统只是展示原始日志、世界 tick 或泛化状态，而不能把主意图和当前结果绑定到同一语义面，则判定为 control-feeling 失败。
-  - AC-7: 若玩家无法显式中断、改道或重新聚焦主目标，只能被动等待 agent 自行推进，则判定为 agency weakened，即便世界仍在持续运行。
-  - AC-8: 本专题必须给出未来 UX/runtime/agent 变更的判据：增强型变更至少强化 1 条 guarantee 且不削弱其余 guarantee；任何削弱 accepted intent、主因果、重排入口或续玩恢复的变更都必须经 `producer_system_designer` 显式裁决。
-  - AC-9: 本专题完成后，`game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 必须互链到 `PRD-GAME-014` 与 `TASK-GAME-071~075`。
-  - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
-  - AC-11: 若 agent 当前行动引用长期记忆，headed Web/UI 与 pure API 至少必须能回答 `记住了什么 / 来自哪里 / 影响当前哪一步 / 玩家如何纠正`；若只能看到 agent 自行行动或原始日志，判定为 agency weakened。
-  - AC-12: 若玩家已提交长期记忆纠正，headed Web/UI 与 pure API 至少必须能回答 `是否接受 / 影响哪段记忆或哪类决策 / 最早在哪个下一行动应用`；接受结果若未出现在下一条 memory-driven action summary，必须说明 `stale_or_ignored_reason`，否则判定为 `memory_correction_outcome_missing`。
-  - AC-13: 记忆驱动、社交、治理与冲突动作使用同一 causal-decision receipt，且能回答 accepted intent、Agent reason/evidence、stakes/expected consequence、alternative、interrupt/correction、earliest effective point 与 post-correction result；若把请求/提案接受写成权威应用，或纠正后只给状态不说明结果，判定为 `causal_decision_receipt_missing`。
-- Non-Goals:
+### Acceptance Criteria
+<a id="ac-1"></a>
+#### AC-1：验收条款
+
+验收：本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
+
+<a id="ac-2"></a>
+#### AC-2：验收条款
+
+验收：“间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
+
+<a id="ac-3"></a>
+#### AC-3：验收条款
+
+验收：当前正式主路线不要求玩家获得第一人称逐帧操控；但若 accepted intent、主因果、打断重排或续玩恢复四者缺一，则不得宣称 control-feeling 合格。
+
+<a id="ac-3a"></a>
+#### AC-3A：验收条款
+
+验收：若 accepted intent 之后连续出现无主因果、无升级解释、无 fallback 建议的静默等待，则即便世界仍在 tick，也必须判定为 agency weakened。
+
+<a id="ac-3b"></a>
+#### AC-3B：验收条款
+
+验收：若系统进入 `fallback_ready` 但缺少 `fallback_tradeoff_preview`，或只能展示单个推荐动作而无法比较 `wait / repair / reroute` 的成本、保留进度、损失机会和推荐理由，则判定为 `fallback_tradeoff_missing`，不得把 fallback CTA 本身当作 control-feeling 通过。
+
+Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63；产品适用承接：[REQ-WR-IA-002](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)。
+
+<a id="ac-3c"></a>
+#### AC-3C：验收条款
+
+验收：若系统推荐 `safe_wait` 但缺少完整 `wait_resolution_quote`，玩家无法回答“在等什么、何时复查、何时换方案”，或到了复查 tick/event 仍未发生预期状态变化却继续静默等待，则判定为 `safe_wait_resolution_missing`；系统必须重新分类为 `repair_now / reroute_now / no_safe_fallback`。若重新分类为 `no_safe_fallback` 却缺少原因和 `reprioritize_goal / escalate_constraint / return_to_goal_selection` 之一的下一决策动作，则判定为 `no_safe_fallback_dead_end`，不得通过 control-feeling 验收。
+
+Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63；产品适用承接：[REQ-WR-IA-002](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)。
+
+<a id="ac-4"></a>
+#### AC-4：验收条款
+
+验收：本专题必须显式承接 `PRD-GAME-012` 第 4 条 lane“间接控制因果与下一步”，并解释它与 `PRD-GAME-004` 微循环反馈可见性、`PRD-GAME-007` PostOnboarding、`PRD-GAME-008` pure API parity 的边界。
+
+<a id="ac-5"></a>
+#### AC-5：验收条款
+
+验收：headed Web/UI 与 pure API 都必须具备同等级的 agency surface；API 可以更简洁，但不允许缺少 accepted intent、主因果、阻塞分类或 next-step 语义。
+
+<a id="ac-6"></a>
+#### AC-6：验收条款
+
+验收：若系统只是展示原始日志、世界 tick 或泛化状态，而不能把主意图和当前结果绑定到同一语义面，则判定为 control-feeling 失败。
+
+<a id="ac-7"></a>
+#### AC-7：验收条款
+
+验收：若玩家无法显式中断、改道或重新聚焦主目标，只能被动等待 agent 自行推进，则判定为 agency weakened，即便世界仍在持续运行。
+
+<a id="ac-8"></a>
+#### AC-8：验收条款
+
+验收：本专题必须给出未来 UX/runtime/agent 变更的判据：增强型变更至少强化 1 条 guarantee 且不削弱其余 guarantee；任何削弱 accepted intent、主因果、重排入口或续玩恢复的变更都必须经 `producer_system_designer` 显式裁决。
+
+<a id="ac-9"></a>
+#### AC-9：验收条款
+
+验收：本专题完成后，`game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 必须互链到 `PRD-GAME-014` 与 `TASK-GAME-071~075`。
+
+<a id="ac-10"></a>
+#### AC-10：验收条款
+
+验收：当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
+
+<a id="ac-11"></a>
+#### AC-11：验收条款
+
+验收：若 agent 当前行动引用长期记忆，headed Web/UI 与 pure API 至少必须能回答 `记住了什么 / 来自哪里 / 影响当前哪一步 / 玩家如何纠正`；若只能看到 agent 自行行动或原始日志，判定为 agency weakened。
+
+<a id="ac-12"></a>
+#### AC-12：验收条款
+
+验收：若玩家已提交长期记忆纠正，headed Web/UI 与 pure API 至少必须能回答 `是否接受 / 影响哪段记忆或哪类决策 / 最早在哪个下一行动应用`；接受结果若未出现在下一条 memory-driven action summary，必须说明 `stale_or_ignored_reason`，否则判定为 `memory_correction_outcome_missing`。
+
+<a id="ac-13"></a>
+#### AC-13：验收条款
+
+验收：记忆驱动、社交、治理与冲突动作使用同一 causal-decision receipt，且能回答 accepted intent、Agent reason/evidence、stakes/expected consequence、alternative、interrupt/correction、earliest effective point 与 post-correction result；若把请求/提案接受写成权威应用，或纠正后只给状态不说明结果，判定为 `causal_decision_receipt_missing`。
+
+Trace refs: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376；产品适用承接：[REQ-WR-IA-003](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)。
+
+### Non-Goals
   - 不把 oasis7 改成第一人称直接操作或逐块建造游戏。
   - 不在本专题中直接修复 active-LLM provider、runtime freeze 或 capability gate 本身；这些仍由对应实现任务负责。
   - 不把“更多按钮”误当作 control-feeling 改善；本专题关注的是 agency 合同，而不是动作数量膨胀。

@@ -93,6 +93,15 @@
 <a id="req-sc31-001"></a>
 #### REQ-SC31-001：同一权威快照的需求比较
 
+Trace ID: O7-REQ-bfd4b2f4-6b21-4c4a-961d-387b220e762f
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 性质：已采纳目标
 - 适用条件：玩家在 demand goal 提交前比较一个有 `goal_authority_ref` 的目标。
 - 要求：产品读面必须（MUST）从同一份当前权威快照分别显示 target、committed、produced、delivery-settled、terminal-settled、remaining 数量，canonical batch quantum，预计 shortage/matched/surplus，输入/电力/物流/buffer/terminal 占用，机会成本和 `next_recheck`；任何缺失、过期或冲突 authority 必须显示为 `unknown/blocked`，不得补成安全或零成本。
@@ -103,6 +112,15 @@
 
 <a id="req-sc31-002"></a>
 #### REQ-SC31-002：受支持的计划选择
+
+Trace ID: O7-REQ-3c8dcb96-cb2b-4ec8-824a-5cb50b75f060
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
 
 - 性质：已采纳目标
 - 适用条件：目标报价存在可继续、受限或不可用的候选路径。
@@ -115,6 +133,15 @@
 <a id="req-sc31-003"></a>
 #### REQ-SC31-003：生产与匹配结算分层
 
+Trace ID: O7-REQ-ebb96559-33a9-4029-af82-a709c71225e0
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 性质：已采纳目标
 - 适用条件：目标链路产生 production receipt、delivery receipt 或 terminal settlement。
 - 要求：产品读面必须（MUST）把 production receipt 表达为生产结果，而只让 profile 声明的 matching delivery 或 terminal settlement receipt 更新目标满足量和交付奖励；非 matching settlement 不得减少目标，亦不得二次减少同一需求。
@@ -125,6 +152,15 @@
 
 <a id="req-sc31-004"></a>
 #### REQ-SC31-004：满足后停止与盈余保护
+
+Trace ID: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
 
 - 性质：已采纳目标
 - 适用条件：目标已由匹配结算满足，或合法 batch 产出超过 remaining。
@@ -137,6 +173,15 @@
 <a id="req-sc31-005"></a>
 #### REQ-SC31-005：缺口与补产修订
 
+Trace ID: O7-REQ-62129528-2238-4733-8b8e-d226dc40943d
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 性质：已采纳目标
 - 适用条件：matching settlement 只满足部分目标，或玩家主动选择停止/延期。
 - 要求：产品读面必须（MUST）允许玩家在专业合同支持时选择一次 parent-linked supplemental revision，并保留原 baseline、actual、实际损耗、已满足量和 remaining shortage；若玩家选择 stop/defer，必须保留 shortage 且不得创建 supplemental revision。
@@ -147,6 +192,15 @@
 
 <a id="req-sc31-006"></a>
 #### REQ-SC31-006：提交漂移的安全处置
+
+Trace ID: O7-REQ-544d08be-9d56-4106-bd80-89c46786bfdf
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
 
 - 性质：已采纳目标
 - 适用条件：报价或承诺后目标、库存、batch quantum、产率或 terminal capacity 发生变化。
@@ -159,6 +213,15 @@
 <a id="req-sc31-007"></a>
 #### REQ-SC31-007：重复执行与恢复幂等
 
+Trace ID: O7-REQ-1e60706a-d6b6-43e8-b3f9-86af391700fd
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 性质：已采纳目标
 - 适用条件：同一 submit、delivery、恢复处置或其事件发生重复、乱序、重连、恢复或 replay。
 - 要求：产品读面必须（MUST）保持同一 root/revision 的一次性世界结果：重复操作不得复制 production、delivery、需求减少、surplus 处置、奖励或容量释放；历史实际损耗和已占用价值必须继续可追溯。
@@ -170,6 +233,15 @@
 <a id="req-sc31-008"></a>
 #### REQ-SC31-008：多入口同义
 
+Trace ID: O7-REQ-34f477af-5903-48fd-8889-ceb8b1028ef3
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 性质：已采纳目标
 - 适用条件：同一 demand goal 从 Viewer、pure API 或 Agent 读面查看、推荐或恢复。
 - 要求：三类入口必须（MUST）对 demand 状态、target/committed/produced/delivery-settled/terminal-settled/remaining 分层、shortage/matched/surplus/unknown、primary blocker、允许动作和 `next_recheck` 保持同义；入口形式可以不同，但不得制造不同的目标满足、奖励或恢复真值。
@@ -180,6 +252,15 @@
 
 <a id="req-sc31-009"></a>
 #### REQ-SC31-009：跨区发现、物流与里程碑结算分层
+
+Trace ID: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[cross-region-delivery-and-escrow-settlement.design / des-wr-cr-001](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-001)；[cross-region-delivery-and-escrow-settlement.design / des-wr-cr-002](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-002)。已承接：跨区发现、运输/接收分层与条件 escrow 结算、去重/争议恢复。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：完整商业合同、目的地保管/所有权及专业政策尚未核验；不以运输 receipt 或既有运输报价测试证明完整交付。
 
 - 性质：已采纳目标
 - 适用条件：玩家查看跨区供给/需求并从报价或合同进入物理交付、目的地存储和 ownership/escrow 结算。
@@ -194,6 +275,8 @@
 <a id="ac-sc31-001"></a>
 ### AC-SC31-001：同一快照的提交前比较
 
+Trace refs: O7-REQ-bfd4b2f4-6b21-4c4a-961d-387b220e762f；声明：[REQ-SC31-001](#req-sc31-001)；适用范围沿用本 AC 原覆盖条件。
+
 给定：一个有效 `goal_authority_ref`、目标量、已承诺/生产/交付/终端结算数量、canonical batch quantum，以及已知和未知的输入、电力、物流、buffer、terminal 事实。
 当：玩家打开提交前 demand-goal preview。
 则：读面按同一快照分别显示 target、committed、produced、delivery-settled、terminal-settled、remaining、shortage/matched/surplus、占用、机会成本和 `next_recheck`；任一过期或冲突 authority 显示 `unknown/blocked`，preview 不产生 sink、hold、queue、产出、结算或奖励。
@@ -202,6 +285,8 @@
 
 <a id="ac-sc31-002"></a>
 ### AC-SC31-002：只展示真实支持的选择
+
+Trace refs: O7-REQ-3c8dcb96-cb2b-4ec8-824a-5cb50b75f060；声明：[REQ-SC31-002](#req-sc31-002)；适用范围沿用本 AC 原覆盖条件。
 
 给定：同一目标有 full、reduced、补料/调运、hold、stop/defer 中部分路径被专业 profile 支持，另一些不被支持。
 当：玩家比较并选择一个候选。
@@ -212,6 +297,8 @@
 <a id="ac-sc31-003"></a>
 ### AC-SC31-003：生产不等于需求满足
 
+Trace refs: O7-REQ-ebb96559-33a9-4029-af82-a709c71225e0；声明：[REQ-SC31-003](#req-sc31-003)；适用范围沿用本 AC 原覆盖条件。
+
 给定：一个目标已有 production receipt，但产物尚未取得匹配 delivery 或 terminal settlement；另有一份非 matching settlement。
 当：玩家查看目标状态并重试读取 settlement。
 则：production receipt 只增加 produced 层，不减少 remaining、不发 delivery reward；非 matching settlement 不减少目标；取得一份匹配 settlement 后只按其支持的数量减少一次目标，并保留 settled 与未交付层次。
@@ -220,6 +307,8 @@
 
 <a id="ac-sc31-004"></a>
 ### AC-SC31-004：目标满足后的显式停止
+
+Trace refs: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3；声明：[REQ-SC31-004](#req-sc31-004)；适用范围沿用本 AC 原覆盖条件。
 
 给定：matching settlement 已将目标 remaining 变为零，而旧 schedule、后台循环或 Agent retry 仍可能再次提交同一目标。
 当：系统处理旧计划或 retry。
@@ -230,6 +319,8 @@
 <a id="ac-sc31-005"></a>
 ### AC-SC31-005：合法 batch 的 surplus 不自动处置
 
+Trace refs: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3；声明：[REQ-SC31-004](#req-sc31-004)；适用范围沿用本 AC 原覆盖条件。
+
 给定：一个合法 batch 因 canonical quantum 产生超过 remaining 的产品。
 当：batch 结算完成。
 则：目标只按匹配数量满足，surplus 单独可见；系统不自动倾销、销毁、伪成交或把 surplus 计为成长，玩家只能选择专业合同支持的 hold 或后续处置。
@@ -238,6 +329,8 @@
 
 <a id="ac-sc31-006"></a>
 ### AC-SC31-006：部分匹配后的补产或停止
+
+Trace refs: O7-REQ-62129528-2238-4733-8b8e-d226dc40943d；声明：[REQ-SC31-005](#req-sc31-005)；适用范围沿用本 AC 原覆盖条件。
 
 给定：matching settlement 只满足部分目标，并保留原 baseline、actual、损耗、已满足量和 remaining shortage。
 当：玩家分别选择一次 supplemental revision，或选择 stop/defer。
@@ -248,6 +341,8 @@
 <a id="ac-sc31-007"></a>
 ### AC-SC31-007：条件漂移后的重新裁决
 
+Trace refs: O7-REQ-544d08be-9d56-4106-bd80-89c46786bfdf；声明：[REQ-SC31-006](#req-sc31-006)；适用范围沿用本 AC 原覆盖条件。
+
 给定：报价后目标、库存、batch quantum、产率或 terminal capacity 至少一项发生变化。
 当：玩家提交旧报价。
 则：系统重新报价、无副作用原子拒绝，或进入 profile 明示的有界 pending；旧报价不创建新的 sink、义务、容量占用或奖励，玩家可读变化原因、保留结果和下一步。
@@ -256,6 +351,8 @@
 
 <a id="ac-sc31-008"></a>
 ### AC-SC31-008：重复、乱序、恢复和 replay 只产生一次结果
+
+Trace refs: O7-REQ-1e60706a-d6b6-43e8-b3f9-86af391700fd；声明：[REQ-SC31-007](#req-sc31-007)；适用范围沿用本 AC 原覆盖条件。
 
 给定：同一 submit、delivery 或恢复处置被重复投递、乱序到达、重连、snapshot restore 或 replay。
 当：系统重新处理该事件或请求。
@@ -266,6 +363,8 @@
 <a id="ac-sc31-009"></a>
 ### AC-SC31-009：Viewer、pure API 与 Agent 同义
 
+Trace refs: O7-REQ-34f477af-5903-48fd-8889-ceb8b1028ef3；声明：[REQ-SC31-008](#req-sc31-008)；适用范围沿用本 AC 原覆盖条件。
+
 给定：同一 demand goal、同一权威快照和同一 blocker。
 当：玩家通过 Viewer 查看，或通过 pure API / Agent 请求相同状态、推荐或恢复路径。
 则：三类入口对目标数量分层、shortage/matched/surplus/unknown、primary blocker、允许动作、机会成本和 `next_recheck` 给出同义结果；任何入口都不能把 production、buffer 或非 matching settlement 说成 demand 已满足或 reward 已发放。
@@ -275,6 +374,8 @@
 <a id="ac-sc31-010"></a>
 ### AC-SC31-010：跨区市场不把发现或前序状态伪装成结算
 
+Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2；声明：[REQ-SC31-009](#req-sc31-009)；适用范围沿用本 AC 原覆盖条件。
+
 给定：一项带来源/新鲜度边界的跨区市场发现结果、报价/合同、物理路线、目的地存储和 escrow 里程碑，并包含延误、损耗、拒收、争议、条件漂移、重复投递或 replay 的对照样例。
 当：玩家查看、确认、观察或恢复该交易。
 则：玩家能区分情报发现、范围明确的承诺、出发/在途、到达、目的地 storage acceptance 和 ownership settlement；陈旧、私有或不完整情报不会表现为实时库存，任何前序状态都不能表示到货、需求满足或最终结算。
@@ -283,6 +384,8 @@
 
 <a id="ac-sc31-011"></a>
 ### AC-SC31-011：Escrow 里程碑与争议恢复保持 exactly-once
+
+Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2；声明：[REQ-SC31-009](#req-sc31-009)；适用范围沿用本 AC 原覆盖条件。
 
 给定：一项绑定物理/接收事实的跨区 escrow 合同，包含延误、损耗、目的地拒收、条件漂移、争议、重连、重复投递、并发到达或 replay 的对照样例。
 当：玩家观察里程碑、等待、补救、退回、改道、重谈、争议或安全停止。
