@@ -1148,7 +1148,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
 - `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
 
-<a name="network-tiers-shared-network-evidence"></a>
+<a id="network-tiers-validation-evidence"></a>
 
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` 与对应 project/runbook 为准：
