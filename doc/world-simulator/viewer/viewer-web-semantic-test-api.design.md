@@ -36,13 +36,13 @@
 
 Owner：viewer_engineer / qa_engineer。消费者为隔离 visual-test 构建中的自动化驱动；本专题维护测试观测与操作辅助，不授权生产控制，不以 helper 成功代签真实 UI、IME 或 gameplay 验收。
 
-当前 `legacy_core.js::isTestApiEnabled/installTestApi` 同时要求 `__OASIS7_VISUAL_TEST__ === true` 与显式测试 query；release 加 `test_api=1` 仍不安装 API。配对 PRD 的历史 debug/release 注入和 Bevy command queue 记录不能覆盖该构建隔离边界；操作入口以[当前测试手册](../../../testing-manual.md#s6：web-ui-闭环-smoke-套件（l4a）)及实际构建 profile 为准。
+当前 `legacy_core.js::isTestApiEnabled/installTestApi` 同时要求 `__OASIS7_VISUAL_TEST__ === true` 与显式测试 query；release 加 `test_api=1` 仍不安装 API。配对 PRD 的历史 debug/release 注入和 Bevy command queue 记录不能覆盖该构建隔离边界；操作入口以[当前测试手册](../../../testing-manual.md#testing-web-ui-closed-loop-smoke)及实际构建 profile 为准。
 
 ### 2.1 需求承接与分配表
 
 | 上游 requirement / professional acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [当前 API 合同](viewer-web-semantic-test-api.prd.md#当前实现合同（batch-22-回填）) | `sendControl`/`runSteps` 维持当前 step grammar、profile 与反馈区分；产品适用性：N/A；reason=测试驱动的观测接口不新增玩家控制权限或产品功能；scope=隔离测试构建中的语义API | [语义调用与观测](viewer-web-semantic-test-api.design.md#semantic-observation) | runtime 协议拥有进展事实；viewer_engineer 拥有解析与反馈 | 不恢复 retired UI DSL；不把 queued 当完成 |
+| [当前 API 合同](viewer-web-semantic-test-api.prd.md#viewer-web-semantic-test-api-current-contract) | `sendControl`/`runSteps` 维持当前 step grammar、profile 与反馈区分；产品适用性：N/A；reason=测试驱动的观测接口不新增玩家控制权限或产品功能；scope=隔离测试构建中的语义API | [语义调用与观测](viewer-web-semantic-test-api.design.md#semantic-observation) | runtime 协议拥有进展事实；viewer_engineer 拥有解析与反馈 | 不恢复 retired UI DSL；不把 queued 当完成 |
 | [Chat 输入验证边界](viewer-web-semantic-test-api.prd.md#chat-输入验证边界) | helper 与真实输入分层验证；产品适用性：N/A；reason=本关系仅定义QA辅助方法而非对话产品承诺；scope=测试入口证据不能替代真实UI输入 | [真实输入与错误边界](viewer-web-semantic-test-api.design.md#semantic-input-boundary) | qa_engineer、真实浏览器环境与聊天控制 authority | 不据 helper 宣称 IME、多行、焦点隔离均通过 |
 
 <a id="semantic-observation"></a>
@@ -65,8 +65,8 @@ Owner：viewer_engineer / qa_engineer。消费者为隔离 visual-test 构建中
 
 | 上游 requirement | 本设计条款 | 独立 obligation 与适用条件 | 验证方法 / source / scenario / candidate | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [当前 API 合同](viewer-web-semantic-test-api.prd.md#当前实现合同（batch-22-回填）) | [语义调用与观测](viewer-web-semantic-test-api.design.md#semantic-observation) | 隔离测试构建中非法step不发包，live拒绝seek，queued/reconnect不合成logicalTime/eventSeq进展 | [测试手册](../../../testing-manual.md#s6：web-ui-闭环-smoke-套件（l4a）)；按实际 profile 核对非法payload不发包、live不支持seek、queued不合成进展；L4A profile/反馈与无进展负例；固定 source、visual-test 构建、query、runtime profile 和浏览器 | 实际PR/验证记录：source/build/profile、请求次数与payload、getState和lastControlFeedback序列、console及失败负例输出 | 手册实时回归不能靠step伪造自然进展；未声称现有自动套件覆盖任意parser输入、真实玩法或生产控制权限 |
-| [Chat 输入验证边界](viewer-web-semantic-test-api.prd.md#chat-输入验证边界) | [真实输入与错误边界](viewer-web-semantic-test-api.design.md#semantic-input-boundary) | 语义helper与真实键盘输入分别取证；组合态/多行/焦点/超时恢复不得由helper成功代签 | [测试手册](../../../testing-manual.md#s6：web-ui-闭环-smoke-套件（l4a）)；真实键盘输入与可见恢复验证另取证；单元语义与真实UI分层；记录 source、构建、OS/浏览器、输入法及故障注入条件 | 实际PR/验证记录：语义测试输出；真实IME场景的state、console、截图、请求次数/消息文本；fatal注入与有界恢复记录 | helper仅证明所测语义路径；未执行的OS/输入法/浏览器、真实IME、多行及fatal场景不能视为通过 |
+| [当前 API 合同](viewer-web-semantic-test-api.prd.md#viewer-web-semantic-test-api-current-contract) | [语义调用与观测](viewer-web-semantic-test-api.design.md#semantic-observation) | 隔离测试构建中非法step不发包，live拒绝seek，queued/reconnect不合成logicalTime/eventSeq进展 | [测试手册](../../../testing-manual.md#testing-web-ui-closed-loop-smoke)；按实际 profile 核对非法payload不发包、live不支持seek、queued不合成进展；L4A profile/反馈与无进展负例；固定 source、visual-test 构建、query、runtime profile 和浏览器 | 实际PR/验证记录：source/build/profile、请求次数与payload、getState和lastControlFeedback序列、console及失败负例输出 | 手册实时回归不能靠step伪造自然进展；未声称现有自动套件覆盖任意parser输入、真实玩法或生产控制权限 |
+| [Chat 输入验证边界](viewer-web-semantic-test-api.prd.md#chat-输入验证边界) | [真实输入与错误边界](viewer-web-semantic-test-api.design.md#semantic-input-boundary) | 语义helper与真实键盘输入分别取证；组合态/多行/焦点/超时恢复不得由helper成功代签 | [测试手册](../../../testing-manual.md#testing-web-ui-closed-loop-smoke)；真实键盘输入与可见恢复验证另取证；单元语义与真实UI分层；记录 source、构建、OS/浏览器、输入法及故障注入条件 | 实际PR/验证记录：语义测试输出；真实IME场景的state、console、截图、请求次数/消息文本；fatal注入与有界恢复记录 | helper仅证明所测语义路径；未执行的OS/输入法/浏览器、真实IME、多行及fatal场景不能视为通过 |
 
 ## 12. 决策、风险与未决范围
 
