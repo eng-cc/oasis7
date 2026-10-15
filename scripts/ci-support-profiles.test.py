@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -37,6 +38,20 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertNotIn('oasis7_local_signer', result.stdout)
         self.assertNotIn('full-inventory', result.stdout)
 
+    def test_application_keeps_native_sdk_out_of_wasm(self):
+        manifest = tomllib.loads((ROOT / "crates/oasis7/Cargo.toml").read_text())
+        self.assertNotIn("oasis7_game_client", manifest["dependencies"])
+        native = manifest["target"]["cfg(not(target_arch = \"wasm32\"))"]["dependencies"]
+        self.assertIn("oasis7_game_client", native)
+
+    def test_game_client_isolated_and_strict(self):
+        result = self.invoke(json.dumps(['oasis7_game_client']))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('clippy -p oasis7_game_client --all-targets', result.stdout)
+        self.assertIn('cargo test -p oasis7_game_client --lib', result.stdout)
+        self.assertNotIn('cargo test -p oasis7 ', result.stdout)
+        self.assertNotIn('full-inventory', result.stdout)
+
     def test_invalid_lists_fail_before_execution(self):
         for value in ['[]', '["unknown"]', '["oasis7_agent_api", "oasis7_agent_api"]',
                       'null', '{}', '[1]', 'invalid']:
@@ -56,15 +71,21 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertIn('full-inventory', result.stdout)
 
     def test_plan_omissions_and_unknown_versions_rejected(self):
-        for plan in [dict(groups=['workspace_support'], scope='full',
-                          workspace_support_profile_version=1,
-                          workspace_support_profiles=['oasis7_agent_api']),
-                     dict(groups=['workspace_support'], scope='targeted',
+        for plan in [dict(groups=['workspace_support'], scope='targeted',
                           workspace_support_profile_version=1),
                      dict(groups=['workspace_support'], workspace_support_profile_version=2)]:
             result = self.invoke('plan:' + json.dumps(plan))
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertNotIn('cargo test', result.stdout)
+
+    def test_trusted_base_full_plan_expands_new_candidate_profiles(self):
+        plan = dict(groups=['workspace_support'], scope='full',
+                    workspace_support_profile_version=1,
+                    workspace_support_profiles=['oasis7_agent_api'])
+        result = self.invoke('plan:' + json.dumps(plan))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('support profile completed: oasis7_game_client', result.stdout)
+        self.assertIn('support profile completed: wasm_module_observe', result.stdout)
 
     def test_full_inventory_preserves_packages_and_special_commands(self):
         import importlib.util

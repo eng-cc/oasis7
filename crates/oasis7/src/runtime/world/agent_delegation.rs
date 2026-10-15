@@ -11,33 +11,9 @@ use std::collections::BTreeMap;
 mod controls;
 pub use controls::{AgentOwnerControlKindV1, AgentOwnerControlV1};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentDelegationGrantV1 {
-    pub grant_id: String,
-    pub source_id: String,
-    pub issuer_id: String,
-    pub owner_id: String,
-    pub organization_id: Option<String>,
-    pub agent_id: String,
-    pub object_id: String,
-    pub action_kinds: Vec<String>,
-    pub revision: u64,
-    pub period_id: String,
-    pub valid_from_tick: u64,
-    pub valid_until_tick: u64,
-    pub limit_units: u64,
-    /// Native domain electricity accounting; never a new currency.
-    pub resource_kind: String,
-    pub revoked: bool,
-}
+pub use oasis7_agent_api::world_quote::AgentDelegationGrantV1;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentDelegationAuthorizationV1 {
-    pub grant: AgentDelegationGrantV1,
-    pub cost_units: u64,
-    pub spent_units: u64,
-    pub remaining_units: u64,
-}
+pub use oasis7_agent_api::world_quote::AgentDelegationAuthorizationV1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentDecisionCausalContextV1 {

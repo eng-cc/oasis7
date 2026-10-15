@@ -4,7 +4,7 @@
 
 在异构provider中严守分布式读取假设，以有界repair/rebalance和optional非阻塞poll维护副本，避免无索引fallback隐藏缺失。
 
-Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；固定审读基线 f9d5a552d9af04c1b1398262808198a58e560230，2026-09-26。本设计消费下表有限关系；旧章节保留作兼容详细条款，新增DES细化原义务而不改算法/schema/默认值/产品承诺。任务实际source/integration/tested tree/config/environment/window/结果由GitHub Issue/Project evidence维护，本文不伪造候选/通过结果。
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；固定源码审读基线 f97f2253cdcb163bf984e3c90d59d792fe1c9b19，2026-10-15。本设计消费下表有限关系；旧章节保留作兼容详细条款，新增DES细化原义务而不改算法/schema/默认值/产品承诺。任务实际source/integration/tested tree/config/environment/window/结果由GitHub Issue/Project evidence维护，本文不伪造候选/通过结果。
 
 非目标：不以文档active/合并、local fixture、历史MIG或CLI可编译宣称运行、BFT、部署、SLA或release。剩余215-object required set及root SC1..10/full组合不变。
 
@@ -21,9 +21,10 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 | [professional_acceptance: dr-distribution](distfs-distributed-resilience.prd.md#dr-distribution) | batch读取前min2及no single provider all necessary blobs审计 | [des-dr-distribution](#des-dr-distribution) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-maintenance](distfs-distributed-resilience.prd.md#dr-maintenance) | target3/32/32/850/450受quota；task identity与repair/rebalance分开 | [des-dr-plan](#des-dr-plan) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-maintenance](distfs-distributed-resilience.prd.md#dr-maintenance) | success transfer才target index，failed_tasks不污染且可retry | [des-dr-transfer-publish](#des-dr-transfer-publish) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | first/due推进last_polled，未到期None，invalid策略error | [des-dr-due](#des-dr-due) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | 到期plan/report后推进last_polled，即使含failed_tasks；未到期None，非法策略error | [des-dr-due](#des-dr-due) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | 依赖missing/no sample skip保time，error last_error不阻tick | [des-dr-runtime-poll](#des-dr-runtime-poll) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | 仅self target、指定source found+payload+hash才CAS | [des-dr-local-executor](#des-dr-local-executor) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) | 仅指定source响应found、有payload且BLAKE3等于任务hash后写CAS；只承接hash-bound材料校验子范围 | [材料校验子范围](#des-dr-local-executor) | P2P/runtime拥有提交与权限，QA拥有组合判定 | 仅材料供应子范围；不覆盖DCS-002恢复、DCS-005可服务或完整AC |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -38,57 +39,71 @@ provider画像/DHT排名/覆盖审计由net；transfer执行器只本节点targe
 
 ### des-dr-selection
 
-None兼容/中性，stable rank/dedupe/tie/max candidates。
+旧 ProviderRecord 的六个 optional 能力字段缺失时保留 None；评分对未知画像使用中性值。`ProviderSelectionPolicy` 按 freshness、uptime、challenge、capacity、load、latency 排序；同 provider 去重、平局顺序和候选限制由 `provider_selection.rs` 的比较器保持。`max_candidates=0` 的既有含义是保留全部唯一 provider，不能将其误写成零候选或全局有界。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=画像评分与候选选择是专业算法，不独立规定玩家结果；scope=None兼容、排序、去重、平局和候选数机制。
+
 
 ### des-dr-read
 
-indexed定向retry；empty/exhausted明确error，无无provider fallback。
+`client.rs::fetch_blob_from_dht` 读取 DHT provider，按排序后的每个 provider 定向尝试；空列表明确失败，耗尽时返回最后错误或验证错误，不调用无 provider 的默认 fetch。该函数的定向选择保证不能替代调用方的内容身份/世界权威校验。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=定向尝试与失败选择是读取机制，不新增玩家可用性承诺；scope=DHT候选读取及重试顺序。
+
 
 ### des-dr-distribution
 
-batch读取前min2及no single provider all necessary blobs审计。
+`provider_distribution.rs` 先对 hash 和 provider ID 去重；默认每 hash 至少 2 个 provider，多个必要 hash 时禁止同一 provider 全覆盖。`fetch_blobs_from_dht_with_distribution` 在首次读取前完成审计；不足或全覆盖返回验证失败。DHT 声明不是这些副本当下可达、独立故障域或完整恢复材料的证明。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=provider集合覆盖审计不独立决定同世界恢复或可服务状态；scope=默认min2及多blob反全覆盖预检。
+
 
 ### des-dr-plan
 
-target3/32/32/850/450受quota；task identity与repair/rebalance分开。
+`replica_maintenance.rs::plan_replica_maintenance` 规范化 hash，查询并去重 provider 后分别规划 repair 与 rebalance。既有默认目标副本数 3、两类每轮上限 32/32、源/目标负载阈值 850‰/450‰不变。任务携带 hash/source/target/kind；无目标候选保留 warning。DHT 滞后和多节点同时规划不具全局仲裁保证；配额限制本轮任务数，不等于真实网络时延上界。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=repair/rebalance计划是局部调度，不构成玩家恢复验收；scope=任务生成、默认阈值与两类轮次配额。
+
 
 ### des-dr-transfer-publish
 
-success transfer才target index，failed_tasks不污染且可retry。
+`execute_replica_task` 先调用 transfer，成功才调用 DHT target publish；transfer 失败不会进入 publish。publish 自身失败也记入 `failed_tasks`，不能推断此前 CAS 已回滚。报告逐项累计 attempted/succeeded/failed；failed task 可用于后续重新规划或重试，但这里没有持久重试队列或自动成功保证。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=传输后索引发布是专业顺序规则，不独立证明最终性；scope=逐任务transfer/publish和失败报告。
+
 
 ### des-dr-due
 
-first/due推进last_polled，未到期None，invalid策略error。
+`run_replica_maintenance_poll` 先校验 polling policy；未到期返回 None 且不推进时间。到期后 plan 成功并取得逐项 report，才写 `last_polled_at_ms=now_ms`。report 可以含 failed_tasks，因此推进时间不以全部 transfer 成功为前提；策略或 plan 返回错误时不会到达写时间步骤。该时间只是轮询节拍。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=轮询时钟是局部调度观测，不是恢复完成边界；scope=到期判定、轮次报告及last_polled更新。
+
 
 ### des-dr-runtime-poll
 
-依赖missing/no sample skip保time，error last_error不阻tick。
+`replica_maintenance_support.rs` 在配置启用且 DHT、replication runtime、network 和采样 hash 齐全时调用维护；缺任一依赖或空样本返回原时间。wasm32 分支保持原时间。NodeRuntime 主循环将 helper 的 Err 写入 last_error；不能把 net 层 report 中的每项失败等同于 helper Err，也不能由 last_error 为空推导所有任务成功。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=最佳努力调用与错误观察不独立定义世界服务等级；scope=依赖检查、skip和runtime错误接线。
+
 
 ### des-dr-local-executor
 
-仅self target、指定source found+payload+hash才CAS。
+`RuntimeReplicaMaintenanceTransferExecutor` 只接受 target 为本节点的任务；向 task 指定 source 定向 fetch，要求 found、有 payload 且 BLAKE3 等于任务 hash，之后才 `store_blob_by_hash`。错误不转为默认无 provider 请求。此处只提供 hash-bound CAS 材料；材料的世界身份、提交证明和后续消费由下述材料/权限边界约束。
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+产品适用性：N/A；reason=本地执行器调度部分不新增玩家承诺；hash-bound与权限产品义务另由本页材料边界承接；scope=self-target及定向请求机制，排除hash-bound材料的产品边界。
+
+
+### des-dr-material-authority
+
+本页只供应 hash-bound 材料和局部诊断；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) 的世界状态结论仍要求合法 profile 提交证明及对应历史/root。[AC-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-003) 禁止存储服务、provider、缓存或 probe 借读取/发布成功取得最终写入权。现有 P2P [receipt/finality](../design.md#des-p2p-receipt-finality) 与[角色隔离](../design.md#des-p2p-layer-authority)拥有组合边界；本页不新增投票、激活、恢复或服务闸门。
+
+上面各机制的产品 N/A 只限定其局部调度/I/O义务，不排除此材料与权限关系。产品卡现有部分覆盖和未核实范围不因本页规范化提升；恢复链、真实故障域、正向续跑和消费者可服务仍须独立验证。
 
 ## 5. 关键运行流程
 
-compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；轮次成功进入才推进last_polled。
+compat ProviderRecord None→stable rank/dedup/limit→distribution audit→按indexed provider定向retry→缺副本/负载plan→按quota逐task→source found+payload+hash→localCAS→transfer success后DHT publish。poll未到期None；非法策略error；缺依赖/无数据skip保留时间；到期且plan/report完成后推进last_polled，report可含failed_tasks；未到期或plan错误不推进。
 
-拒绝保留可定位原因；timeout/retry受原策略有界限制。并发冲突遵循原guard/precondition/共识authority，不能因接线或重连获得新权限。取消/替代只有外部专业合同明确支持时成立，本设计不新建取消或补偿schema。
+拒绝保留可定位原因；本页的候选数、轮次或检查配额不证明统一timeout、自动retry次数或时延上界。并发冲突遵循原guard/precondition/共识authority，不能因接线或重连获得新权限。取消/替代只有外部专业合同明确支持时成立，本设计不新建取消或补偿schema。
 
 ## 6. 接口与数据合同
 
@@ -106,7 +121,7 @@ accepted、applied、persisted、published必须分别具备各自证据；workf
 
 ## 8. 部署、安全与运行约束
 
-max candidates/sample/round quotas有界资源；非local target拒绝；指定source定向失败不走default请求；BLAKE3校验后才CAS。严格DHT fetch禁止未索引fetch；与root node storage-challenge有界availability fallback不同。无跨DC/PoSt/autoscale/controlplane/SLA承诺。
+max_candidates>0时限制候选数，0保留全部唯一provider；sample/round quotas只限制各自采样/轮次任务数；非local target拒绝；指定source定向失败不走default请求；BLAKE3校验后才CAS。严格DHT fetch禁止未索引fetch；与root node storage-challenge有界availability fallback不同。无跨DC/PoSt/autoscale/controlplane/SLA承诺。
 
 设计只定义受控输入和失败条件；操作留在现行runbook。当前governed live网络raw-copy禁令和signed-V2边界只适用于该runbook环境，不否定历史/offline local事实。任何真实fleet/health/restore claim需固定inventory/manifest/package/config与同窗口证据，不从triad标签或本地成功推导。
 
@@ -134,11 +149,12 @@ max candidates/sample/round quotas有界资源；非local target拒绝；指定s
 | [professional_acceptance: dr-provider-read](distfs-distributed-resilience.prd.md#dr-provider-read) | [des-dr-selection](#des-dr-selection) | None兼容/中性，stable rank/dedupe/tie/max candidates | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/provider_selection.rs`；existing rank_providers_supports_legacy_records_without_capabilities、rank_providers_preserves_dedupe_tie_breaks_and_candidate_limit、rank_providers_zero_candidate_limit_keeps_all_unique_providers；local fixture。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-provider-read](distfs-distributed-resilience.prd.md#dr-provider-read) | [des-dr-read](#des-dr-read) | indexed定向retry；empty/exhausted明确error，无无provider fallback | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/tests.rs`；existing client_fetch_blob_from_dht_fails_when_no_providers、client_fetch_blob_from_dht_fails_after_ranked_provider_failures、client_fetch_blob_from_dht_retries_ranked_providers_until_success；local scripted provider。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-distribution](distfs-distributed-resilience.prd.md#dr-distribution) | [des-dr-distribution](#des-dr-distribution) | batch读取前min2及no single provider all necessary blobs审计 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/tests.rs`；existing provider_distribution_rejects_insufficient_replicas、provider_distribution_rejects_single_provider_full_coverage、client_fetch_blobs_from_dht_with_distribution_prevents_single_provider_full_coverage；fixture不证明真实DA。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dr-maintenance](distfs-distributed-resilience.prd.md#dr-maintenance) | [des-dr-plan](#des-dr-plan) | target3/32/32/850/450受quota；task identity与repair/rebalance分开 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/replica_maintenance.rs`；existing plan_replica_maintenance_creates_repair_tasks_for_under_replicated_blob、plan_replica_maintenance_creates_rebalance_tasks_for_overloaded_provider、plan_replica_maintenance_preserves_rebalance_tie_breaks；quota边界完整assertion需审读/执行。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dr-maintenance](distfs-distributed-resilience.prd.md#dr-maintenance) | [des-dr-plan](#des-dr-plan) | target3/32/32/850/450受quota；task identity与repair/rebalance分开 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/replica_maintenance.rs`；existing plan_replica_maintenance_creates_repair_tasks_for_under_replicated_blob、plan_replica_maintenance_creates_rebalance_tasks_for_overloaded_provider、plan_replica_maintenance_preserves_rebalance_tie_breaks；现有fixture核repair/rebalance任务、target和tie；完整quota边界仍planned。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dr-maintenance](distfs-distributed-resilience.prd.md#dr-maintenance) | [des-dr-transfer-publish](#des-dr-transfer-publish) | success transfer才target index，failed_tasks不污染且可retry | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/replica_maintenance.rs`；existing execute_replica_maintenance_plan_publishes_target_provider_on_success、execute_replica_maintenance_plan_does_not_publish_on_transfer_failure；StaticProvidersDht/ScriptedTransferExecutor只local oracle。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-due](#des-dr-due) | first/due推进last_polled，未到期None，invalid策略error | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/replica_maintenance.rs`；existing run_replica_maintenance_poll_runs_first_round_and_updates_state、run_replica_maintenance_poll_skips_when_interval_not_elapsed、run_replica_maintenance_poll_rejects_non_positive_interval；local模拟时间。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-runtime-poll](#des-dr-runtime-poll) | 依赖missing/no sample skip保time，error last_error不阻tick | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_node/src/tests_runtime_replica_maintenance.rs`；existing runtime_replica_maintenance_poll_skips_without_dht；所有依赖permutation/no sample/tick进展oracle planned，existing名不代表覆盖全部。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
-| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-local-executor](#des-dr-local-executor) | 仅self target、指定source found+payload+hash才CAS | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_node/src/tests_runtime_replica_maintenance.rs`；existing runtime_replica_maintenance_poll_executes_local_target_tasks；wrong target/missing payload/hash mismatch/CAS nonmutation完整负例planned；非远端编排。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-due](#des-dr-due) | 到期plan/report后推进last_polled，即使含failed_tasks；未到期None，非法策略error | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_net/src/replica_maintenance.rs`；existing run_replica_maintenance_poll_runs_first_round_and_updates_state、run_replica_maintenance_poll_skips_when_interval_not_elapsed、run_replica_maintenance_poll_rejects_non_positive_interval；local模拟时间，断言首轮时间1000、1050未到期保1000、非法interval时间None；含failed_tasks仍推进的组合断言planned。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-runtime-poll](#des-dr-runtime-poll) | 依赖missing/no sample skip保time，error last_error不阻tick | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_node/src/tests_runtime_replica_maintenance.rs`；existing runtime_replica_maintenance_poll_skips_without_dht只断言last_error为空，未断言旧轮询时间；所有依赖permutation/no sample/tick进展oracle planned，existing名不代表覆盖全部。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dr-runtime-poll](distfs-distributed-resilience.prd.md#dr-runtime-poll) | [des-dr-local-executor](#des-dr-local-executor) | 仅self target、指定source found+payload+hash才CAS | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_node/src/tests_runtime_replica_maintenance.rs`；existing runtime_replica_maintenance_poll_executes_local_target_tasks断言commit进展与DHT有本节点发布，使用in-memory network；wrong target/missing payload/hash mismatch/CAS nonmutation完整负例planned；非远端编排。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[AC-DCS-001](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-001) | [材料校验子范围](#des-dr-local-executor) | 仅指定source响应found、有payload且BLAKE3等于任务hash后写CAS；只承接hash-bound材料校验子范围 | [testing-manual S9A](../../../testing-manual.md)；planned同candidate P2P/runtime消费负例：错误hash/缺提交证明/非权威服务输入拒绝，观察无canonical进展；本页局部fixture只验证材料机制 | source/config/world/profile与真实拒绝结果、canonical前后状态；QA独立判定 | 未运行，local CAS、manifest、probe或DHT成功均不足以证明完整AC |
 
 ## 12. 决策、长期风险与未决问题
 

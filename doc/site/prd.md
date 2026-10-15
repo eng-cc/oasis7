@@ -111,7 +111,7 @@ M1–M3 仅是 2026-03 的历史建档/同步记录，未核到唯一原执行 T
   - AC-16: deck 实现必须适配当前 `site/**` 静态发布链路；允许引入浏览器端演示库，但不得要求新增 Node/Vite/SPA 构建步骤才能发布到 Pages。
   - AC-17: docs hub 或首页必须存在清晰 deck 入口；deck 页面本身必须保留回到首页 / docs hub 的导航，并显式标注当前仍为 `limited playable technical preview`，不是 closed beta 或正式玩家发布。
   - AC-18: 中英首页必须按“游戏与玩家位置 -> 一局后果链 -> 当前真实证据与预览边界 -> 下载/深读/跟进”形成单一主阅读路径，减少重复解释，不得把 builder 术语重新前置。
-  - AC-19: 桌面首页首要导航入口不超过五个；次级文档、故事、架构和开发者路径通过页尾或渐进披露保持可达。
+  - AC-19: 桌面首页首要导航入口不超过五个，并按已有内容分配；当前采用玩法、开发进展、世界观、技术预览。世界观到明确标为小说的导读；空世界记录留在页尾或次级状态。文档、架构和开发者路径通过页尾或渐进披露保持可达。
   - AC-20: 首页使用真实 Viewer 截图时必须标注受控场景与证据边界，不得把截图表达成公开网页可玩入口或正式发布证明。
   - AC-21: 1440x900、390x844 与 360x800 的浏览器证据必须确认首屏层级、无横向溢出、移动端导航与 CTA 可达；既有 link/manual/download/homepage-claim gates 必须继续通过。
   - AC-22: 首页对 persistent 的表述必须限定为世界状态、历史与后果可持续/可回放；不得承诺 7x24 公共托管、在线 SLA，或本地 runtime 停止后仍后台推进。
@@ -154,7 +154,7 @@ M1–M3 仅是 2026-03 的历史建档/同步记录，未核到唯一原执行 T
   - `site/skills/oasis7.md`
 ### 当前 Pages、下载与镜像合同
 - `site/index.html` 与 `site/en/index.html` 是公开 CN/EN 首页；`site/assets/app.js` 和 `site/assets/styles.css` 是其静态交互与无脚本降级的实现面。它们必须继续把 `viewer` 表达为默认 Web 验证入口、把 `software_safe` 限定为兼容 alias，并保持 `limited playable technical preview` 的公开边界。
-- 首页的 Canvas、指针响应、滚动高亮和时间线筛选仅是渐进增强，不能改变无 JS、键盘或 reduced-motion 访问下的内容、导航、CTA 与公开 claim；共享架构图必须保留稳定 SVG 引用和可访问语义。具体视觉层级、响应式和页面覆盖规则以 `doc/site/design.md` 为准。
+- 首页不初始化已隐藏的 Canvas；保留的滚动高亮等交互仅是渐进增强，不能改变无 JS、键盘或 reduced-motion 访问下的内容、导航、CTA 与公开 claim；共享架构图必须保留稳定 SVG 引用和可访问语义。具体视觉层级、响应式和页面覆盖规则以 `doc/site/design.md` 为准。
 - Pages 发布在 `.github/workflows/pages.yml` 中先执行四个当前门禁：`scripts/site-link-check.sh`、`scripts/site-homepage-claim-check.sh`、`scripts/site-manual-sync-check.sh` 与 `scripts/site-download-check.sh`；任一失败都不应部署静态站点。前两个分别守本地资源可达性与 CN/EN claim/no-JS 导航，后两个分别守 Viewer 手册镜像和下载面。
 - 下载面只分发 `eng-cc/oasis7` GitHub Releases 的 Windows `.exe`、macOS `.dmg`、Linux `.deb` 与 checksum；Linux 运维恢复工具另以带 manifest/checksum 的 `oasis7-linux-x64-ops-tools.tar.gz` 独立资产提供。首页可按平台选择主 CTA，但必须在下载前保留版本、安装、信任与支持边界。资产存在或检查通过不构成普通用户广泛发行、Windows codesigning 或 macOS notarization 已就绪的声明。
 - 升级仅支持重新下载最新主包并手动覆盖/替换。`config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` 是需要用户先备份的相对路径状态；不得把该说明升级为应用内更新、自动迁移或跨目录状态保留承诺。

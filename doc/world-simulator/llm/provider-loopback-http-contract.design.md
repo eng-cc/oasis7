@@ -4,7 +4,8 @@
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - 本地会话产品要求：[本地启动会话连续性与恢复](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md)
 
-## 1. 设计定位
+<a id="1-设计定位"></a>
+## 1. 设计定位与目标
 定义“安装在用户机器上的 `Local Provider` 如何通过本地 HTTP 参与 world-simulator 的 agent 决策”的首期工程方案，覆盖本地发现、握手、配置、决策请求、反馈回写、状态可观测与失败回退。
 
 ## 2. 设计结构
@@ -19,9 +20,9 @@
 
 | 上游要求 | 承接与分配 | 本设计条款 | 主责与消费方 | 边界 |
 | --- | --- | --- | --- | --- |
-| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | target/legacy 路由、身份与 Runtime 裁决保持独立 | [Harness 对齐](#41-harness-contract-alignment) | runtime_engineer、agent_engineer；HTTP adapter | 本地 callback 不替代完整 Runtime/Game API |
-| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 共享产物选择、有效配置和自有进程停止 | [交付与生命周期](#local-provider-delivery-contract) | 启动脚本与 Launcher；runtime_engineer、QA | 不停止独立 Provider，不撤销世界已接受请求 |
-| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 同请求重试、模型 SSE 完成及 URL/许可分离 | [HTTP 边界](#local-provider-http-boundaries) | adapter、模型桥接器；agent_engineer、QA | Rust/Python 分别验证，不新增自动降级 |
+| [REQ-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-005)；Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7 | target/legacy 路由、身份与 Runtime 裁决保持独立 | [Harness 对齐](#41-harness-contract-alignment) | runtime_engineer、agent_engineer；HTTP adapter | 本地 callback 不替代完整 Runtime/Game API |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)；Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1 | 仅承接配置输入与已应用配置的区分，以及停止不撤销已接受世界请求；产物选择和进程清理是专业依赖，不单独算作产品覆盖。 | [交付与生命周期](#local-provider-delivery-contract) | 启动脚本与 Launcher；runtime_engineer、QA | 不停止独立 Provider，不撤销世界已接受请求 |
+| [Flow-OC-LOCAL-004（失败恢复）](provider-loopback-http-contract.prd.md#local-provider-user-flows)；同节专业验收 AC-2、AC-6、AC-7（列表条款） | 仅承接单请求 transport 的重试分类、模型 SSE 完成及 URL/许可分离；不承接跨会话恢复重验。 | [HTTP 边界](#local-provider-http-boundaries) | adapter、模型桥接器；agent_engineer、QA | 产品适用性：N/A；reason=本行只分配单请求transport兼容验证方法，不定义停止或陈旧状态后的会话/权限恢复；scope=同一请求attempt/deadline、模型SSE终结与URL解析/许可的工程验证。HTTP功能实际产品消费链尚未准确建立；本行不将整个HTTP功能判为产品不适用，亦不填补已撤的LAUNCH-002关系。 |
 
 ## 3. 关键接口 / 入口
 - `GET /v1/provider/info`
@@ -41,6 +42,8 @@
 - required 回归不依赖真实用户安装的 `Local Provider`，必须使用 mock 服务即可跑通。
 
 ### 4.1 Harness contract alignment
+
+本条只承接 REQ-EXT-005 的 loopback feedback correlation 与 Runtime 结果边界；专业细项沿用[Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows)，不证明结果已进入所有真实 Runtime 的后续认知。
 
 Loopback is an adapter with a strict target lane and a fenced legacy compatibility lane for the Continuous Harness. Its tagged `decision` response
 preserves `wait/wait_ticks/act/query/module_command/module_command_response` variants; `query` is
@@ -75,12 +78,12 @@ inner DTO is legacy-route only, and a committed Runtime outcome is still require
 <a id="local-provider-delivery-contract"></a>
 ## 6. 本地交付、配置与停止合同
 
-本节是专业设计要求，不是启动脚本、HTTP 实现或真实 Runtime 已通过验收的声明。它细化配对 PRD 的发现、绑定、失败恢复流程和本地会话产品的 REQ-ENTRY-LAUNCH-001/002；外部 Runtime 的完整 Game API/Skill 旅程仍由上游产品与 Runtime adapter 设计拥有。
+本节是专业设计要求，不是启动脚本、HTTP 实现或真实 Runtime 已通过验收的声明。它细化配对 PRD 的发现、绑定、失败恢复流程，并仅承接本地会话产品 REQ-ENTRY-LAUNCH-001 的配置输入/实际应用及停止不撤销世界请求边界；REQ-ENTRY-LAUNCH-002 的跨会话重新验证由 Launcher 会话设计负责，是外部依赖而非本节覆盖；外部 Runtime 的完整 Game API/Skill 旅程仍由上游产品与 Runtime adapter 设计拥有。
 
 | 上游要求 | 本设计责任 | 主责与消费方 | 验证边界 |
 | --- | --- | --- | --- |
 | 配对 PRD Flow-OC-LOCAL-001/002、AC-1 | 同一产物选择用于预检和真实启动，区分配置输入与已应用配置 | 启动脚本、Cargo wrapper、Launcher；Agent adapter 消费结果 | 路径存在或配置保存不证明进程已采用它 |
-| 配对 PRD Flow-OC-LOCAL-004、AC-5；REQ-ENTRY-LAUNCH-002 | 受控停止、结构化失败、显式 provider 切换 | 本次创建的 supervisor/子进程；Launcher 展示结果 | 不终止用户独立启动的 Runtime 或无关进程 |
+| 配对 PRD Flow-OC-LOCAL-004、AC-5 | 受控停止、结构化失败、显式 provider 切换 | 本次创建的 supervisor/子进程；Launcher 展示结果 | 不终止用户独立启动的 Runtime 或无关进程 |
 | 配对 PRD AC-2/6/7 | 同一请求的有限重试、HTTP 终结与地址解析 | HTTP adapter、模型桥接器、离线合同测试 | 本地 callback、上游模型 SSE 与 Game API 分别验证 |
 
 ### 6.1 产物与有效配置
@@ -97,6 +100,8 @@ bootstrap 的模型 base URL 在其自身边界内遵循：显式 `--base-url` �
 
 <a id="local-provider-http-boundaries"></a>
 ## 7. HTTP 失败、终结和地址边界
+
+本节保留单请求传输的技术合同，专业细项沿用[Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows)。它不实现停止、陈旧状态或失败后重新进入时的 authority、session、配置和 primary mode 重验；该产品义务仍由 Launcher 会话连续性专业设计负责，不能由 HTTP 重试或 SSE/URL 验证代签。
 
 ### 7.1 一个决策请求的重试
 
@@ -133,8 +138,12 @@ transport 与 adapter 使用一致的 retryable 分类。对现有允许重试�
 
 | 上游要求 | 本设计条款 | 机制与场景 | 验证来源 | 执行证据 | 未覆盖与状态 |
 | --- | --- | --- | --- | --- | --- |
-| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [Harness 对齐](#41-harness-contract-alignment) | target outer/feedback correlation 与 legacy 隔离；沿用 mock 合同，真实 Runtime 单独验收 | [测试手册](../../../testing-manual.md)；按其中 provider/Agent 合同入口执行 | 实际 source、命令、退出码和失败反例，记录在 PR/Issue | 本次只建立映射，未执行；mock 不证明真实首局 |
-| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [交付与生命周期](#local-provider-delivery-contract) | §8 的产物、配置、Ready 前/后 TERM 与 HUP 独立反例；扩展已有 shell 回归 | [本地 LetAI 回归](../../../scripts/run-local-letai-game-test.test.sh) | source、选中产物、净化配置、真实自有子树退出和端口释放 | planned；现有测试入口不表示这些新增用例已实现或通过 |
-| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [HTTP 边界](#local-provider-http-boundaries) | §8 的同请求两次尝试、DONE 后保持连接/禁止额外读取和 IPv6 反例 | [测试手册](../../../testing-manual.md)；按 provider HTTP/mock 与对应 Rust/Python suite 分别扩展执行 | source、客户端类型、尝试/读取计数、结果和命令退出码 | planned；不以 shell 通过或任一客户端结果代签全部 HTTP 验收 |
+| [REQ-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-005)；Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7 | [Harness 对齐](#41-harness-contract-alignment) | target outer/feedback correlation 与 legacy 隔离；沿用 mock 合同，真实 Runtime 单独验收 | [HTTP合同测试](../../../crates/oasis7/src/simulator/tests/provider_loopback_http.rs)：`env -u RUSTC_WRAPPER cargo test -p oasis7 provider_loopback_http_client_round_trips_info_health_decision_and_feedback -- --nocapture` 当前仅验证bare legacy DTO往返；target outer/feedback关联与legacy不能关闭target的场景按§4.1另补并记录真实测试ID，不以该legacy正例代签 | 实际 source、命令、退出码和失败反例，记录在 PR/Issue | 本次只建立映射，未执行；mock 不证明真实首局 |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)；Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1 | [交付与生命周期](#local-provider-delivery-contract) | 对账输入配置与真实child有效配置，并核对停止不取消世界已接受请求；§8产物选择/TERM/HUP仅属专业依赖验证，不代签该产品子义务。 | [本地 LetAI 回归](../../../scripts/run-local-letai-game-test.test.sh)：`bash scripts/run-local-letai-game-test.test.sh` 现有检查包括help/preflight、缺配置/产物和占用端口诊断；§8全部真实进程停止条件仍是待补/单独验证场景。待补：同候选先记录世界已接受请求的request/Agent/任务关联，停止本地自有进程后按原request查询权威结果，对账停止前后的pending/committed/rejected含义及是否误取消/重放；现有shell不证明此项，不声称已有fixture。 | source、选中产物、输入与真实child有效配置；另存原request关联、停止前后权威查询/receipt及未取消/未重放断言，子树退出和端口释放仅为依赖证据。 | planned；现有测试入口不表示这些新增用例已实现或通过 |
+| [Flow-OC-LOCAL-004（失败恢复）](provider-loopback-http-contract.prd.md#local-provider-user-flows)；同节专业验收 AC-2、AC-6、AC-7（列表条款） | [HTTP 边界](#local-provider-http-boundaries) | §8 的同请求两次尝试、DONE 后保持连接/禁止额外读取和 IPv6 反例 | [HTTP合同测试](../../../crates/oasis7/src/simulator/tests/provider_loopback_http.rs)：运行 `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_http_failure_retryability_is_deterministic -- --nocapture`，只证明RequestFailed/429/503可重试与401/400不可重试分类；`provider_loopback_http_client_surfaces_http_401_on_decision`只证明401映射。两次尝试/耗尽/取消、SSE完成边界与Rust/Python URL组合仍须各自新增fixture和准确测试ID，不借分类单测声称已证明 | source、客户端类型、尝试/读取计数、结果和命令退出码 | planned；不以 shell 通过或任一客户端结果代签全部 HTTP 验收 |
 
 新增场景与已存在测试入口明确区分。实现任务须把本表场景落实到对应测试并记录真实结果；本表不构造已通过证据，也不以通用手册引用免除 §8 的逐项验收。
+
+## 12. 决策与残余风险
+
+审读基线为 `4e94163a3dff9ba69f6959b406ca3fcedf8aa097`。保留 target/legacy 路由隔离与单次 JSON callback，不把上游 SSE 或 URL 解析能力扩大为公网 callback 许可。§8 与 §11 是分层验证计划，不声明全部负例已有测试；agent/runtime/launcher owner 在重试预算、进程所有权、配置选择或协议版本变化时复核。真实 provider 鉴权、完整首局与跨入口玩家反馈仍需独立证据。

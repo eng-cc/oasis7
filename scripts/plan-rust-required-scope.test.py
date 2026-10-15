@@ -308,6 +308,33 @@ class Selection(unittest.TestCase):
                     self.assertEqual(set(plan['groups']), expected)
                     base = self.git('rev-parse', 'HEAD')
 
+    def test_game_client_routes_through_support_and_server_consumer(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        packages = ('oasis7_client_api', 'oasis7_game_client', 'oasis7')
+        for package in packages:
+            self.write(f'crates/{package}/Cargo.toml',
+                       f'[package]\nname="{package}"\nversion="0.1.0"\n')
+            self.write(f'crates/{package}/src/lib.rs', '')
+        base = self.commit()
+        manifests = {name: (f'crates/{name}', {}) for name in packages}
+        graph = (manifests, {
+            'oasis7_client_api': {'oasis7_game_client', 'oasis7'},
+            'oasis7_game_client': {'oasis7'}, 'oasis7': set(),
+        }, {})
+        with patch.object(selector, 'cargo_graph', return_value=graph):
+            for package in ('oasis7_client_api', 'oasis7_game_client'):
+                with self.subTest(package=package):
+                    self.write(f'crates/{package}/src/lib.rs', '// changed')
+                    plan = selector.select(config, base, self.commit())
+                    self.assertEqual(plan['scope'], 'targeted')
+                    expected_profiles = {'oasis7_game_client'}
+                    if package == 'oasis7_client_api':
+                        expected_profiles.add('oasis7_client_api')
+                    self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
+                    self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
+                                     'workspace_support', 'oasis7_required', 'launcher_web'})
+                    base = self.git('rev-parse', 'HEAD')
+
     def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
         packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')

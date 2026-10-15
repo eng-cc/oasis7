@@ -202,8 +202,10 @@ run_oasis7_net_libp2p_clippy() {
 run_oasis7_workspace_support_crate_tests() {
   run_cargo_clippy -p oasis7_agent_api --all-targets
   run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo_clippy -p oasis7_game_client --all-targets
   run_cargo test -p oasis7_agent_api
   run_cargo test -p oasis7_agent_harness --lib
+  run_cargo test -p oasis7_game_client --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \
@@ -248,8 +250,6 @@ if raw.startswith('plan:'):
         raise SystemExit('unknown support profile plan version')
     else:
         profiles = plan.get('workspace_support_profiles')
-        if plan.get('scope') == 'full' and set(profiles or []) != set(module.SUPPORT_PROFILES):
-            raise SystemExit('full plan omitted support profiles')
 else:
     profiles = json.loads(raw)
 if (not isinstance(profiles, list) or not profiles or
@@ -257,6 +257,11 @@ if (not isinstance(profiles, list) or not profiles or
         len(set(profiles)) != len(profiles) or
         not set(profiles).issubset(module.SUPPORT_PROFILES)):
     raise SystemExit('invalid or missing workspace support profiles')
+# A trusted base planner cannot name newly extracted packages. Full scope
+# always expands to the candidate inventory after validating its known input,
+# so an additive profile never narrows or breaks the full support job.
+if raw.startswith('plan:') and plan.get('scope') == 'full':
+    profiles = list(module.SUPPORT_PROFILES)
 print('\n'.join(sorted(profiles)))
 PY
   ) || return 2
@@ -264,7 +269,7 @@ PY
     echo "+ support profile: $profile"
     case "$profile" in
       oasis7_agent_api) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" ;;
-      oasis7_agent_harness) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
+      oasis7_agent_harness|oasis7_game_client) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
       oasis7_wasm_executor) run_cargo test -p "$profile" --features wasmtime --lib ;;
       oasis7_secure_envelope|oasis7_context) run_cargo test -p "$profile" --all-targets --locked ;;
       oasis7_local_signer) run_cargo test -p "$profile" --lib; run_cargo test -p "$profile" --test context_cli --locked ;;

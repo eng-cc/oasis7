@@ -8,62 +8,9 @@ use crate::world_service::{
     private_goal_store::PreparedGoalReceiptV1,
 };
 impl RemoteWorldServiceClient {
+    #[cfg(test)]
     fn private_connection(&self) -> Result<reqwest::blocking::Client, WorldServiceClientError> {
-        let endpoint = reqwest::Url::parse(&self.config.endpoint).map_err(|_| {
-            WorldServiceClientError::Configuration("invalid private endpoint".into())
-        })?;
-        let host = endpoint
-            .host_str()
-            .unwrap_or_default()
-            .trim_start_matches('[')
-            .trim_end_matches(']');
-        if endpoint.scheme() != "https"
-            && !(endpoint.scheme() == "http"
-                && host
-                    .parse::<std::net::IpAddr>()
-                    .is_ok_and(|ip| ip.is_loopback()))
-        {
-            return Err(WorldServiceClientError::Configuration(
-                "private goals require HTTPS or a literal loopback HTTP address".into(),
-            ));
-        }
-        if self.config.trusted_service_public_key.len() != 64
-            || !self
-                .config
-                .trusted_service_public_key
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        {
-            return Err(WorldServiceClientError::Configuration(
-                "noncanonical private service trust".into(),
-            ));
-        }
-        let key: [u8; 32] = hex::decode(&self.config.trusted_service_public_key)
-            .map_err(|_| {
-                WorldServiceClientError::Configuration("invalid private service trust".into())
-            })?
-            .try_into()
-            .map_err(|_| {
-                WorldServiceClientError::Configuration("invalid private service trust".into())
-            })?;
-        if ed25519_dalek::VerifyingKey::from_bytes(&key)
-            .map_err(|_| {
-                WorldServiceClientError::Configuration("invalid private service trust".into())
-            })?
-            .is_weak()
-        {
-            return Err(WorldServiceClientError::Configuration(
-                "weak private service trust".into(),
-            ));
-        }
-        reqwest::blocking::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(self.config.timeout)
-            .build()
-            .map_err(|_| {
-                WorldServiceClientError::Configuration("private transport unavailable".into())
-            })
+        self.transport.private_connection()
     }
     pub(super) fn private_scope(
         &self,
@@ -91,54 +38,8 @@ impl RemoteWorldServiceClient {
         request: &Q,
         maximum: usize,
     ) -> Result<SignedServiceResponse<R>, WorldServiceClientError> {
-        let http = self.private_connection()?;
-        self.query_state.check()?;
-        let mut response = http
-            .post(format!(
-                "{}{}",
-                self.config.endpoint.trim_end_matches('/'),
-                path
-            ))
-            .json(request)
-            .send()
-            .map_err(|_| WorldServiceClientError::Transport("private transport failed".into()))?;
-        let status = response.status().as_u16();
-        if status != 200 {
-            return Err(WorldServiceClientError::Rejected {
-                status,
-                message: "private goal request rejected".into(),
-            });
-        }
-        let bound = self
-            .config
-            .max_response_bytes
-            .min(maximum.min(2 * 1024 * 1024));
-        let mut bytes = zeroize::Zeroizing::new(Vec::new());
-        response
-            .by_ref()
-            .take(bound as u64 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| {
-                WorldServiceClientError::Transport("private response read failed".into())
-            })?;
-        if bytes.len() > bound {
-            return Err(WorldServiceClientError::Assurance(
-                "private response exceeds bound".into(),
-            ));
-        }
-        // Reject duplicate keys/depth first, then ignored wrapper/commit fields.
-        let value: Value = oasis7_agent_api::game::parse_bounded_json(&bytes, bound)
-            .map_err(|_| WorldServiceClientError::Assurance("invalid private response".into()))?;
-        use serde::de::IntoDeserializer;
-        let mut ignored = false;
-        let signed = serde_ignored::deserialize(value.into_deserializer(), |_| ignored = true)
-            .map_err(|_| WorldServiceClientError::Assurance("invalid private response".into()))?;
-        if ignored {
-            return Err(WorldServiceClientError::Assurance(
-                "unsupported private response field".into(),
-            ));
-        }
-        Ok(signed)
+        self.transport
+            .private_signed_response(path, request, maximum)
     }
     /// Retain and verify the exact original proof. Does not sign or submit a public intent.
     pub fn prepare_goal(
@@ -183,6 +84,7 @@ impl RemoteWorldServiceClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
     #[test]
     fn private_transport_rejects_remote_plaintext_and_names_before_network() {
         let private = hex::encode([7; 32]);

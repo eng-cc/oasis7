@@ -15,8 +15,8 @@
 
 | 对象 | 基线事实 | 目标与差距 |
 | --- | --- | --- |
-| 文档索引 | [index.rs](../../../tools/oasis7-command-center/core/src/index.rs)按 tracked 路径读取并生成章节，单文件/总量/数量有界 | 复用章节及生命周期解析；补文件级清单、明确遗漏原因、固定基线读取和树投影 |
-| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 已有章节索引复核 HEAD、tracked 清单、dirty 路径和已读内容摘要，变化时拒绝候选；文件节点与独立树快照仍待实现 |
+| 文档索引 | [index.rs](../../../tools/oasis7-command-center/core/src/index.rs)按 tracked 路径读取并生成章节，单文件/总量/数量有界 | 复用章节及生命周期解析；已有工作树文件清单及逐项覆盖；固定基线读取和树投影待实现 |
+| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 已有章节索引复核 HEAD、tracked 清单、dirty 路径和已读内容摘要，变化时拒绝候选；已有文件覆盖记录；完整文件节点关系与独立树快照仍待实现 |
 | 导航与关系 | 仓库入口和配对链接存在；没有据此证明专用树 UI | 增加明确导航关系、配对关系和可见未归属集合 |
 | 桌面验证 | 本次仅源码与文档核对 | 未执行新 UI、读屏、性能或模型验收；不得以设计表认定已通过 |
 
@@ -60,7 +60,7 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 本功能不执行 fetch、checkout、模型调用或源文档写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
 
-现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；跳过文件的逐项覆盖、独立树 attempt/generation、缓存与 UI 合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
+现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；逐文件覆盖由下述清单切片承接；独立树 attempt/generation、树缓存与树 UI 合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
 
 <a id="DES-CC-TREE-003"></a>
 
@@ -133,6 +133,16 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 现有章节索引按 core PRD、工作流主责、结构入口（`AGENTS.md`、文档目录 `README.md`、项目地图）、产品正文/其他 `prd.md`、其余正文的顺序消费文件数量和字节预算；同级按路径稳定排序，入口也受相同单文件及总预算约束，不保证所有入口必然可读。入口优先回归见 `core/src/index_consistency_tests.rs`。
 
 现有章节索引的覆盖反馈由 [index_coverage.rs](../../../tools/oasis7-command-center/core/src/index_coverage.rs) 承接：来源状态显示候选/已读/遗漏数量、实际已读字节、完整遗漏原因计数与最多 20 条路径样本（标明样本/总数）；单文件实际读取受文件和剩余总量预算限制，空文件计为已读，全量遗漏不判为空结果。这是现有工作树章节索引的局部反馈，不提供逐文件持久覆盖、独立树快照/attempt、固定提交或树 UI；本节表内尚待实现的义务仍保留。
+
+文件清单切片由 [document_inventory.rs](../../../tools/oasis7-command-center/core/src/document_inventory.rs) 和 [DocumentInventory.tsx](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx) 承接：现有 tracked 工作树扫描保留所有候选路径，记录 read/skipped/deleted/error、具体原因、可得的标题/类型/生命周期、摘要、已读字节和 dirty；空文件保留记录，未读文件不虚构正文元数据。文件键按项目/路径生成，读取前去重，清单按路径稳定排序；不将文件类型推定为明确配对或主责关系。
+
+清单与章节/搜索在同一 SQLite 事务发布，使用独立 `document_inventory_v1:<project>` 派生键，不修改原持久 Snapshot shape 或数据库 schema 版本。查询 `query_document_inventory` 携带 schemaVersion=1、projectId、可选 snapshotId、标题/路径查询、读取结果筛选及游标；最多返回 100 项，计数不随分页裁剪，游标绑定清单摘要和筛选。来源变化后旧游标明确失效；失败保留原清单并显示 stale，首次缺清单、损坏或未来版本只使清单查询失败，用户刷新可重建，个人记录与未决操作不随清单删除。旧客户端忽略新键。清单仍沿现有章节索引的 partial 发布行为，不提供本设计 §7 独立树成功 pointer/partial attempt 的恢复合同。
+
+规范视图按文件查询读取结果，可查看遗漏、空文件与同摘要章节，项目切换或刷新使旧响应无效。此清单不宣称已经提供三种树投影、显式文档 ID/条款搜索、配对边、固定提交/untracked 基线、独立树快照、树偏好或完整 AC-CC-016。程序回归见 [文件清单测试](../../../tools/oasis7-command-center/core/tests/document_inventory.rs) 与 [界面测试](../../../tools/oasis7-command-center/ui/src/DocumentInventory.test.tsx)；真实界面与宿主验证的候选、环境和限制归实现 PR。
+
+显式配对前置切片在同一文件清单中保留 `pairings`：只识别首个非 H1 标题之前、顶层列表的精确“配对系统设计”字段内 Markdown 链接，普通引用、代码块、引用块、嵌套列表和正文不推断配对；每条保留声明行、原链接、规范化目标和文件级诊断。每文件最多 32 条，字段最多 4096 字节，跨行字段仅提取首行链接并显示解析不完整，超过预算或无法识别链接也显示解析不完整，不声称无配对。声明链接按源顺序保留，不合并多条声明。
+
+目标仅与本次候选清单比对，不沿链接读文件或访问网络：已读取且没有 fragment 的文件目标标 resolved，已读取但带 fragment 的目标标 fragment_unchecked（章节锚点尚未核对），已列举但删除的目标标 missing，其他读取遗漏标 unread；未纳入清单、外部、越界或不安全目标标 outside_scope，不把未跟踪文件猜为不存在。详情展示诊断及源行，内容摘要沿所属文件绑定。旧清单缺少可选 `pairings` 时显示未解析并要求刷新，不将缺字段当作无配对；旧 App 忽略新增派生字段，原 Snapshot 不变。此切片尚不解析上游/承接表、导航、successor 边、重复锚点或显式文档 ID，不提供关系跳转或三种树投影；fragment_unchecked 不计为已解析配对。程序回归沿文件清单和界面测试入口，实际桌面验证归实现 PR。
 
 先实现文件清单与覆盖反馈，再实现关系和快照投影，随后接入树/详情及恢复，最后验证真实 App。只到前两步时可以交付索引切片，但不宣称 AC-CC-016 已通过。纯设计不改变游戏 Agent Skill/API/runtime 行为，开发自主试玩不适用；功能实现仍需上述真实桌面验证。
 

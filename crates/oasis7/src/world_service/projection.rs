@@ -43,17 +43,7 @@ pub struct WorldServiceContinuationContext {
     pub precondition_digest: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorldServiceAgentContext {
-    pub agent_id: String,
-    pub capability_authorization_root: String,
-    pub capability_snapshot_hash: String,
-    pub authority_context_hash: String,
-    pub capability_catalog: oasis7_wasm_abi::CapabilityCatalogSnapshot,
-    pub capability_invocation_context:
-        crate::capability_invocation_context::CapabilityInvocationContext,
-    pub payer_binding: serde_json::Value,
-}
+pub use oasis7_agent_api::world_context::WorldServiceAgentContext;
 
 impl WorldServiceProjection {
     /// Called after scope authentication. Owner chat metadata has a stricter

@@ -388,56 +388,105 @@ fn canonical_owner_goal_http_view_excludes_public_and_registered_delegate() {
         (&delegate_private, "agent:agent-a", false),
         (&delegate_private, "public", false),
     ] {
-        let signed = sign_read_request(
-            VIEW_PATH,
-            ReadWorldViewRequest {
-                observation_nonce: None,
-                formal_anchor: None,
-                contract_version: 1,
-                world: identity.clone(),
-                scope_id: scope.into(),
-                min_commit: None,
-                fixed_commit: None,
-                deadline_unix_ms: None,
-            },
-            key,
-        )
-        .unwrap();
-        let body = serde_json::to_vec(&signed).unwrap();
-        let mut bytes = format!(
-            "POST {VIEW_PATH} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n",
-            body.len()
-        )
-        .into_bytes();
-        bytes.extend(body);
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
-        let (mut server, _) = listener.accept().unwrap();
-        crate::world_service_api::maybe_handle(
-            &mut server,
-            &bytes,
-            &runtime,
-            "POST",
-            VIEW_PATH,
-            "w1",
-            &dir.join("world"),
-            &dir.join("records"),
-            &dir.join("store"),
-            &signer,
-        )
-        .unwrap();
-        drop(server);
-        let mut response = String::new();
-        client.read_to_string(&mut response).unwrap();
-        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
-        let value: serde_json::Value =
-            serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
-        assert_eq!(
-            value.to_string().contains("private canonical goal 1"),
-            is_owner
-        );
-        let projection = &value["payload"]["view"];
-        assert_eq!(projection.get("canonical_agent_chat").is_some(), is_owner);
+        let mut original_projection = None;
+        for path in [VIEW_PATH, oasis7_client_api::world_service::VIEW_JSON_PATH] {
+            let signed = sign_read_request(
+                path,
+                ReadWorldViewRequest {
+                    observation_nonce: None,
+                    formal_anchor: None,
+                    contract_version: 1,
+                    world: identity.clone(),
+                    scope_id: scope.into(),
+                    min_commit: None,
+                    fixed_commit: None,
+                    deadline_unix_ms: None,
+                },
+                key,
+            )
+            .unwrap();
+            let body = serde_json::to_vec(&signed).unwrap();
+            let mut bytes = format!(
+                "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            bytes.extend(body);
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+            let (mut server, _) = listener.accept().unwrap();
+            crate::world_service_api::maybe_handle(
+                &mut server,
+                &bytes,
+                &runtime,
+                "POST",
+                path,
+                "w1",
+                &dir.join("world"),
+                &dir.join("records"),
+                &dir.join("store"),
+                &signer,
+            )
+            .unwrap();
+            drop(server);
+            let mut response = String::new();
+            client.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+            let value: serde_json::Value =
+                serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            assert_eq!(
+                value.to_string().contains("private canonical goal 1"),
+                is_owner
+            );
+            let projection = &value["payload"]["view"];
+            assert_eq!(projection.get("canonical_agent_chat").is_some(), is_owner);
+            if path == VIEW_PATH {
+                let typed: SignedServiceResponse<
+                    ReadWorldViewResponse<
+                        oasis7::world_service::projection::WorldServiceProjection,
+                    >,
+                > = serde_json::from_value(value.clone()).unwrap();
+                verify_service_response(
+                    path,
+                    &request_digest(path, &signed).unwrap(),
+                    &typed,
+                    &signer.public_key_hex,
+                )
+                .unwrap();
+                original_projection = Some(value["payload"].clone());
+            } else {
+                assert_eq!(original_projection.as_ref(), Some(&value["payload"]));
+                let mut normalized: SignedServiceResponse<
+                    ReadWorldViewResponse<serde_json::Value>,
+                > = serde_json::from_value(value).unwrap();
+                verify_service_response(
+                    path,
+                    &request_digest(path, &signed).unwrap(),
+                    &normalized,
+                    &signer.public_key_hex,
+                )
+                .unwrap();
+                assert!(
+                    verify_service_response(
+                        VIEW_PATH,
+                        &request_digest(path, &signed).unwrap(),
+                        &normalized,
+                        &signer.public_key_hex
+                    )
+                    .is_err()
+                );
+                normalized.payload.view["state"]["time"] = serde_json::json!(999);
+                assert!(
+                    verify_service_response(
+                        path,
+                        &request_digest(path, &signed).unwrap(),
+                        &normalized,
+                        &signer.public_key_hex
+                    )
+                    .is_err()
+                );
+            }
+        }
     }
     fs::remove_dir_all(dir).unwrap();
 }

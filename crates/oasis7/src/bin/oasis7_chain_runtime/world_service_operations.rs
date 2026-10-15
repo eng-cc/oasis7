@@ -230,7 +230,29 @@ pub(super) fn view(
     service: &Service<'_>,
     request: SignedReadRequest<ReadWorldViewRequest>,
 ) -> Result<Value, String> {
-    verify_read_request(VIEW_PATH, &request)?;
+    view_profile(service, request, VIEW_PATH, false)
+}
+
+/// Explicit JSON projection codec; authorization and pinning share the typed read.
+pub(super) fn view_json(
+    service: &Service<'_>,
+    request: SignedReadRequest<ReadWorldViewRequest>,
+) -> Result<Value, String> {
+    view_profile(
+        service,
+        request,
+        oasis7_client_api::world_service::VIEW_JSON_PATH,
+        true,
+    )
+}
+
+fn view_profile(
+    service: &Service<'_>,
+    request: SignedReadRequest<ReadWorldViewRequest>,
+    path: &str,
+    json_projection: bool,
+) -> Result<Value, String> {
+    verify_read_request(path, &request)?;
     request.request.validate().map_err(|e| e.to_string())?;
     if request.request.world != service.identity {
         return Err("view world mismatch".into());
@@ -273,7 +295,15 @@ pub(super) fn view(
     response
         .validate(&request.request)
         .map_err(|e| e.to_string())?;
-    service.signed(VIEW_PATH, &request, response)
+    if json_projection {
+        // Normalize before signing, never reinterpret a typed-CBOR signature as JSON.
+        let response: ReadWorldViewResponse<Value> =
+            serde_json::from_value(serde_json::to_value(response).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        service.signed(path, &request, response)
+    } else {
+        service.signed(path, &request, response)
+    }
 }
 
 pub(super) fn changes(

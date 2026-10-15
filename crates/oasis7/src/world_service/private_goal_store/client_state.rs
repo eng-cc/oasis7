@@ -1,170 +1,51 @@
-//! Device-side original operation cache. Never substitutes a new nonce or
-//! payload after an unknown result. Uses the same encrypted durable boundary
-//! as private goal records, with a separate domain and locator namespace.
+//! Compatibility adapter sharing the native client's original operation cache.
 use super::PrivateGoalStore;
-use crate::world_service::{
-    private_task_context::{TaskContextPrepareV1, verify_prepare},
-    *,
-};
-use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use zeroize::Zeroizing;
-
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ClientStateKind {
-    Prepare,
-    Prefix,
-    Action,
-    Outcome,
-}
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum ClientStateV1 {
-    ContextPrepare(Box<SignedReadRequest<TaskContextPrepareV1>>),
-    PublicIntent(Box<SubmitIntentRequest<WorldServicePayloadV1>>),
-}
-impl ClientStateV1 {
-    fn validate(&self, kind: ClientStateKind) -> Result<(), String> {
-        match self {
-            Self::ContextPrepare(proof) if kind == ClientStateKind::Prepare => {
-                verify_prepare(proof)
-            }
-            Self::PublicIntent(request) if kind != ClientStateKind::Prepare => {
-                request.validate().map_err(|_| "invalid cached operation")?;
-                let expected = derive_correlation(
-                    request.correlation.key.world.clone(),
-                    &request.signed_payload,
-                )?;
-                if expected != request.correlation {
-                    return Err("cached correlation mismatch".into());
-                }
-                match (&request.signed_payload, kind) {
-                    (WorldServicePayloadV1::Scheduler(s), ClientStateKind::Prefix)
-                        if matches!(
-                            s.request.operation,
-                            SchedulerOperationV1::TaskProviderPrefix { .. }
-                        ) =>
-                    {
-                        Ok(())
-                    }
-                    (WorldServicePayloadV1::Scheduler(s), ClientStateKind::Outcome)
-                        if matches!(
-                            s.request.operation,
-                            SchedulerOperationV1::TaskProviderFailure { .. }
-                        ) =>
-                    {
-                        Ok(())
-                    }
-                    (WorldServicePayloadV1::Cognition(s), ClientStateKind::Action)
-                        if s.request.task_fence.is_some() =>
-                    {
-                        Ok(())
-                    }
-                    _ => Err("cached operation kind mismatch".into()),
-                }
-            }
-            _ => Err("cached operation kind mismatch".into()),
-        }
-    }
-}
-#[cfg(unix)]
-const DOMAIN: &str = "oasis7/private-task-client-state/v1";
-#[cfg(unix)]
-const MAGIC: &[u8; 8] = b"O7CLIENT";
-#[cfg(unix)]
-const MAXIMUM: usize = oasis7_agent_api::game::MAX_REQUEST_BYTES + 1024;
+pub use oasis7_client_api::world_service::client_state::ClientStateKind;
+pub type ClientStateV1 = oasis7_client_api::world_service::client_state::ClientStateV1<
+    crate::world_service::WorldServicePayloadV1,
+>;
+use oasis7_client_api::world_service::client_state::validate_client_state;
 impl PrivateGoalStore {
-    #[cfg(unix)]
-    fn client_state_name(&self, kind: ClientStateKind, operation: &str) -> Result<String, String> {
-        if operation.trim().is_empty() || operation.len() > 256 {
-            return Err("invalid client operation identity".into());
-        }
-        let key = Zeroizing::new(blake3::derive_key(
-            "oasis7/private-task-client-index/v1",
-            self.key.as_slice(),
-        ));
-        let scope = oasis7_wasm_abi::encode_canonical_cbor(&(kind, operation))
-            .map_err(|_| "client operation encoding failed")?;
-        Ok(format!("client-{}", blake3::keyed_hash(&key, &scope)))
-    }
     pub fn read_client_state(
         &self,
         kind: ClientStateKind,
         operation: &str,
     ) -> Result<Option<ClientStateV1>, String> {
-        #[cfg(unix)]
-        {
-            let name = self.client_state_name(kind, operation)?;
-            let aad = serde_cbor::to_vec(&(DOMAIN, &name))
-                .map_err(|_| "client operation encoding failed")?;
-            let Some(bytes) = super::unix::read_bounded_record(
-                &self.directory,
-                &self.key,
-                &name,
-                MAGIC,
-                &aad,
-                MAXIMUM,
-            )?
-            else {
-                return Ok(None);
-            };
-            let record: ClientStateV1 =
-                serde_cbor::from_slice(&bytes).map_err(|_| "client operation recovery required")?;
-            record.validate(kind)?;
-            Ok(Some(record))
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = (kind, operation);
-            Err("private client operation storage unsupported".into())
-        }
+        oasis7_game_client::operation_store::read_client_state_with(
+            #[cfg(unix)]
+            &self.directory,
+            &self.key,
+            kind,
+            operation,
+            validate_client_state,
+        )
     }
-    /// Returns the immutable winner. Callers check exact input compatibility;
-    /// a concurrent first nonce is retained rather than silently replaced.
     pub fn put_client_state(
         &self,
         kind: ClientStateKind,
         operation: &str,
         record: &ClientStateV1,
     ) -> Result<ClientStateV1, String> {
-        record.validate(kind)?;
-        #[cfg(unix)]
-        {
-            let name = self.client_state_name(kind, operation)?;
-            let aad = serde_cbor::to_vec(&(DOMAIN, &name))
-                .map_err(|_| "client operation encoding failed")?;
-            let bytes = Zeroizing::new(
-                serde_cbor::to_vec(record).map_err(|_| "client operation encoding failed")?,
-            );
-            super::unix::publish_bounded_record(
-                &self.directory,
-                &self.key,
-                &name,
-                MAGIC,
-                &aad,
-                &bytes,
-                MAXIMUM,
-            )?;
-            self.read_client_state(kind, operation)?
-                .ok_or_else(|| "client operation recovery required".into())
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = (operation, &self.key);
-            Err("private client operation storage unsupported".into())
-        }
+        oasis7_game_client::operation_store::put_client_state_with(
+            #[cfg(unix)]
+            &self.directory,
+            &self.key,
+            kind,
+            operation,
+            record,
+            validate_client_state,
+        )
+    }
+    #[cfg(all(test, unix))]
+    fn client_state_name(&self, kind: ClientStateKind, operation: &str) -> Result<String, String> {
+        oasis7_game_client::operation_store::client_state_name(&self.key, kind, operation)
     }
 }
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::world_service::private_task_context::TaskContextPrepareV1;
+    use crate::world_service::*;
     use oasis7_agent_api::game::{GameTaskControlV1, GameTaskFenceV1};
     use serde_json::json;
 
@@ -204,6 +85,18 @@ mod tests {
             )
             .unwrap();
         drop(store);
+        let native =
+            oasis7_game_client::operation_store::OperationStore::open(&directory, [61; 32])
+                .unwrap();
+        let Some(oasis7_game_client::operation_store::ClientStateV1::ContextPrepare(native_proof)) =
+            native
+                .read_client_state(ClientStateKind::Prepare, "stable")
+                .unwrap()
+        else {
+            panic!("native SDK must reopen the same encrypted cache")
+        };
+        assert!(*native_proof == proof);
+        drop(native);
         let store = PrivateGoalStore::open(&directory, [61; 32]).unwrap();
         let ClientStateV1::ContextPrepare(recovered) = store
             .read_client_state(ClientStateKind::Prepare, "stable")

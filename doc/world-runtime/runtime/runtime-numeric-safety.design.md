@@ -3,7 +3,8 @@
 - 对应需求文档：`doc/world-runtime/runtime/runtime-numeric-safety.prd.md`
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 
-## 1. 设计原则
+<a id="1-设计原则"></a>
+## 1. 目标与设计原则
 
 - 后继值先计算、全部校验通过后再提交。
 - 算术策略是接口契约的一部分：`Result` 路径采用 checked failure；协议 ID 可采用持久化 rollover；明确允许有损边界的辅助函数才可采用 observable clamp。
@@ -32,9 +33,9 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041) | 可失败的权威数值推进先校验再提交；规则成本溢出形成拒绝且不部分应用。 | [原子数值转移](runtime-numeric-safety.design.md#atomic-numeric-transition) | `runtime_engineer`；资源与事件应用实现。 | 单项规则成本回归不证明全仓数值安全、分布式恢复或发布就绪。 |
+| [REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)；Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607 | 专业依据：[PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041)；可失败的权威数值推进先校验再提交；规则成本溢出形成拒绝且不部分应用。 | [原子数值转移](runtime-numeric-safety.design.md#atomic-numeric-transition) | `runtime_engineer`；资源与事件应用实现。 | 单项规则成本回归不证明全仓数值安全、分布式恢复或发布就绪。 |
 | [net clock clamp 专业条款](runtime-numeric-safety.prd.md#numeric-clock-clamp) | 保留 net 时钟毫秒转换的有损边界；范围内保值、超界为 `i64::MAX`、epoch 前为 `0`。 | [clock clamp](runtime-numeric-safety.design.md#numeric-clock-clamp) | `runtime_engineer`；`oasis7_net` 时钟消费者。 | 不改变其他受检时钟接口，不将边界值解释成精确时间。 |
-| [Action allocator 恢复](runtime-numeric-safety.prd.md#numeric-action-allocator-replay) | 完整 finalized checkpoint 与 event suffix 恢复 cursor/era 及相关 queue，后续合法动作与不中断分支一致。 | [分配来源与恢复](#numeric-action-allocator-replay) | runtime 拥有 allocator/queue/replay；[共同恢复设计](../design.md#runtime-journal-suffix-recovery-design) 拥有切点、完整性与兼容范围。 | 目标记录待实现；不新增 HTTP producer 命名空间、不建立全链路复合 ID、不承诺恢复未持久化 pending。 |
+| [REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)；Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4 | 专业依据：[Action allocator 恢复](runtime-numeric-safety.prd.md#numeric-action-allocator-replay)；完整 finalized checkpoint 与 event suffix 恢复 cursor/era 及相关 queue，后续合法动作与不中断分支一致。 | [分配来源与恢复](#numeric-action-allocator-replay) | runtime 拥有 allocator/queue/replay；[共同恢复设计](../design.md#runtime-journal-suffix-recovery-design) 拥有切点、完整性与兼容范围。 | 目标记录待实现；不新增 HTTP producer 命名空间、不建立全链路复合 ID、不承诺恢复未持久化 pending。 |
 
 <a id="atomic-numeric-transition"></a>
 
@@ -59,6 +60,8 @@ read current state
 <a id="numeric-clock-clamp"></a>
 
 ### net clock clamp
+
+产品适用性：N/A；reason=本条只保持 net 时钟辅助函数的有损转换兼容约定，不直接裁决世界效果或承诺精确时刻；scope=duration_millis_to_i64_saturating 与 unix_now_ms_i64 的边界值语义，消费者的 lease/schedule 权威转移仍由各自合同负责。
 
 [`crates/oasis7_net/src/util.rs`](../../../crates/oasis7_net/src/util.rs) 中，`duration_millis_to_i64_saturating` 先通过 `Duration::as_millis()` 得到毫秒值，再以 `i64::try_from` 窄化；超界返回 `i64::MAX`。`unix_now_ms_i64` 对 `SystemTime::now().duration_since(UNIX_EPOCH)` 成功值调用该转换，epoch 前的错误返回 `0`。这些辅助函数只提供时钟读数，不写入世界状态；调用方的 lease、schedule 或持久化转移仍须满足各自受检与原子性合同。
 
@@ -102,7 +105,8 @@ read current state
 
 旧 snapshot 缺 era 的 `serde(default)=0` 读取保持不变，但不能由此推断旧 tail 从未 rollover、没有未记录分配或没有 pending。无法证明来源链和队列完整性的旧数据按 [共同兼容矩阵](../design.md#runtime-journal-suffix-compatibility) 处理；不得默认 cursor、重编号已提交 action、扫描 settled job 补洞或将旧事件重新执行为新业务效果。
 
-## 6. 演进边界
+<a id="6-演进边界"></a>
+## 6. 演进边界与风险
 
 rollover 不建立全链路复合 ID ABI：仅 runtime 内持久化 era 并保持恢复/同步兼容，纯 `u64` ID 仍可能跨 era 复用。所有失败路径继续要求结构化错误、rejection evidence 与状态/持久化未变化的回归。
 
@@ -115,9 +119,9 @@ rollover 不建立全链路复合 ID ABI：仅 runtime 内持久化 era 并保�
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041) | [原子数值转移](runtime-numeric-safety.design.md#atomic-numeric-transition) | 规则成本的某个资源项溢出时拒绝动作，其他资源项保持不变。 | 固定候选；按 [rules_enforcement.rs](../../../crates/oasis7/src/runtime/tests/rules_enforcement.rs) 的 `rule_decision_cost_overflow_rejected_without_partial_apply` 执行 L1 回归：`env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required rule_decision_cost_overflow_rejected_without_partial_apply`。文档修补仅核对合同与现有断言。 | PR 中的源码回读；运行时记录候选、命令与实际结果。 | 不代表其余 numeric phase、durable write、rollover、长稳或跨节点验收。 |
+| [REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)；Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607 | [原子数值转移](runtime-numeric-safety.design.md#atomic-numeric-transition) | 专业依据：[PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041)；规则成本的某个资源项溢出时拒绝动作，其他资源项保持不变。 | 固定候选；按 [rules_enforcement.rs](../../../crates/oasis7/src/runtime/tests/rules_enforcement.rs) 的 `rule_decision_cost_overflow_rejected_without_partial_apply` 执行 L1 回归：`env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required rule_decision_cost_overflow_rejected_without_partial_apply`。文档修补仅核对合同与现有断言。 | PR 中的源码回读；运行时记录候选、命令与实际结果。 | 不代表其余 numeric phase、durable write、rollover、长稳或跨节点验收。 |
 | [net clock clamp 专业条款](runtime-numeric-safety.prd.md#numeric-clock-clamp) | [clock clamp](runtime-numeric-safety.design.md#numeric-clock-clamp) | 范围内毫秒值保留，超界夹到 `i64::MAX`；epoch 前返回 `0` 的当前实现不得被误写成受检错误。 | 固定候选；按 [测试手册 S4](../../../testing-manual.md) 选择 net 单测，窄命令 `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib duration_millis_to_i64_saturating_` 对应上文两项内联测试；epoch 前分支另行回读 `crates/oasis7_net/src/util.rs::unix_now_ms_i64`。 | PR 中的代码/测试定位；实际运行时记录两个用例及执行环境。 | 两项单测不验证真实系统时钟回拨、epoch 前分支或消费者的分布式行为。 |
-| [Action allocator 恢复](runtime-numeric-safety.prd.md#numeric-action-allocator-replay) | [分配来源与恢复](#numeric-action-allocator-replay) | C<T 恢复完整 cursor/queue，后续合法 recipe 正常完成，原已结算 job 不被复用；多事件/拒绝、预分配、pending 和 rollover 各自成立。 | 在 [恢复测试](../../../crates/oasis7/src/runtime/tests/persistence_recovery_tests.rs) 等入口扩展下表 J1 计划场景，固定同一 source/runtime/manifest/input；目标为 `test_tier_required` 的确定性恢复回归，文档修订仅 S0。 | 实施 PR 的场景、候选、实际命令、cursor/queue 对照及 recipe disposition/费用/产出；与 [共同恢复验收](../design.md#runtime-journal-suffix-validation) 汇总。 | 新记录与场景未实现/未运行；现有边界单测不证明 J1 已修复，也不证明真实部署或完整 signed-pending 服务。 |
+| [REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)；Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4 | [分配来源与恢复](#numeric-action-allocator-replay) | 专业依据：[Action allocator 恢复](runtime-numeric-safety.prd.md#numeric-action-allocator-replay)；C<T 恢复完整 cursor/queue，后续合法 recipe 正常完成，原已结算 job 不被复用；多事件/拒绝、预分配、pending 和 rollover 各自成立。 | 在 [恢复测试](../../../crates/oasis7/src/runtime/tests/persistence_recovery_tests.rs) 等入口扩展下表 J1 计划场景，固定同一 source/runtime/manifest/input；目标为 `test_tier_required` 的确定性恢复回归，文档修订仅 S0。 | 实施 PR 的场景、候选、实际命令、cursor/queue 对照及 recipe disposition/费用/产出；与 [共同恢复验收](../design.md#runtime-journal-suffix-validation) 汇总。 | 新记录与场景未实现/未运行；现有边界单测不证明 J1 已修复，也不证明真实部署或完整 signed-pending 服务。 |
 
 <a id="numeric-action-allocator-validation"></a>
 ### 11.2 J1 计划场景与现有测试边界

@@ -6,19 +6,16 @@ use super::{
     wire::*,
 };
 use oasis7_client_api::world_service::*;
+pub use oasis7_game_client::{WorldServiceClientError, WorldServiceQueryState};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
-use std::io::Read;
 use std::time::Duration;
-#[path = "client_cooldown.rs"]
-mod cooldown;
 #[path = "client_formal.rs"]
 mod formal;
 #[path = "client_formal_changes.rs"]
 mod formal_changes;
 #[path = "client_formal_operations.rs"]
 mod formal_operations;
-pub use cooldown::WorldServiceQueryState;
 pub use formal::FormalReadTrustConfigV1;
 #[cfg(test)]
 #[path = "client_cooldown_tests.rs"]
@@ -104,10 +101,9 @@ impl WorldServiceClientConfig {
     }
 
     pub fn from_env() -> Result<Option<Self>, String> {
-        let Ok(endpoint) = std::env::var("OASIS7_WORLD_SERVICE_ENDPOINT") else {
+        let Some(base) = oasis7_game_client::WorldServiceClientConfig::from_env()? else {
             return Ok(None);
         };
-        let required = |name: &str| std::env::var(name).map_err(|_| format!("missing {name}"));
         let formal_read_trust = match std::env::var("OASIS7_WORLD_SERVICE_FORMAL_TRUST_FILE") {
             Ok(path) => {
                 use std::io::Read;
@@ -131,38 +127,20 @@ impl WorldServiceClientConfig {
         let max_response_bytes = if formal_read_trust.is_some() {
             16 * 1024 * 1024
         } else {
-            1_048_576
+            base.max_response_bytes
         };
         Ok(Some(Self {
-            endpoint,
-            trusted_service_public_key: required("OASIS7_WORLD_SERVICE_PUBLIC_KEY")?,
-            expected_world: WorldIdentity {
-                world_id: required("OASIS7_WORLD_SERVICE_WORLD_ID")?,
-                genesis_digest: required("OASIS7_WORLD_SERVICE_GENESIS_DIGEST")?,
-            },
-            scope_id: required("OASIS7_WORLD_SERVICE_SCOPE")?,
-            read_private_key_hex: required("OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY")?,
-            timeout: Duration::from_millis(1500),
+            endpoint: base.endpoint,
+            trusted_service_public_key: base.trusted_service_public_key,
+            expected_world: base.expected_world,
+            scope_id: base.scope_id,
+            read_private_key_hex: base.read_private_key_hex,
+            timeout: base.timeout,
             max_response_bytes,
             formal_read_trust,
         }))
     }
 }
-
-#[derive(Debug)]
-pub enum WorldServiceClientError {
-    Configuration(String),
-    Transport(String),
-    Rejected { status: u16, message: String },
-    Assurance(String),
-    Cooldown { status: u16, retry_after: Duration },
-}
-impl std::fmt::Display for WorldServiceClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-impl std::error::Error for WorldServiceClientError {}
 
 pub trait WorldServicePort {
     fn describe(&self) -> Result<DescribeWorldResponse, WorldServiceClientError>;
@@ -191,8 +169,7 @@ pub struct RemoteWorldServiceClient {
     formal_trust_identity: Option<String>,
     evidence_policy: ReadEvidencePolicy,
     config: WorldServiceClientConfig,
-    http: reqwest::blocking::Client,
-    query_state: WorldServiceQueryState,
+    transport: oasis7_game_client::WorldServiceTransport,
 }
 impl RemoteWorldServiceClient {
     pub fn new(config: WorldServiceClientConfig) -> Result<Self, WorldServiceClientError> {
@@ -225,52 +202,23 @@ impl RemoteWorldServiceClient {
         config: WorldServiceClientConfig,
         evidence_policy: ReadEvidencePolicy,
     ) -> Result<Self, WorldServiceClientError> {
-        config
-            .expected_world
-            .validate()
-            .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
-        config
-            .expected_world
-            .validate()
-            .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
-        let endpoint = reqwest::Url::parse(&config.endpoint)
-            .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
-        if !["http", "https"].contains(&endpoint.scheme())
-            || endpoint.host_str().is_none()
-            || !endpoint.username().is_empty()
-            || endpoint.password().is_some()
-            || endpoint.query().is_some()
-            || endpoint.fragment().is_some()
-            || config.scope_id.trim().is_empty()
-            || config.timeout.is_zero()
-            || config.max_response_bytes == 0
-        {
-            return Err(WorldServiceClientError::Configuration(
-                "invalid service connection".into(),
-            ));
-        }
-        // Decode and validate configured trust/signer before any request.
-        let proof = authority::sign_read_request(DESCRIBE_PATH, (), &config.read_private_key_hex)
-            .map_err(WorldServiceClientError::Configuration)?;
-        authority::verify_read_request(DESCRIBE_PATH, &proof)
-            .map_err(WorldServiceClientError::Configuration)?;
-        if hex::decode(&config.trusted_service_public_key).map_or(true, |key| key.len() != 32) {
-            return Err(WorldServiceClientError::Configuration(
-                "invalid service trust key".into(),
-            ));
-        }
-        let http = reqwest::blocking::Client::builder()
-            .timeout(config.timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
+        let transport = oasis7_game_client::WorldServiceTransport::new(
+            oasis7_game_client::WorldServiceClientConfig {
+                endpoint: config.endpoint.clone(),
+                trusted_service_public_key: config.trusted_service_public_key.clone(),
+                expected_world: config.expected_world.clone(),
+                scope_id: config.scope_id.clone(),
+                read_private_key_hex: config.read_private_key_hex.clone(),
+                timeout: config.timeout,
+                max_response_bytes: config.max_response_bytes,
+            },
+        )?;
         Ok(Self {
             formal_read: None,
             formal_trust_identity: None,
             evidence_policy,
             config,
-            http,
-            query_state: WorldServiceQueryState::default(),
+            transport,
         })
     }
     /// Formal membership is read from the independently proved public projection;
@@ -339,7 +287,7 @@ impl RemoteWorldServiceClient {
         .map_err(WorldServiceClientError::Assurance)
     }
     pub fn with_query_state(mut self, state: WorldServiceQueryState) -> Self {
-        self.query_state = state;
+        self.transport = self.transport.with_query_state(state);
         self
     }
     fn check_evidence_scope(&self, scope: Option<&str>) -> Result<(), WorldServiceClientError> {
@@ -402,89 +350,7 @@ impl RemoteWorldServiceClient {
         path: &str,
         request: &Q,
     ) -> Result<R, WorldServiceClientError> {
-        if path != SUBMIT_PATH {
-            self.query_state.check()?;
-        }
-        let digest =
-            authority::request_digest(path, request).map_err(WorldServiceClientError::Assurance)?;
-        let mut response = self
-            .http
-            .post(format!(
-                "{}{}",
-                self.config.endpoint.trim_end_matches('/'),
-                path
-            ))
-            .json(request)
-            .send()
-            .map_err(|error| {
-                let mut message = error.to_string();
-                let mut source = std::error::Error::source(&error);
-                for _ in 0..4 {
-                    let Some(cause) = source else {
-                        break;
-                    };
-                    message.push_str(": ");
-                    message.push_str(&cause.to_string());
-                    source = cause.source();
-                }
-                WorldServiceClientError::Transport(message)
-            })?;
-        let status = response.status().as_u16();
-        if let Some(retry_after) = self.query_state.observe(
-            status,
-            response
-                .headers()
-                .get(reqwest::header::RETRY_AFTER)
-                .and_then(|value| value.to_str().ok()),
-        )? {
-            return Err(WorldServiceClientError::Cooldown {
-                status,
-                retry_after,
-            });
-        }
-        let mut bytes = Vec::new();
-        response
-            .by_ref()
-            .take(self.config.max_response_bytes as u64 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|e| WorldServiceClientError::Transport(e.to_string()))?;
-        if bytes.len() > self.config.max_response_bytes {
-            return Err(WorldServiceClientError::Assurance(
-                "service response exceeds bound".into(),
-            ));
-        }
-        if status != 200 {
-            let message = serde_json::from_slice::<SignedServiceResponse<Value>>(&bytes)
-                .ok()
-                .filter(|reply| {
-                    authority::verify_service_response(
-                        path,
-                        &digest,
-                        reply,
-                        &self.config.trusted_service_public_key,
-                    )
-                    .is_ok()
-                })
-                .and_then(|reply| {
-                    reply
-                        .payload
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .map(|message| message.chars().take(1024).collect::<String>())
-                })
-                .unwrap_or_else(|| "service rejected request".into());
-            return Err(WorldServiceClientError::Rejected { status, message });
-        }
-        let signed: SignedServiceResponse<R> = serde_json::from_slice(&bytes)
-            .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
-        authority::verify_service_response(
-            path,
-            &digest,
-            &signed,
-            &self.config.trusted_service_public_key,
-        )
-        .map_err(WorldServiceClientError::Assurance)?;
-        Ok(signed.payload)
+        self.transport.call(path, request)
     }
     /// Forward the original browser proof without replacing its signer.
     pub fn read_owner_view(
@@ -512,9 +378,7 @@ impl RemoteWorldServiceClient {
         path: &str,
         request: Q,
     ) -> Result<R, WorldServiceClientError> {
-        let signed = authority::sign_read_request(path, request, &self.config.read_private_key_hex)
-            .map_err(WorldServiceClientError::Assurance)?;
-        self.call(path, &signed)
+        self.transport.signed_call(path, request)
     }
 }
 
