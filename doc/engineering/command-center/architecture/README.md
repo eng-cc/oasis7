@@ -7,6 +7,8 @@
 - 历史环境表 Last Verified 为 **2026-07-06**，节点表为 **2026-06-23**。读取摘要的日期不能代替部署、健康或可用性的核验日期。
 - 项目进度与待处理事项见[当前状态](../README.md#cc-status-attention)；本页的更新方法见[架构索引维护流程](../command-center.manual.md#cc-maintenance-architecture)。
 
+独立 ECS 技术预览的环境准备、构建尝试和部署验收由 [交付任务 #4671](https://github.com/eng-cc/oasis7/issues/4671) 承接。本页保留架构入口；该任务的技术预览不代表正式世界开放或原测试网恢复。
+
 ## 从问题进入
 
 Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) / `133d70e45b71bd062032a734d68be1e290692b2c` 将 native 生产 cognition 状态转换转接至 Harness，World readback 与 signed-service 校验仍由 Runtime 适配器承担，旧 DTO/checkpoint 兼容保留；不新增 Harness→Oasis 依赖。支持包 profile 隔离尚在分支验证，直接 Oasis wasm32 目标及部署不因本次局部摘要变为已验证。测试入口见[测试手册](../../../../testing-manual.md)。
