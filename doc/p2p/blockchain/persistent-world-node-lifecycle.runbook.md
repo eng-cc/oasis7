@@ -6,6 +6,18 @@
 
 用户选择先完成代码和本机验证。本轮没有真实故障域、生产部署或公开开放的验收结论。
 
+Trace refs：沿用 [AC-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) 与 [AC-DWE-002](../../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002)，设计承接见 [原 candidate 恢复](../design.md#des-p2p-original-candidate-recovery-v1) 与 [受控 epoch 恢复](../design.md#des-p2p-controlled-epoch-takeover-v1)。本 PR 验证其本机基础设施部分；完整产品验收、新配方/模块行动连续性、正式自主试玩及真实部署矩阵仍按后续范围单独验收，不把 Trace ID 当任务身份或通过证明。
+
+## 最新收口状态（2026-10-15）
+
+PR #4683 的 888737544 CI 中，普通库 3014 项及 runtime binary 802 项通过；实际进程组 4 项通过、6 项失败，required-gate 失败，不能合入。文档关系缺失已补充适用范围和 N/A 原因，full-corpus 校验通过。其余失败按实际根因修复，不用 TODO 代替门禁。
+
+当前 native restore 复用已认证 current/parent Result envelope 的既有有界节点材料，仍核对内容摘要、完整根和最终 head；冷恢复新 RPC 从 777 次降至 6 次，协议期限不变。fixture v87 / production v30 / endpoint release v14 的本机实际验证：普通提交/重启 25.68 秒、primary_published 崩溃恢复 28.72 秒、副本失联恢复 16.08 秒、signer handoff 25.67 秒均通过。完整八阶段及 survivor 场景另验。
+
+同组合长历史测试完成 64 次变更，第 67 次提交因 RPC frame ended early 失败（647.81 秒）；该失败仍是当前阻断。诊断显示冷历史结果查找反复计算 Business Index 空哈希，性能现象与 RPC 提前断开原因分别核实，不能据此宣称恢复已通过。日志 `/tmp/oasis7-lifecycle-node-delivery-long-history-20261015-v1.log`。
+
+- TODO：测试 helper 的名义 20 秒轮询预算目前不能中断同步冷读取；为该读取增加可中断的测试预算并证明超时诊断，保持生产协议期限与资格校验不变。
+
 ## 本机正式入口验收进度（2026-10-14）
 
 这些结果来自不同的串行测试与本机进程运行，不能合并解释为整套部署计划已通过。历史失败只在下表注明的场景仍未重测时作为未解决项；已修复的旧错误不作为当前阻断。

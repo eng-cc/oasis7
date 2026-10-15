@@ -771,7 +771,7 @@ fn run_protected_runtime_fixture(
             oasis7::world_service::formal_read::MAX_FORMAL_HISTORY_STEPS,
         )?;
     }
-    let first_cut = runtime.published.current()?;
+    let (first_cut, original_result) = wait_for_canonical_request_result(&runtime, &owner_request)?;
     if genesis_mode && wasm_emit_count(&first_cut.world) <= module_emits_initial {
         return Err("formal execution did not invoke the actual Wasmtime tick observer".into());
     }
@@ -783,7 +783,6 @@ fn run_protected_runtime_fixture(
     }
     let result_key = correlation::key_digest(&owner_request.correlation.key)
         .map_err(|error| error.to_string())?;
-    let original_result = retained_result_from_hot_or_cold(&first_cut.world, &result_key)?;
     let game_task_before = if genesis_mode {
         if !first_cut
             .world

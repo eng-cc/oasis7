@@ -324,12 +324,12 @@ pub(crate) fn restore_native_position(
 /// A bounded byte cache only. `BusinessIndexNodeReader` still validates each
 /// fetched digest and canonical node depth before the bytes influence a root.
 #[derive(Default)]
-struct EmbeddedBusinessNodes {
+pub(super) struct EmbeddedBusinessNodes {
     nodes: BTreeMap<String, Vec<u8>>,
     bytes: usize,
 }
 impl EmbeddedBusinessNodes {
-    fn include_material(
+    pub(super) fn include_material(
         &mut self,
         record: &CanonicalRecordV1,
         material: &ClosedRecord,
@@ -359,7 +359,7 @@ impl EmbeddedBusinessNodes {
         Ok(())
     }
 
-    fn insert_write(&mut self, digest: &str, bytes: &[u8]) -> Result<(), FormalError> {
+    pub(super) fn insert_write(&mut self, digest: &str, bytes: &[u8]) -> Result<(), FormalError> {
         hash_hex(digest)?;
         if blake3::hash(bytes).to_hex().as_str() != digest {
             return Err(invalid("historical embedded business node checksum"));

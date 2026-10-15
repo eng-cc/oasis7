@@ -51,3 +51,35 @@ pub(in super::super) fn assert_bridge_negatives(
             .is_err()
     );
 }
+
+#[test]
+fn current_native_embedded_nodes_avoid_source_reads_but_preserve_missing_node_fallback_and_hash_checks()
+ {
+    use crate::controlled_authority::formal::business_index::BusinessIndexNodeReader;
+    let mut embedded = super::super::native_history::EmbeddedBusinessNodes::default();
+    let bytes = b"authenticated current material node";
+    let id = blake3::hash(bytes).to_hex().to_string();
+    embedded.insert_write(&id, bytes).unwrap();
+    assert!(embedded.insert_write(&id, b"different bytes").is_err());
+    let missing_bytes = b"authenticated node outside current and parent material";
+    let missing = blake3::hash(missing_bytes).to_hex().to_string();
+    let reads = std::cell::Cell::new(0);
+    let mut load = |digest: &str| {
+        reads.set(reads.get() + 1);
+        assert_eq!(digest, missing);
+        Ok(missing_bytes.to_vec())
+    };
+    let reader = NativeBusinessReader {
+        load: std::cell::RefCell::new(&mut load),
+        embedded: &embedded,
+    };
+    for _ in 0..8 {
+        assert_eq!(reader.read_node(&id).unwrap(), Some(bytes.to_vec()));
+    }
+    assert_eq!(reads.get(), 0);
+    assert_eq!(
+        reader.read_node(&missing).unwrap(),
+        Some(missing_bytes.to_vec())
+    );
+    assert_eq!(reads.get(), 1);
+}

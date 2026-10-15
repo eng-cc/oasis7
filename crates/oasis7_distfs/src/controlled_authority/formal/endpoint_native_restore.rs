@@ -156,6 +156,10 @@ pub(crate) fn restore_native_with_durable_set(
     }
     indexed(body, &node.request, &node.entry, &mut load)?;
     verify_record_material(&proof.decision.record, &candidate.material)?;
+    let mut embedded = super::native_history::EmbeddedBusinessNodes::default();
+    if context.authority().definition().profile_version == 2 {
+        embedded.include_material(&proof.decision.record, &candidate.material)?;
+    }
     match (&candidate.frozen, &candidate.frozen_material) {
         (Some(cert), Some(material)) => verify_frozen_material(&cert.reservation.body, material)?,
         (None, None) if proof.decision.record.kind == FormalRecordKindV1::InitialActivation => {}
@@ -170,8 +174,10 @@ pub(crate) fn restore_native_with_durable_set(
         if parent_node.head != link.head {
             return Err(invalid("native restore parent node hash/identity"));
         }
-        let FormalRequestStateV1::Qualified { proof: parent, .. } =
-            object(&parent_node.entry, &mut load)?
+        let FormalRequestStateV1::Qualified {
+            candidate: parent_candidate,
+            proof: parent,
+        } = object(&parent_node.entry, &mut load)?
         else {
             return Err(invalid("native restore immutable qualified parent"));
         };
@@ -181,6 +187,18 @@ pub(crate) fn restore_native_with_durable_set(
                 != parent.decision.replica.body.finalizing_authority_id
         {
             return Err(invalid("native restore canonical parent context"));
+        }
+        if context.authority().definition().profile_version == 2 {
+            if parent_candidate.candidate.record != parent.decision.record
+                || parent_candidate.candidate.writer_signature_hex
+                    != parent.decision.writer_signature_hex
+                || parent_candidate.branch != parent.decision.branch
+                || parent_candidate.frozen != parent.decision.frozen
+            {
+                return Err(invalid("native restore parent canonical candidate/proof"));
+            }
+            verify_record_material(&parent.decision.record, &parent_candidate.material)?;
+            embedded.include_material(&parent.decision.record, &parent_candidate.material)?;
         }
         business_parent = Some(VerifiedFormalBusinessParentV1::from_authenticated_parent(
             &CheckpointParent {
@@ -260,8 +278,10 @@ pub(crate) fn restore_native_with_durable_set(
         restore_formal_commit_from_checkpoint(&proof, origin, recovery, &verdict)?
     };
     {
+        use super::super::business_index::BusinessIndexNodeReader;
         let reader = NativeBusinessReader {
             load: std::cell::RefCell::new(&mut load),
+            embedded: &embedded,
         };
         if let Some(verified) = super::super::business_material::verify_formal_business_material(
             context.authority(),
@@ -271,7 +291,6 @@ pub(crate) fn restore_native_with_durable_set(
             candidate.frozen_material.as_ref(),
             &reader,
         )? {
-            use super::super::business_index::BusinessIndexNodeReader;
             for write in verified
                 .node_writes()
                 .iter()
@@ -319,11 +338,15 @@ pub(crate) fn restore_native_with_durable_set(
 
 struct NativeBusinessReader<'a, F> {
     load: std::cell::RefCell<&'a mut F>,
+    embedded: &'a super::native_history::EmbeddedBusinessNodes,
 }
 impl<F: FnMut(&str) -> Result<Vec<u8>, FormalError>>
     super::super::business_index::BusinessIndexNodeReader for NativeBusinessReader<'_, F>
 {
     fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        if let Some(bytes) = self.embedded.read_node(digest)? {
+            return Ok(Some(bytes));
+        }
         (self.load.borrow_mut())(digest)
             .map(Some)
             .map_err(|error| error.to_string())

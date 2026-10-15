@@ -59,10 +59,17 @@ pub(super) fn exercise(mut case: AvailabilityCase) -> Result<(), String> {
     let baseline = case.runtime.published.current()?;
     let (old_commit, expected_projection) = commit_ref_for_opaque_cut(&baseline, &case.world)?;
 
-    let admission = owner_client
-        .submit(case.owner_request.clone())
-        .map_err(|error| format!("C06 ordinary owner submit: {error}"))?;
-    assert_volatile_admission(admission, &case.owner_request.correlation)?;
+    let admitted = match owner_client.submit(case.owner_request.clone()) {
+        Ok(admission) => {
+            assert_volatile_admission(admission, &case.owner_request.correlation)?;
+            true
+        }
+        Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
+            status: 503,
+            message,
+        }) if message == "formal runtime is not ready" => false,
+        Err(error) => return Err(format!("C06 ordinary owner submit: {error}")),
+    };
 
     let status = wait_for_degraded_status(&case.public_client_config)?;
     if status.ready
@@ -77,7 +84,7 @@ pub(super) fn exercise(mut case: AvailabilityCase) -> Result<(), String> {
         ));
     }
 
-    // The owner request was accepted as volatile, but a lone endpoint must not
+    // The owner request was volatile or refused after degradation; a lone endpoint must not
     // create a newer CommitRef or change the last published World.
     let live = case.runtime.published.current()?;
     if live.anchor.head().record().position != old_commit.position
@@ -147,6 +154,22 @@ pub(super) fn exercise(mut case: AvailabilityCase) -> Result<(), String> {
         .ok_or("C06 CommitRef position overflow")?;
     wait_for_published_position(&reopened, target_position)?;
 
+    if !admitted {
+        let next = reopened
+            .published
+            .current()?
+            .anchor
+            .head()
+            .record()
+            .position
+            .checked_add(1)
+            .ok_or("C06 recovery position overflow")?;
+        let admission = owner_client
+            .submit(case.owner_request.clone())
+            .map_err(|error| format!("C06 same original submit after recovery: {error}"))?;
+        assert_volatile_admission(admission, &case.owner_request.correlation)?;
+        wait_for_published_position(&reopened, next)?;
+    }
     let committed = lookup_original_commit(&owner_client, &case.owner_request)?;
     if committed.position <= old_commit.position {
         return Err("C06 recovered request lacks a successor CommitRef".into());

@@ -205,6 +205,58 @@ pub(super) fn optional_retained_result_from_hot_or_cold(
         .map_err(|error| format!("authenticated cold result read failed: {error}"))
 }
 
+pub(super) fn wait_for_canonical_request_result(
+    runtime: &FormalLiveRuntime,
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+) -> Result<
+    (
+        crate::formal_live_service::PublishedReadCut,
+        oasis7::world_service::CanonicalIntentResultV1,
+    ),
+    String,
+> {
+    let result_key =
+        correlation::key_digest(&request.correlation.key).map_err(|error| error.to_string())?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let cut = runtime.published.current()?;
+        if let Some(result) = optional_retained_result_from_hot_or_cold(&cut.world, &result_key)? {
+            if result.request != *request {
+                return Err(
+                    "published canonical result differs from the exact submitted request".into(),
+                );
+            }
+            if result.rejected.is_some() {
+                return Err(format!(
+                    "exact submitted request was canonically rejected: {:?}",
+                    result.rejected
+                ));
+            }
+            return Ok((cut, result));
+        }
+
+        let snapshot = runtime
+            .runtime
+            .lock()
+            .map_err(|_| "Node runtime lock poisoned while waiting for canonical result")?
+            .snapshot();
+        if let Some(error) = snapshot.last_error {
+            return Err(format!(
+                "Node failed before publishing the exact canonical result: {error}"
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "exact canonical result {result_key} missing at qualified position {}; running={}, ticks={}",
+                cut.anchor.head().record().position,
+                snapshot.running,
+                snapshot.tick_count,
+            ));
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
 pub(super) fn lookup_original_commit(
     client: &RemoteWorldServiceClient,
     original: &SubmitIntentRequest<WorldServicePayloadV1>,
