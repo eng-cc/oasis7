@@ -205,6 +205,9 @@ journal identity/source、opaque canonical crisis subtype、显式 freshness/per
   冒充 severity。新增类别必须重新提供 runtime/producer、viewer、visual 与 QA 合同和证据。
 
 ### Current implementation boundary
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：本段仅由当前单一 Next Move、从属 Objective / Player Leverage 和窄屏主区优先的 shell 布局承接目的、blocker 与下一决策的阅读主次；不改变以下默认模式、Director 能力或历史证据状态，不代签全部 surface 与恢复路径。
+
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
 - 当前 `main` 已交付的 Player shell 是 fullscreen、world-first 的单舞台：世界棋盘 覆盖首屏，HUD 以单一 `Next Move` 主动作区与从属 `Objective / Player Leverage` 上下文区叠加， `World / Targets / Command` 通过按需 drawer 进入。旧的“左侧/中间/右侧”三栏 Player IA 不属于当前默认入口；密集三栏只保留给显式、能力门控的 Director 工具视图， 不能与 Player shell 混写。
