@@ -1,4 +1,5 @@
 # Public Testnet Governed Bootstrap Runbook (2026-06-06)
+
 - 对应项目文档: GitHub Issue / GitHub Project
 - 关联证据:
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
@@ -9,10 +10,9 @@
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`
   - `doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md`
-
 审计轮次: 2
-
 ## Stable authority and evidence boundary
+
 - This is the stable operator authority for public-testnet topology, deployment truth, rollout, rollback and recovery drills. The frozen bootstrap topology remains historical provenance; the managed-five-node inventory is an execution target only after a fresh Phase A truth capture. Neither records present fleet health or release readiness by itself.
 - Dated manifests, bundles, peer lists, package hashes, status snapshots and evidence files remain evidence-window inputs. Before each deployment, recovery update, or readiness assertion, operators must recapture the current deployment truth and bounded same-window health evidence; QA owns release-blocking verdicts and LiveOps/community owns external status or recovery wording.
 - Restart, port cleanup, reseed, data isolation and waiting for recovery may collect evidence or provide temporary recovery only. For peer-head drift, execution/resource divergence, signer/peer identity mismatch, or degraded replication, identify and repair the code, configuration, package, manifest, deployment artifact, or state-contract root cause before clean redeploy/rebuild; never treat an operational restart as the durable resolution.
@@ -183,7 +183,7 @@ validator-quorum finality or a replacement for `WorldHeadProofV1`.
    - derived validator signer truth
    - validator registry
    - governed bootstrap world
-   - observer `REPLICATION_REMOTE_WRITERS_CSV`
+   - observer `REPLICATION_FETCH_REQUESTERS_CSV`. Replication naming migration: `REPLICATION_FETCH_REQUESTERS_CSV` / `--replication-fetch-requester-public-key` grant additional fetch permission only; writers remain bound to verified validator signers. The old `REPLICATION_REMOTE_WRITERS_CSV` / `--replication-remote-writer-public-key` spelling is a warning-emitting adapter for deployed env files until versioned node-config migration completes. Observer sync writes only the new field and rejects conflicting old/new env values. Flat CLI scalars occur once, opposite switches conflict, and validator IDs/signer bindings are unique; peer/listener/authority/requester lists remain repeatable. Escape leading `--` values with `--node-id -- --literal`. Omitted relay/probe hints use live detection; explicit hints override it.
 4. libp2p bootstrap peer id 必须在 validator 启动后实时读取，不能沿用旧证据文件中的值。
 5. 当 validator 高度超过低高度阈值后，observer 不得使用空 world 从 genesis replay 追链；正常 attach 必须依赖自动 high-head checkpoint catch-up 与 tail gap sync。
 6. 自动 high-head checkpoint catch-up 只覆盖 observer/light-node 边界；execution-required 节点不能用它跳过历史执行，也不能把它当作完整 snapshot state-sync。
@@ -381,7 +381,7 @@ ssh root@39.104.205.67 'curl -s http://127.0.0.1:6632/v1/chain/status | jq -r .r
 2. 用新的 signer truth 生成 deployment-only validator registry。
 3. 用新的 registry 重建 deployment-only governed bootstrap world。
 4. 读取 validator 实际 `local_peer_id`，更新当前 deployment truth 中的 manifest/bootstrap peer artifact；manifest-backed public_testnet 启动不再要求 observer env 维护 `REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV`。
-5. 更新 observer 的 `REPLICATION_REMOTE_WRITERS_CSV`，对齐当前 deployment truth 中所有 authorized replication writers；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。
+5. 更新 observer 的 `REPLICATION_FETCH_REQUESTERS_CSV`，对齐当前 deployment truth 中需要 fetch 权限的 requester signer；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。
 
 ### Pass criteria
 1. deployment-only registry 与 host 当前 signer truth 一致
