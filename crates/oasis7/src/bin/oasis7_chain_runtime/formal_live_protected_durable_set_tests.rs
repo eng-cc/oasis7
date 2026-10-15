@@ -116,22 +116,50 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     }
     let new_replica_directory = case.root.join("healthy-successor-replica");
     oracle_support::private_directory(&new_replica_directory)?;
-    let start_cut = runtime.published.current()?;
-    let transition = signed_transition(
-        &case.authority,
-        &start_cut.anchor,
-        &case.primary_directory,
-        &new_replica_directory,
-    )?;
-    let boundary_position = transition.body.boundary_position;
-    let operation_id = transition.body.operation_id.clone();
-
-    if start_cut.anchor.head().record().position + 1 != boundary_position {
-        return Err("healthy arm predecessor differs from the actual published cut".into());
-    }
     case.scenario_deadline
         .report_stage("before exact transition arm")?;
-    let armed = runtime.arm_durable_set_transition(&operation_id, transition.clone())?;
+    let (start_cut, transition, armed) = {
+        // The public exact-arm wrapper locks only after its caller constructed
+        // the candidate. A running Node may already have an original continuation
+        // pending then. Wait for that original under the existing scenario budget,
+        // and keep one gate across the first cut, signature and guarded core arm.
+        let _admission = crate::formal_live_runtime::quiesce::acquire_after_pending_clear(
+            &runtime.admission_gate,
+            || runtime.durable_set_arm.pending_open(),
+            case.scenario_deadline.expires_at,
+        )?;
+        if !runtime.started
+            || !runtime
+                .state
+                .ready
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err("formal runtime is not ready to admit a durable-set arm".into());
+        }
+        let start_cut = runtime.published.current()?;
+        let transition = signed_transition(
+            &case.authority,
+            &start_cut.anchor,
+            &case.primary_directory,
+            &new_replica_directory,
+        )?;
+        if start_cut.anchor.head().record().position + 1 != transition.body.boundary_position {
+            return Err("healthy arm predecessor differs from the actual published cut".into());
+        }
+        let armed = crate::formal_live_runtime::quiesce::arm_before_deadline(
+            case.scenario_deadline.expires_at,
+            || {
+                runtime.durable_set_arm.arm(
+                    &transition.body.operation_id,
+                    transition.clone(),
+                    &start_cut.anchor,
+                )
+            },
+        )?;
+        (start_cut, transition, armed)
+    }; // Release admission before any public request or boundary wait.
+    let boundary_position = transition.body.boundary_position;
+    let operation_id = transition.body.operation_id.clone();
     if armed.phase != DurableSetArmPhaseV1::Armed
         || armed.operation_id != operation_id
         || armed.boundary_position != boundary_position

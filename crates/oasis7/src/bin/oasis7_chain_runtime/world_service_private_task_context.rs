@@ -306,9 +306,6 @@ pub(super) fn process(
                 &proof.subject_public_key,
                 true,
             )?;
-            if fresh.commit.binding != pinned.commit.binding {
-                return Err(PrivateError::Conflict);
-            }
             game_task::validate_task_context_capture(
                 &fresh.world,
                 &proof.request.context,
@@ -316,6 +313,11 @@ pub(super) fn process(
             )
             .map_err(|_| PrivateError::Conflict)?;
             check_record_live(&fresh, &output.prepared)?;
+            // A dedicated retry category describes only a still-authorized,
+            // unexpired context whose read snapshot changed during delivery.
+            if fresh.commit != pinned.commit {
+                return Err(PrivateError::ContextReadDeliveryDrift);
+            }
             service
                 .signed(path, &proof, output)
                 .map_err(PrivateError::from)

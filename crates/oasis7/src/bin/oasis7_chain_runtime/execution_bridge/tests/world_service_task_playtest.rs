@@ -888,3 +888,6 @@ pub(super) fn retry_private<T>(
         }
     }
 }
+
+#[path = "world_service_task_quote_drift.rs"]
+mod quote_drift;
