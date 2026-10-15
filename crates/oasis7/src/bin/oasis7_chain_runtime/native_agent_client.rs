@@ -245,3 +245,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "native_agent_client_realplay.rs"]
+mod realplay;
