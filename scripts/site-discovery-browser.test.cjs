@@ -13,6 +13,20 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   assert.equal(await p.locator('noscript a:visible').count(),3);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),360);
   await p.screenshot({path:path.join(out,locale+'-nojs-360.png'),fullPage:true});await c.close();record(locale+' no-JS complete steps/nav/manual packages');
  }
+ // Composition regression: illustration must not push the reading rail below a separate image block.
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
+  for(const width of [390,1440]){
+   await p.setViewportSize({width,height:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
+   const layout=await p.evaluate(()=>({proof:document.querySelector('#proof').getBoundingClientRect().top,
+    fourth:document.querySelector('[data-decision-step="3"]').getBoundingClientRect().bottom,
+    art:getComputedStyle(document.querySelector('.hero-visual')).position,
+    rail:getComputedStyle(document.querySelector('.decision-panels')).gridTemplateColumns.split(' ').length}));
+   assert.equal(layout.art,'absolute');assert.ok(layout.proof<550,JSON.stringify(layout));
+   assert.equal(layout.rail,width===390?1:4);assert.ok(layout.fourth<1000,JSON.stringify(layout));
+  }
+  await c.close();record(locale+' integrated hero and early four-step reading rail');
+ }
  const files=['oasis7-windows-x64.exe','oasis7-macos-x64.dmg','oasis7-linux-x64.deb','oasis7-checksums.txt'];
  for(const scenario of ['full','no-platform','no-checksum','invalid','timeout']){
   const c=await context();await c.route('https://api.github.com/**',async r=>{
