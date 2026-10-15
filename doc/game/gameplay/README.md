@@ -1,10 +1,11 @@
 # `game/gameplay` 热点子域入口
 
-更新时间: 2026-07-06
+更新时间: 2026-10-15
 
 ## 从这里开始
 - 想快速理解核心玩法骨架：先在 `../prd.md` 确认活跃基线与路由，再读 `gameplay-top-level-design.prd.md` 的 bounded 专业合同
 - 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 由同候选 PR 与实际验证记录 与 `../../testing/evidence/` 确认。
+- 想把同类游戏借鉴落到经营决策、目标委托和回访：先读[首局产品设计的采用边界](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#borrowed-gameplay-patterns)，再读[组合系统设计](gameplay-decision-delegation-return.design.md)；真实合作与策略复用保持后续范围，不增加当前首产物或邀请测试门槛。
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-mature-world-progression-contract.prd.md` 的专业合同
 - 想确认区域 charter、tenure 与公共融资如何形成玩家可读、可恢复且不封锁独立路线的制度循环：先读 `../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `gameplay-regional-charter-tenure-funding-contract.prd.md`
@@ -50,6 +51,7 @@
 - 首读入口:
   - `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md`（产品承诺）
   - `gameplay-top-level-design.prd.md`
+  - [经营决策、目标委托与回访续接系统设计](gameplay-decision-delegation-return.design.md)（既有要求的组合接线、来源与验证）
 - 适合问题:
   - 进入游戏后的前 10 分钟为什么会掉线
   - micro-loop、反馈可见性和 post-onboarding 阶段如何衔接
@@ -91,7 +93,7 @@
   - `../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md`
   - `../../product/world-infrastructure/deterministic-world-execution.prd.md`
 - 适合问题:
-  - agent claim 的 token cost、bond、upkeep、reclaim 如何组织
+  - agent claim 的 token cost、claim bond、upkeep、reclaim 如何组织
   - restricted grant 如何发放、撤销、过期和 incident 处理
   - starter OC / first chat gate 如何与 restricted starter claim balance 区分
   - economy / longrun hardening 何时需要 QA 或 LiveOps 参与
