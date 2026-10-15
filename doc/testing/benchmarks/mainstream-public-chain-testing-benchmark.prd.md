@@ -34,7 +34,7 @@
   - `liveops_community`：需要知道对外为何仍不能说“对标主流公链安全/测试成熟度”。
 - User Scenarios & Frequency:
   - 每次有人提“现在是不是已经接近主流主链测试体系”时，先对照本专题。
-  - 每次 `MAINNET-1~3` execution workstream 完成一个阶段时，回填本专题矩阵。
+  - 需要更新测试成熟度评估时，新增带日期、范围和来源的比较；当前 `MAINNET-1~3` 执行进度留在相应 PR/Task，不回填覆盖原始基准窗口。
   - 每次准备做更高安全口径或创世前评审时，先复查 network rehearsal、drill、chaos、QA 证据是否到位。
 - User Stories:
   - PRD-P2P-BENCH-001: As a `producer_system_designer`, I want one explicit benchmark for mainstream public-chain testing systems, so that oasis7 phase decisions are grounded in testing reality rather than intuition.
@@ -44,7 +44,7 @@
 - Critical User Flows:
   1. Flow-P2P-BENCH-001: `读取 testing-manual 与安全/readiness 专题 -> 提炼 oasis7 当前测试层 -> 对照主流公链分层模型 -> 形成 gap matrix`
   2. Flow-P2P-BENCH-002: `有人提出“接近主流公链测试体系” -> 检查 benchmark layers -> 若关键层仍缺失则直接 block 该口径`
-  3. Flow-P2P-BENCH-003: `execution workstream 完成一次 drill/chaos/network-rehearsal 里程碑 -> 回填 benchmark 状态 -> producer 重新排序下一步`
+  3. Flow-P2P-BENCH-003: `读取 drill/chaos/network-rehearsal 的固定窗口证据 -> 比较测试成熟度及剩余边界 -> 当前执行排序回到相应 PR/Task`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |

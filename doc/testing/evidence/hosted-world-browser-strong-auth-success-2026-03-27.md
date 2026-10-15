@@ -1,5 +1,7 @@
 # hosted world 浏览器 strong-auth 成功证据（2026-03-27）
 
+脱敏说明：历史命令中的具体私钥值已替换为 `<REDACTED_PRIVATE_KEY>`；该命令因此不再是逐字原件。候选、公开身份、运行结果和失败边界保持原记录。Git 历史仍可能包含原值，本次脱敏不表示密钥已撤销、已轮换或已安全；不得将此历史命令当作当前凭据配置示例。
+
 审计轮次: 1
 
 ## Meta
@@ -30,7 +32,7 @@
 
 ## 执行命令
 - 启动真实 hosted 栈:
-  - `env OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=48f1d2d8b67b270dbeacec50399b044bfd772ea3cdfabc29f62850bb030d84a3 OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=9da13c6f9aec8b92b4831afb81bc5b37bdfc2a3482a9de36990e8ebfbfc18f60 OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=preview-code env -u RUSTC_WRAPPER cargo run -q -p oasis7 --bin oasis7_game_launcher -- --deployment-mode hosted_public_join --with-llm --viewer-static-dir crates/oasis7_viewer --viewer-host 127.0.0.1 --viewer-port 6101 --web-bind 127.0.0.1:6102 --live-bind 127.0.0.1:6103 --chain-disable --no-open-browser`
+  - `env OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=48f1d2d8b67b270dbeacec50399b044bfd772ea3cdfabc29f62850bb030d84a3 OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=<REDACTED_PRIVATE_KEY> OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=preview-code env -u RUSTC_WRAPPER cargo run -q -p oasis7 --bin oasis7_game_launcher -- --deployment-mode hosted_public_join --with-llm --viewer-static-dir crates/oasis7_viewer --viewer-host 127.0.0.1 --viewer-port 6101 --web-bind 127.0.0.1:6102 --live-bind 127.0.0.1:6103 --chain-disable --no-open-browser`
 - 浏览器动作:
   - `agent-browser --session hosted-prompt-rerun2 open 'http://127.0.0.1:6101/?ws=ws%3A%2F%2F127.0.0.1%3A6102&hosted_access=...'`
   - `source scripts/agent-browser-lib.sh && ab_eval hosted-prompt-rerun2 'window.__AW_TEST__.setStrongAuthApprovalCode("preview-code")'`

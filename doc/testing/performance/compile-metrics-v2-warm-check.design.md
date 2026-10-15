@@ -9,7 +9,7 @@ This document records the technical contract and current behavior for the
 approved first Compile Metrics V2 slice: an opt-in warm/no-op `cargo check`
 measurement. It is a design authority, not a task ledger. Task status,
 execution evidence, review returns, and mutable acceptance state remain in the
-GitHub task issue.
+actual PR/CI and any existing task (Issue/Project are optional).
 
 ## 1. Purpose and scope
 
@@ -418,6 +418,8 @@ missing `comparison.json` is normally a consequence, not the root failure.
 
 ## 9. Rollout and rollback
 
+产品适用性：N/A；reason=本节仅规定开发编译量测工具的选择、运行记录和回退，不定义玩家体验或运行时性能目标；scope=warm/no-op measurement rollout。真实 hosted 量测、专业准确性及原有验证义务仍须独立满足。
+
 ### Phase A: contract implementation (implemented; still opt-in)
 
 The CLI option, workflow inputs, schema fields, gate option, and contract tests
@@ -566,7 +568,7 @@ updating this authority.
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [Testing technical specifications](../prd.md#4-technical-specifications) | [Warm measurement rollout](#9-rollout-and-rollback) | Verify that the default run records cold-only metrics, opt-in mode records a separate no-op warm check, and only an explicit supported threshold can evaluate a paired warm comparison. | Run `bash ./scripts/ci-compile-metrics-contract.test.sh` ([contract test](../../../scripts/ci-compile-metrics-contract.test.sh)); its fake-Cargo fixtures cover the disabled default, command/target identity, report-only output, selected threshold, and failure behavior on this candidate. | Issue #4065 implementation evidence and exact-head required CI receipt. | Does not establish hosted-runner performance, platform noise bounds, or release readiness. |
+| [Testing technical specifications](../prd.md#4-technical-specifications) | [Warm measurement rollout](#9-rollout-and-rollback) | Verify that the default run records cold-only metrics, opt-in mode records a separate no-op warm check, and only an explicit supported threshold can evaluate a paired warm comparison. | Run `bash ./scripts/ci-compile-metrics-contract.test.sh` ([contract test](../../../scripts/ci-compile-metrics-contract.test.sh)); its fake-Cargo fixtures cover the disabled default, command/target identity, report-only output, selected threshold, and failure behavior on this candidate. | The implementation PR and actual checks for the tested source; Issue #4065 is historical provenance, not a required task or receipt. | Does not establish hosted-runner performance, platform noise bounds, or release readiness. |
 
 Warm/no-op is a prerequisite observation, not the final developer inner-loop
 metric. A later Compile Metrics V2 slice may add these independent scenarios:
@@ -609,7 +611,7 @@ diagnostic information but does not make the metric a touched-source measure.
 The existing three-platform workflow is also expensive, so this slice keeps
 warm collection manual and opt-in.
 
-Create a follow-up task when any of these triggers is observed:
+Evaluate the affected scope and record any necessary follow-up in the current PR or an existing task when any of these triggers is observed; create an Issue only when tracking needs it:
 
 - warm results are being used to support an incremental/touched-source claim;
 - an owner wants a default warm threshold or required-gate enforcement;
@@ -621,3 +623,7 @@ Create a follow-up task when any of these triggers is observed:
 
 Those triggers are technical-debt signals, not permission to broaden this
 slice in place.
+
+## 范围、结构边界与风险
+
+本设计范围是 cold/warm/no-op 编译量测及其结果解释；结构、采样身份、缓存条件、rollout 与验证沿用下文各节。主要风险是把不同候选、缓存或 runner 条件的样本混比，或把 no-op 改善当作触源码增量、hosted 性能或发布就绪证明；必须保留原始测量及未证明范围。

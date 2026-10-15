@@ -3,7 +3,7 @@
     "authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "4367a60e75fbbe81d98d5514936dc81dc5b00787df9d9d9262bf4ab0c83acccd",
+    "content_sha256": "eadcb13400ca57dd273627d86e6f2798c275e13d5482ce0720961c6c716fee5d",
     "disposition": "retain",
     "domain_owner": "blockchain_ops_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "d2855861d810099691fa4d74d1ac07e3bf9a51f4d5ef8bfd4ce53c8b9ec20421",
+    "content_sha256": "2a0a2eeebbf622bb7a16f467587351482bf4d163de1ae210fb91c90571d578bb",
     "current_authority": "doc/site/prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",

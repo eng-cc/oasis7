@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景文件化（设计文档）
 
 - 对应设计文档: `doc/world-simulator/scenario/scenario-files.design.md`
-- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
+- 当前任务状态与历史变更：GitHub PR、实际验证记录与 Git history；Issue 按需。
 
 审计轮次: 5
 
@@ -9,6 +9,8 @@
 本分册描述将 `WorldScenario` 的内置定义迁移为**场景文件**，用于提升可维护性与可扩展性。
 
 ## 1. Executive Summary
+
+### 目标与范围
 - 将现有所有 `WorldScenario` 定义迁移为**场景文件**（JSON），作为单一来源。
 - 保持现有 API（`WorldInitConfig::from_scenario` / `WorldScenario::parse` 等）可用。
 - 通过 `seed + location_generator` 生成地点，保证同场景配置可复现。
@@ -59,6 +61,8 @@
 
 <a id="scenario-loading-contract"></a>
 ### 加载策略
+
+Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448；本条承接[Agent 根 SC-1](../../product/agents-world-simulation/prd.md#sc-agent-001)中的场景初始化或来源重建子范围，不代签后续全部权威事件与正式交互结果。
 - 内置场景通过 `include_str!` 嵌入编译产物，`WorldInitConfig::from_scenario` 使用该嵌入配置，避免运行时场景文件 I/O；修改内置 JSON 后须重新编译对应程序。
 - `oasis7_init_demo --scenario-file <path>` 在本次初始化时通过 `WorldScenarioSpec::load_from_path` 读取显式 JSON；修改该外部文件后重新运行 demo 即可，无需仅为场景数据重编译。
 - 两条加载路径使用相同场景解析、effective config 和初始化校验；demo 例外不构成生产 runtime 热加载承诺。
@@ -68,6 +72,8 @@
 - **F2**：完成场景文件迁移与加载逻辑，更新测试与文档。
 
 ### Technical Risks
+
+#### 当前风险与未决
 - 场景文件与代码结构漂移导致解析失败。
 - 相对位置表达不当引入边界越界风险。
 - 修改嵌入的内置 JSON 需重编译；demo 自定义 JSON 的风险是给定文件不可读或解析/初始化失败，不能静默改用内置场景。
@@ -93,6 +99,8 @@
 
 ### 场景初始化与消费入口矩阵
 
+Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448；本条承接[Agent 根 SC-1](../../product/agents-world-simulation/prd.md#sc-agent-001)中的场景初始化或来源重建子范围，不代签后续全部权威事件与正式交互结果。
+
 此表区分初始 Simulator 模型与 Runtime 对外快照，不能从场景 JSON 解析成功推断各入口保留同一模型。
 
 | 入口 | 初始模型与默认实体语义 | 可证明范围 |
@@ -107,6 +115,8 @@
 
 <a id="generated-world-provenance-contract"></a>
 ### generated-world 来源与可复现声明
+
+Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448；本条承接[Agent 根 SC-1](../../product/agents-world-simulation/prd.md#sc-agent-001)中的场景初始化或来源重建子范围，不代签后续全部权威事件与正式交互结果。
 
 当前 [`bootstrap_generated_sidecar_runtime_world_with_chunk_runtime`](../../../crates/oasis7/src/viewer/runtime_live/support.rs) 对 `world-generation-provenance.json` 仅调用 `is_file()`，不解析 JSON，也不比较 seed、场景配置、manifest 或 sidecar 内容。文件存在只满足当前调试加载的前置条件，不能把加载成功写成“来源已验证”或“同输入可复现”。
 
@@ -135,4 +145,8 @@
 - 场景矩阵应随测试变更同步更新，避免“文档保留但测试漂移”。
 
 ## 6. Validation & Decision Record
-- 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。
+- 追溯: GitHub PR、实际验证记录与 Git history；Issue 按需 保留原实施过程；本文与 design 保持现行约束语义。
+
+## 6. 上游需求承接与产品边界
+
+[Agent 根 SC-1](../../product/agents-world-simulation/prd.md#sc-agent-001)是完整场景重现的产品组合要求；本专题的加载策略、消费入口矩阵及 generated-world 来源合同只承接场景有效输入与来源重建子范围。后续事件执行、provider 选择、正式表面交互和同候选端到端结果仍由各专业 authority 与 QA 承接，不因本专题加载成功而完成。

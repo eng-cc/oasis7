@@ -7,20 +7,26 @@
 - last_reviewed_at：2026-10-11
 - 上游：[配对产品需求](private-context.prd.md)、[工程域 PRD](../prd.md#PRD-ENGINEERING-035)
 
+## 目标与范围
+
+为公开源码之外的私有开发资料提供显式目录、严格格式、条件更新、可追溯事实检查、离线历史与加密快照恢复。下表承接六项现有需求；本设计限定文件与工具合同，不定义游戏世界持久化、秘密托管或新的授权流程。后续 GUI、MCP、服务与语义索引不因本文存在而视为已交付，仍按各自实际变更验收。
+
 ### 2.1 需求承接与分配表
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-PC-001](private-context.prd.md#REQ-PC-001) | AC-PC-001；首版独立义务 | [DES-PC-001](#DES-PC-001) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
-| [REQ-PC-002](private-context.prd.md#REQ-PC-002) | AC-PC-002；首版独立义务 | [DES-PC-002](#DES-PC-002) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
-| [REQ-PC-003](private-context.prd.md#REQ-PC-003) | AC-PC-003；首版独立义务 | [DES-PC-003](#DES-PC-003) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
-| [REQ-PC-004](private-context.prd.md#REQ-PC-004) | AC-PC-004；首版独立义务 | [DES-PC-004](#DES-PC-004) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
-| [REQ-PC-005](private-context.prd.md#REQ-PC-005) | AC-PC-005；首版独立义务 | [DES-PC-005](#DES-PC-005) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
-| [REQ-PC-006](private-context.prd.md#REQ-PC-006) | AC-PC-006；首版独立义务 | [DES-PC-006](#DES-PC-006) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-001](private-context.prd.md#REQ-PC-001) | AC-PC-001；两 CLI 同业务结果、严格格式与身份校验；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-001；两 CLI 同业务结果、严格格式与身份校验 | [DES-PC-001](#DES-PC-001) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-002](private-context.prd.md#REQ-PC-002) | AC-PC-002；条件写/新建竞争、私有草稿保留与文件安全；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-002；条件写/新建竞争、私有草稿保留与文件安全 | [DES-PC-002](#DES-PC-002) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-003](private-context.prd.md#REQ-PC-003) | AC-PC-003；业务摘要绑定检查声明、过期和失配区分；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-003；业务摘要绑定检查声明、过期和失配区分 | [DES-PC-003](#DES-PC-003) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-004](private-context.prd.md#REQ-PC-004) | AC-PC-004；离线原始 Git 历史与同库条件恢复；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-004；离线原始 Git 历史与同库条件恢复 | [DES-PC-004](#DES-PC-004) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-005](private-context.prd.md#REQ-PC-005) | AC-PC-005；加密快照完整性、独立 kind 与新目录恢复；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-005；加密快照完整性、独立 kind 与新目录恢复 | [DES-PC-005](#DES-PC-005) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
+| [REQ-PC-006](private-context.prd.md#REQ-PC-006) | AC-PC-006；有界扫描/分页、诊断隐私与双平台集成；产品适用性：N/A；reason=独立私有开发资料的文件、历史与加密恢复工具，不定义玩家世界持久化或游戏凭据权限；scope=AC-PC-006；有界扫描/分页、诊断隐私与双平台集成 | [DES-PC-006](#DES-PC-006) | runtime_engineer；context 核心 | 真实数据与生产环境另行使用验收 |
 
 <a id="DES-PC-001"></a>
 
-## 模块与数据
+<a id="模块与数据"></a>
+
+## 模块与数据结构
 
 `oasis7_context` 包含普通用户态文件、查询、Git、快照与 CLI。`oasis7_secure_envelope` 是不依赖环境、进程、文件或权限的纯字节加解密 crate。signer 依赖两者，context 不依赖 signer；caller 在固定安装检查前分发 context，成功、失败、帮助和未知子命令都结束在该分支。worker IPC 不增加资料请求。
 
@@ -90,7 +96,9 @@ oasis7_context snapshot restore --input /absolute/private-backups/example.enc --
 
 示例是虚构值，完整 front matter 由 schema 字段约束。正文中的命令与关联引用是资料，不获得执行或授权含义。
 
-## 操作与交付
+<a id="操作与交付"></a>
+
+## 操作、交付与风险
 
 普通用户安装独立 binary：`env -u RUSTC_WRAPPER cargo install --locked --path crates/oasis7_context`。源码更新不证明已安装 signer caller 更新；如需统一入口应明确安装对应 caller 版本。
 

@@ -14,9 +14,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只规定便利服务、独立基线和认可资格的产品边界；独立 design 不会增加不同的玩家操作语义。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 长期产品目标是让玩家无需购买客户端、账户或基础进入资格即可进入受支持世界路径；付费只能购买可选的 hosting、storage、support 等便利服务，不能购买、租用或跳过世界中的实质权力。早期体验应容易进入，并把愿意继续的玩家引向世界规则与玩法系统中真实、有代价、可审计的成长、认可和区域协作路径；这些世界内语义分别由[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)与[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)主责，本分册不复制其规范性条件。
@@ -175,4 +176,4 @@ Trace ID: O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC 对账免费与可选服务的权限/成本，核对取消、失效与恢复不改变世界权力；待取得同候选记录；导航关系不等于通过证据 | `test_tier_required` |
-| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 入口负边界与成熟世界/情境声誉主责的可导航组合追踪；认可失效、容量竞争、独立恢复和 specialized authority 不重复立法 | `test_tier_full` |
+| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC-ENTRY-FREE-002 分别核对成熟世界认可授予/到期/撤销、双人容量竞争、重复申领及独立恢复；首次持续能力前另核对入口信号不产生资格/容量/世界效果；待取得同候选主责与入口对照记录，导航关系不等于通过证据 | `test_tier_full` |
