@@ -39,7 +39,11 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   await p.goto(origin+route);
   await p.evaluate(()=>{document.querySelector('.hero-overview-link').click();document.querySelector('[data-preview-details] > summary').click();});
   await p.waitForTimeout(100);assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),null);
-  await p.goto(origin+route+'#download');assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
+  await p.locator('.hero-overview-link').click();assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
+  const deep=await c.newPage();await deep.goto(origin+route+'#download');assert.equal(await deep.locator('[data-preview-details]').getAttribute('open'),'');
+  await p.goto(origin+route);await p.evaluate(()=>{window.location.hash='#download';});
+  await p.waitForFunction(()=>document.querySelector('[data-preview-details]').open);
+  assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
   await c.close();record(locale+' compact preview opens by CTA, keyboard-native disclosure and deep link with visible risk');
  }
  const files=['oasis7-windows-x64.exe','oasis7-macos-x64.dmg','oasis7-linux-x64.deb','oasis7-checksums.txt'];
