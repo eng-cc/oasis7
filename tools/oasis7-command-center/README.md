@@ -89,4 +89,4 @@ Apple-signing/admin-helper integration is paused at the user's request. No syste
 
 For explicit private development inputs, choose a source in an owned session, preview the revision and send manually. The host commits private references before sending; later rounds and restored threads remain private. Dedicated runtime requests retain approval details, while `Runtime::public_snapshot` excludes private threads. The optional connector remains disabled by default.
 
-文件清单详情可查看文件头顶层列表的“配对系统设计”Markdown 链接、声明行及目标文件读取状态。普通引用不推断配对；带章节锚点的目标按同次已读内容定位；缺失、重复和未读取分别提示。旧缓存需刷新后解析；未跟踪、外部和不安全路径不沿链接读取。可打开唯一目标章节，关闭来源详情后返回原配对按钮，保留筛选和分页。旧配对缓存若缺少章节定位需刷新；此入口尚不提供上游承接表或产品/专业树，详细边界见[文档树设计](../../doc/engineering/command-center/document-tree.design.md)。
+文件清单详情可查看文件头顶层列表的“配对系统设计”Markdown 链接、声明行及目标文件读取状态。普通引用不推断配对；带章节锚点的目标按同次已读内容定位；缺失、重复和未读取分别提示。旧缓存需刷新后解析；未跟踪、外部和不安全路径不沿链接读取。可打开唯一目标章节，关闭来源详情后返回原配对按钮，保留筛选和分页。旧配对缓存若缺少章节定位需刷新；设计文件头的精确“上游”字段可分组查看需求文档与设计引用，并跳转同版本章节；目标类型是路径分类，不代表需求已实现。此入口尚不提供正文上游承接表或产品/专业树，详细边界见[文档树设计](../../doc/engineering/command-center/document-tree.design.md)。

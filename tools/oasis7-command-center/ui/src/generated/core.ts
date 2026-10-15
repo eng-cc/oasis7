@@ -36,13 +36,21 @@ export type DocumentPairing = { declarationLine: number, destination: string, ta
 /**
  * resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
  */
-resolution: string, targetSection: string | null, targetRevision: string | null, };
+resolution: string, targetSection: string | null, targetRevision: string | null,
+/**
+ * Candidate path classification, not proof of authority or implementation.
+ */
+targetKind: string | null, };
 export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
 export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
 /**
  * None in pre-pairing caches; refresh is required before claiming absence.
  */
-pairings: DocumentPairings | null, };
+pairings: DocumentPairings | null,
+/**
+ * Explicit design-header upstream declarations; None means not yet parsed.
+ */
+upstream: DocumentPairings | null, };
 export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
 /**
  * all / read / omitted
