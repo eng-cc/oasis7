@@ -119,7 +119,7 @@ pub fn put_client_state_with<Payload: Serialize + serde::de::DeserializeOwned>(
     record: &ClientStateV1<Payload>,
     validate: impl Fn(&ClientStateV1<Payload>, ClientStateKind) -> Result<(), String>,
 ) -> Result<ClientStateV1<Payload>, String> {
-    validate(&record, kind)?;
+    validate(record, kind)?;
     #[cfg(unix)]
     {
         let name = client_state_name(key, kind, operation)?;
@@ -145,8 +145,8 @@ pub fn put_client_state_with<Payload: Serialize + serde::de::DeserializeOwned>(
 mod tests {
     use super::*;
     use oasis7_agent_api::game::{GameTaskControlV1, GameTaskFenceV1};
-    use oasis7_client_api::world_service::task_context::TaskContextPrepareV1;
     use oasis7_client_api::world_service as authority;
+    use oasis7_client_api::world_service::task_context::TaskContextPrepareV1;
     use serde_json::json;
 
     #[test]

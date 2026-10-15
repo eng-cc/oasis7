@@ -332,9 +332,6 @@ impl WorldServiceTransport {
     }
 }
 
-#[cfg(test)]
-mod tests;
-
 pub mod private_key_file;
 #[cfg(unix)]
 pub mod private_storage;
@@ -349,3 +346,6 @@ pub use verified_task_view::{TaskWorldProjection, VerifiedTaskWorldView};
 
 pub mod commands;
 pub mod device_client;
+
+#[cfg(test)]
+mod tests;

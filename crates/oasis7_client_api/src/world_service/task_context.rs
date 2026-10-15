@@ -491,18 +491,6 @@ pub fn context_deadline(base_tick: u64, grant_until: u64) -> Result<DecimalU64, 
     }
     Ok(DecimalU64(grant_until.min(lease_until)))
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn private_task_context_deadline_never_extends_grant_or_overflows() {
-        assert_eq!(context_deadline(10, 100).unwrap(), DecimalU64(26));
-        assert_eq!(context_deadline(10, 12).unwrap(), DecimalU64(12));
-        assert!(context_deadline(u64::MAX, u64::MAX).is_err());
-        assert!(context_deadline(10, 9).is_err());
-    }
-}
-
 pub fn task_cognition_intent_from_public_context(
     context: &oasis7_agent_api::game::TaskContextIdentityV1,
     binding: oasis7_agent_api::world_cognition::RuntimeCognitionBaseBindingV1,
@@ -646,4 +634,16 @@ pub fn public_outcome_intent<P, L, CP, ST, R, D, X>(
             reason: reason.into(),
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn private_task_context_deadline_never_extends_grant_or_overflows() {
+        assert_eq!(context_deadline(10, 100).unwrap(), DecimalU64(26));
+        assert_eq!(context_deadline(10, 12).unwrap(), DecimalU64(12));
+        assert!(context_deadline(u64::MAX, u64::MAX).is_err());
+        assert!(context_deadline(10, 9).is_err());
+    }
 }
