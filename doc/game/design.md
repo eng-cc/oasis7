@@ -18,9 +18,23 @@
 4. 下钻 `gameplay/` 等专题目录；执行状态从对应 GitHub task issue 获取。
 
 ## 3. 设计结构
+
+### 组件职责与分层
+
 - 规则层：定义核心循环、资源与治理边界。
 - 系统层：定义 gameplay、发行可玩性、长期在线 P0 的结构分层。
 - 验证层：通过 `testing-manual.md`、`doc/testing/*` 和可玩性结果对玩法质量做闭环验证。
+
+### 玩法到验证的主链路
+
+玩法目标与规则由[活跃玩法基线](prd.md#2-active-gameplay-baseline)路由到声明范围内的专题合同，再由 runtime / world-simulator / viewer / agent 提供实现、观测与验证支撑；发布前可玩性结论回到 `testing-manual.md`、`doc/playability_test_result/` 与 `doc/testing/evidence/`。这是[模块架构与验证关系](prd.md#4-technical-specifications)，不是某个候选已经完成实现或通过验收的声明。
+
+[PRD-GAME-009/010](prd.md#2-active-gameplay-baseline)要求阶段与对外口径绑定同候选证据、QA、产品决策与 LiveOps 同步；gate pass 不自动升阶。证据或执行状态与基线冲突时，按[权威边界](prd.md#3-player-facing-authority-boundary)保留 blocker 并交对应 owner，不直接改写玩家承诺。
+
+### 玩家反馈与验证状态流
+
+- [PRD-GAME-004/014](prd.md#2-active-gameplay-baseline)约束玩家侧状态反馈：Viewer 与 pure API 从同一权威状态提供有效动作、不可用原因和解锁/恢复路径；动作接受、推进、阻塞、反馈与下一步必须可辨认。请求/提案接受不等同于权威规则应用或后果发生；因果反馈保留 reason/evidence、预期后果、替代动作、纠正及纠正后结果。
+- 本页只汇总上述玩法语义，不新增 snapshot 字段、UI 或运行时状态机。实际动作与恢复行为按专题合同及专业实现验证；[执行记录与正式 evidence](prd.md#3-player-facing-authority-boundary)分别承载执行状态和验证结果，历史样本不能替代当前候选证据。
 
 ## 4. 集成点
 - `doc/testing/prd.md`
