@@ -213,6 +213,65 @@ class Workflow(unittest.TestCase):
             failed = subprocess.run(['bash', '-c', definitions.replace("printf '%s\\n' \"$*\"", 'return 42') + case], text=True, capture_output=True)
             self.assertEqual(failed.returncode, 42)
 
+    def test_required_and_full_tier_runners_share_feature_matched_viewer_artifact(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        names = ('build_oasis7_viewer_binary', 'run_oasis7_test_tier_with_viewer',
+                 'run_oasis7_required_tier_tests', 'run_oasis7_full_tier_tests')
+        functions = [re.search(r'^' + name + r'\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+                     for name in names]
+        with tempfile.TemporaryDirectory() as temporary:
+            viewer = Path(temporary) / 'oasis7_viewer_live'
+            viewer.write_text('test viewer executable')
+            viewer.chmod(0o755)
+            log = Path(temporary) / 'commands.log'
+            script = """set -euo pipefail
+ci_python=python3
+run_cargo() {
+  if [[ "$1" == build ]]; then
+    printf 'BUILD|%s\\n' "$*" >> "$CI_LOG"
+    [[ "${FAIL_PHASE:-}" != build ]] || return 47
+    printf '{"reason":"compiler-artifact","target":{"name":"oasis7_viewer_live"},"executable":"%s"}\\n' "$VIEWER_BIN"
+  else
+    printf 'TEST|%s|VIEWER=%s\\n' "$*" "${PRE2_VIEWER_BINARY:-}" >> "$CI_LOG"
+    [[ "${FAIL_PHASE:-}" != test ]] || return 48
+  fi
+}
+""" + "\n".join(functions) + "\nrun_oasis7_required_tier_tests\nrun_oasis7_full_tier_tests\n"
+            environment = dict(os.environ, CI_LOG=str(log), VIEWER_BIN=str(viewer))
+            environment.pop('PRE2_VIEWER_BINARY', None)
+            result = subprocess.run(['bash', '-c', script], text=True, capture_output=True, env=environment)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = log.read_text().splitlines()
+            self.assertEqual(sum(call.startswith('BUILD|') for call in calls), 2)
+            self.assertEqual(sum(call.startswith('TEST|') for call in calls), 2)
+            for feature in ('test_tier_required', 'test_tier_full,wasmtime,viewer_live_integration'):
+                build_index = next((index for index, call in enumerate(calls)
+                                    if call.startswith('BUILD|') and f'--features {feature} ' in call), None)
+                test_index = next((index for index, call in enumerate(calls)
+                                   if call.startswith('TEST|') and f'--features {feature}|' in call
+                                   and f'VIEWER={viewer}' in call), None)
+                self.assertIsNotNone(build_index, feature)
+                self.assertIsNotNone(test_index, feature)
+                self.assertLess(build_index, test_index, feature)
+
+            full_only_script = script.replace('run_oasis7_required_tier_tests\nrun_oasis7_full_tier_tests\n',
+                                              'run_oasis7_full_tier_tests\n')
+            self.assertNotEqual(full_only_script, script)
+            for phase, expected in (('build', 47), ('test', 48)):
+                failure_log = Path(temporary) / f'{phase}.log'
+                failure_environment = dict(environment, CI_LOG=str(failure_log), FAIL_PHASE=phase)
+                failed = subprocess.run(['bash', '-c', full_only_script], text=True, capture_output=True,
+                                        env=failure_environment)
+                self.assertEqual(failed.returncode, expected, failed.stderr)
+                failure_calls = failure_log.read_text().splitlines()
+                if phase == 'build':
+                    self.assertTrue(any(call.startswith('BUILD|') and '--features test_tier_full,wasmtime,viewer_live_integration' in call
+                                        for call in failure_calls))
+                    self.assertFalse(any(call.startswith('TEST|') for call in failure_calls))
+                else:
+                    self.assertTrue(any(call.startswith('TEST|') and '--features test_tier_full,wasmtime,viewer_live_integration' in call
+                                        for call in failure_calls))
+
     def test_network_wasm_tools_precede_group_execution(self):
         net = JOBS['net']
         self.assertLess(net.index('Install WASM C compiler'), net.index('Execute selected group'))

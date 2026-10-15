@@ -114,11 +114,18 @@ run_cargo_clippy() {
 
 
 
-run_oasis7_required_tier_tests() {
+build_oasis7_viewer_binary() {
+  local features="$1"
   local viewer_manifest viewer_binary
   viewer_manifest="$(mktemp)"
-  run_cargo build -p oasis7 --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
-  viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
+  if run_cargo build -p oasis7 --bin oasis7_viewer_live --features "$features" --message-format=json > "$viewer_manifest"; then
+    :
+  else
+    local status=$?
+    rm -f "$viewer_manifest"
+    return "$status"
+  fi
+  if viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
 import json, pathlib, sys
 artifacts = []
 for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
@@ -131,9 +138,26 @@ assert len(artifacts) == 1, artifacts
 assert pathlib.Path(artifacts[0]).is_file(), artifacts
 print(artifacts[0])
 PY_VIEWER
-)"
+  )"; then
+    :
+  else
+    local status=$?
+    rm -f "$viewer_manifest"
+    return "$status"
+  fi
   rm -f "$viewer_manifest"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features test_tier_required
+  printf '%s\n' "$viewer_binary"
+}
+
+run_oasis7_test_tier_with_viewer() {
+  local features="$1"
+  local viewer_binary
+  viewer_binary="$(build_oasis7_viewer_binary "$features")"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features "$features"
+}
+
+run_oasis7_required_tier_tests() {
+  run_oasis7_test_tier_with_viewer test_tier_required
 }
 
 run_scenario_regression_tests() {
@@ -145,7 +169,7 @@ run_oasis7_required_tier_clippy() {
 }
 
 run_oasis7_full_tier_tests() {
-  run_cargo test -p oasis7 --tests --features "test_tier_full,wasmtime,viewer_live_integration"
+  run_oasis7_test_tier_with_viewer "test_tier_full,wasmtime,viewer_live_integration"
 }
 
 run_oasis7_consensus_tests() {
