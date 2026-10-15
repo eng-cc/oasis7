@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "1b7cc1328769cca04b1a6923d47642114c8786b1b646ba60ff39673dbf2d03c5",
+    "content_sha256": "60e87f406fd64a8b730c525f6c0ac9342c74acc53677f69cc126cfdfdea08989",
     "current_authority": "doc/site/design.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
