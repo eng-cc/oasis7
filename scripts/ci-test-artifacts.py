@@ -198,7 +198,7 @@ def execute(bundle, suite, results):
             names = [name for name in binary['tests'] if pattern in name and name not in binary['ignored_tests']]
             if not names:
                 raise ValueError('missing snapshot regression: ' + pattern)
-            entries.extend(dict(binary='snapshot-tests', name=name, ignored=False) for name in names)
+            entries.append(dict(binary='snapshot-tests', filter=pattern, count=len(names)))
         # Original ordinary environment did not contain formal-process child paths.
         for variable in list(env):
             if variable.startswith('OASIS7_FORMAL_') or variable in ('OASIS7_CHAIN_RUNTIME_BIN', 'OASIS7_NODE_LIFECYCLE_TEST_BIN'):
@@ -217,12 +217,16 @@ def execute(bundle, suite, results):
             name = entry.get('name', entry['binary'])
             if entry.get('batch'):
                 count = len(set(binary['tests']) - set(binary['ignored_tests']))
+            elif 'filter' in entry:
+                command.append(entry['filter'])
+                name, count = entry['filter'], entry['count']
             else:
                 command += ['--exact', name]
                 if entry['ignored']:
                     command.append('--ignored')
                 count = 1
-            command += ['--test-threads=1', '--nocapture']
+            if suite != 'ordinary':
+                command += ['--test-threads=1', '--nocapture']
             cwd = ROOT / binary['cwd']
         test_env = dict(env, CARGO_MANIFEST_DIR=str(cwd))
         result = run(command, cwd, test_env, suite, name, results, expected_count=count)

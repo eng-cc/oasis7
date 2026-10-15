@@ -169,7 +169,10 @@ class Process(unittest.TestCase):
                 restored, env = artifacts.load(bundle)
                 self.assertEqual(restored['producer_attempt'], '1')
                 self.assertTrue(original.is_file())
-                artifacts.execute(bundle, 'ordinary', root / 'results.jsonl')
+                with patch('ci_process_runner.run', wraps=run) as child_runner:
+                    artifacts.execute(bundle, 'ordinary', root / 'results.jsonl')
+                    self.assertTrue(all('--test-threads=1' not in call.args[0] for call in child_runner.call_args_list))
+                    self.assertTrue(all('--nocapture' not in call.args[0] for call in child_runner.call_args_list))
                 results = [json.loads(line) for line in (root / 'results.jsonl').read_text().splitlines()]
                 self.assertEqual(len(results), 3)
                 self.assertTrue(all(result['passed'] for result in results))
