@@ -1356,3 +1356,143 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 ## 本地 CI 工具环境
 
 普通 `required` 本地入口使用 Python 3.11 或更高版本（标准库 `tomllib` 解析 TOML）。确认 `python3 --version` 指向该版本；Rust、Node 与平台依赖按对应测试组准备。
+
+
+<a id="planned-node-economic-contract-qa"></a>
+## 节点既有经济合同 QA 场景（planned，未执行）
+
+本节从既有节点积分、PowerCredit、创世分配/奖励专业接受条件抽取可逐项执行的 QA 方法，仅供后续获得适用授权的验证任务使用；没有新增经济功能、资格、参数、额度、审批、权限或当前能力结论。当前这些场景均未执行，文档检查不能使其通过。每项只能使用固定同一候选、配置版本、受控fixture及原专业合同指定的角色/阶段；不得在fixture中填入真实地址/密钥、绑定真实账户、启动实际铸造/兑换/奖励发放。真实经济操作始终另需原逐次授权及全部原前置，本手册不授予该授权。
+
+业务oracle以各项链接的专业原文为准；本节不成为经济参数第二真值。正式验证者须保存候选commit、环境、fixture/输入和配置引用、适用验收与层级、预期/实际结果、拒绝原因和未覆盖范围。局部测试定义只能证明其列出的断言，不代表完整矩阵已通过。生产控制或审批证据缺失时如实保留pending/conditional/block，不能用fixture补真值。本任务不运行任何业务场景。
+
+<a id="qa-economic-points-eligibility"></a>
+### 基础义务与合格额外贡献分离：planned QA
+
+Trace refs: O7-REQ-118e8c96-669b-4b11-bbec-a32831803e16；[准确专业接受关系](doc/p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)取得SC-1..3、贡献输入与计分公式的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原 SC-1..3 与贡献输入分别构造自身模拟、代跑、维护、有效/无效存储和在线挑战/回退样例，逐项核对资格与计分；不得把自身义务或不合格贡献计成额外收益。 当前只定义方法，不执行该步骤。
+- 原权威oracle：为自身 Agent 模拟是基础义务，不直接获奖励；代跑离线节点、世界维护、有效存储和合格在线仅按原专业规则进入积分计算。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-contribution-points.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不能推出所有玩家获益、实际采样可信或公开网络安全；不得凭其他项green代签。
+- 证据字段与层级：原贡献画像、输入、资格与得分对账；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-points-allocation"></a>
+### 固定双池的确定性且不重复分配：planned QA
+
+Trace refs: O7-REQ-1bd30efb-22b7-403e-94f6-fe0a2efde4a2；[准确专业接受关系](doc/p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)取得AC-9、独立存储奖励池与结算合并规则的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按 AC-8/9 的至少3节点、连续2epoch画像，分别覆盖存储池启用/关闭、严格阈值、最小挑战数、可选质押封顶、零合格贡献及惩罚；核对各池预算不超发、排序与累计单调，不假定余额自动结转。 当前只定义方法，不执行该步骤。
+- 原权威oracle：两个固定 epoch 池分别按原合格正得分分配，独立存储池启用时主池排除存储权重；允许未分配余额，保持守恒、排序、惩罚效果和累计单调。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-contribution-points.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不调整预算/权重/阈值，不证明实际数值平衡；不得凭其他项green代签。
+- 证据字段与层级：逐epoch/node得分、两池分配及预算差额；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-points-recovery"></a>
+### epoch结算与恢复不重复入账：planned QA
+
+Trace refs: O7-REQ-54617172-fa9b-4efe-a058-b327ce348407；[准确专业接受关系](doc/p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)取得AC-7、Runtime 与多节点闭环约束的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原 runtime闭环约束对同一epoch/node注入重复tick、重启恢复、replay及不可读reward-runtime-state.json，对账awarded/cumulative不重复增加、快照不改ledger与明确warning/metric；结合3节点2epoch场景。 当前只定义方法，不执行该步骤。
+- 原权威oracle：同一 epoch/node 结算幂等；采样或快照写入不直接增加奖励，恢复、重复tick与replay只能复现结果；不可读collector状态须可观测降级，不是资产对账成功。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-contribution-points.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。runtime closure草案未完整吸收；不证明已结算资产安全恢复或生产custody；不得凭其他项green代签。
+- 证据字段与层级：恢复前后ledger、settlement及降级记录；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-points-asset-gates"></a>
+### 积分与独立资产路径保持门禁：planned QA
+
+Trace refs: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5；[准确专业接受关系](doc/p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)取得积分与资产结算边界的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原积分与资产边界分别核对PowerCredit身份/签名/预算/reserve/nonce/replay门禁和Token同epoch node_service_reward预算分配；双路径并用列出重复奖励审查，缺该审查不形成经济安全通过。 当前只定义方法，不执行该步骤。
+- 原权威oracle：积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-contribution-points.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-contribution-points.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness；不得凭其他项green代签。
+- 证据字段与层级：每条路径预算/授权/拒绝与独立审查记录；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-power-ledger"></a>
+### 贡献形成受限协议资产账本：planned QA
+
+Trace refs: O7-REQ-c0f136a1-3baf-497e-a0ec-622e745024d0；[准确专业接受关系](doc/p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)取得AC-1..6、资产与储备账本和结算记录的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原test_tier_required铸造守恒场景对照awarded_points、points_per_credit、floor结果与mint record及余额，核对未获授权的资产路径不能形成有效铸造。 当前只定义方法，不执行该步骤。
+- 原权威oracle：PowerCredit保持不可直接转账的受限协议资产；按原积分换算和mint记录形成可追溯余额，不扩展通用交易市场。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-redeemable-power-asset.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不更改兑换率，不新增转账/市场或当前可兑现承诺；不得凭其他项green代签。
+- 证据字段与层级：积分/credits换算与mint/balance/record对账；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-power-redemption"></a>
+### 全部条件成立才燃烧资产并增加目标电力：planned QA
+
+Trace refs: O7-REQ-a061488d-5b14-489a-af77-ed3f6f75f1bb；[准确专业接受关系](doc/p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)取得兑换动作与事件、关键规则的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原required兑换扣账/电力一致、reserve不足、nonce重放拒绝场景，同时覆盖最小量和epoch上限；按full多节点多epoch压力对账原动作及事件结果。 当前只定义方法，不执行该步骤。
+- 原权威oracle：兑换沿原余额、nonce、最小量、epoch储备与上限条件；成功须扣资产、扣储备与增加指定Agent电力一致，失败不得伪装兑付成功。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-redeemable-power-asset.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不改额度、目标、权限或承诺当前服务可用；不得凭其他项green代签。
+- 证据字段与层级：credits/reserve/electricity与拒绝原因；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-power-signature"></a>
+### 签名治理条件不足必须拒绝：planned QA
+
+Trace refs: O7-REQ-85c5baeb-e05a-4924-9024-e05f1903bd2a；[准确专业接受关系](doc/p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)取得审计与签名治理演进、MIG-097验收的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原MIG-097的required/full验证v2/redeem签名、治理拒绝与快照策略，分别对缺签名、错误绑定、策略要求无法满足和历史v1兼容边界核验；不改变worker安全默认。 当前只定义方法，不执行该步骤。
+- 原权威oracle：v1仅历史可重算摘要；v2与兑换签名依既有治理策略和绑定执行，缺少密钥、绑定或所需策略条件时fail closed。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-redeemable-power-asset.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不接触密钥，不证明HSM/KMS或跨组织custody；不得凭其他项green代签。
+- 证据字段与层级：版本化载荷、绑定/策略与拒绝结果；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-power-audit"></a>
+### 审计与恢复检测异常而不自动修复：planned QA
+
+Trace refs: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5；[准确专业接受关系](doc/p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)取得状态与回放一致性、审计与签名治理演进、MIG-096验收的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原MIG-096 required/full审计、required快照余额一致及full重启replay/libp2p复制抽样，对比余额储备和记录，核对报告列异常且不自动修复/对账；恢复后重验策略。 当前只定义方法，不执行该步骤。
+- 原权威oracle：mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/node/node-redeemable-power-asset.prd.md#4-technical-specifications)与[原验收](doc/p2p/node/node-redeemable-power-asset.prd.md#6-validation--decision-record)为准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不证明mainnet或生产恢复，不恢复历史viewer flags入口；不得凭其他项green代签。
+- 证据字段与层级：快照前后状态、invariant report与策略复核；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原专业required/full的适用场景分别记录；本地fixture不能代full实际多节点/复制或公开网络。该项planned，不是执行日志。
+
+<a id="qa-economic-genesis-allocation"></a>
+### 冻结分配可核算到各bucket与recipient：planned QA
+
+Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；[准确专业接受关系](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)取得SC-1/8、AC-1/8/9/12/13、DEC-TOKEN-INIT-009的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原TOKEN-INIT-001/002与QA TGA-01/02/08，逐条核对七桶参数、比例合计、冻结绝对金额、rounding及recipient聚合，不使用手工补差或把custody写成treasury。 当前只定义方法，不执行该步骤。
+- 原权威oracle：按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)与[原验收](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#6-validation--decision-record)为准；另以[QA原verdict与审计项](doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md#71-verdict-规则)、[freeze原前置](doc/p2p/token/mainchain-token-genesis-freeze-sheet.md#5-pre-mint-checklist)和[原ledger批准](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary) / [distribution闭合](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#6-distribution-closure)分别核相应条款，不能混用模板和真实批准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不变更总量/比例/账户，不执行InitializeMainTokenGenesis；不得凭其他项green代签。
+- 证据字段与层级：固定参数版本、七桶金额与rounding对账；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原§6的test_tier_required。该项planned，不是执行日志。
+
+<a id="qa-economic-genesis-control"></a>
+### 控制主体与个人受益及释放边界分别可审计：planned QA
+
+Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；[准确专业接受关系](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)取得SC-2..4、AC-2..5、DEC-TOKEN-INIT-002/004的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按QA TGA-03..07和原TOKEN-INIT-001/002核对控制主体、个人受益拆分、vesting/claim与创世/首年释放；缺主体、个人拆分或计划数值不得以比例表正确代签。 当前只定义方法，不执行该步骤。
+- 原权威oracle：项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)与[原验收](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#6-validation--decision-record)为准；另以[QA原verdict与审计项](doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md#71-verdict-规则)、[freeze原前置](doc/p2p/token/mainchain-token-genesis-freeze-sheet.md#5-pre-mint-checklist)和[原ledger批准](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary) / [distribution闭合](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#6-distribution-closure)分别核相应条款，不能混用模板和真实批准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。不改控制人/vesting/释放额度，不把协议储备当团队库存；不得凭其他项green代签。
+- 证据字段与层级：真实控制映射、受益拆分、释放计划与阻断依据；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原§6的test_tier_required。该项planned，不是执行日志。
+
+<a id="qa-economic-genesis-freeze"></a>
+### 逻辑冻结不等于真实mint-ready：planned QA
+
+Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；[准确专业接受关系](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)取得SC-6、AC-11、DEC-TOKEN-INIT-006、正式执行清单的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：planned依formal freeze sheet §5/§7、QA checklist §7的真实地址/controller/个人拆分/rounding/最终verdict逐项核对；任一TBD或conditional/block必须阻断，模板与历史勾选不代签。 当前只定义方法，不执行该步骤。
+- 原权威oracle：slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)与[原验收](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#6-validation--decision-record)为准；另以[QA原verdict与审计项](doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md#71-verdict-规则)、[freeze原前置](doc/p2p/token/mainchain-token-genesis-freeze-sheet.md#5-pre-mint-checklist)和[原ledger批准](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary) / [distribution闭合](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#6-distribution-closure)分别核相应条款，不能混用模板和真实批准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易；不得凭其他项green代签。
+- 证据字段与层级：绑定证据、完整pre-mint清单与该次QA verdict；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原§6的test_tier_required。该项planned，不是执行日志。
+
+<a id="qa-economic-genesis-reward"></a>
+### 独立reserve只消费最终复核的批准记录：planned QA
+
+Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；[准确专业接受关系](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)。
+
+- 输入与适用条件：固定候选、配置/输入版本和适用原角色/阶段；从[原技术约束](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)取得AC-6/10、DEC-TOKEN-INIT-003/005、Execution Path Decision的原字段/参数，不自行调值；正例与缺失/错误条件反例使用受控fixture，生产事实保持原未决。
+- 方法：按原TOKEN-INIT-003及canonical reward pack/ledger复核贡献证据、Approval ID、approved状态、distribution前actual-value review和最终Actual Amount；缺任何条件不得发放，执行后的Distribution Ref/date按原ledger闭合。 当前只定义方法，不执行该步骤。
+- 原权威oracle：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)与[原验收](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#6-validation--decision-record)为准；另以[QA原verdict与审计项](doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md#71-verdict-规则)、[freeze原前置](doc/p2p/token/mainchain-token-genesis-freeze-sheet.md#5-pre-mint-checklist)和[原ledger批准](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary) / [distribution闭合](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#6-distribution-closure)分别核相应条款，不能混用模板和真实批准。
+- 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次；不得凭其他项green代签。
+- 证据字段与层级：canonical批准行、最终金额复核、审批及distribution引用；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原§6的test_tier_required。该项planned，不是执行日志。

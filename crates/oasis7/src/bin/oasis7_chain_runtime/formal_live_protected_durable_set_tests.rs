@@ -5,10 +5,9 @@ use super::*;
 use crate::execution_bridge::formal_durable_set_arm::DurableSetArmPhaseV1;
 use oasis7::world_service::AgentSignerDelegationChangeV1;
 use oasis7_distfs::controlled_authority::formal::{
-    DurableSetSealedEvidenceV1, EndpointSignerBindingV1, HealthyEndpointLineagePageV1,
-    HealthyEndpointLineageStepV1, NormalDurableSetTransitionBodyV1,
-    SignedNormalDurableSetTransitionV1, VerifiedSealedDurableSetTransitionV1,
-    normal_durable_set_transition_signing_bytes,
+    DurableSetSealedEvidenceV1, HealthyEndpointLineagePageV1, HealthyEndpointLineageStepV1,
+    NormalDurableSetTransitionBodyV1, SignedNormalDurableSetTransitionV1,
+    VerifiedSealedDurableSetTransitionV1, normal_durable_set_transition_signing_bytes,
     transport::{
         ArchiveReadGrantBodyV1, RemoteDurableSetCandidateV1, RemoteFormalEndpoint,
         SignedArchiveReadGrantV1, archive_read_grant_signing_bytes,
@@ -117,42 +116,74 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     }
     let new_replica_directory = case.root.join("healthy-successor-replica");
     oracle_support::private_directory(&new_replica_directory)?;
-    let operation_id = fixtures::h(124);
-    // The runtime selects the signed transition's predecessor after pending
-    // work clears; this binding supplies only deterministic fixture identity.
-    let replica = successor_replica_binding(&case.authority, &new_replica_directory)?;
     case.scenario_deadline
-        .report_stage("before quiescent transition prepare")?;
-    // Share the existing API's 60-second cap with the absolute scenario budget.
-    let prepare_timeout = case
-        .scenario_deadline
-        .expires_at
-        .saturating_duration_since(Instant::now())
-        .min(Duration::from_secs(60));
-    if prepare_timeout.is_zero() {
-        return Err("healthy-set scenario deadline expired before transition prepare".into());
-    }
-    let transition =
-        runtime.prepare_durable_set_transition(&operation_id, replica, prepare_timeout)?;
+        .report_stage("before exact transition arm")?;
+    let (start_cut, transition, armed) = {
+        // The public exact-arm wrapper locks only after its caller constructed
+        // the candidate. A running Node may already have an original continuation
+        // pending then. Wait for that original under the existing scenario budget,
+        // and keep one gate across the first cut, signature and guarded core arm.
+        let _admission = crate::formal_live_runtime::quiesce::acquire_after_pending_clear(
+            &runtime.admission_gate,
+            || runtime.durable_set_arm.pending_open(),
+            case.scenario_deadline.expires_at,
+        )?;
+        if !runtime.started
+            || !runtime
+                .state
+                .ready
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err("formal runtime is not ready to admit a durable-set arm".into());
+        }
+        let start_cut = runtime.published.current()?;
+        let transition = signed_transition(
+            &case.authority,
+            &start_cut.anchor,
+            &case.primary_directory,
+            &new_replica_directory,
+        )?;
+        if start_cut.anchor.head().record().position + 1 != transition.body.boundary_position {
+            return Err("healthy arm predecessor differs from the actual published cut".into());
+        }
+        let armed = crate::formal_live_runtime::quiesce::arm_before_deadline(
+            case.scenario_deadline.expires_at,
+            || {
+                runtime.durable_set_arm.arm(
+                    &transition.body.operation_id,
+                    transition.clone(),
+                    &start_cut.anchor,
+                )
+            },
+        )?;
+        (start_cut, transition, armed)
+    }; // Release admission before any public request or boundary wait.
     let boundary_position = transition.body.boundary_position;
+    let operation_id = transition.body.operation_id.clone();
     let transition_digest = transition.body.digest().map_err(|e| e.to_string())?;
-    if transition.body.operation_id != operation_id || boundary_position == 0 {
-        return Err("healthy transition prepare returned a different operation or boundary".into());
-    }
-    if case.long_history {
-        // Exercise the already-qualified-at-first-query path deterministically
-        // in the long-history/cold-lookup scenario. The short case retains the
-        // immediate Armed/pre-boundary admission path.
-        wait_for_published_position(&runtime, boundary_position)?;
+    if armed.phase != DurableSetArmPhaseV1::Armed
+        || armed.operation_id != operation_id
+        || armed.boundary_position != boundary_position
+        || armed.transition_digest != transition_digest
+        || operation_id != fixtures::h(124)
+        || boundary_position == 0
+    {
+        return Err("formal runtime did not persist the exact healthy transition arm".into());
     }
 
     let owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
         .map_err(|error| error.to_string())?;
     case.scenario_deadline
         .report_stage("before boundary submit and qualification")?;
+    if case.long_history {
+        // Exercise the already-qualified-at-first-query path deterministically
+        // in the long-history/cold-lookup scenario. The short case retains the
+        // immediate Armed/pre-boundary admission path.
+        wait_for_boundary(&runtime, boundary_position)?;
+    }
     let initial_arm_status = runtime
         .query_durable_set_transition(&operation_id, boundary_position)?
-        .ok_or("healthy transition arm was not persisted by prepare")?;
+        .ok_or("healthy transition arm was not persisted")?;
     if initial_arm_status.operation_id != operation_id
         || initial_arm_status.boundary_position != boundary_position
         || initial_arm_status.transition_digest != transition_digest
@@ -186,27 +217,23 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         case.scenario_deadline
             .report_stage("pre-boundary admission deferred for exact boundary proof")?;
     }
-    wait_for_published_position(&runtime, boundary_position)?;
-    let predecessor_position = boundary_position
-        .checked_sub(1)
-        .ok_or("healthy transition boundary has no predecessor")?;
-    let parent_anchor = qualified_anchor_at(&case, predecessor_position)?;
+    wait_for_boundary(&runtime, boundary_position)?;
+    let boundary_cut = runtime.published.current()?;
+    if boundary_cut.anchor.head().record().position != boundary_position
+        || boundary_cut
+            .anchor
+            .authority()
+            .context_digest()
+            .map_err(|e| e.to_string())?
+            != case.authority.context_digest().map_err(|e| e.to_string())?
+    {
+        return Err("healthy boundary is not the exact old-authority Qualified cut".into());
+    }
+    let parent_anchor = start_cut.anchor.clone();
     let parent = parent_anchor.head().clone();
     if transition.body.predecessor != parent.head() {
-        return Err("healthy transition predecessor differs from its qualified history".into());
+        return Err("healthy transition predecessor differs from its prepared anchor".into());
     }
-    let armed = runtime
-        .durable_set_arm
-        .query(&operation_id, boundary_position, &parent_anchor)?
-        .ok_or("healthy transition arm was not persisted by prepare")?;
-    if armed.phase != DurableSetArmPhaseV1::Armed
-        || armed.operation_id != operation_id
-        || armed.boundary_position != boundary_position
-        || armed.transition_digest != transition_digest
-    {
-        return Err("formal runtime did not persist the exact healthy transition arm".into());
-    }
-
     let (boundary_candidate, boundary_proof) =
         crate::execution_bridge::formal_writer::read_published_candidate_at(
             &case.writer_directory,
@@ -810,7 +837,14 @@ pub(super) fn signed_transition(
     successor.primary.instance.authority_epoch = epoch;
     successor.primary.instance.storage_fingerprint =
         directory_fingerprint(primary_directory).map_err(|error| error.to_string())?;
-    successor.replica = successor_replica_binding(authority, new_replica_directory)?;
+    successor.replica.instance.authority_epoch = epoch;
+    successor.replica.instance.endpoint_public_key = oracle_support::public(12);
+    successor.replica.instance.instance_id = fixtures::h(122);
+    successor.replica.instance.storage_id = fixtures::h(123);
+    successor.replica.instance.storage_fingerprint =
+        directory_fingerprint(new_replica_directory).map_err(|error| error.to_string())?;
+    successor.replica.instance.endpoint_id = "healthy-successor-replica".into();
+    successor.replica.fault_domain_id = "healthy-successor-replica-domain".into();
     let mut body = NormalDurableSetTransitionBodyV1 {
         schema_version: 1,
         world: successor.world.clone(),
@@ -834,26 +868,6 @@ pub(super) fn signed_transition(
         ),
         body,
     })
-}
-
-pub(super) fn successor_replica_binding(
-    authority: &VerifiedAuthorityV1,
-    new_replica_directory: &Path,
-) -> Result<EndpointSignerBindingV1, String> {
-    let mut replica = authority.definition().replica.clone();
-    replica.instance.authority_epoch = authority
-        .definition()
-        .epoch
-        .checked_add(1)
-        .ok_or("authority epoch overflow")?;
-    replica.instance.endpoint_public_key = oracle_support::public(12);
-    replica.instance.instance_id = fixtures::h(122);
-    replica.instance.storage_id = fixtures::h(123);
-    replica.instance.storage_fingerprint =
-        directory_fingerprint(new_replica_directory).map_err(|error| error.to_string())?;
-    replica.instance.endpoint_id = "healthy-successor-replica".into();
-    replica.fault_domain_id = "healthy-successor-replica-domain".into();
-    Ok(replica)
 }
 
 pub(super) fn archive_grant(
@@ -925,46 +939,43 @@ pub(super) fn write_healthy_endpoint_config(
     )
 }
 
-fn qualified_anchor_at(
-    case: &HealthySetCase,
-    position: u64,
-) -> Result<VerifiedFormalReadAnchorV1, String> {
-    let mut anchor = case.initial_anchor.clone();
-    let initial_position = anchor.head().record().position;
-    let distance = position.saturating_sub(initial_position);
-    if position < initial_position
-        || distance > oasis7::world_service::formal_read::MAX_FORMAL_HISTORY_STEPS as u64
-    {
-        return Err("healthy transition predecessor exceeds bounded qualified history".into());
-    }
-    if position > initial_position {
-        let first_position = initial_position
-            .checked_add(1)
-            .ok_or("healthy qualified history position overflow")?;
-        for next in first_position..=position {
-            let (candidate, proof) =
-                crate::execution_bridge::formal_writer::read_published_candidate_at(
-                    &case.writer_directory,
-                    next,
-                )?
-                .ok_or("healthy transition predecessor proof is missing")?;
-            if candidate.candidate.record != proof.decision.record {
-                return Err("healthy history candidate differs from its qualified proof".into());
+fn wait_for_boundary(runtime: &FormalLiveRuntime, position: u64) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let cut = runtime.published.current()?;
+        if cut.anchor.head().record().position >= position {
+            if cut.anchor.head().record().position != position {
+                return Err(format!(
+                    "healthy arm passed exact boundary {position}: current {}",
+                    cut.anchor.head().record().position
+                ));
             }
-            let commit =
-                verify_formal_qualified(&proof, &case.authority, Some(anchor.head()), None)
-                    .map_err(|error| format!("verify healthy history position {next}: {error}"))?;
-            verify_record_material(&proof.decision.record, &candidate.material)
-                .map_err(|error| format!("verify healthy history material {next}: {error}"))?;
-            anchor = anchor
-                .after_verified_commit(case.authority.clone(), commit)
-                .map_err(|error| format!("advance healthy history position {next}: {error}"))?;
+            return Ok(());
         }
+        let status = runtime
+            .runtime
+            .lock()
+            .map_err(|_| "healthy boundary runtime lock poisoned")?
+            .snapshot();
+        if let Some(error) = status.last_error {
+            return Err(format!(
+                "Node failed before healthy boundary {position}: {error}"
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "Node did not qualify healthy boundary {position}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?}",
+                status.running,
+                status.tick_count,
+                status.consensus.slot,
+                status.consensus.latest_height,
+                status.consensus.committed_height,
+                status.consensus.last_execution_height,
+                status.consensus.pending_consensus_actions,
+            ));
+        }
+        thread::sleep(Duration::from_millis(20));
     }
-    if anchor.head().record().position != position {
-        return Err("healthy qualified history ended at the wrong position".into());
-    }
-    Ok(anchor)
 }
 
 fn wait_for_request_result(

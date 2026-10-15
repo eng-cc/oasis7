@@ -171,3 +171,44 @@
 | DEC-TOKEN-INIT-007 | 先冻结当前链上代币正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime symbol/account 真值 | 在未评审兼容性影响前直接改 runtime symbol / 账户前缀 | 产品名、ticker 与账户派生的治理半径不同；先冻结 public naming，才能把后续 runtime 迁移收成独立可审计任务。 |
 | DEC-TOKEN-INIT-008 | 在独立迁移专题中，把当前 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值 | public naming 已冻结后，继续双轨会让 runtime、API、viewer/client 与 liveops 口径长期分叉；应尽快完成单一当前真值迁移。 |
 | DEC-TOKEN-INIT-009 | 当前创世绝对发行量冻结为 `10,000,000,000 OC` | 改为 `100,000,000 OC` 或 `1,000,000,000 OC` | 该值保留大整数公开叙事空间，同时仍由 `genesis_liquid=0`、首年外部释放 `100~200 bps` 目标与 `<=500 bps` 硬上限约束低流通边界；在当前 7 个 bucket 比例下还能得到无需 remainder 的整数分配额。 |
+
+
+## 既有经济结果的产品接收
+
+以下仅把本文件既有义务准确接收到世界规则产品根，不修改原参数、角色、权限、状态、历史或执行真值。每项只引用根唯一身份，原 SC/AC/DEC 与 §6 验收仍有效；本节不是实施/发放批准。
+
+<a id="economic-contract-genesis-allocation"></a>
+### 冻结分配可核算到各bucket与recipient的既有专业接受关系
+
+Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；唯一声明：[世界规则根结果](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-allocation)。
+
+- 原义务：SC-1/8、AC-1/8/9/12/13、DEC-TOKEN-INIT-009；按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。
+- 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
+- 有限接收：[冻结分配可核算到各bucket与recipient设计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-allocation)；不变更总量/比例/账户，不执行InitializeMainTokenGenesis。
+
+<a id="economic-contract-genesis-control"></a>
+### 控制主体与个人受益及释放边界分别可审计的既有专业接受关系
+
+Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；唯一声明：[世界规则根结果](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-control)。
+
+- 原义务：SC-2..4、AC-2..5、DEC-TOKEN-INIT-002/004；项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。
+- 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
+- 有限接收：[控制主体与个人受益及释放边界分别可审计设计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-control)；不改控制人/vesting/释放额度，不把协议储备当团队库存。
+
+<a id="economic-contract-genesis-freeze"></a>
+### 逻辑冻结不等于真实mint-ready的既有专业接受关系
+
+Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；唯一声明：[世界规则根结果](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-freeze)。
+
+- 原义务：SC-6、AC-11、DEC-TOKEN-INIT-006、正式执行清单；slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。
+- 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
+- 有限接收：[逻辑冻结不等于真实mint-ready设计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-freeze)；本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。
+
+<a id="economic-contract-genesis-reward"></a>
+### 独立reserve只消费最终复核的批准记录的既有专业接受关系
+
+Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；唯一声明：[世界规则根结果](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-reward)。
+
+- 原义务：AC-6/10、DEC-TOKEN-INIT-003/005、Execution Path Decision；独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。
+- 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
+- 有限接收：[独立reserve只消费最终复核的批准记录设计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-reward)；本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。

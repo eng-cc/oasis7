@@ -12,6 +12,7 @@ use oasis7_agent_api::{
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 pub const TASK_CONTEXT_PREPARE_PATH: &str = "/v1/world/private-task/context-prepare";
+pub const TASK_CONTEXT_READ_DELIVERY_DRIFT: &str = "task_context_read_delivery_drift";
 pub const TASK_CONTEXT_READ_PATH: &str = "/v1/world/private-task/context-read";
 pub const TASK_SNAPSHOT_PATH: &str = "/v1/world/private-task/goal-snapshot";
 pub const MAX_PRIVATE_CONTEXT_BYTES: usize = 2 * 1024 * 1024;

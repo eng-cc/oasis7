@@ -1387,3 +1387,286 @@ Trace ID: O7-REQ-bd83785c-d414-4bd7-b291-41a4d7272aa3
 - 实现与验证依据：尚未核定外部性处置与其他事实隔离的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
 - 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
 - 剩余范围：preview只读，submit fresh，linked production/externality disposition一次；quality/custody/byproduct/maintenance/settlement/W不被改写，WIP/transit/buffer/terminal保持root/revision及义务单次处置的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+
+## 8. 既有节点经济合同的结果接收
+
+本节只为已经由下列 P2P 专业 SC/AC/DEC 采用的节点贡献、受限资产兑电和创世控制结果登记产品位置与唯一身份，不新增经济功能或面向所有玩家的收益承诺。原适用角色、阶段、前提、成功与拒绝条件、局部 PRD-ID、历史记录和演进计划全部保留。经济参数、公式、预算、额度、recipient/controller、vesting、签名规则、approved ledger、actual-value review、QA 和执行 authority 仍分别由原 P2P/runtime、README reward governance 与 QA 拥有；本根与 game 不取得新的调参、批准、发放或执行权。根只引用参数真值，不复制数值表。
+
+消费/组合说明：[参与与权益分离](../player-entry-distribution/participation-and-recognition-boundaries.prd.md#req-entry-part-001)与[同候选发行门禁](../player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001)继续拥有各自结果，本节不重复声明其身份。基础设施只提供[同输入确定性与原子拒绝](../world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)子范围，不能代替以下经济结果；epoch/node幂等不等同互斥intent lineage。PowerCredit路径不改starter支持、liquid starter OC或任何原有资源反补贴限制。下列条款不声称当前兑付、mint、奖励发放或生产可用；未取得完整证据前保持未核实。
+
+<a id="req-wr-economic-points-eligibility"></a>
+### REQ-WR-ECONOMIC-POINTS-ELIGIBILITY：基础义务与合格额外贡献分离
+
+Trace ID: O7-REQ-118e8c96-669b-4b11-bbec-a32831803e16
+
+适用范围与成功标准：为自身 Agent 模拟是基础义务，不直接获奖励；代跑离线节点、世界维护、有效存储和合格在线仅按原专业规则进入积分计算。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[基础义务与合格额外贡献分离](#req-wr-economic-points-eligibility)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ELIGIBILITY](#ac-wr-economic-points-eligibility)。
+- 系统设计状态：未核实
+- 系统设计依据：[基础义务与合格额外贡献分离有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-eligibility)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不能推出所有玩家获益、实际采样可信或公开网络安全。
+
+<a id="ac-wr-economic-points-eligibility"></a>
+### AC-WR-ECONOMIC-POINTS-ELIGIBILITY：基础义务与合格额外贡献分离的原验收
+
+Trace refs: O7-REQ-118e8c96-669b-4b11-bbec-a32831803e16；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ELIGIBILITY](#req-wr-economic-points-eligibility)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)适用的固定候选中逐项核验：为自身 Agent 模拟是基础义务，不直接获奖励；代跑离线节点、世界维护、有效存储和合格在线仅按原专业规则进入积分计算。 原验收成功/拒绝条件及层级不变，实际证据至少保留原贡献画像、输入、资格与得分对账；没有对应完整证据时保持未核实。不能推出所有玩家获益、实际采样可信或公开网络安全。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-allocation"></a>
+### REQ-WR-ECONOMIC-POINTS-ALLOCATION：固定双池的确定性且不重复分配
+
+Trace ID: O7-REQ-1bd30efb-22b7-403e-94f6-fe0a2efde4a2
+
+适用范围与成功标准：两个固定 epoch 池分别按原合格正得分分配，独立存储池启用时主池排除存储权重；允许未分配余额，保持守恒、排序、惩罚效果和累计单调。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[固定双池的确定性且不重复分配](#req-wr-economic-points-allocation)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ALLOCATION](#ac-wr-economic-points-allocation)。
+- 系统设计状态：未核实
+- 系统设计依据：[固定双池的确定性且不重复分配有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-allocation)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不调整预算/权重/阈值，不证明实际数值平衡。
+
+<a id="ac-wr-economic-points-allocation"></a>
+### AC-WR-ECONOMIC-POINTS-ALLOCATION：固定双池的确定性且不重复分配的原验收
+
+Trace refs: O7-REQ-1bd30efb-22b7-403e-94f6-fe0a2efde4a2；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ALLOCATION](#req-wr-economic-points-allocation)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)适用的固定候选中逐项核验：两个固定 epoch 池分别按原合格正得分分配，独立存储池启用时主池排除存储权重；允许未分配余额，保持守恒、排序、惩罚效果和累计单调。 原验收成功/拒绝条件及层级不变，实际证据至少保留逐epoch/node得分、两池分配及预算差额；没有对应完整证据时保持未核实。不调整预算/权重/阈值，不证明实际数值平衡。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-recovery"></a>
+### REQ-WR-ECONOMIC-POINTS-RECOVERY：epoch结算与恢复不重复入账
+
+Trace ID: O7-REQ-54617172-fa9b-4efe-a058-b327ce348407
+
+适用范围与成功标准：同一 epoch/node 结算幂等；采样或快照写入不直接增加奖励，恢复、重复tick与replay只能复现结果；不可读collector状态须可观测降级，不是资产对账成功。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[epoch结算与恢复不重复入账](#req-wr-economic-points-recovery)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-RECOVERY](#ac-wr-economic-points-recovery)。
+- 系统设计状态：未核实
+- 系统设计依据：[epoch结算与恢复不重复入账有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-recovery)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；runtime closure草案未完整吸收；不证明已结算资产安全恢复或生产custody。
+
+<a id="ac-wr-economic-points-recovery"></a>
+### AC-WR-ECONOMIC-POINTS-RECOVERY：epoch结算与恢复不重复入账的原验收
+
+Trace refs: O7-REQ-54617172-fa9b-4efe-a058-b327ce348407；覆盖要求：[REQ-WR-ECONOMIC-POINTS-RECOVERY](#req-wr-economic-points-recovery)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)适用的固定候选中逐项核验：同一 epoch/node 结算幂等；采样或快照写入不直接增加奖励，恢复、重复tick与replay只能复现结果；不可读collector状态须可观测降级，不是资产对账成功。 原验收成功/拒绝条件及层级不变，实际证据至少保留恢复前后ledger、settlement及降级记录；没有对应完整证据时保持未核实。runtime closure草案未完整吸收；不证明已结算资产安全恢复或生产custody。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-asset-gates"></a>
+### REQ-WR-ECONOMIC-POINTS-ASSET-GATES：积分与独立资产路径保持门禁
+
+Trace ID: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5
+
+适用范围与成功标准：积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[积分与独立资产路径保持门禁](#req-wr-economic-points-asset-gates)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ASSET-GATES](#ac-wr-economic-points-asset-gates)。
+- 系统设计状态：未核实
+- 系统设计依据：[积分与独立资产路径保持门禁有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-asset-gates)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness。
+
+<a id="ac-wr-economic-points-asset-gates"></a>
+### AC-WR-ECONOMIC-POINTS-ASSET-GATES：积分与独立资产路径保持门禁的原验收
+
+Trace refs: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ASSET-GATES](#req-wr-economic-points-asset-gates)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)适用的固定候选中逐项核验：积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。 原验收成功/拒绝条件及层级不变，实际证据至少保留每条路径预算/授权/拒绝与独立审查记录；没有对应完整证据时保持未核实。不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-ledger"></a>
+### REQ-WR-ECONOMIC-POWER-LEDGER：贡献形成受限协议资产账本
+
+Trace ID: O7-REQ-c0f136a1-3baf-497e-a0ec-622e745024d0
+
+适用范围与成功标准：PowerCredit保持不可直接转账的受限协议资产；按原积分换算和mint记录形成可追溯余额，不扩展通用交易市场。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[贡献形成受限协议资产账本](#req-wr-economic-power-ledger)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-LEDGER](#ac-wr-economic-power-ledger)。
+- 系统设计状态：未核实
+- 系统设计依据：[贡献形成受限协议资产账本有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-ledger)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不更改兑换率，不新增转账/市场或当前可兑现承诺。
+
+<a id="ac-wr-economic-power-ledger"></a>
+### AC-WR-ECONOMIC-POWER-LEDGER：贡献形成受限协议资产账本的原验收
+
+Trace refs: O7-REQ-c0f136a1-3baf-497e-a0ec-622e745024d0；覆盖要求：[REQ-WR-ECONOMIC-POWER-LEDGER](#req-wr-economic-power-ledger)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)适用的固定候选中逐项核验：PowerCredit保持不可直接转账的受限协议资产；按原积分换算和mint记录形成可追溯余额，不扩展通用交易市场。 原验收成功/拒绝条件及层级不变，实际证据至少保留积分/credits换算与mint/balance/record对账；没有对应完整证据时保持未核实。不更改兑换率，不新增转账/市场或当前可兑现承诺。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-redemption"></a>
+### REQ-WR-ECONOMIC-POWER-REDEMPTION：全部条件成立才燃烧资产并增加目标电力
+
+Trace ID: O7-REQ-a061488d-5b14-489a-af77-ed3f6f75f1bb
+
+适用范围与成功标准：兑换沿原余额、nonce、最小量、epoch储备与上限条件；成功须扣资产、扣储备与增加指定Agent电力一致，失败不得伪装兑付成功。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[全部条件成立才燃烧资产并增加目标电力](#req-wr-economic-power-redemption)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-REDEMPTION](#ac-wr-economic-power-redemption)。
+- 系统设计状态：未核实
+- 系统设计依据：[全部条件成立才燃烧资产并增加目标电力有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-redemption)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不改额度、目标、权限或承诺当前服务可用。
+
+<a id="ac-wr-economic-power-redemption"></a>
+### AC-WR-ECONOMIC-POWER-REDEMPTION：全部条件成立才燃烧资产并增加目标电力的原验收
+
+Trace refs: O7-REQ-a061488d-5b14-489a-af77-ed3f6f75f1bb；覆盖要求：[REQ-WR-ECONOMIC-POWER-REDEMPTION](#req-wr-economic-power-redemption)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)适用的固定候选中逐项核验：兑换沿原余额、nonce、最小量、epoch储备与上限条件；成功须扣资产、扣储备与增加指定Agent电力一致，失败不得伪装兑付成功。 原验收成功/拒绝条件及层级不变，实际证据至少保留credits/reserve/electricity与拒绝原因；没有对应完整证据时保持未核实。不改额度、目标、权限或承诺当前服务可用。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-signature"></a>
+### REQ-WR-ECONOMIC-POWER-SIGNATURE：签名治理条件不足必须拒绝
+
+Trace ID: O7-REQ-85c5baeb-e05a-4924-9024-e05f1903bd2a
+
+适用范围与成功标准：v1仅历史可重算摘要；v2与兑换签名依既有治理策略和绑定执行，缺少密钥、绑定或所需策略条件时fail closed。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[签名治理条件不足必须拒绝](#req-wr-economic-power-signature)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-SIGNATURE](#ac-wr-economic-power-signature)。
+- 系统设计状态：未核实
+- 系统设计依据：[签名治理条件不足必须拒绝有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-signature)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不接触密钥，不证明HSM/KMS或跨组织custody。
+
+<a id="ac-wr-economic-power-signature"></a>
+### AC-WR-ECONOMIC-POWER-SIGNATURE：签名治理条件不足必须拒绝的原验收
+
+Trace refs: O7-REQ-85c5baeb-e05a-4924-9024-e05f1903bd2a；覆盖要求：[REQ-WR-ECONOMIC-POWER-SIGNATURE](#req-wr-economic-power-signature)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)适用的固定候选中逐项核验：v1仅历史可重算摘要；v2与兑换签名依既有治理策略和绑定执行，缺少密钥、绑定或所需策略条件时fail closed。 原验收成功/拒绝条件及层级不变，实际证据至少保留版本化载荷、绑定/策略与拒绝结果；没有对应完整证据时保持未核实。不接触密钥，不证明HSM/KMS或跨组织custody。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-audit"></a>
+### REQ-WR-ECONOMIC-POWER-AUDIT：审计与恢复检测异常而不自动修复
+
+Trace ID: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5
+
+适用范围与成功标准：mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[审计与恢复检测异常而不自动修复](#req-wr-economic-power-audit)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-AUDIT](#ac-wr-economic-power-audit)。
+- 系统设计状态：未核实
+- 系统设计依据：[审计与恢复检测异常而不自动修复有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-audit)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不证明mainnet或生产恢复，不恢复历史viewer flags入口。
+
+<a id="ac-wr-economic-power-audit"></a>
+### AC-WR-ECONOMIC-POWER-AUDIT：审计与恢复检测异常而不自动修复的原验收
+
+Trace refs: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5；覆盖要求：[REQ-WR-ECONOMIC-POWER-AUDIT](#req-wr-economic-power-audit)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)适用的固定候选中逐项核验：mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。 原验收成功/拒绝条件及层级不变，实际证据至少保留快照前后状态、invariant report与策略复核；没有对应完整证据时保持未核实。不证明mainnet或生产恢复，不恢复历史viewer flags入口。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-allocation"></a>
+### REQ-WR-ECONOMIC-GENESIS-ALLOCATION：冻结分配可核算到各bucket与recipient
+
+Trace ID: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4
+
+适用范围与成功标准：按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[冻结分配可核算到各bucket与recipient](#req-wr-economic-genesis-allocation)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-ALLOCATION](#ac-wr-economic-genesis-allocation)。
+- 系统设计状态：未核实
+- 系统设计依据：[冻结分配可核算到各bucket与recipient有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-allocation)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不变更总量/比例/账户，不执行InitializeMainTokenGenesis。
+
+<a id="ac-wr-economic-genesis-allocation"></a>
+### AC-WR-ECONOMIC-GENESIS-ALLOCATION：冻结分配可核算到各bucket与recipient的原验收
+
+Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-ALLOCATION](#req-wr-economic-genesis-allocation)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)适用的固定候选中逐项核验：按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 原验收成功/拒绝条件及层级不变，实际证据至少保留固定参数版本、七桶金额与rounding对账；没有对应完整证据时保持未核实。不变更总量/比例/账户，不执行InitializeMainTokenGenesis。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-control"></a>
+### REQ-WR-ECONOMIC-GENESIS-CONTROL：控制主体与个人受益及释放边界分别可审计
+
+Trace ID: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9
+
+适用范围与成功标准：项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[控制主体与个人受益及释放边界分别可审计](#req-wr-economic-genesis-control)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-CONTROL](#ac-wr-economic-genesis-control)。
+- 系统设计状态：未核实
+- 系统设计依据：[控制主体与个人受益及释放边界分别可审计有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-control)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不改控制人/vesting/释放额度，不把协议储备当团队库存。
+
+<a id="ac-wr-economic-genesis-control"></a>
+### AC-WR-ECONOMIC-GENESIS-CONTROL：控制主体与个人受益及释放边界分别可审计的原验收
+
+Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-CONTROL](#req-wr-economic-genesis-control)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)适用的固定候选中逐项核验：项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 原验收成功/拒绝条件及层级不变，实际证据至少保留真实控制映射、受益拆分、释放计划与阻断依据；没有对应完整证据时保持未核实。不改控制人/vesting/释放额度，不把协议储备当团队库存。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-freeze"></a>
+### REQ-WR-ECONOMIC-GENESIS-FREEZE：逻辑冻结不等于真实mint-ready
+
+Trace ID: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15
+
+适用范围与成功标准：slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[逻辑冻结不等于真实mint-ready](#req-wr-economic-genesis-freeze)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-FREEZE](#ac-wr-economic-genesis-freeze)。
+- 系统设计状态：未核实
+- 系统设计依据：[逻辑冻结不等于真实mint-ready有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-freeze)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。
+
+<a id="ac-wr-economic-genesis-freeze"></a>
+### AC-WR-ECONOMIC-GENESIS-FREEZE：逻辑冻结不等于真实mint-ready的原验收
+
+Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-FREEZE](#req-wr-economic-genesis-freeze)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)适用的固定候选中逐项核验：slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 原验收成功/拒绝条件及层级不变，实际证据至少保留绑定证据、完整pre-mint清单与该次QA verdict；没有对应完整证据时保持未核实。本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-reward"></a>
+### REQ-WR-ECONOMIC-GENESIS-REWARD：独立reserve只消费最终复核的批准记录
+
+Trace ID: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa
+
+适用范围与成功标准：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[独立reserve只消费最终复核的批准记录](#req-wr-economic-genesis-reward)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-REWARD](#ac-wr-economic-genesis-reward)。
+- 系统设计状态：未核实
+- 系统设计依据：[独立reserve只消费最终复核的批准记录有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-reward)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。
+
+<a id="ac-wr-economic-genesis-reward"></a>
+### AC-WR-ECONOMIC-GENESIS-REWARD：独立reserve只消费最终复核的批准记录的原验收
+
+Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-REWARD](#req-wr-economic-genesis-reward)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)适用的固定候选中逐项核验：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 原验收成功/拒绝条件及层级不变，实际证据至少保留canonical批准行、最终金额复核、审批及distribution引用；没有对应完整证据时保持未核实。本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。本验收不授权执行经济操作。
