@@ -387,6 +387,8 @@ builtin unbudgeted 请求的既有一次恢复机会不能取决于合法 JSON �
 <a id="builtin-input-integrity"></a>
 ### builtin 当前输入完整性（目标）
 
+Trace refs: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f；承接根产品已采用的 [builtin 子范围](../../product/agents-world-simulation/prd.md#sc-agent-002-builtin-input-integrity)，沿用本节原目标、适用范围和验收边界。
+
 本节与下节冻结 builtin `LlmAgentBehavior` 的补充目标合同；文档生效不代表实现已修复或验收已通过。它们不扩大独立 ProviderBacked 路径、真实模型能力或发布支持范围。
 
 - 每次实际模型请求都必须保留当前目标与当前最小 observation；最小 observation 保留观测合同规定的必要当前字段。本次决策循环已有查询回复时，还必须保留最新回复的成功/失败状态及后续决策所需关键结果/错误信息，并保持与查询的对应关系；初次尚无查询时无需构造回复。工具已执行、结果存在于 history/trace 或只留下成功标记，均不能代替请求中真实包含必要材料。
@@ -398,12 +400,16 @@ builtin unbudgeted 请求的既有一次恢复机会不能取决于合法 JSON �
 <a id="builtin-parameter-consistency"></a>
 ### builtin 工具参数说明一致性（目标）
 
+Trace refs: O7-REQ-be4bb896-dc4f-41d1-9f87-c381049ac190；承接根产品已采用的 [builtin 子范围](../../product/agents-world-simulation/prd.md#sc-agent-002-builtin-parameter-consistency)，沿用本节原目标、适用范围和验收边界。
+
 - 同一次请求中的自然语言范围说明、OutputSchema/tool schema、parser 与 Runtime 必须表达同一合法参数合同。推荐值仅是合法域内的建议，不得写成合法上下界；schema 正确不能抵消同一请求正文中的矛盾说明。
 - 治理提案的投票窗口和通过阈值继续消费[政治数值基线与普通治理边界](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002)。builtin 说明应从共享常量或统一 schema 生成、校验，具体结构由[配对系统设计](decision-provider-contract.design.md#des-builtin-parameter-consistency)拥有；不得为修复说明漂移而放宽 Runtime、parser 的合法域或其它主体、权限与前置条件。
 - 验收：[AC-BUILTIN-PARAMETER-CONSISTENCY](#ac-builtin-parameter-consistency)。
 
 <a id="ac-builtin-input-integrity"></a>
 ### AC-BUILTIN-INPUT-INTEGRITY：最终请求保留当前输入，容量不足不调用
+
+Trace refs: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f；承接根产品已采用的 [builtin 子范围](../../product/agents-world-simulation/prd.md#sc-agent-002-builtin-input-integrity)，沿用本节原目标、适用范围和验收边界。
 
 - 给定：分别使用实际 Balanced、Compact profile，并各覆盖短目标与默认目标，共四个组合；由确定性 client/transport fixture 返回一轮普通 `environment_current_observation` 查询，不使用 debug 资源注入或真实模型。
 - 当：builtin 执行查询并组装第二次请求，捕获真实序列化 Responses payload；另提供最小必需输入无法容纳的配置。
@@ -412,6 +418,8 @@ builtin unbudgeted 请求的既有一次恢复机会不能取决于合法 JSON �
 
 <a id="ac-builtin-parameter-consistency"></a>
 ### AC-BUILTIN-PARAMETER-CONSISTENCY：治理说明与合法边界独立对账
+
+Trace refs: O7-REQ-be4bb896-dc4f-41d1-9f87-c381049ac190；承接根产品已采用的 [builtin 子范围](../../product/agents-world-simulation/prd.md#sc-agent-002-builtin-parameter-consistency)，沿用本节原目标、适用范围和验收边界。
 
 - 给定：builtin 实际组装的治理决策请求，以及除待测边界外其它参数、主体和权限均合法的 fixture。
 - 当：分别检查请求正文、tool schema 与 parser/Runtime 合同，并验证正反向边界。
