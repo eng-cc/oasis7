@@ -163,6 +163,8 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 后续若改变阶段目标、正式开放范围或部署安排，应回到对应主责条款和已有操作入口形成具体决定。
 这里记录真实问题，不把正常 CI、文档刷新或已有授权工作包装成新的许可请求。来源：[开发流程边界](../workflow/source-of-truth.md#1-适用范围与规则边界)、[#4363 历史安排](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
+持久世界部署优化的代码候选见 [PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 和[架构索引](architecture/README.md#cc-architecture-authority)，2026-10-15 核对为待合入。当前授权范围为代码与本机验证；小遗留按[实施文档 TODO](../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)跟踪，真实部署、完整产品及自主试玩验收仍未完成。
+
 ### 待补事实
 
 | 需要补齐的信息 | 为什么影响决策 | 处理入口 |

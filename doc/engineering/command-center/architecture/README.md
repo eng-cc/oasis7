@@ -82,6 +82,8 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-06：局部双端持久证明不等于正式 CommitRef，若干原子发布切片不等于整个 World 的根事务；同机双目录不能证明独立故障域。
 - ARCH-07：已有 execution bridge v3、CAS、sidecar、retention/GC/replay 的实现合同；[本地恢复边界](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary)不证明分布式可得性或完整灾备。
 
+2026-10-15 候选实现增量：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。候选尚未合入，完整长历史与最终 CI 仍在核验；没有刷新真实部署或独立故障域事实。
+
 **实际部署核验：** 未验证正式 profile 激活、实际存储同步、故障域隔离、旧写者 fencing、备份可用性或恢复后的写服务。这些结论需要各自候选与环境证据，不能由代码数量汇总为完成率。
 
 正式激活、独立故障域恢复和人工交接的能力边界由对应专业合同持有。[#4363 的旧规划](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)仅作历史来源；该 Issue 已停止独立跟踪，不据此恢复执行义务。
