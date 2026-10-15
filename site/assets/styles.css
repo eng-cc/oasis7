@@ -3879,6 +3879,7 @@ body.discovery-page:not(.content-page)::before { display: none; }
 .discovery-page:not(.content-page) .viewer-evidence figcaption { margin-top: 10px; font-size: var(--home-aux); line-height: 1.7; color: #b9cbc3; }
 .discovery-page:not(.content-page) .discovery-editorial-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 26px; border-top: 1px solid #30483d; }
 .discovery-page:not(.content-page) .discovery-editorial-grid .section { position: relative; min-width: 0; min-height: 0; margin: 0; padding: 24px 0; border: 0; border-radius: 0; background: none; box-shadow: none; display: flex; flex-direction: column; overflow: visible; }
+.discovery-page:not(.content-page) .discovery-editorial-grid .section::before { display: none; }
 .discovery-page:not(.content-page) .discovery-editorial-grid .entry-art { display: block; order: 1; width: 100%; height: auto; aspect-ratio: 2.5 / 1; object-fit: cover; flex-shrink: 0; margin: 16px 0; opacity: .8; }
 .discovery-page:not(.content-page) .landing-progress .entry-art { object-position: 75% center; }
 .discovery-page:not(.content-page) .portal-preview .entry-art { object-position: 95% center; }
