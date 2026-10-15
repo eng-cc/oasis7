@@ -111,6 +111,7 @@ Trace ID: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264
 - 适用范围：viewer/pure_api 入口的唯一模式、阶段、能力及独立证据表达；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
+- 本次补充系统设计依据：[Viewer 决策模式](../../p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md#vl-des-observer)仅承接direct viewer Script observer/debug 与 launcher/gameplay/release 的证据隔离；其余原剩余范围保留，系统设计仍为部分覆盖，原实现状态和历史核对基线不变。
 - 实现状态：未核实
 - 实现与验证依据：按 AC 分别核对 viewer/pure_api 当前入口及证据，加入 alias/另一模式代签负例；待取得逐入口记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
@@ -136,6 +137,7 @@ Trace ID: O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270
 - 适用范围：前置、身份/会话、provider、模式和后端失败时的分类与真实恢复；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
+- 本次补充系统设计依据：[Viewer 决策模式](../../p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md#vl-des-launcher)仅承接launcher 无 LLM fail-fast、禁止 Script 成功 fallback 及 direct observer/debug 提示；其余原剩余范围保留，系统设计仍为部分覆盖，原实现状态和历史核对基线不变。
 - 实现状态：部分实现
 - 实现与验证依据：Launcher 对配置无效、禁用和启动失败给出 ConfigError/Disabled/Unreachable；会话请求失败清空旧 authority 快照。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_client_launcher/src/main_chain_status.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
