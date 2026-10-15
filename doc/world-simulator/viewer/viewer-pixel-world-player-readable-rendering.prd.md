@@ -35,6 +35,8 @@
 - renderer 诊断 badges、控制按钮和 raw DTO 默认折叠。
 
 ### Out of Scope
+
+历史措辞说明：本节“新增 host 字段由 wasm 侧忽略”及旧 `buildPixelWorldRenderState` 名称记录初始阶段。当前 owner 是 Rust `host_state.rs` 派生并发布 `commercial_surface`，JS host 消费 runtime 结果；这里不改变以下非目标、既有 schema 或 AC，也不建立独立 JS renderer。
 - 不新增 world server / runtime snapshot 字段。
 - 不改变 `pixel_world_bridge` 反序列化 schema；新增 host 字段由 wasm 侧忽略。
 - 不把 action button 直接搬进像素地图；命令面仍在现有 Command surface。
@@ -42,6 +44,10 @@
 
 <a id="industry-detail-requirements"></a>
 ### 产业图谱与空间信息层级：目标合同
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：下面节点、路线、blocker 和未知/推断标示只承接当前目的与可读关系的持续目标，不证明完整产业实现。
+
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；局部承接[REQ-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-003)：下面 World/Region/Node 的分层可见集与目标定位只承接多尺度浏览的有限目标，不证明完整探索、授权搜索/返回任务或 semantic zoom。
 
 - 受支持的产业 projection 应统一工厂/配方/产品/物流节点、物料/电力/数据流向、层级/阶段/状态和 location/Agent/module 定位目标；吞吐、损耗、瓶颈、拥塞与告警仅展示权威数据。
 - 当权威数据支持 P3 分层档案时，符号应可辨 R1~R5 层级及 bootstrap/scale/governance 阶段，并独立表达瓶颈/拥塞/告警；不得仅凭 id/tag 推断而包装为确认事实。
@@ -67,6 +73,9 @@
   计数合成 objective、next action、player leverage、blocker、Action Receipt 或玩家进度。
 
 ### 4.1 Commercial Surface DTO
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：现有目标、下一步、玩家杠杆与 blocker 的可读 HUD 映射；ambient 计数不合成玩家进度。
+
 - `objective`: 当前目标标题与描述。
 - `next_action`: 推荐动作标签或 next-step hint。
 - `active_agent_id`: 推荐动作、accepted intent、selection 或首个 agent 推导出的当前玩家杠杆对象。
@@ -75,6 +84,9 @@
 - `world_read`: agents/routes/fragments/hotspots 的可扫描计数。
 
 ### 4.1.1 Action Receipt DTO/state mapping
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：现有因果反馈与下一步解释；pending 不等于完成，advanced/no-progress 分开，缺回执不能用环境活动补齐。
+
 `commercial_surface.action_receipt` is the only player-causality projection. It is
 derived from the authoritative runtime `player_gameplay.recent_feedback`,
 `execution_state`, `causality_kind/detail`, `last_world_change`, and the local
@@ -94,6 +106,9 @@ recovery path. When no authoritative feedback exists, render
 `No action receipt yet`; do not promote Recent Events/World Feed into a receipt.
 
 ### 4.1.2 World Feed v1 implementation contract
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：环境活动与玩家因果分离、真实空/不可用/恢复提示；order/dedup/cursor 是以下既有专业机制，不等于完整产品 AC。
+
 World Feed is the implemented Viewer projection owned by `viewer_engineer`, sourced
 from the ordered persisted runtime `WorldEvent` journal projection confirmed by
 `runtime_engineer`. Current `state.recentEvents` is only a non-contract ambient
@@ -127,6 +142,9 @@ remain pending in the receipt contract. The World Feed never replaces
 `commercial_surface.action_receipt`.
 
 ### 4.2 UI Layering
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：世界舞台/目标/下一步主次，诊断次级及受支持屏幕的可读表达；没有新增布局决定。
+
 - Stage summary: `World Command Board` / `世界指挥棋盘`。
 - Commercial HUD: objective、next move、player leverage 的字段与可读性由本文定义；布局只取[终端 shell 当前合同](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)的 Next Move 主区与从属上下文，不再要求三列或三张平级卡片。
 - Canvas foreground: selected entity / goal / blocker callouts。

@@ -98,6 +98,8 @@
 <a id="render-reconcile-and-visual-regression-requirements"></a>
 ## 增量更新与视觉回归的剩余目标
 
+Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；局部承接[REQ-AGENT-SURFACE-001](../../product/agents-world-simulation/player-readable-surface-continuity.prd.md#req-agent-surface-001)：依产品 §5.3 的专业分配，以下兼容输出、范围圈及 selected/browser 视觉判定保持既有选中对象、空间含义与决策锚点可辨。枚举次数、实体复用和像素容差是已有工程细化，不新增产品性能承诺；不代签完整 viewport、语言、连接恢复组合 AC。
+
 以下要求来源于 [#2116](https://github.com/eng-cc/oasis7/issues/2116) 的局部效率与验证条目，审读基线为 `fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e`（2026-10-12）。它们是局部优化与回归测试的验收要求；实现、测试通过及真实性能证据分别核实，不承诺已测量的帧率收益，不改宿主 API、世界真值或玩家命中语义。对应[局部设计与验证](viewer-pixel-world-bridge-rendering.design.md#render-reconcile-and-visual-regression-target)。
 
 | 来源 | 保留的专业要求 | 当前边界与完成条件 |

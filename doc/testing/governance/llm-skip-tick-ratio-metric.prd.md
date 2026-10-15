@@ -7,12 +7,15 @@
 
 
 ## 1. Executive Summary
-- Problem Statement: 当前 LLM 运行链路缺少“跳过 LLM 调用 tick 占比”这一统一指标，无法量化 `execute_until` 等机制带来的调用节省效果。
+- Problem Statement（原问题背景）: 当前 LLM 运行链路缺少“跳过 LLM 调用 tick 占比”这一统一指标，无法量化 `execute_until` 等机制带来的调用节省效果。
+- 当前源码定位：demo/report/stress 已有字段和消费定义；这不是执行通过结论。分类差距、fallback 与数值边界见[设计的源码与未决范围](llm-skip-tick-ratio-metric.design.md#des-llmskip-source-gaps)。原验收标准不因已定位代码而降低。
 - Proposed Solution: 在 demo、report 与长跑汇总脚本中统一输出 `llm_skipped_ticks` 与 `llm_skipped_tick_ratio_ppm`，并通过稳定口径与单测保障可消费性。
 - Success Criteria:
   - SC-1: `oasis7_llm_agent_demo` 能输出跳过计数与百万分比占比指标。
   - SC-2: `scripts/llm-longrun-stress.sh` 在单场景与聚合输出中包含该指标。
   - SC-3: `report.json` 持久化包含新增字段，自动脚本可直接消费。
+<a id="llmskip-ratio-contract"></a>
+
   - SC-4: 指标计算口径固定为 `llm_skipped_ticks / active_ticks` 并有测试覆盖。
 
 <a id="llmskip-observation-contract"></a>
@@ -33,6 +36,8 @@
   1. Flow-LLMSKIP-001: `demo tick 执行 -> trace 采样判定是否 skipped -> 更新计数与占比`
   2. Flow-LLMSKIP-002: `report.json 持久化 -> stress 脚本读取 report/log -> 输出 summary/TSV/聚合 JSON`
   3. Flow-LLMSKIP-003: `回归测试运行 -> 校验计数和 ppm 计算 -> 防止口径回归`
+<a id="llmskip-classification"></a>
+
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -41,10 +46,20 @@
 | stress 输出接入 | summary、TSV、aggregated summary/json 字段 | 解析 report/log 后填充新增字段 | `parsed -> merged -> exported` | 单场景与聚合字段名保持一致 | 脚本维护者可扩展输出 |
 | 测试覆盖 | 单测断言计数与占比 | 执行测试命令验证口径 | `pending -> passed/failed` | 覆盖边界值与常规值 | CI 执行、维护者审阅 |
 - Acceptance Criteria:
+<a id="llmskip-demo-fields"></a>
+
   - AC-1: `TraceCounts` 含 `llm_skipped_ticks` 与 `llm_skipped_tick_ratio_ppm` 字段。
+<a id="llmskip-persistence"></a>
+
   - AC-2: demo finalize 输出和 `report.json` 均包含新增指标。
+<a id="llmskip-stress-output"></a>
+
   - AC-3: `scripts/llm-longrun-stress.sh` 的单场景与聚合输出均新增该指标。
+<a id="llmskip-regression"></a>
+
   - AC-4: 单测覆盖 skipped 判定与 ppm 计算口径。
+<a id="llmskip-noninterference"></a>
+
   - AC-5: 不影响 LLM 决策行为与现有 fail gate。
 - Non-Goals:
   - 不改动 LLM 决策逻辑。
@@ -61,6 +76,8 @@
   - `crates/oasis7/src/bin/oasis7_llm_agent_demo.rs`
   - `crates/oasis7/src/bin/oasis7_llm_agent_demo/tests.rs`
   - `scripts/llm-longrun-stress.sh`
+<a id="llmskip-fallback"></a>
+
 - Edge Cases & Error Handling:
   - `active_ticks = 0`：占比计算回退为 0，避免除零。
   - trace 缺失或字段为空：按“无 LLM 请求语义”规则谨慎判定并记录。
@@ -91,6 +108,8 @@
 | PRD-TESTING-GOV-LLMSKIP-001 | LLMSKIP-1/2 | `test_tier_required` | demo 输出字段与 report 持久化核验 | LLM 运行观测链路 |
 | PRD-TESTING-GOV-LLMSKIP-002 | LLMSKIP-2/3 | `test_tier_required` | stress 单场景/聚合输出字段检查 | 长跑自动化报表 |
 | PRD-TESTING-GOV-LLMSKIP-003 | LLMSKIP-3/4 | `test_tier_required` | 单测校验 skipped 计数与 ppm 计算 | 指标口径稳定性 |
+<a id="llmskip-ppm-decisions"></a>
+
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
