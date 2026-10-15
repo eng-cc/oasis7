@@ -70,7 +70,9 @@ fn native_existing_world_production_executor_process() {
     );
     let deadline =
         Instant::now() + Duration::from_millis(u64::try_from(deadline_ms - now_ms).unwrap());
-    eprintln!("NATIVE_REALPLAY_PROBE actual_location=separate_probe_process node_owned_startup_verified=false");
+    eprintln!(
+        "NATIVE_REALPLAY_PROBE actual_location=separate_probe_process node_owned_startup_verified=false"
+    );
     prepared()
         .start()
         .expect("production executor start failed");
