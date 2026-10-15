@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "d0fe9902c53b25ed0cf1435ac3a1b8bb3181da8007d36e98485fcaffa0d31c6f",
+    "content_sha256": "024819a9dfc78c3127a359a4b7124ea9ed6a3a7897dbd3ec4c267a1676f20e02",
     "current_authority": "doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current public claim and release boundary retained; author self-review of existing site PRD and bounded story-entry/state additions; no new public player capability, execution result or independent approval claimed",
+    "note": "author semantic review of the full site PRD: retain release/public-claim authority; navigation follows available content and hidden Canvas initialization is removed; no new package/gameplay acceptance or independent approval claimed",
     "path": "doc/site/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

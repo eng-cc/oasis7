@@ -25,7 +25,9 @@ def copy_fixture(root):
 cases=[
  ('index.html','data-decision-panel="3"','data-decision-panel="0"'),
  ('index.html','id="decision-2"','id="decision-2" hidden'),
- ('en/index.html','data-provenance="illustrative"','data-provenance="runtime_capture"'),
+ ('en/index.html','data-provenance="source-bound"','data-provenance="runtime_capture"'),
+ ('index.html','data-evidence-source=','missing-evidence-source='),
+ ('index.html','data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b"','data-source-version="unknown"'),
  ('devlog/discovery-first/index.html','data-content-status="published"','data-content-status="draft"'),
  ('devlog/discovery-first/index.html','data-content-status="published"','data-content-status="withdrawn"'),
  ('devlog/discovery-first/index.html','data-content-id="discovery-first"','data-content-id="different"'),

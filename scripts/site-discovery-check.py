@@ -63,7 +63,11 @@ def check(root=ROOT):
         need([a['data-decision-panel'] for _, a in steps] == ['0', '1', '2', '3'], f'{prefix}: four static reading steps required')
         need(all('hidden' not in a for _, a in steps), f'{prefix}: steps must remain readable without JS')
         walkthrough = home.with_attr('data-decision-walkthrough')
-        need(len(walkthrough) == 1 and walkthrough[0][1].get('data-provenance') == 'illustrative', f'{prefix}: evidence type required')
+        need(len(walkthrough) == 1 and walkthrough[0][1].get('data-provenance') == 'source-bound', f'{prefix}: evidence type required')
+        if len(walkthrough) == 1:
+            attrs = walkthrough[0][1]
+            need(bool(re.fullmatch(r'[0-9a-f]{40}', attrs.get('data-source-version', ''))), f'{prefix}: fixed case version required')
+            need(bool(re.fullmatch(r'https://github\.com/eng-cc/oasis7/blob/[0-9a-f]{40}/doc/testing/evidence/[^?#]+', attrs.get('data-evidence-source', ''))), f'{prefix}: immutable case report required')
         articles = []
         identities = set()
         for family, kind in families.items():
