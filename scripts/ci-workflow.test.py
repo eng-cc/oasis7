@@ -68,7 +68,7 @@ class Workflow(unittest.TestCase):
         writer = re.sub(r'      - name: Save prepared wasm-bindgen tool cache\n.*?(?=      - name:)', '', writer, flags=re.S)
         candidate = candidate.replace('          save-if: false\n', '')
         candidate = candidate.replace('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0',
-                                      'actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5')
+                                      'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0')
         self.assertEqual(candidate.strip(), writer.strip())
 
     def test_pinned_trunk_helper_failure_and_success_paths(self):
@@ -257,7 +257,7 @@ class Workflow(unittest.TestCase):
                 self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2'))
         for name in ('launcher-web','full-regression'):
             job=JOBS[name]
-            self.assertIn('uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25',job)
+            self.assertIn('uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9',job)
             self.assertIn("hashFiles('scripts/install-ci-trunk.sh')",job)
             self.assertNotIn('cargo install trunk',job)
             self.assertNotIn('restore-keys:',job)
