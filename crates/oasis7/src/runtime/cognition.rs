@@ -193,15 +193,7 @@ pub(crate) fn world_state_binding_digest_v1(
     )
 }
 
-pub(crate) fn finality_binding_is_legal(status: &str, block_hash: Option<&str>) -> bool {
-    matches!(status, "pending" | "verified" | "reorged" | "suspended")
-        && match block_hash {
-            // A finality hash is optional until the upstream binding is
-            // verified, but any supplied hash remains a typed binding.
-            Some(hash) => valid_blake3_digest(hash),
-            None => status != "verified",
-        }
-}
+pub(crate) use oasis7_agent_api::world_cognition::finality_binding_is_legal;
 
 fn world_has_cognition_binding(world: &World) -> bool {
     world.chain_resource_manifest().world_id != "unbound"
@@ -1110,16 +1102,6 @@ fn valid_digest(value: &str) -> bool {
         .strip_prefix("blake3:")
         .or_else(|| value.strip_prefix("sha256:"))
         .unwrap_or(value);
-    hex.len() == DIGEST_HEX_BYTES
-        && hex
-            .bytes()
-            .all(|character| character.is_ascii_digit() || (b'a'..=b'f').contains(&character))
-}
-
-fn valid_blake3_digest(value: &str) -> bool {
-    let Some(hex) = value.strip_prefix("blake3:") else {
-        return false;
-    };
     hex.len() == DIGEST_HEX_BYTES
         && hex
             .bytes()

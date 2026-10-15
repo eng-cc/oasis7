@@ -61,12 +61,7 @@ pub struct FactorySiteAuthorityV1 {
     pub registered_at: WorldTime,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum FactoryConstructionPowerMode {
-    #[default]
-    StartOnlySink,
-}
+pub use oasis7_agent_api::world_quote::FactoryConstructionPowerMode;
 
 /// M4-governed construction electricity source. The map key is the exact
 /// `factory_id` submitted by BuildFactory; callers cannot provide an amount.
@@ -88,37 +83,7 @@ pub struct FactoryConstructionPowerProfileV1 {
     pub active: bool,
 }
 
-/// Immutable construction power sink resolved at BuildFactory admission.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct FactoryBuildPowerObligationV1 {
-    #[serde(default)]
-    pub payer_agent_id: String,
-    #[serde(default)]
-    pub profile_key: String,
-    #[serde(default)]
-    pub profile_revision: u64,
-    #[serde(default)]
-    pub electricity_amount: i64,
-    #[serde(default)]
-    pub mode: FactoryConstructionPowerMode,
-    /// Exact source ledger committed at admission and retained in the settled
-    /// construction receipt. This is optional only for legacy replay.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub material_ledger: Option<MaterialLedgerId>,
-    /// Admission-time electricity facts.  These are optional so snapshots
-    /// containing the pre-receipt obligation continue to decode and replay.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub electricity_before: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub electricity_after: Option<i64>,
-    /// Admission-time material facts keyed only by required build-cost kind.
-    /// Keeping the maps scoped to the requirement avoids treating unrelated
-    /// ledger balances as part of the construction receipt.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub material_balances_before: Option<BTreeMap<String, i64>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub material_balances_after: Option<BTreeMap<String, i64>>,
-}
+pub use oasis7_agent_api::world_quote::FactoryBuildPowerObligationV1;
 
 /// Durable intent written before a product validation module call. If a
 /// retry observes this intent without a settled receipt it must fail closed,

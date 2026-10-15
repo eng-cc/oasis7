@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 pub struct WorldServiceQueryState(Arc<Mutex<Option<(u16, Instant)>>>);
 
 impl WorldServiceQueryState {
-    pub(super) fn check(&self) -> Result<(), WorldServiceClientError> {
+    pub fn check(&self) -> Result<(), WorldServiceClientError> {
         let mut state = self.0.lock().map_err(|_| {
             WorldServiceClientError::Configuration("query cooldown lock poisoned".into())
         })?;
@@ -24,7 +24,7 @@ impl WorldServiceQueryState {
         Ok(())
     }
 
-    pub(super) fn observe(
+    pub fn observe(
         &self,
         status: u16,
         retry_after: Option<&str>,

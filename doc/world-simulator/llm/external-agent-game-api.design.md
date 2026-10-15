@@ -61,6 +61,14 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
 
+### 共享原生客户端与 JSON 观察 profile
+
+`oasis7_game_client` 包同时提供共享 Rust 客户端和同名 CLI；构建入口为 `cargo build -p oasis7_game_client --bin oasis7_game_client`，设备配置、原操作缓存和命令参数保持兼容。公共 Action/报价与纯 cognition 合同由 `oasis7_agent_api` 唯一定义；World Service wire/纯验证由 `oasis7_client_api` 唯一定义；主应用仅保留兼容导出和权威执行。SDK 不依赖主应用、World/Viewer 或模型 SDK。API、存储和使用边界见 [SDK](../../../crates/oasis7_game_client/README.md)。Trace refs: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6；O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5。
+
+原生 SDK 的公共观察使用显式 POST `/v1/world/view-json`。它与 `/v1/world/view` 复用 `ReadWorldViewRequest`、pin/minimum/fixed commit 和主体授权逻辑，但以自身路径为读签名及回应签名 domain；服务在授权投影转为 JSON 后签署 `ReadWorldViewResponse<serde_json::Value>`。旧路径继续签署原类型化投影，两者不能互换签名。新路径没有额外权限，public 及 executor 不因此取得 owner 私有目标；未知执行证据 scope、错误世界/切点、主体不符或篡改响应均拒绝。JSON 中的完整投影参与签名，客户端不能先裁掉未知字段再验签。服务签名仍只证明交付内容，不证明独立共识最终性。
+
+旧 Provider/内置执行器保留其明确的原 profile。共享库和独立 CLI 的拆分不代表内置已迁移、所有能力已统一，或真实 Runtime/首局/部署验收已经通过；整体范围由 [#4726](https://github.com/eng-cc/oasis7/issues/4726) 承接。
+
 <a id="当前实施候选原生物流执行"></a>
 
 ### 已实施切片：原生物流执行

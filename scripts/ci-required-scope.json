@@ -170,6 +170,9 @@
     "oasis7_client_api": [
       "workspace_support"
     ],
+    "oasis7_game_client": [
+      "workspace_support"
+    ],
     "oasis7_local_signer": [
       "workspace_support"
     ],

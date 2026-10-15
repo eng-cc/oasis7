@@ -1,8 +1,8 @@
-use super::client::{Client, pending, print};
-use oasis7::world_service::{
-    client::WorldServicePort, private_goal_store::client_state::ClientStateKind,
-    private_task_context::*, *,
-};
+use crate::device_client::{Client, pending, print};
+use crate::operation_store::ClientStateKind;
+use oasis7_client_api::world_service as authority;
+use oasis7_client_api::world_service::{task_context::*, *};
+use oasis7_client_api::world_service_wire::{SchedulerOperationV1, WorldServicePayloadV1};
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
 const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
@@ -95,9 +95,9 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             let [x, y, z] = values.as_slice() else {
                 return Err("--to requires x,y,z".into());
             };
-            let action = oasis7::runtime::Action::MoveAgent {
+            let action = oasis7_agent_api::world_action::Action::MoveAgent {
                 agent_id: client.agent.clone(),
-                to: oasis7::GeoPos::new(*x, *y, *z),
+                to: oasis7_agent_api::world_action::GeoPos::new(*x, *y, *z),
             };
             print(&client.submit_action(operation, action)?)
         }
@@ -191,7 +191,7 @@ fn build_selection<'a>(
     let kind = required("--kind")?;
     bounded_id(site)?;
     bounded_id(factory)?;
-    if oasis7::runtime::builtin_factory_spec(kind, factory).is_none() {
+    if oasis7_agent_api::world_quote::builtin_factory_spec(kind, factory).is_none() {
         return Err("factory kind requires an exact built-in ID".into());
     }
     Ok((site, factory, kind))
@@ -213,7 +213,7 @@ fn schedule_selection<'a>(
     let batches = required("--batches")?
         .parse::<u32>()
         .map_err(|_| "invalid batches")?;
-    if oasis7::runtime::builtin_recipe_plan(recipe, batches).is_none() {
+    if oasis7_agent_api::world_quote::builtin_recipe_plan(recipe, batches).is_none() {
         return Err("recipe requires an exact built-in ID and positive u32 batches".into());
     }
     Ok((factory, recipe, batches))
@@ -222,8 +222,8 @@ fn schedule_selection<'a>(
 fn transfer_action(
     agent: &str,
     options: &BTreeMap<&str, &str>,
-) -> Result<oasis7::runtime::Action, String> {
-    use oasis7::runtime::{Action, MaterialTransitPriority};
+) -> Result<oasis7_agent_api::world_action::Action, String> {
+    use oasis7_agent_api::world_action::{Action, MaterialTransitPriority};
     let required = |name| {
         options
             .get(name)
@@ -233,7 +233,7 @@ fn transfer_action(
     let ledger = |name| {
         let value = required(name)?;
         bounded_id(value)?;
-        oasis7::industry_types::MaterialLedgerId::try_from(value.to_owned())
+        oasis7_agent_api::world_action::MaterialLedgerId::try_from(value.to_owned())
             .map_err(|_| "invalid material ledger".to_owned())
     };
     let from_ledger = ledger("--from")?;
@@ -421,7 +421,7 @@ mod tests {
     }
     #[test]
     fn transfer_is_typed_and_requester_is_configured_identity() {
-        let oasis7::runtime::Action::TransferMaterial {
+        let oasis7_agent_api::world_action::Action::TransferMaterial {
             requester_agent_id,
             route_ids,
             route_id,

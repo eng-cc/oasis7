@@ -150,7 +150,7 @@ fn overload_cooldown_survives_recreated_queries_without_replaying_submit_or_bloc
             .outcome,
         IntentOutcome::Pending
     ));
-    state.expire_for_test();
+    std::thread::sleep(Duration::from_millis(2100));
     assert!(matches!(
         recreated.lookup(request, payload).unwrap().outcome,
         IntentOutcome::Pending
