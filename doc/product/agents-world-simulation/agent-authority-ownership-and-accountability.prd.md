@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：授权、责任和恢复直接以产品决策条款表达；范围：授权与责任专题，不另造界面设计；风险：组织和跨入口实现证据仍需核实；映射：[玩家体验与决策](#2-授权与自治边界)、[风险与未决承接](#5-范围与权威边界)
+
 - 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
@@ -71,11 +73,23 @@ Agent 的稳定身份、来源和已影响世界的历史不能被交易、组�
 <a id="req-agent-auth-001"></a>
 ### REQ-AGENT-AUTH-001：高后果授权必须按有效期累计约束
 
+Trace ID: O7-REQ-bd548350-7fce-4026-aeec-5b26a10b86ad
+
+- 功能点：[REQ-AGENT-AUTH-001](#req-agent-auth-001)；适用范围沿本条原条件与 [AC-AGENT-AUTH-001](#ac-agent-auth-001)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-010)：累计授权的来源、对象、期间与 effect 前再校验；玩家额度可读性、组织 issuer、其他资源/权利/风险来源的完整承接仍须分项核对。
+- 实现状态：未核实
+- 实现与验证依据：[runtime 已记录的 native lane 边界](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#32-当前-native-lane-与目标合同的边界)保留 starter owner grant、电力额度及旧授权失效的局部事实；组织 issuer、完整转让等不能由此推为完成。本轮未核清固定实现/实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)仅是文档任务。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：玩家额度可读性、组织 issuer、其他资源/权利/风险来源的完整承接仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+
 - 要求：当玩家或组织提前授权会消耗资源、占用容量、转移权利或累积风险的行动时，产品必须让玩家知道授权的对象范围、来源、有效期和剩余额度；拆分、并发、重试、重连或控制权切换不得扩大同一授权。
 - 验收：AC-AGENT-AUTH-001
 
 <a id="ac-agent-auth-001"></a>
 ### AC-AGENT-AUTH-001：授权额度不会因重试或切换复制
+
+Trace refs: O7-REQ-bd548350-7fce-4026-aeec-5b26a10b86ad；承接[REQ-AGENT-AUTH-001](#req-agent-auth-001)。
 
 - 覆盖要求：REQ-AGENT-AUTH-001
 - 场景与结果：在同一授权下重复提交、并发提交、重连后重试或切换 owner 时，权威结果至多消费有效累计额度一次；额度不足、来源/对象不匹配或授权失效时，玩家能看到 blocker 与等待、改道、取消或重新确认路径。
@@ -84,11 +98,23 @@ Agent 的稳定身份、来源和已影响世界的历史不能被交易、组�
 <a id="req-agent-auth-002"></a>
 ### REQ-AGENT-AUTH-002：转让与处置必须保留身份和责任历史
 
+Trace ID: O7-REQ-be254f99-9b66-47b1-ad7f-4a356d296b2a
+
+- 功能点：[REQ-AGENT-AUTH-002](#req-agent-auth-002)；适用范围沿本条原条件与 [AC-AGENT-AUTH-002](#ac-agent-auth-002)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-011)：转让生效、旧授权失效与历史因果保留；完整经济转让、退休/报废与跨入口历史呈现仍须组合核对。
+- 实现状态：未核实
+- 实现与验证依据：[runtime 已记录的 native lane 边界](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#32-当前-native-lane-与目标合同的边界)保留 starter owner grant、电力额度及旧授权失效的局部事实；组织 issuer、完整转让等不能由此推为完成。本轮未核清固定实现/实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)仅是文档任务。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：完整经济转让、退休/报废与跨入口历史呈现仍须组合核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+
 - 要求：Agent 转让、重配置、退休或报废后，产品必须把新 owner 的生效点与既有身份、来源、审计历史和已生效世界结果区分呈现，不得以处置抹除责任或历史。
 - 验收：AC-AGENT-AUTH-002
 
 <a id="ac-agent-auth-002"></a>
 ### AC-AGENT-AUTH-002：新策略不会改写既有因果
+
+Trace refs: O7-REQ-be254f99-9b66-47b1-ad7f-4a356d296b2a；承接[REQ-AGENT-AUTH-002](#req-agent-auth-002)。
 
 - 覆盖要求：REQ-AGENT-AUTH-002
 - 场景与结果：转让后新 owner 可以在有效权限内配置新目标或策略；玩家仍能追溯转让生效点、旧配置、来源和既有结果，且撤销、退休或报废不把已生效结果显示为未发生。
@@ -102,27 +128,65 @@ Agent 的稳定身份、来源和已影响世界的历史不能被交易、组�
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-AUTH-001](#req-agent-auth-001) / [AC-AGENT-AUTH-001](#ac-agent-auth-001) | `producer_system_designer`：累计授权、来源/对象范围与责任语义，不拥有字段、去重实现或 readiness；`agent_engineer`：Agent 意图和请求来源；`runtime_engineer`：授权再校验、资源/容量、去重、receipt 与权威结果；`viewer_engineer`：blocker、额度和恢复路径的可读表达；`qa_engineer`：跨角色证据对账。 | `PRD-GAME-001` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 累计授权场景覆盖同一来源/对象范围的拆分、并发、重试、重连和 owner 切换；提交与接受时余额再校验、至多一次实际消费、无隐藏债务/第二次效果，并读出 blocker 与恢复路径。 | `test_tier_full` |
 | [REQ-AGENT-AUTH-002](#req-agent-auth-002) / [AC-AGENT-AUTH-002](#ac-agent-auth-002) | `producer_system_designer`：转让后的身份、责任与历史连续性语义，不拥有转让状态机或审计字段；`runtime_engineer`：控制权生效、结果与 receipt；`agent_engineer`：Agent 配置/行为 provenance；`viewer_engineer`：生效点、旧配置和历史的可读表达；`qa_engineer`：转让、处置与历史不可洗除证据。 | `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`world-runtime PRD`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 转让、重配置、退休/报废场景对账生效点、旧配置、身份/来源、既有世界结果和责任 receipt；验证处置不会制造历史删除或把已生效结果改写为未发生。 | `test_tier_full` |
+| [REQ-AGENT-AUTH-001](#req-agent-auth-001) / [AC-1](#ac-1) / [AC-2](#ac-2) / [AC-5](#ac-5) / [AC-8](#ac-8) / [AC-9](#ac-9) | `producer_system_designer`：累计授权、来源/对象范围与责任语义，不拥有字段、去重实现或 readiness；`agent_engineer`：Agent 意图和请求来源；`runtime_engineer`：授权再校验、资源/容量、去重、receipt 与权威结果；`viewer_engineer`：blocker、额度和恢复路径的可读表达；`qa_engineer`：跨角色证据对账。 | `PRD-GAME-001` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 仅追踪这些组合验收中的累计授权与有效范围切片；完整组合的其他义务仍按 §6.2 原文与 §7 验收追踪取得证据，不以本叶子代签整个组合。 | `test_tier_full` |
+| [REQ-AGENT-AUTH-002](#req-agent-auth-002) / [AC-4](#ac-4) / [AC-6](#ac-6) / [AC-8](#ac-8) | `producer_system_designer`：转让后的身份、责任与历史连续性语义，不拥有转让状态机或审计字段；`runtime_engineer`：控制权生效、结果与 receipt；`agent_engineer`：Agent 配置/行为 provenance；`viewer_engineer`：生效点、旧配置和历史的可读表达；`qa_engineer`：转让、处置与历史不可洗除证据。 | `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`world-runtime PRD`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 仅追踪这些组合验收中的身份与责任历史连续性切片；完整组合的其他义务仍按 §6.2 原文与 §7 验收追踪取得证据，不以本叶子代签整个组合。 | `test_tier_full` |
 
 ## 6.2 组合验收
 
 <a id="ac-1"></a>
-- AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
+### AC-1：两种自治模式的可读范围
+
+- 叶级关联：[REQ-AGENT-AUTH-001](#req-agent-auth-001)（高后果授权的累计边界）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
 <a id="ac-2"></a>
-- AC-2：高后果行动缺少有效提前授权或确认、超出范围、到期或撤销后，不会静默执行；正式结果能区分授权拒绝、世界规则拒绝、资源/竞争阻塞和可用替代路径。
+### AC-2：高后果行动的授权与拒绝
+
+- 叶级关联：[REQ-AGENT-AUTH-001](#req-agent-auth-001)（有效授权及累计额度）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：高后果行动缺少有效提前授权或确认、超出范围、到期或撤销后，不会静默执行；正式结果能区分授权拒绝、世界规则拒绝、资源/竞争阻塞和可用替代路径。
 <a id="ac-9"></a>
-- AC-9：代表性资源消耗、可争用容量、经济权利或累积风险行动证明，高后果授权的预算/数量上限在整个有效期内按同一资源/权利来源和对象范围累计执行；拆分、并发、重试、重连或控制权切换不能重置、复制或绕过剩余额度，也不会产生隐藏债务、额外优先权或第二次世界效果。余额不足、来源/对象不匹配或授权失效时，玩家能读到实际 blocker 与升级、改道、等待或重新确认中的适用下一步。
+### AC-9：累计授权与单次世界效果
+
+- 叶级关联：[REQ-AGENT-AUTH-001](#req-agent-auth-001)（同一授权的累计限制）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：代表性资源消耗、可争用容量、经济权利或累积风险行动证明，高后果授权的预算/数量上限在整个有效期内按同一资源/权利来源和对象范围累计执行；拆分、并发、重试、重连或控制权切换不能重置、复制或绕过剩余额度，也不会产生隐藏债务、额外优先权或第二次世界效果。余额不足、来源/对象不匹配或授权失效时，玩家能读到实际 blocker 与升级、改道、等待或重新确认中的适用下一步。
 <a id="ac-8"></a>
-- AC-8：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
+### AC-8：待决行动与授权变化
+
+- 叶级关联：[REQ-AGENT-AUTH-001](#req-agent-auth-001) / [REQ-AGENT-AUTH-002](#req-agent-auth-002)（有效授权与历史连续性）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
 <a id="ac-3"></a>
-- AC-3：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的团队资产结果，并证明自治范围与责任不会因团队扩张被静默放大；组合结果仍须满足额外 Agent 的取得、维护、授权和协调约束，以及小规模独立路线。
+### AC-3：团队扩张的授权责任边界
+
+- 叶级关联：[REQ-WR-AOS-003](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-003)（团队取得、维护与授权边界）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的团队资产结果，并证明自治范围与责任不会因团队扩张被静默放大；组合结果仍须满足额外 Agent 的取得、维护、授权和协调约束，以及小规模独立路线。
 <a id="ac-7"></a>
-- AC-7：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的工业供给结果，并证明授权与责任边界不会被工业订单或治理 quota 静默扩大；组合结果仍须满足资源、产能、交付、维护和协调约束。
+### AC-7：工业供给不扩大授权
+
+- 叶级关联：[REQ-WR-AOS-004](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-004)（工业供给的资源、产能与交付约束）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的工业供给结果，并证明授权与责任边界不会被工业订单或治理 quota 静默扩大；组合结果仍须满足资源、产能、交付、维护和协调约束。
 <a id="ac-4"></a>
-- AC-4：转让样例消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的经济转让条件，同时证明自治授权、控制/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
+### AC-4：转让与配置历史连续性
+
+- 叶级关联：[REQ-AGENT-AUTH-002](#req-agent-auth-002) / [REQ-WR-AOS-005](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-005)（转让资格与历史连续性）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：转让样例消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的经济转让条件，同时证明自治授权、控制/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
 <a id="ac-5"></a>
-- AC-5：异议、世界/安全硬阻断和有效 owner override 在正式世界结果中可区分；有效 override 的 receipt 关联异议、授权、执行结果和恢复路径。
+### AC-5：异议、override 与硬阻断
+
+- 叶级关联：[REQ-AGENT-AUTH-001](#req-agent-auth-001)（override仍须满足的有效累计授权边界）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：异议、世界/安全硬阻断和有效 owner override 在正式世界结果中可区分；有效 override 的 receipt 关联异议、授权、执行结果和恢复路径。
 <a id="ac-6"></a>
-- AC-6：高影响结果可追溯到 Agent 建议/执行、owner 决定、组织策略和执行载体中的适用因素；责任表达不把 Agent 当作 owner 或组织的替罪对象。
+### AC-6：高影响结果责任归因
+
+- 叶级关联：[REQ-AGENT-AUTH-002](#req-agent-auth-002)（责任历史不可洗除）；该关联只定位本组合中的相应义务，完整组合仍以下文原验收与本专题产品条款为准，不缩减异议、override、责任或恢复范围。
+
+- 验收：高影响结果可追溯到 Agent 建议/执行、owner 决定、组织策略和执行载体中的适用因素；责任表达不把 Agent 当作 owner 或组织的替罪对象。
 
 ## 7. 验收追踪
 

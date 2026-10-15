@@ -305,6 +305,13 @@ Replay 使用同一 reducer 和 typed buffer，但只能应用 canonical event�
 <a id="runtime-generation-persistence-contract"></a>
 #### 普通 generation 保存与恢复合同（目标）
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：完整同代候选与历史恢复连续性；本地保存只是恢复链的子边界，不证明正式可服务或独立故障域。
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)：持久结果与调用方一致，已提交或未知时不伪造无效果终态；不代替全部验证者的确定性组合。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 普通 runtime 保存必须向调用方区分 `NotCommitted`、`Committed` 与 `StatusUnknown`，并独立表达提交后的维护降级。候选绑定稳定操作身份、原 base generation 与完整持久内容；确认已提交时安装或恢复该候选，未知时禁止旧 World 再发布，按同一身份核对后才解除写入隔离。此处描述本地 generation 的持久结果，不代替[合法 authority profile 的正式提交证明和独立故障域条件](#runtime-authority-profile-commit)。
 
 专业要求和独立验收由存储专题的 [G1 提交判定与调用方一致性](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g1)、[G2 当前 index 引用闭包保护](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g2)、[G3 完整同代候选恢复](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-g3)及[提交判定与恢复选择边界](runtime/runtime-storage-footprint-governance.prd.md#storage-generation-cross-boundary)承接，技术映射见[根设计](design.md#runtime-generation-persistence-design)。健康旧候选不证明新代未提交，也不自行恢复当前写权；涉及事件后缀时，完整候选还须满足 [J1/J2 恢复与续跑合同](#runtime-journal-suffix-recovery)，不能仅由同代材料可读推断控制状态已正确重建。重新服务仍受[恢复闸门](#runtime-recovery-acceptance)约束。文档采纳不证明普通保存入口或这些故障验收已实现。

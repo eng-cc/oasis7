@@ -10,7 +10,7 @@
 `engineering` 模块的 `design.md` 承担工程治理的总体设计入口：
 - 说明工程规则如何从规范文档落到门禁、索引、迁移与审读流程；
 - 说明文档治理、角色协作与质量门之间的关系；
-- 指明结构治理轮（如 ROUND-006）与工程规范专题的衔接方式。
+- 指明工程规范专题的衔接方式，并保留结构治理轮（如 ROUND-006）的历史来源。
 
 ## 2. 阅读顺序
 模块级当前导航统一从 `doc/engineering/README.md` 开始；本设计文档只在进入模块三件套后承载结构设计、规则载体与执行链路，不再复制一套根入口顺序。
@@ -37,8 +37,12 @@
 ### 3.3 文档结构治理链路
 - 权威规则：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 项目级执行台账：Git history
-- 逐文档执行面：Git history（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot）
+- 当前执行记录：Git、PR、实际 CI 与评审记录；Issue/Project 按需使用
+- 历史逐文档执行面：Git history（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot），不作为当前任务台账
+
+### 3.4 主链路、数据流与状态流
+
+专业规范定义规则，模块入口与专题文档承接规则，检查脚本读取受影响文件并输出检查结果。Git、PR、实际 CI 和评审记录承载修改与验证事实，按需 Issue/Project 展示跟踪状态；历史 Git snapshot 只保存当时记录，不代表当前已验证。检查结果不替代专业语义评审，适用门禁与合入条件仍由[开发流程规范](workflow/source-of-truth.md)规定。
 
 ## 4. 集成点
 - `AGENTS.md`
@@ -51,8 +55,7 @@
 - `testing-manual.md`
 
 ## 5. ROUND-006 入口职责
-- `engineering` 负责提供 ROUND-006 的规则定义与裁定标准。
-- 若 ROUND-006 执行中发现规范空白，应先回写本模块规范文档，再继续治理。
+以下为历史治理分工，不恢复该轮执行义务。`engineering` 当时负责提供 ROUND-006 的规则定义与裁定标准；原治理方法要求发现规范空白时先回写专业规范。现行规则冲突与有界修复按[文档规范](doc-governance/doc-structure-standard.design.md#25-权威裁决与有界修复)和[开发流程规范](workflow/source-of-truth.md)处理。
 
 ## 设计目标
 - 提供 `engineering` 模块的总体设计入口。
@@ -67,8 +70,9 @@
 - 专题文件级精确检索：`doc/engineering/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+以下保留 ROUND-006 的历史规划来源，不表示当前排期或已完成验收；当前任务与结果以实际 PR、CI 和评审记录为准，Issue/Project 按需使用。
+- 历史 M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
+- 历史 M2（原规划，完成情况未在此核实）: 按专题继续补齐高复杂度主题的 `*.design.md`。
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。

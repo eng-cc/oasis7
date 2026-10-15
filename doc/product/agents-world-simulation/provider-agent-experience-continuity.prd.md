@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：简单专题以玩家边界和专业权威分工组织；范围：已声明provider组合内的连续性；风险：未覆盖组合与切换验证不能升级为支持结论；映射：[范围与非目标](#4-非目标与权威边界)、[风险与未决证据](#31-验收权威与证据边界)
+
 - 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
@@ -44,11 +46,23 @@
 <a id="req-agent-parity-001"></a>
 ### REQ-AGENT-PARITY-001：体验连续性必须限定在已声明场景
 
+Trace ID: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6
+
+- 功能点：[REQ-AGENT-PARITY-001](#req-agent-parity-001)；适用范围沿本条原条件与 [AC-AGENT-PARITY-001](#ac-agent-parity-001)，不扩大入口或阶段。
+- 系统设计状态：未核实
+- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“已声明provider组合的证据范围与受限表面”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：核清已声明provider组合的证据范围与受限表面的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+
 - 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
 - 验收：AC-AGENT-PARITY-001
 
 <a id="ac-agent-parity-001"></a>
 ### AC-AGENT-PARITY-001：未覆盖组合保持窄承诺
+
+Trace refs: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6；承接[REQ-AGENT-PARITY-001](#req-agent-parity-001)。
 
 - 覆盖要求：REQ-AGENT-PARITY-001
 - 场景与结果：当组合超出适用范围或证据不足时，玩家看到受限、退化或 blocked 语义及真实下一步；产品不会把回退、静默替代或局部技术通路呈现为等价体验或当前可用 provider。
@@ -57,11 +71,23 @@
 <a id="req-agent-parity-002"></a>
 ### REQ-AGENT-PARITY-002：provider 切换不得重放在途意图
 
+Trace ID: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5
+
+- 功能点：[REQ-AGENT-PARITY-002](#req-agent-parity-002)；适用范围沿本条原条件与 [AC-AGENT-PARITY-002](#ac-agent-parity-002)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-003)：原请求身份、持久 handoff、迟到结果隔离与不重放；玩家可读状态与各真实 provider/入口的全范围承接须另行核对。
+- 实现状态：未核实
+- 实现与验证依据：[PSW 验证映射](../../world-simulator/llm/provider-switch-intent-continuity.design.md#111-验证映射表)明确 PSW-01..09 为计划测试、相邻恢复测试不代签 cutover；本轮未重核代码与真实 provider 结果，不把该历史描述提升为当前全范围未实现结论。文档任务见 [#4694](https://github.com/eng-cc/oasis7/issues/4694)。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：玩家可读状态与各真实 provider/入口的全范围承接须另行核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+
 - 要求：provider 切换、重连或体验降级必须保留候选、待决、已结算和已拒绝请求的真实区别，不得自动重放旧请求、伪造取消或产生第二次世界效果。
 - 验收：AC-AGENT-PARITY-002
 
 <a id="ac-agent-parity-002"></a>
 ### AC-AGENT-PARITY-002：切换只影响后续新意图
+
+Trace refs: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5；承接[REQ-AGENT-PARITY-002](#req-agent-parity-002)。
 
 - 覆盖要求：REQ-AGENT-PARITY-002
 - 场景与结果：切换前候选不自动交给新 provider 重试；待决请求按原权威合同继续、拒绝、过期、取消或明确重新规划；只有 committed receipt 表达世界后果，受支持的撤回/替换必须走专业路径。
