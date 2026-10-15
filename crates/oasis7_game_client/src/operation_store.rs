@@ -146,7 +146,7 @@ mod tests {
     use super::*;
     use oasis7_agent_api::game::{GameTaskControlV1, GameTaskFenceV1};
     use oasis7_client_api::world_service::task_context::TaskContextPrepareV1;
-    use oasis7_client_api::world_service::*;
+    use oasis7_client_api::world_service as authority;
     use serde_json::json;
 
     #[test]
