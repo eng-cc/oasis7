@@ -77,7 +77,7 @@ fixture v87 / production v30 / endpoint release v14 的普通提交/重启、完
 
 用户授权小遗留在实施文档跟踪；这些项不表示当前已通过，也不解除切换、回滚与恢复正确性及 required CI 的合入要求。
 
-- TODO：按真实提交大小和状态规模测量写入至 Qualified 发布的延迟，再确定生产 SLO。长期历史夹具的新请求采用绝对 120 秒等待预算，20/40/60/80/100 秒输出原请求及发布/Node pending 阶段诊断；该预算不是生产 SLO，SDK、RPC 和生产期限不变。完整 70 次精确发布与冷历史断言仍须通过，120 秒后仍缺结果不能按性能 TODO 豁免。
+- TODO：按真实提交大小和状态规模测量写入至 Qualified 发布的延迟，再确定生产 SLO。长期历史夹具的新请求采用绝对 120 秒等待预算，20/40/60/80/100 秒输出原请求及发布/Node pending 阶段诊断；任务等待与 graceful stop 均为绝对 120 秒夹具预算，不是生产 SLO，SDK、RPC 和生产期限不变。stop 仅重试明确 Pending，保留同一 runtime owner 与原停止工作线程，成功后才重开；其他错误立即失败。完整 70 次精确发布与冷历史断言仍须通过，120 秒后仍缺结果或停止未完成不能按性能 TODO 豁免。
 - TODO：在明确获准的真实部署环境验证 P/R 物理故障域、受保护 signer/HSM、服务管理器与部署回退。验收为原 C0/身份不变、故障后原请求恰好一次恢复及独立资格读回；本机协议模拟不代签。
 - TODO：在具有精确已提交 execution record/CAS 根的 qualified World 上验证真正不同 SHA 的正向 shipping 升级。当前 compatibility_observer 夹具只具备 materialized World 而没有执行资格，探针必须在停止原节点前拒绝；不同 SHA 的计划或拒绝、同映像真实失败启动回滚均不代签成功升级。不得通过放宽未证明 World 的兼容性检查完成该项。
 - TODO：补充 macOS 以外平台的 executable-image/no-follow 路径与真实不同版本产物升级矩阵。验收为合法 prior/candidate 通过、错误加载映像及不兼容持久格式在停止前拒绝；shell stub 不代签真实升级。

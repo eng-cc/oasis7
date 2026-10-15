@@ -112,7 +112,7 @@ pub(super) fn exercise_long_history(
                 "long history reopening after {} completed changes",
                 ordinal + 1
             );
-            runtime.stop(Duration::from_secs(10))?;
+            stop_long_history_runtime(&mut runtime)?;
             let before = runtime.published.current()?;
             drop(runtime);
             runtime = FormalLiveRuntime::open_with_native_history(config).map_err(|error| {
@@ -173,7 +173,7 @@ pub(super) fn exercise_long_history(
             "actual World closed-record bytes only {bytes}; C10 threshold unmet"
         ));
     }
-    runtime.stop(Duration::from_secs(10))?;
+    stop_long_history_runtime(&mut runtime)?;
     drop(runtime);
     eprintln!("long history final reopen after 70 completed changes");
     let mut reopened = FormalLiveRuntime::open_with_native_history(config)
@@ -221,7 +221,26 @@ pub(super) fn exercise_long_history(
         before.world.tick_consensus_records().len(),
         before.world.tick_consensus_record_count()
     );
-    reopened.stop(Duration::from_secs(10))
+    stop_long_history_runtime(&mut reopened)
+}
+
+/// Retry only the documented pending outcome on the same owned runtime. A
+/// large final Tick may still be publishing when graceful stop is requested.
+fn stop_long_history_runtime(runtime: &mut FormalLiveRuntime) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("long history graceful stop still pending after 120s".into());
+        }
+        match runtime.stop(remaining.min(Duration::from_secs(10))) {
+            Ok(()) => return Ok(()),
+            Err(error) if error == "formal Node stop is still pending; runtime remains owned" => {
+                eprintln!("long history graceful stop pending; retaining the same runtime owner");
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 /// A background empty Tick may advance position before the submitted task runs.
