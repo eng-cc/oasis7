@@ -75,6 +75,24 @@ describe("Passkey browser account boundary", () => {
     await surface.refresh();
     expect(root.childNodes).toHaveLength(0);
   });
+  it("recognizes server passkey credentials for backup registration and email gating", async () => {
+    const root = document.createElement("section");
+    const client = {
+      capabilities: async () => ({ email: { available: true } }),
+      session: async () => ({ account: { display_name: "Player" } }),
+      credentials: async () => ({ credentials: [{ id: "passkey-1", label: "This device", state: "active", type: "passkey" }] }),
+      sessions: async () => ({ sessions: [] }),
+      addCredential: vi.fn(),
+      upgradeEmailOptions: vi.fn(),
+    };
+    const surface = mountPasskeyAccount(root, { client });
+    await surface.refresh();
+
+    const labels = [...root.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).toContain("添加备用通行密钥");
+    expect(labels).not.toContain("验证邮箱并添加首个通行密钥");
+    surface.dispose();
+  });
   it("email completion consumes the original purpose-bound OTP operation in v2", async () => {
     const calls = [];
     const fetch = vi.fn(async (url, init) => {

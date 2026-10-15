@@ -343,7 +343,7 @@ export function mountPasskeyAccount(root, { client = createPasskeyAccountClient(
       const row = element("div"); row.append(element("span", credential.label || "通行密钥"));
       row.append(button("移除", () => credential.type === "email" ? client.unbindEmail(credential) : client.revokeCredential(credential))); root.append(row);
     }
-    if (credentialList.some((key) => key.state === "active" && key.type === "webauthn")) root.append(button("添加备用通行密钥", () => client.addCredential()));
+    if (credentialList.some((key) => key.state === "active" && key.type === "passkey")) root.append(button("添加备用通行密钥", () => client.addCredential()));
     renderAccountEmailRecovery(root, { state: emailRecoveryState, account, credentials: credentialList, capabilities, client, run, render });
     root.append(element("h3", "已登录会话"));
     for (const session of sessionList) {

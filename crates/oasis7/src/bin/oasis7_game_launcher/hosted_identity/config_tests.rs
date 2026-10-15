@@ -91,7 +91,9 @@ fn disabled_v2_rejects_configured_table_without_backend_or_credentials() {
 
 #[test]
 fn disabled_v2_preserves_entirely_unconfigured_legacy() {
-    probe(None, None, None, false);
+    for flag in [None, Some("0"), Some("false"), Some("")] {
+        probe(flag, None, None, false);
+    }
     probe(Some("0"), None, Some("  "), false);
 }
 
@@ -154,4 +156,42 @@ fn identity_v2_enabled_config_probe() {
     let config = IdentityConfig::from_env().unwrap().unwrap();
     assert!(!config.registration_enabled);
     assert!(config.sqlite_path.try_exists().unwrap());
+}
+
+#[test]
+fn invalid_v2_flags_fail_closed_before_legacy_startup() {
+    for flag in ["true", "TRUE", " 1 ", "01", "yes", "FALSE", "  "] {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .env_clear()
+            .args([
+                "--ignored",
+                "--exact",
+                "hosted_identity::config::config_tests::identity_v2_invalid_flag_probe",
+                "--nocapture",
+            ])
+            .env("OASIS7_HOSTED_IDENTITY_V2_ENABLED", flag)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "invalid flag {flag:?}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+    }
+}
+
+#[test]
+#[ignore = "only invoked by isolated config regression parent"]
+fn identity_v2_invalid_flag_probe() {
+    assert!(
+        oasis7::viewer::hosted_identity_v2_enabled(),
+        "standalone runtime must retain fail-closed v2 authorization for invalid configuration"
+    );
+    let error = IdentityConfig::from_env()
+        .err()
+        .expect("invalid v2 flag must reject startup before legacy endpoints become available");
+    assert!(error.contains("OASIS7_HOSTED_IDENTITY_V2_ENABLED"));
+    assert!(error.contains("invalid identity v2 flag"));
 }
