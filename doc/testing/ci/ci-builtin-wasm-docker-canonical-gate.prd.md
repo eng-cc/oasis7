@@ -11,7 +11,7 @@
 - Success Criteria:
   - SC-1: `m1/m4/m5` hash manifest 仅包含单 canonical token：`linux-x86_64=<sha256>`。
   - SC-2: `sync-m*-builtin-wasm-artifacts.sh` 默认按 Docker canonical 平台校验，并拒绝 legacy / mixed 输入。
-  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 是现行 builtin wasm hash/evidence 独立 gate，并在 PR/push 上先按 changed paths 规划命中的 `m1/m4/m5` module set。planner 成功且 scope 为 partial/all 时，collect/verify 仅展开选中模块；scope 为 none 时仅执行 planner，collect/verify 在 job 层跳过，不产生该次模块产物校验通过结论。
+  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 是现行 builtin wasm hash/evidence 独立 gate，并在 PR/push 上先按 changed paths 规划命中的 `m1/m4/m5` module set。planner 成功且 scope 为 partial/all 时，collect/verify 仅展开选中模块；`scope=skip` 时仅执行 planner，collect/verify 在 job 层跳过，不产生该次模块产物校验通过结论。
   - SC-4: `Wasm Determinism Gate` 的 verify 矩阵按选中模块展开，以下为对应模块的 job 名称，不表示每次 PR 都执行全部三项：
     - `Wasm Determinism Gate / verify-wasm-determinism (m1)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m4)`
