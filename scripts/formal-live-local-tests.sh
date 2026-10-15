@@ -73,7 +73,7 @@ export OASIS7_FORMAL_NODE_TEST_BIN="$OASIS7_CHAIN_RUNTIME_BIN"
 # Never replace a live child executable while its qualification is running.
 env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required formal -- --test-threads=1
 env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required formal -- --test-threads=1
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required protected_endpoint_children -- --ignored --test-threads=1
+env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required protected_endpoint_children -- --ignored --nocapture --test-threads=1
 env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required formal_protected_healthy_durable_set_ -- --ignored --test-threads=1
 env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required healthy_durable_set_owner_ -- --ignored --test-threads=1
 env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib formal -- --test-threads=1
