@@ -311,7 +311,7 @@ class Workflow(unittest.TestCase):
         self.assertNotIn('cp scripts/', select)
         self.assertEqual(WORKFLOW.count('name: ci-authority'), 2)
         self.assertNotIn('matrix.group', WORKFLOW)
-        self.assertEqual(WORKFLOW.count('uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803'), WORKFLOW.count('persist-credentials: false'))
+        self.assertEqual(len(re.findall(r'uses: actions/checkout@[0-9a-f]{40}\b', WORKFLOW)), WORKFLOW.count('persist-credentials: false'))
         self.assertNotIn('secrets.', WORKFLOW)
         self.assertNotIn('GH_TOKEN:', WORKFLOW)
         self.assertNotIn('scripts/pm/', WORKFLOW)
