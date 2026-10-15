@@ -6,7 +6,8 @@
 - Image2 target: `doc/site/github-pages/assets/github-pages-cinematic-consequence-image2-2026-07-19.png`
 - Browser baseline: local static Pages at `1440x900` and `390x844`
 
-## Decision
+<a id="decision"></a>
+## Decision（目标与决策）
 
 The [Site root design](../design.md#homepage-layout-authority) owns the current
 homepage layout and precedence. This supplement supplies consequence rhythm and
@@ -44,7 +45,8 @@ one action first, followed by progressive disclosure of systems and trust detail
 Oasis7 retains a stricter boundary because it is a limited playable technical
 preview rather than a released game.
 
-## Content and hierarchy changes
+<a id="content-and-hierarchy-changes"></a>
+## Content and hierarchy changes（内容与层级结构）
 
 - Shorten the Chinese hero from a multi-clause choice list to
   `资源告急。文明会怎么选？`; keep the English route equivalent in intent.
@@ -84,12 +86,16 @@ preview rather than a released game.
 
 ### 2.1 需求承接与分配表
 
+本表只补既有产品子链的身份与分配，不改变上文 dated Image2 目标、原专业义务或当前 root 优先关系。产品 requirement 的完整验收仍由现行官网系统设计与原 owner 承担；这里不复制当前页面实现、不恢复旧布局，也不产生新的视觉或发布结论。
+
 | 上游要求 | 分配内容 | 本设计条款 | 主责 | 限制 |
 | --- | --- | --- | --- | --- |
-| [首页布局与预览边界](../design.md#homepage-layout-authority) | 聚焦首屏、从属说明与唯一布局优先关系；保留双语、响应式和素材边界 | [决策与承接范围](#decision) | game_visual_interaction_designer；Site 维护者 | 不改页面实现或公开能力，不以日期替代专业决策 |
+| Trace refs: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19；[REQ-SITE-DISCOVERY-001](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-001) | 产品001仅首屏玩家位置、当前边界与有效主路径；其余原专业义务独立保留：聚焦首屏、从属说明与唯一布局优先关系；保留双语、响应式和素材边界 | [决策与承接范围](#decision) | game_visual_interaction_designer；Site 维护者；原专业承接：[首页布局与预览边界](../design.md#homepage-layout-authority) | 不改页面实现或公开能力，不以日期替代专业决策 |
+| Trace refs: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb；[REQ-SITE-DISCOVERY-006](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-006) | 双语、三视口、键盘/no-JS/reduced-motion 的既有验收义务 | [既有条款](#acceptance) | game_visual_interaction_designer；viewer_engineer / qa_engineer；[现行接收条款](public-site-discovery-and-showcase.design.md#des-site-accessibility) | 只承接上述既有子范围；不证明完整产品 AC、当前浏览器、安装器或游戏验收 |
 
 ### 11.1 验证映射表
 
 | 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
 | --- | --- | --- | --- | --- | --- |
-| [首页布局与预览边界](../design.md#homepage-layout-authority) | [决策与承接范围](#decision) | 同候选根设计与两个补充对三列摘要、主次操作、图注和预览状态给出一致要求 | [文档检查](../../../scripts/doc-governance-check.test.sh)与同候选三文逐条审读；实际页面改动按本文件视口、双语、键盘/no-JS/reduced-motion 验收 | 文档 diff 和实际检查输出；页面变化另留真实截图和行为结果 | 本次文本修订不构成浏览器、视觉通过、部署或发布证据 |
+| Trace refs: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19；[REQ-SITE-DISCOVERY-001](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-001) | [决策与承接范围](#decision) | 产品001仅首屏玩家位置、当前边界与有效主路径；其余原专业义务保持但不冒充产品001完整承接：同候选根设计与两个补充对三列摘要、主次操作、图注和预览状态给出一致要求；仅本条既有界面子范围，其他原专业义务继续保留 | 文档检查（`scripts/doc-governance-check.test.sh`）与同候选三文逐条审读；实际页面改动按本文件视口、双语、键盘/no-JS/reduced-motion 验收；现行有限产品子范围按[官网验证方法](public-site-discovery-validation.manual.md#外部浏览器验证)：S6-DISC-01：同候选 CN/EN 首页主路径、有效 CTA 和当前 preview 边界；另记录陌生访客对玩家位置的原话，作者自测不代签理解；同候选静态服务器与实际浏览器，本文未运行；上述三文/三列摘要一致性审读只核历史替代边界，当前仍不得恢复三列；不是用旧布局为现行产品001签收 | 文档 diff 和实际检查输出；页面变化另留真实截图和行为结果 | 本次文本修订不构成浏览器、视觉通过、部署或发布证据；原专业承接：[首页布局与预览边界](../design.md#homepage-layout-authority) |
+| Trace refs: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb；[REQ-SITE-DISCOVERY-006](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-006) | [既有条款](#acceptance) | 双语、三视口、键盘/no-JS/reduced-motion 的既有验收义务 | [现行验证方法](public-site-discovery-validation.manual.md#外部浏览器验证)：S6-DISC-06中与本旧条款交集的子范围：仅原 Acceptance 范围：同候选1440×900、390×844、360×800，CN/EN同序与preview、44px操作及无横向溢出，键盘/no-JS/reduced-motion；原link/claim/manual/download检查保持，不扩展200%缩放或性能义务；沿用test_tier_required / 适用S6，记录同候选实际浏览器结果；本文未运行，不重启界面实现 | 实施 PR 记录 source/build、路由/语言、候选环境与逐项 pass/fail/blocked/not_run；素材来源另由 QA 复核 | 只承接上述既有子范围；不证明完整产品 AC、当前浏览器、安装器或游戏验收 |

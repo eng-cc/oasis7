@@ -78,6 +78,8 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 3. 多入口等价：主 Web、Launcher 与 pure API 在权威状态与核心动作上一致。
 4. 外部 Runtime 游玩：从契约验证推进到 OpenClaw、Codex 各自完成代表性首局，再按实际证据扩展持续玩法与 Runtime 范围；阶段范围见[产品分册](external-agent-runtime-play.prd.md#22-阶段目标)。
 
+<a name="5-done：成功标准与验收"></a>
+
 ## 5. Done：成功标准与验收
 
 SC-1～SC-14 的成功标准原文及独立组合状态见 §5.2；§5.1 保留对应六列验收责任与原测试层级。
@@ -135,6 +137,20 @@ Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb（[REQ-EXT-003](external
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
 - 剩余范围：外部Runtime观察、决策和权威结果切片以所列叶项为准；builtin及其他provider、正式玩家反馈、完整因果链不能由外部Runtime子集代签。
+
+<a id="sc-agent-002-builtin-input-integrity"></a>
+##### SC-2 已接收子范围：builtin 当前输入完整性
+
+Trace ID: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f
+
+本条只为 §5.1 SC-2/SC-6 已接收的 [builtin 当前输入完整性目标](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-input-integrity)登记跨层身份：实际请求保留当前必需输入，配置不足时在模型调用前停止并给出既有无副作用失败与恢复路径。完整目标、适用条件与独立验收仍见该专业原文及其 [AC](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-input-integrity)，技术预算、输入投影与字段合同不转移到产品层。对应专业条款为[必要输入与预算流程](../../world-simulator/llm/decision-provider-contract.design.md#des-builtin-input-integrity)及[计划验证组](../../world-simulator/llm/decision-provider-contract.design.md#ver-builtin-input-integrity)；这些定位不改变本根 SC 的未核实状态、原证据基线或剩余组合范围，不证明实现修复、完整玩家体验或其它 provider 支持。
+
+<a id="sc-agent-002-builtin-parameter-consistency"></a>
+##### SC-2 已接收子范围：builtin 参数说明一致性
+
+Trace ID: O7-REQ-be4bb896-dc4f-41d1-9f87-c381049ac190
+
+本条只为 §5.1 SC-2 已接收的 [builtin 参数说明一致性目标](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-parameter-consistency)登记跨层身份：同一次请求的文字、schema、parser 与 Runtime 表达同一治理合法参数合同，不因修复说明漂移而扩大合法域。完整目标及独立验收仍见该专业原文与其 [AC](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-parameter-consistency)，正式数值及技术消费关系继续归原专业 authority。对应专业条款为[治理约束消费关系](../../world-simulator/llm/decision-provider-contract.design.md#des-builtin-parameter-consistency)及[计划验证组](../../world-simulator/llm/decision-provider-contract.design.md#ver-builtin-parameter-consistency)；这些定位不改变本根 SC 的未核实状态、原证据基线或剩余组合范围，不证明四方实现已一致或真实模型选择。
 
 <a id="sc-agent-003"></a>
 #### 功能状态卡：SC-3 组合
@@ -195,6 +211,8 @@ Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb（[REQ-EXT-003](external
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
 - 剩余范围：外部Runtime上下文有效性和学习情报历史仅覆盖各自叶范围；builtin输入不足、各provider的新鲜度及正式surface刷新/纠正/重排组合仍未完整承接。
+
+Trace refs: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f；仅引用 §5.1 已接收的 [builtin 当前输入完整性子范围](#sc-agent-002-builtin-input-integrity)，不另发身份，也不以该子范围代签 SC-6 的正式 surface 与各 provider 组合。
 
 <a id="sc-agent-007"></a>
 #### 功能状态卡：SC-7 组合

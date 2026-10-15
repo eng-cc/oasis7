@@ -67,6 +67,8 @@
 - 消费优先级：
   - 两路均可 ingest；libp2p 路径用于生产默认主链路，UDP 作为兼容链路。
 
+<a name="4-oasis7net-与目标平台边界"></a>
+
 ### 4) `oasis7_net` 与目标平台边界
 - `oasis7_node` 在 native target 依赖 `oasis7_net`，复用其网络实现与公开 API；不得形成反向依赖、依赖环或额外 runtime bridge。
 - `wasm32` 不是完整 node/libp2p 运行目标。target cfg 必须选择 native 实现或 wasm stub，同时保留 `Libp2pReplicationNetwork`、配置结构和 peer identity/key derivation 的 API 形状，避免上层条件编译漂移。

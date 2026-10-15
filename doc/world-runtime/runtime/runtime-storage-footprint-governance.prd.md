@@ -99,12 +99,16 @@
 
 **独立验收 G1：** 分别覆盖 index 提交前失败、提交后错误、GC 结果重写与兼容镜像失败、持久结果无法确认；对账返回结果、活 World、重启 World 和原 lease/receipt。已提交结果不能被旧内存的后续无关操作覆盖，同身份重试无第二效果；未知期间后续写入被阻断，核对并安装后才恢复。对应[设计 G1](runtime-storage-footprint-governance.design.md#storage-generation-g1-design)。
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接持久结果与普通调用方一致、已提交或未知时不伪造无效果终态。本地 generation durable commit 不是网络正式 authority 提交。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-generation-g2"></a>
 #### G2：替代 index 提交前保留当前恢复集合
 
 当前持久 index 指向 latest B、rollback-safe A 时，准备 C 不得提前删除 A/B 的任何必要材料。保护集合包含 generation-local manifest、payload、recovery metadata、snapshot/journal/module/archive 的 CAS 依赖和外部 pin，不只保护 blob 名称。C 的替代 index 确认持久提交后，才能按新 index 的 C/B 与外部 pin 回收其余材料；提交未知时保护旧、新集合。`keep=2` 是成功清理后的稳态，不禁止 A/B/C 的暂态共存；清理失败允许多占空间并后续重试。
 
 **独立验收 G2：** 在已有 A/B 的第三代保存中，使替代 index 的写入或持久确认失败，旧 index 未替换时其字节与 A/B 完整闭包保持不变；B 原已损坏时，A 的可恢复性不能因尝试 C 而丢失。C 已提交后保留 C/B，只有确认不再引用的 A 才可回收；回收失败不改判 C 未提交。对应[设计 G2](runtime-storage-footprint-governance.design.md#storage-generation-g2-design)。
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接替代 index 确认前保护旧恢复材料闭包及未知期间保护旧、新材料。不证明真实独立故障域持久性或重新 serving。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
 
 <a id="storage-generation-g3"></a>
 #### G3：候选选择覆盖完整同代恢复
@@ -115,12 +119,16 @@
 
 **独立验收 G3：** 普通与 authoritative 两入口分别覆盖 latest 独占的 snapshot/journal CAS 对象缺失或损坏、后续装配/World 构造失败；健康 latest 优先，健康 rollback-safe 能被完整选中且 metadata 同代，候选探测无写入或业务副作用。共享必要对象损坏、两代皆坏及不可解释 index/identity 冲突仍失败关闭；保留既有 archive 与兼容读取负例。对应[设计 G3](runtime-storage-footprint-governance.design.md#storage-generation-g3-design)。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接完整同代候选的只读材料校验与恢复连续性。材料可读不等于恢复到当前 head、非空事件后缀续跑或重新 serving。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-generation-cross-boundary"></a>
 #### 提交判定与恢复材料选择不可互相代替
 
 G1 回答“本次精确候选是否提交”，G3 回答“哪一代材料现在完整可读”。B 已有提交证据而只有 A 可读时，选择 A 不证明 B 未提交，也不能抹去 B 的已确认 receipt、余额、nonce 或历史。健康旧候选只允许作为恢复材料；当前写权还须通过[根恢复闸门](../prd.md#runtime-recovery-acceptance)核对同世界、当前 authority/head、版本和单调连续性。
 
 **交叉验收 G1×G3：** 构造新代已提交但只能回退旧代的样例，保存判定不得因回退结果变为 `NotCommitted`，调用方不得从旧业务状态继续写；恢复材料可读、只读恢复与可服务分别呈现，未通过既有闸门时不产生新权威效果。对应[交叉设计](runtime-storage-footprint-governance.design.md#storage-generation-cross-boundary-design)。G1/G2/G3 的确定性故障与交叉断言进入 `test_tier_required`，`test_tier_full` 保留进程重启/中断与实际存储环境的组合验证；文档检查不代签这些执行结果。
+
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接提交判定与恢复材料选择独立、已知提交/未知状态不被健康旧候选替代。本地保存与只读候选不代签正式提交证明或同世界服务闸门。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题不引入新的 AI 推理链路）。
@@ -142,7 +150,7 @@ G1 回答“本次精确候选是否提交”，G3 回答“哪一代材料现�
     - `Orphan / Unpinned Data`: 不再被任一有效 generation / retention class 引用的数据，允许 GC。
 - Integration Points:
   - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-  - `crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge.rs`
+  - `crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs`
   - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
   - `crates/oasis7/src/runtime/world/persistence.rs`
   - `crates/oasis7/src/runtime/snapshot.rs`
@@ -232,73 +240,127 @@ R1 的 committed-input log 重执行与 `WorldJournal` 事件后缀归约分别�
 下列定位分别保留旧SC/AC/NFR/规则条件；预算均为目标，未由本轮实际测量证明；原DEC-RSF和迁移历史不变。
 
 <a id="storage-accept-ac1"></a>
+#### AC-1：体积预算与引用完整性
 - AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling。该独立条件由配对设计 storage-case-ac1 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接record 引用与 retained material 不 dangling 的材料完整性子义务。2500 heights 与256 MiB是本专题独立工程预算，不是产品恢复验收通过的替代。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac2"></a>
+#### AC-2：清理收敛与暂态材料保护
 - AC-2/SC-2：提交确认且清理成功后收敛到latest+rollback-safe及外部pin引用集合，sidecar≤16 MiB，orphan=0；暂态/降级保护额外数据。该独立条件由配对设计 storage-case-ac2 与其验证场景承接，保存结果与预算收敛分别判定。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接确认提交后 retained/pin 材料保护及暂态/未知不提前删除的子义务。16 MiB/orphan稳态预算与清理收敛仍独立判定，不代签全部恢复链。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac3"></a>
+#### AC-3：GC 后 latest restart 对账
 - AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同。该独立条件由配对设计 storage-case-ac3 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接GC 后 latest restart 的 execution root/journal_len/module_registry 对账子义务。不代签非空事件后缀控制状态续跑或重新 serving。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac4"></a>
+#### AC-4：故障与未知状态保护
 - AC-4：GC中断/partialwrite/pin失败保当前index的latest+rollback-safe完整闭包，degraded保恢复；提交未知还保护候选并隔离旧World写入。该独立条件由配对设计 storage-case-ac4 与其验证场景承接。
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接G1未知保护与调用方fence、当前index及候选材料保护的子义务。满盘/中断/pin失败等独立故障仍分别验收，不以单一恢复成功代签。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac5"></a>
+#### AC-5：保留高度重建
 - AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root。该独立条件由配对设计 storage-case-ac5 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接policy-retained H 的 checkpoint 与 canonical committed-input log 重建子义务。committed-input 重执行不是非空 WorldJournal 事件后缀正向续跑。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac6"></a>
+#### AC-6：存储观测字段
 - AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描。该独立条件由配对设计 storage-case-ac6 与其验证场景承接。
 
 <a id="storage-accept-ac61"></a>
+#### AC-6.1：profile 入口与 wrapper 透传
 - AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime。该独立条件由配对设计 storage-case-ac61 与其验证场景承接。
 
 <a id="storage-accept-ac7"></a>
+#### AC-7：快照预算与归档校验
 - AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验。该独立条件由配对设计 storage-case-ac7 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接热窗口外历史材料经archive读取并校验链路的子义务。2500 heights与512 KiB快照预算仍为独立工程条件，不扩大为完整恢复。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-ac8"></a>
+#### AC-8：独立验证矩阵
 - AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵，并独立判定G1/G2/G3及交叉边界。该独立条件由配对设计 storage-case-ac8 与其验证场景承接。
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接本行独立G1/G2/G3及交叉矩阵所对应的持久结果/调用方一致性与同代材料恢复子义务。footprint/profile/archive及required/full其余矩阵仍独立；引用不是整组产品验收或回归通过。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-sc7"></a>
+#### SC-7：hot/checkpoint 保留密度
 - SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot。该独立条件由配对设计 storage-case-sc7 与其验证场景承接。
 
 <a id="storage-accept-nfr1"></a>
+#### NFR-1：稳态空间预算
 - NFR-1：2500 heights node root≤384MiB且store≤256MiB。该独立条件由配对设计 storage-case-nfr1 与其验证场景承接。
 
 <a id="storage-accept-nfr2"></a>
+#### NFR-2：sweep 性能预算
 - NFR-2：2500 heights localSSD sweep p95≤500ms。该独立条件由配对设计 storage-case-nfr2 与其验证场景承接。
 
 <a id="storage-accept-nfr3"></a>
+#### NFR-3：latest restart 性能预算
 - NFR-3：default latest restart p95≤5s。该独立条件由配对设计 storage-case-nfr3 与其验证场景承接。
 
 <a id="storage-accept-nfr4"></a>
+#### NFR-4：优化不降低恢复确定性
 - NFR-4：优化不能降低replay/recovery确定性，相关回归100%。该独立条件由配对设计 storage-case-nfr4 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接体积优化不降低已有replay/recovery确定性的子义务。相关回归100%仍需同候选实际执行，不由静态关系证明。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-nfr5"></a>
+#### NFR-5：保留高度回放完整率
 - NFR-5：所有policy retained heights replay成功100%且原root相等。该独立条件由配对设计 storage-case-nfr5 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接policy-retained heights重建原root的子义务。100%与每个保留目标H仍独立验证，不授予policy范围外深历史保证或serving。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-nfr6"></a>
+#### NFR-6：采样频率与 CPU 预算
 - NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点。该独立条件由配对设计 storage-case-nfr6 与其验证场景承接。
 
 <a id="storage-accept-nfr7"></a>
+#### NFR-7：soak 资源上限
 - NFR-7：soak显式更高占用、metrics增长/可配上限。该独立条件由配对设计 storage-case-nfr7 与其验证场景承接。
 
 <a id="storage-accept-compression"></a>
+#### 原始内容与透明压缩
 - 原payload content_hash不变，compressed header后更小才压缩，读回rawbytes。该独立条件由配对设计 storage-case-compression 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接压缩前后原始payload内容hash不变且读回原bytes的hash-bound材料完整性子义务。是否采用压缩及header后更小的编码策略仍为工程条件，不代签恢复正确性。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-cold-range"></a>
+#### 冷热范围与归档索引兼容
 - continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填。该独立条件由配对设计 storage-case-cold-range 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接retained历史材料的连续范围、anchor及pack读取校验子义务。scan/seek同边界和canonical/legacy别名回填各自独立，目录或索引一致不证明完整恢复。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-legacy-height"></a>
+#### record 兼容与高度连续性
 - v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC。该独立条件由配对设计 storage-case-legacy-height 与其验证场景承接。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接本地retained record兼容读取与stale/noncontiguous高度失败关闭的连续性子义务。v3/V1V2兼容与legacy仅latest-safe不获得完整authority/readiness。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-save-failure"></a>
+#### 保存故障与提交三态
 - save满盘/新generation中断按G1区分未提交、已提交和未知；保护恢复材料不恢复旧写权，维护失败不撤销提交；pin/latestmissing停止，replay mismatch阻aggressiveGC。该独立条件由配对设计 storage-case-save-failure 与其验证场景承接。
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅承接G1保存三态/调用方fence与恢复材料保护的子义务。保存、维护、恢复结果分别判定；不抹去满盘、未知、pin缺失或replay mismatch的独立失败条件。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-single-writer"></a>
+#### 写者、目录与敏感数据边界
 - 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload。该独立条件由配对设计 storage-case-single-writer 与其验证场景承接。
 
 <a id="storage-accept-version-dependency"></a>
+#### 历史版本依赖保护
 - retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched。该独立条件由配对设计 storage-case-version-dependency 与其验证场景承接。
 
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 经 [root version receiver](../design.md#runtime-version-design)，仅承接retained原manifest/artifact/module binding唯一解析及缺失/冲突时停止unsafe sweep的子义务。完整activation ledger/proof、跨版本replacement及版本窗口组合仍未证明。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="storage-accept-service-boundary"></a>
+#### 本地恢复与服务权限边界
 - localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部。该独立条件由配对设计 storage-case-service-boundary 与其验证场景承接。
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接本地root/restart仅是恢复材料条件以及外部root gate的证据边界。同世界服务、追加/最终性/version/head和redundant archive仍由既有外部receiver与ops/runtime/QA按原test_tier_full同窗口判定。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。

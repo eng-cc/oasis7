@@ -21,9 +21,12 @@ pub struct IndexedDocument {
     /// None in pre-pairing caches; refresh is required before claiming absence.
     #[serde(default)]
     pub pairings: Option<DocumentPairings>,
+    /// Explicit design-header upstream declarations; None means not yet parsed.
+    #[serde(default)]
+    pub upstream: Option<DocumentPairings>,
 }
 
-/// Explicit header pairing declarations, never inferred from ordinary links.
+/// Explicit header link declarations, grouped as pairings or design upstreams.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentPairings {
@@ -43,6 +46,9 @@ pub struct DocumentPairing {
     pub target_section: Option<String>,
     #[serde(default)]
     pub target_revision: Option<String>,
+    /// Candidate path classification, not proof of authority or implementation.
+    #[serde(default)]
+    pub target_kind: Option<String>,
 }
 
 impl IndexedDocument {
@@ -68,6 +74,7 @@ impl IndexedDocument {
             dirty,
             lifecycle: None,
             pairings: None,
+            upstream: None,
         }
     }
     pub(crate) fn omit(&mut self, reason: &str) {

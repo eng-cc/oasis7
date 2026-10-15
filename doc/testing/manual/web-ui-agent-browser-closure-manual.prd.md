@@ -120,6 +120,8 @@
   - 风险-3: 脚本与手册偏离，造成执行路径不一致。
   - 风险-4: 仅凭截图判定导致“有图但不可用”漏检。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
