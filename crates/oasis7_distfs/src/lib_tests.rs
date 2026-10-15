@@ -25,6 +25,59 @@ fn temp_dir(prefix: &str) -> PathBuf {
 }
 
 #[test]
+fn atomic_temp_paths_do_not_collide_between_concurrent_writers() {
+    let barrier = std::sync::Barrier::new(8);
+    let paths = std::thread::scope(|scope| {
+        let writers: Vec<_> = (0..8)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    (0..4096)
+                        .map(|_| unique_atomic_temp_path(Path::new("same.blob")))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        writers
+            .into_iter()
+            .flat_map(|writer| writer.join().expect("writer completed"))
+            .collect::<Vec<_>>()
+    });
+    let unique: BTreeSet<_> = paths.iter().collect();
+    assert_eq!(
+        unique.len(),
+        paths.len(),
+        "writers must own distinct temporary files"
+    );
+}
+
+#[test]
+fn concurrent_atomic_writers_publish_complete_files() {
+    let dir = temp_dir("concurrent-atomic-writers");
+    fs::create_dir_all(&dir).expect("create root");
+    let path = dir.join("shared.blob");
+    let barrier = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        for writer in 0..8u8 {
+            let path = &path;
+            let barrier = &barrier;
+            scope.spawn(move || {
+                let bytes = vec![writer; 8192];
+                barrier.wait();
+                for _ in 0..32 {
+                    write_bytes_atomic(path, &bytes).expect("publish complete file");
+                }
+            });
+        }
+    });
+    let bytes = fs::read(&path).expect("read published file");
+    assert_eq!(bytes.len(), 8192);
+    assert!(bytes.iter().all(|byte| *byte == bytes[0]));
+    assert_eq!(fs::read_dir(&dir).expect("list root").count(), 1);
+    fs::remove_dir_all(dir).expect("remove test root");
+}
+
+#[test]
 fn cas_roundtrip_and_pin() {
     let dir = temp_dir("cas");
     let store = LocalCasStore::new(&dir);

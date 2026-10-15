@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zstd::stream::{decode_all as zstd_decode_all, encode_all as zstd_encode_all};
@@ -1062,27 +1062,50 @@ struct BlobEntry {
 }
 
 fn unique_atomic_temp_path(path: &Path) -> PathBuf {
+    static NEXT_TEMP_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT_TEMP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let pid = std::process::id();
     let nanos = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    path.with_extension(format!("tmp-{pid}-{nanos}"))
+    path.with_extension(format!("tmp-{pid}-{nanos}-{sequence}"))
 }
 
 fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), WorldError> {
-    let tmp = unique_atomic_temp_path(path);
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, path)?;
-    Ok(())
+    for _ in 0..16 {
+        let tmp = unique_atomic_temp_path(path);
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        };
+        let result = file.write_all(bytes).and_then(|()| {
+            drop(file);
+            fs::rename(&tmp, path)
+        });
+        if result.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        return result.map_err(WorldError::from);
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        format!(
+            "cannot reserve atomic temporary file for {}",
+            path.display()
+        ),
+    )
+    .into())
 }
 
 fn write_json_atomic<T: Serialize>(value: &T, path: &Path) -> Result<(), WorldError> {
-    let tmp = unique_atomic_temp_path(path);
     let bytes = serde_json::to_vec(value)?;
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, path)?;
-    Ok(())
+    write_bytes_atomic(path, &bytes)
 }
 
 fn read_json_from_path<T: DeserializeOwned>(path: &Path) -> Result<T, WorldError> {
