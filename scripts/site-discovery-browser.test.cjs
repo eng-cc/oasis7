@@ -34,9 +34,20 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
     const sizes=await p.evaluate(()=>Object.fromEntries(['.decision-panels article > p:not(.decision-number)','.preview-badge','.hero-entry-note','.hero-telemetry-label'].map(s=>[s,parseFloat(getComputedStyle(document.querySelector(s)).fontSize)])));
     assert.ok(sizes['.decision-panels article > p:not(.decision-number)']>=15,JSON.stringify(sizes));
     assert.ok(sizes['.preview-badge']>=13 && sizes['.hero-entry-note']>=13 && sizes['.hero-telemetry-label']>=12,JSON.stringify(sizes));
+    const caption=await p.evaluate(()=>({top:document.querySelector('.hero-telemetry-label').getBoundingClientRect().top,noteBottom:document.querySelector('.hero-entry-note').getBoundingClientRect().bottom}));
+    assert.ok(caption.top>=caption.noteBottom,JSON.stringify(caption));
    }
   }
   await c.close();record(locale+' integrated hero, readable static steps and direct short summaries');
+ }
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale});const p=await c.newPage();
+  for(const width of [360,390,1440]){
+   await p.setViewportSize({width,height:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/')+'devlog/first-iron-batch/');await p.evaluate(()=>document.fonts.ready);
+   const box=await p.evaluate(()=>({title:document.querySelector('h1').getBoundingClientRect().top,header:document.querySelector('.topbar').getBoundingClientRect().bottom,width:innerWidth,scroll:document.documentElement.scrollWidth}));
+   assert.ok(box.title>=box.header,JSON.stringify(box));assert.equal(box.scroll,box.width);
+  }
+  await c.close();record(locale+' article header stays in flow without covering title');
  }
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale});const p=await c.newPage();const route=locale==='zh-CN'?'/':'/en/';await p.goto(origin+route);

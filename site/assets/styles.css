@@ -3695,12 +3695,35 @@ a[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
   .editorial-row { flex-direction: column; align-items: flex-start; gap: .5rem; }
   .preview-quickfacts { grid-template-columns: 1fr; }
   .content-main { margin-top: 2.5rem; }
-  .content-page .topbar { flex-wrap: wrap; }
-  .content-page .nav { display: flex !important; position: static; flex-wrap: wrap; width: 100%; gap: .9rem; }
 }
 .content-main h1 { max-width: none; }
 .reader-recovery { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: .8rem 0; }
 .reader-recovery button { min-height: 44px; padding: .5rem 1rem; cursor: pointer; }
+
+/* Content headers have always-visible links; they do not use the homepage menu. */
+@media (max-width: 1120px) {
+  .content-page .topbar { position: relative; flex-wrap: wrap; border-radius: 18px; }
+  html[data-js="true"] .content-page .menu-button { display: none; }
+  .content-page .lang-switch { position: static; margin-left: auto; }
+  html .content-page .nav,
+  html[data-js="true"] .content-page .nav {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    padding: .5rem 0 0;
+    gap: .4rem;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .content-page .nav a { min-height: 44px; display: inline-flex; align-items: center; font-size: .875rem; }
+}
 
 /* Homepage composition: one type scale and one responsive layout.
    Content pages keep the shared styles above. */
@@ -3789,7 +3812,7 @@ body.discovery-page:not(.content-page)::before { display: none; }
 .discovery-page:not(.content-page) .hero-status { margin-top: 16px; }
 .discovery-page:not(.content-page) .preview-badge { font-size: var(--home-aux); background: #071b14d9; border-color: #3f5d4b; padding: 6px 10px; }
 .discovery-page:not(.content-page) .hero-entry-note { font-size: var(--home-aux); max-width: 34rem; margin: 10px 0 0; color: #b4c5bd; }
-.discovery-page:not(.content-page) .hero-telemetry-label { position: absolute; bottom: 0; right: 10px; left: auto; width: auto; max-width: 48%; z-index: 1; font-size: var(--home-caption); line-height: 1.5; color: #c4d6cb; background: #06110fcc; border: 0; padding: 5px 8px; }
+.discovery-page:not(.content-page) .hero-telemetry-label { position: static; margin: 12px 0 0; font-size: var(--home-caption); line-height: 1.5; text-align: right; color: #c4d6cb; background: none; border: 0; border-radius: 0; padding: 0; backdrop-filter: none; }
 .discovery-page:not(.content-page) #proof { margin: 0; padding: 24px 0 0; background: none; border: 0; border-radius: 0; box-shadow: none; }
 .discovery-page:not(.content-page) .decision-walkthrough { margin: 0; padding: 24px 0; border: 0; border-top: 1px solid #365047; background: none; border-radius: 0; }
 .discovery-page:not(.content-page) .decision-walkthrough h3 { margin: 8px 0 12px; font-size: 1.5rem; }
@@ -3886,7 +3909,7 @@ body.discovery-page:not(.content-page)::before { display: none; }
   body.discovery-page:not(.content-page) { --home-gutter: 25px; }
   .discovery-page:not(.content-page) > .topbar { padding-block: 4px; }
   .discovery-page:not(.content-page) > .topbar .nav { margin-left: 0; }
-  .discovery-page:not(.content-page) .landing-hero { padding: 20px 0 64px; }
+  .discovery-page:not(.content-page) .landing-hero { padding: 20px 0 24px; }
   .discovery-page:not(.content-page) .landing-hero .hero-grid > div { width: 100%; }
   .discovery-page:not(.content-page) .landing-hero .hero-visual { inset: -20px -25px -24px 0; opacity: .75; }
   .discovery-page:not(.content-page) .landing-hero .hero-key-art img { mask-image: linear-gradient(90deg,transparent,#000 80%),linear-gradient(0deg,transparent,#000 35%); object-position: 100% 20%; }
@@ -3895,7 +3918,6 @@ body.discovery-page:not(.content-page)::before { display: none; }
   .discovery-page:not(.content-page) .hero .subtitle { font-size: var(--home-body); }
   .discovery-page:not(.content-page) .hero .cta-row { flex-direction: column; align-items: flex-start; gap: 8px; }
   .discovery-page:not(.content-page) .hero .button.primary { width: auto; min-width: 190px; max-width: 100%; min-height: 44px; padding: 10px 16px; font-size: var(--home-body); }
-  .discovery-page:not(.content-page) .hero-telemetry-label { bottom: 0; right: 0; max-width: 100%; margin: 0; padding: 5px 8px; }
   .discovery-page:not(.content-page) #proof { padding-top: 12px; }
   .discovery-page:not(.content-page) .decision-walkthrough { padding: 20px 0; }
   .discovery-page:not(.content-page) .decision-walkthrough h3 { font-size: 1.375rem; }
