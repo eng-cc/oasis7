@@ -82,6 +82,19 @@ impl RemoteFormalEndpoint {
         let restored = super::super::super::endpoint::verify_committed_historical_material(
             cut, state, &content,
         )?;
+        Self::check_committed_material_content(&restored, &content, reader)?;
+        Ok(restored)
+    }
+
+    /// Complete the original content-availability check for an already verified
+    /// delegated material. An explicit caller cache owns immutable bytes only.
+    pub(crate) fn check_committed_material_content(
+        restored: &VerifiedCommittedHistoricalMaterialV1,
+        content: &impl crate::controlled_authority::formal::business_index::BusinessIndexNodeReader,
+        cache: Option<
+            &dyn crate::controlled_authority::formal::business_index::BusinessIndexNodeReader,
+        >,
+    ) -> Result<(), FormalError> {
         let result = &restored.material().roots
             [&crate::controlled_authority::replicated_protocol::ArtifactRole::Result];
         let envelope = FormalBusinessResultEnvelopeV1::decode(
@@ -93,19 +106,37 @@ impl RemoteFormalEndpoint {
                 .ok_or_else(|| invalid("historical Result material"))?
                 .bytes,
         )?;
-        for write in envelope.delta.node_writes.iter().chain(
-            envelope
-                .retained_history_delta
-                .as_ref()
-                .into_iter()
-                .flat_map(|delta| delta.node_writes.iter()),
-        ) {
+        let writes: Vec<_> = envelope
+            .delta
+            .node_writes
+            .iter()
+            .chain(
+                envelope
+                    .retained_history_delta
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|delta| delta.node_writes.iter()),
+            )
+            .collect();
+        // Validate the whole batch before installing any writes. This does not
+        // memoize qualification: the opaque restored material above has already
+        // passed every exact proof, canonical, Frozen and delta/root check.
+        for write in &writes {
             if hex::encode(blake3::hash(&write.bytes).as_bytes()) != write.digest {
                 return Err(invalid(
                     "HistoryUnavailable: committed business/retained CAS write digest mismatch",
                 ));
             }
-            let fetched = crate::controlled_authority::formal::business_index::BusinessIndexNodeReader::read_node(&content, &write.digest)
+        }
+        if let Some(cache) = cache {
+            for write in &writes {
+                cache
+                    .cache_content_node(&write.digest, &write.bytes)
+                    .map_err(|error| invalid(format!("HistoryUnavailable: {error}")))?;
+            }
+        }
+        for write in writes {
+            let fetched = crate::controlled_authority::formal::business_index::BusinessIndexNodeReader::read_node(content, &write.digest)
                 .map_err(|error| invalid(format!("HistoryUnavailable: {error}")))?;
             if fetched.as_deref() != Some(write.bytes.as_slice()) {
                 return Err(invalid(
@@ -113,6 +144,6 @@ impl RemoteFormalEndpoint {
                 ));
             }
         }
-        Ok(restored)
+        Ok(())
     }
 }

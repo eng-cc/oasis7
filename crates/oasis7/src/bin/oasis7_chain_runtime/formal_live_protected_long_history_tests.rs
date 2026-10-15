@@ -235,13 +235,11 @@ fn wait_for_new_long_history_result(
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let current = runtime.published.current()?;
-        if let Some(result) = optional_retained_result_from_hot_or_cold(&current.world, &key)? {
-            if result.request != *request || result.rejected.is_some() {
-                return Err(format!(
-                    "long history exact task outcome mismatch or rejection: {:?}",
-                    result.rejected
-                ));
-            }
+        // Each generation/nonce here is new and the next request is not
+        // submitted until this one is published. Its result must therefore be
+        // in this qualified publication's recent hot results. Probing older
+        // cold history for an unexecuted request competes with publication.
+        if fresh_long_history_result(&current.world, &key, request)?.is_some() {
             return Ok(());
         }
         let snapshot = runtime
@@ -271,4 +269,93 @@ fn wait_for_new_long_history_result(
         }
         thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn fresh_long_history_result(
+    world: &oasis7::runtime::World,
+    key: &str,
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+) -> Result<Option<oasis7::world_service::CanonicalIntentResultV1>, String> {
+    let Some(value) = world
+        .capability_revocation_state()
+        .world_service_results
+        .get(key)
+    else {
+        return Ok(None);
+    };
+    correlation::validate_result(key, value)?;
+    let result: oasis7::world_service::CanonicalIntentResultV1 =
+        serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+    if result.request != *request || result.rejected.is_some() {
+        return Err(format!(
+            "long history exact task outcome mismatch or rejection: {:?}",
+            result.rejected
+        ));
+    }
+    Ok(Some(result))
+}
+
+#[test]
+fn fresh_long_history_wait_avoids_cold_absence_and_requires_exact_success() {
+    use oasis7::{runtime::World, world_service::CanonicalIntentResultV1};
+    let mut staged = World::new();
+    staged.initialize_empty_formal_history().unwrap();
+    let mut world = World::from_snapshot(staged.snapshot(), staged.journal().clone()).unwrap();
+    let identity = WorldIdentity {
+        world_id: "formal-fixture-world".into(),
+        genesis_digest: "08".repeat(32),
+    };
+    let payload = WorldServicePayloadV1::Delegation(
+        sign_read_request(
+            "delegation",
+            AgentSignerDelegationChangeV1 {
+                world_id: identity.world_id.clone(),
+                branch_id: "main".into(),
+                agent_id: "agent".into(),
+                owner_binding: "a".repeat(64),
+                agent_identity_generation: 1,
+                generation: 1,
+                delegate_public_key: hex::encode(fixtures::key(72).verifying_key().to_bytes()),
+                revoked: false,
+                nonce: 1,
+            },
+            &hex::encode(fixtures::key(91).to_bytes()),
+        )
+        .unwrap(),
+    );
+    let request = SubmitIntentRequest {
+        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+        correlation: correlation::derive_correlation(identity, &payload).unwrap(),
+        deadline_unix_ms: None,
+        signed_payload: payload,
+    };
+    let key = correlation::key_digest(&request.correlation.key).unwrap();
+    assert!(world.read_retained_world_service_result(&key).is_err());
+    assert!(
+        fresh_long_history_result(&world, &key, &request)
+            .unwrap()
+            .is_none()
+    );
+    let result = CanonicalIntentResultV1 {
+        request: request.clone(),
+        action_id: 1,
+        committed_height: 1,
+        receipt: serde_json::json!({}),
+        rejected: None,
+    };
+    world.record_world_service_result(result.clone()).unwrap();
+    assert_eq!(
+        fresh_long_history_result(&world, &key, &request).unwrap(),
+        Some(result.clone())
+    );
+    let mut different = request.clone();
+    different.deadline_unix_ms = Some(1);
+    assert!(fresh_long_history_result(&world, &key, &different).is_err());
+    let mut rejected = result;
+    rejected.rejected = Some("canonical rejection".into());
+    let mut rejected_world = World::new();
+    rejected_world
+        .record_world_service_result(rejected)
+        .unwrap();
+    assert!(fresh_long_history_result(&rejected_world, &key, &request).is_err());
 }
