@@ -1,3 +1,4 @@
+import type { DocumentInventoryQuery, DocumentInventoryPage } from './generated/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { DecisionDraft, DecisionRecord, DocumentSection, GitHubSnapshot, Preferences, Snapshot, WorkAssociation, RuntimeSnapshot, RuntimeTarget, RequestAnswer, QuitStatus, SessionConfig } from './types';
 import { listen } from '@tauri-apps/api/event';
@@ -8,6 +9,7 @@ function call<T>(command: string, args: Record<string, unknown> = {}): Promise<T
 }
 // Explicit finite commands: no arbitrary method, shell, SQL or filesystem proxy.
 export const bridge = {
+  documentInventory: (query: DocumentInventoryQuery) => call<DocumentInventoryPage>('query_document_inventory', { query }),
   snapshot: () => call<Snapshot>('query_view'),
   openProject: (path: string) => call<Snapshot>('open_project', { path }),
   chooseProject: () => call<Snapshot | null>('choose_project'),
