@@ -124,6 +124,8 @@ Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；唯一要求声明：[
 - 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
+- 新增局部设计依据（Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4）：[Node authoritative-state 拒绝启动](../../p2p/node/node-identity-replication-contract.design.md#des-nir-recovery)，由[专业恢复条款](../../p2p/node/node-identity-replication-contract.prd.md#nir-recovery)承接；仅 corrupt/unreadable PoS state 不默认重置的负向边界，不证明完整恢复链、非空日志后缀或新请求/模块行动/业务结算续跑。
+- 本次局部关系静态核对：2026-10-15；`a0b6ab12ad14c6c881e48cecdb4adbdb322dd30e` 与文档候选；不改变上述系统设计/实现状态、既有执行证据或原 AC / test_tier_full。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅本地driver/CAS恢复子范围；真实多节点、合法profile激活/authority链、pruning/archive与新请求/模块行动正向续跑对照仍缺完整验收。
 
 恢复只能沿同一 `world_id` 的 固定 genesis 身份、合法 manifest/profile/epoch 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
@@ -167,11 +169,13 @@ Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；唯一要求声明：[
 - 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
 - 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
 - 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
+- 新增局部设计依据（Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3）：[Node 条件 signer binding](../../p2p/node/node-identity-replication-contract.design.md#des-nir-signer)及其[专业接受](../../p2p/node/node-identity-replication-contract.prd.md#nir-signer-binding)，仅启用配置/签名模式后拒绝冒充受治理 validator；[local signer 权限边界](../../p2p/blockchain/local-file-signing-backend.design.md#des-local-signer-install)，仅安装、OS caller、grant 与通用文件签名不自授链/governance 权限。未配置 map、完整角色/暴露面/注册轮换/BFT 及真实主机组合仍未证明。
+- 本次局部关系静态核对：2026-10-15；`a0b6ab12ad14c6c881e48cecdb4adbdb322dd30e` 与文档候选；不改变上述系统设计/实现状态、既有执行证据或原 AC / test_tier_full。
 - 剩余范围：设计方面，角色隔离已有设计；各存储角色、pruning 冗余和运行暴露面的完整范围仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
 
-目标态参与边界：公网 IP 不是受治理 validator 或 permissionless full/storage/observer service role 参与网络的通用前置条件；治理 admission/activation 仅适用于 validators，full/storage/observer 等服务角色按本地 role policy 和技术可达性参与。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#2-user-experience-functionality)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
+目标态参与边界：公网 IP 不是受治理 validator 或 permissionless full/storage/observer service role 参与网络的通用前置条件；治理 admission/activation 仅适用于 validators，full/storage/observer 等服务角色按本地 role policy 和技术可达性参与。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#reachability-user-experience)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
 
 - 对应验收：[AC-DCS-003](#ac-dcs-003)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)。

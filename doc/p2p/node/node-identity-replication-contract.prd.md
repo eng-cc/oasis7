@@ -18,6 +18,8 @@ local/dev missing key 仅启用节点启动前在当前 config path 创建；dis
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
+Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3。局部承接 [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)：启用对应配置/签名模式后，即使签名有效，missing/mismatch binding 也不能让任意 signer 冒充已受治理 validator。未配置 map 的部署不能据此声称完整绑定。治理 registry、轮换、activation、所有网络角色与被攻破服务组合不由本条证明。
+
 <a id="nir-ingest-order"></a>
 ### Replication ingest
 
@@ -31,6 +33,8 @@ world/topic-isolated injection；验 signature/source→apply→persist guard→
 corrupt/unreadable PoS state blocks start，不默认重置；保留诊断并纠正 state/config/deployment 根因。无自动 deploy/state-sync/restore/rollback 或 topology/readiness 承诺。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4。局部承接 [REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：已定义的 PoS authoritative state corrupt/unreadable 必须阻断启动，不 default reset 或伪恢复，保留诊断并纠正根因。仅此负向边界；不证明合法激活链、checkpoint/snapshot/replay/root 全链、非空日志后缀、新请求/模块行动与业务结算正向续跑或当前可服务。
 
 
 - Design: `doc/p2p/node/node-identity-replication-contract.design.md`
