@@ -78,19 +78,13 @@ pub(super) fn parse(content: &str) -> HashMap<String, Vec<Location>> {
 }
 
 fn slug(title: &str) -> String {
-    // The governance heading convention removes formatting, punctuation and
-    // keeps BMP non-ASCII text. Duplicate slugs remain ambiguous, without suffixes.
+    // Heading anchors use lowercase visible letters/numbers, excluding punctuation.
+    // Duplicate slugs remain ambiguous, without suffixes.
     let normalized: String = title
         .trim()
         .to_lowercase()
         .chars()
-        .filter(|c| {
-            !"`*_~".contains(*c)
-                && (c.is_alphanumeric()
-                    || *c == '-'
-                    || *c == ' '
-                    || ('\u{0080}'..='\u{ffff}').contains(c))
-        })
+        .filter(|c| !"`*_~".contains(*c) && (c.is_alphanumeric() || *c == '-' || *c == ' '))
         .collect();
     normalized.split_whitespace().collect::<Vec<_>>().join("-")
 }
@@ -136,7 +130,7 @@ fn html(
                 .trim();
             let standalone = anchor_only(source_line);
             result
-                .entry(id.to_lowercase())
+                .entry(id)
                 .or_default()
                 .push(Location { line, standalone });
         }

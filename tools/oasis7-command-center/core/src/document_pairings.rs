@@ -128,11 +128,7 @@ pub(super) fn resolve(
                     let catalog = fragments
                         .entry(path.to_owned())
                         .or_insert_with(|| super::document_fragments::parse(&contents[path]));
-                    match catalog
-                        .get(&fragment.to_lowercase())
-                        .map(Vec::as_slice)
-                        .unwrap_or(&[])
-                    {
+                    match catalog.get(fragment).map(Vec::as_slice).unwrap_or(&[]) {
                         [] => {
                             edge.resolution = "missing_fragment".into();
                             None

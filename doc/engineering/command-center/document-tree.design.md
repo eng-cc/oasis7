@@ -36,7 +36,7 @@
 
 Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库相对路径、标题、kind、声明 ID、原始生命周期声明及独立规范化类别/解析状态、内容摘要、snapshot ID、dirty 状态。文件键使用项目/工作树身份与规范化路径；文档 ID 只作为检索字段，重复 ID 产生诊断，不合并文件。章节沿既有章节定位，关系的源/目标 fragment 保留完整路径及源位置。
 
-`DocumentEdge` 保存 from/to、kind（navigation / paired_design / upstream_requirement / reference / successor）、声明位置、源摘要及解析结果（resolved / missing / ambiguous / outside_scope / unread）。只有入口的模块/专题导航、明确配对字段及设计上游/承接表产生相应 typed edge；其他 Markdown 链接为 reference。解析支持相对路径、显式锚点和 Markdown 标题锚点，沿仓库治理解析规则保持一致；重复锚点不静默选第一项。链接不存在与目标超出本次读取范围分别记录。远端链接仅作为引用显示，刷新不跟随网络抓取。
+`DocumentEdge` 保存 from/to、kind（navigation / paired_design / upstream_requirement / reference / successor）、声明位置、源摘要及解析结果（resolved / missing / ambiguous / outside_scope / unread）。只有入口的模块/专题导航、明确配对字段及设计上游/承接表产生相应 typed edge；其他 Markdown 链接为 reference。解析支持相对路径、显式锚点和 Markdown 标题锚点，路径沿仓库治理范围规则；导航按下述大小写/标题合同定位，不继承治理校验的宽松 fragment 大小写匹配；重复锚点不静默选第一项。链接不存在与目标超出本次读取范围分别记录。远端链接仅作为引用显示，刷新不跟随网络抓取。
 
 产品投影固定从产品 README 的四域入口读取模块与专题声明；异常额外模块作为诊断，不自动新增第五域。专业系统投影从专业域入口与模块 design 导航展开，同域工程 PRD 可作为需求关联入口；专题归属来自明确导航，无法定位的文件进入“未归属/待核对”。目录投影按路径组织所有候选 PRD/design，README 仅作为结构入口；类型以根 prd/design 与专题后缀为默认，显式声明冲突保留诊断。
 
@@ -144,7 +144,7 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 
 目标仅与本次候选清单比对，不沿链接读文件或访问网络：已读取且没有 fragment 的文件目标标 resolved，带 fragment 的目标仅在同次已读内容中定位；唯一显式 HTML `id` 或 Markdown 标题锚点标 resolved，未找到标 missing_fragment，重复显式/标题锚点及二者冲突标 ambiguous，不自动选择第一项或添加编号后缀。已列举但删除的目标标 missing，其他读取遗漏标 unread；未纳入清单、外部、越界或不安全目标标 outside_scope，不把未跟踪文件猜为不存在。详情展示诊断及源行，内容摘要沿所属文件绑定。已解析目标附可选 targetSection/targetRevision，UI 仅在目标路径、章节 ID 和内容摘要均匹配当前章节时开放跳转；无 fragment 时进入文件首个索引章节，空文件无章节可跳。显式锚点紧邻标题时定位该标题，正文/表格内锚点定位所属章节。
 
-锚点解析使用 CommonMark 事件，排除代码和 HTML 注释；标题按可见文本小写、去格式/标点并以连字符连接空白，保留中文等 BMP 文本，支持 Setext 标题。HTML `id` 支持单/双引号及其他属性前置，raw-text HTML 块不提取内部伪锚点。旧清单缺少可选 `pairings` 时显示未解析并要求刷新，不将缺字段当作无配对；旧 App 忽略新增派生字段，原 Snapshot 不变。旧配对清单若仍有 fragment_unchecked 或没有章节定位字段，保留诊断并提示刷新，不按标题猜位置。跳转复用来源详情，关闭后回到原配对按钮并保留当前筛选、分页和文件选择；项目/源代次变化使原清单失效。此切片尚不解析上游/承接表、导航、successor 边或显式文档 ID，不提供三种树投影。程序回归沿文件清单和界面测试入口，实际桌面验证归实现 PR。
+锚点解析使用 CommonMark 事件，排除代码和 HTML 注释；标题按可见文本小写，仅保留 Unicode 字母/数字和连字符，移除格式符及包括中文标点在内的其他字符，并以连字符连接空白，支持 Setext 标题。显式 HTML `id` 按原始大小写精确匹配（Contract 与 contract 分开），生成的标题锚点使用小写值；HTML `id` 支持单/双引号及其他属性前置，raw-text HTML 块不提取内部伪锚点。旧清单缺少可选 `pairings` 时显示未解析并要求刷新，不将缺字段当作无配对；旧 App 忽略新增派生字段，原 Snapshot 不变。旧配对清单若仍有 fragment_unchecked 或没有章节定位字段，保留诊断并提示刷新，不按标题猜位置。跳转复用来源详情，关闭后回到原配对按钮并保留当前筛选、分页和文件选择；项目/源代次变化使原清单失效。此切片尚不解析上游/承接表、导航、successor 边或显式文档 ID，不提供三种树投影。程序回归沿文件清单和界面测试入口，实际桌面验证归实现 PR。
 
 先实现文件清单与覆盖反馈，再实现关系和快照投影，随后接入树/详情及恢复，最后验证真实 App。只到前两步时可以交付索引切片，但不宣称 AC-CC-016 已通过。纯设计不改变游戏 Agent Skill/API/runtime 行为，开发自主试玩不适用；功能实现仍需上述真实桌面验证。
 

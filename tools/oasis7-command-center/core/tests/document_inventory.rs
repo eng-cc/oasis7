@@ -754,3 +754,45 @@ fn raw_html_text_never_produces_navigable_anchors() {
         ["missing_fragment", "missing_fragment", "resolved"]
     );
 }
+
+#[test]
+fn heading_punctuation_and_explicit_id_case_follow_navigation_semantics() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    fs::write(root.join("doc/prd.md"), "# Product\n\n- 配对系统设计：[heading](design.md#状态事务) [upper](design.md#Contract) [lower](design.md#contract) [wrong](design.md#CONTRACT)\n").unwrap();
+    fs::write(root.join("doc/design.md"), "# Design\n\n## 状态、事务\n\n<a id='Contract'></a>\n\n## Upper target\n\n<a id='contract'></a>\n\n## Lower target\n").unwrap();
+    git(&root, &["add", "doc/design.md"]);
+    core.refresh().unwrap();
+    let snapshot = core.snapshot();
+    let page = core.document_inventory(query).unwrap();
+    let edges = &page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap()
+        .targets;
+    assert_eq!(
+        edges
+            .iter()
+            .map(|e| e.resolution.as_str())
+            .collect::<Vec<_>>(),
+        ["resolved", "resolved", "resolved", "missing_fragment"]
+    );
+    let titles = edges
+        .iter()
+        .take(3)
+        .map(|edge| {
+            snapshot
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == edge.target_section.as_ref())
+                .unwrap()
+                .title
+                .as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(titles, ["状态、事务", "Upper target", "Lower target"]);
+}
