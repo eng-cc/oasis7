@@ -431,6 +431,7 @@ struct ServiceState {
     chain_p2p_status: Option<ChainP2pStatusSnapshot>,
     chain_observability_status: Option<ChainNodeObservabilitySnapshot>,
     chain_replication_status: Option<ChainReplicationSnapshot>,
+    executor_status: Option<oasis7_launcher_ui::AgentExecutorStatus>,
     chain_recovery: Option<ChainRecoverySnapshot>,
     chain_running: Option<RunningProcess>,
     chain_started_at: Option<Instant>,
@@ -463,6 +464,7 @@ impl ServiceState {
             chain_p2p_status: None,
             chain_observability_status: None,
             chain_replication_status: None,
+            executor_status: None,
             chain_recovery: None,
             chain_running: None,
             chain_started_at: None,
@@ -504,6 +506,7 @@ struct StateSnapshot {
     chain_observability_status: Option<ChainNodeObservabilitySnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_replication_status: Option<ChainReplicationSnapshot>,
+    executor_status: Option<oasis7_launcher_ui::AgentExecutorStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_recovery: Option<ChainRecoverySnapshot>,
     hosted_access: hosted_access::HostedPlayerAccessContract,

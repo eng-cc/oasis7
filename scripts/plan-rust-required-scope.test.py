@@ -335,6 +335,35 @@ class Selection(unittest.TestCase):
                                      'workspace_support', 'oasis7_required', 'launcher_web'})
                     base = self.git('rev-parse', 'HEAD')
 
+    def test_model_provider_integration_tests_route_to_support_and_server_consumer(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        packages = ('oasis7_agent_harness', 'oasis7_model_provider', 'oasis7')
+        for package in packages:
+            self.write(f'crates/{package}/Cargo.toml',
+                       f'[package]\nname="{package}"\nversion="0.1.0"\n')
+            self.write(f'crates/{package}/src/lib.rs', '')
+            self.write(f'crates/{package}/tests/transport.rs', '')
+        base = self.commit()
+        manifests = {name: (f'crates/{name}', {}) for name in packages}
+        graph = (manifests, {
+            'oasis7_agent_harness': {'oasis7_model_provider', 'oasis7'},
+            'oasis7_model_provider': {'oasis7'}, 'oasis7': set(),
+        }, {})
+        with patch.object(selector, 'cargo_graph', return_value=graph):
+            for package, path in [('oasis7_model_provider', 'tests/transport.rs'),
+                                  ('oasis7_agent_harness', 'src/lib.rs')]:
+                with self.subTest(package=package):
+                    self.write(f'crates/{package}/{path}', '// changed')
+                    plan = selector.select(config, base, self.commit())
+                    self.assertEqual(plan['scope'], 'targeted')
+                    expected_profiles = {'oasis7_model_provider'}
+                    if package == 'oasis7_agent_harness':
+                        expected_profiles.add('oasis7_agent_harness')
+                    self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
+                    self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
+                                     'workspace_support', 'oasis7_required', 'launcher_web'})
+                    base = self.git('rev-parse', 'HEAD')
+
     def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
         packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')

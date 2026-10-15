@@ -251,3 +251,6 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
+
+#[path = "native_run_budget.rs"]
+mod native_run_budget;

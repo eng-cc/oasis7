@@ -409,49 +409,6 @@ impl Client {
         }
         Ok(*winner)
     }
-    pub fn lookup(
-        &self,
-        request: &SubmitIntentRequest<WorldServicePayloadV1>,
-    ) -> Result<IntentResponse<Value>, String> {
-        self.remote
-            .lookup(
-                LookupIntentRequest {
-                    contract_version: 1,
-                    key: request.correlation.key.clone(),
-                },
-                request.signed_payload.clone(),
-            )
-            .map_err(|_| "original result query unavailable; retain original operation".to_owned())
-    }
-    pub fn submit_and_poll(
-        &self,
-        request: &SubmitIntentRequest<WorldServicePayloadV1>,
-    ) -> Result<IntentResponse<Value>, String> {
-        // The original signed payload is already durable before the first send.
-        // A transport failure can only cause lookup/replay of this exact intent.
-        let submission = self.remote.submit(request.clone());
-        if let Ok(SubmitObservation::Response(response)) = submission
-            && matches!(
-                response.outcome,
-                IntentOutcome::Committed { .. }
-                    | IntentOutcome::Rejected { .. }
-                    | IntentOutcome::Expired
-            )
-        {
-            return Ok(*response);
-        }
-        for _ in 0..40 {
-            let response = self.lookup(request)?;
-            if !matches!(
-                response.outcome,
-                IntentOutcome::Received { .. } | IntentOutcome::Pending | IntentOutcome::Unknown
-            ) {
-                return Ok(response);
-            }
-            std::thread::sleep(Duration::from_millis(200));
-        }
-        self.lookup(request)
-    }
     pub fn prefix(
         &self,
         operation: &str,
@@ -525,21 +482,17 @@ fn context_next_step<T>(outcome: &IntentOutcome<T>) -> &'static str {
     }
 }
 
-/// Emit only a bounded public category/status, never response text or proofs.
-fn failure_tag(error: &crate::WorldServiceClientError) -> String {
-    use crate::WorldServiceClientError;
-    match error {
-        WorldServiceClientError::Configuration(_) => "configuration rejected".into(),
-        WorldServiceClientError::Transport(_) => "transport unavailable".into(),
-        WorldServiceClientError::Assurance(_) => "response not verified".into(),
-        WorldServiceClientError::Rejected { status, .. } => format!("rejected HTTP {status}"),
-        WorldServiceClientError::Cooldown { status, .. } => format!("cooldown HTTP {status}"),
-    }
-}
-
 #[path = "device_client_validation.rs"]
 mod validation;
 use validation::*;
 #[cfg(test)]
 #[path = "device_client_tests.rs"]
 mod tests;
+
+#[path = "device_client_outcome.rs"]
+mod outcomes;
+
+#[path = "device_client_poll.rs"]
+mod polling;
+
+use polling::failure_tag;

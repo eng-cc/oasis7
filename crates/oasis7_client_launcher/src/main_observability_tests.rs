@@ -65,6 +65,11 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
             }],
             request_peer_scores: std::collections::BTreeMap::new(),
         }),
+        executor_status: Some(oasis7_launcher_ui::AgentExecutorStatus {
+            phase: "blocked".into(),
+            reason: Some("model_budget_exhausted".into()),
+            ..Default::default()
+        }),
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -72,6 +77,17 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
     };
 
     app.apply_web_snapshot(snapshot);
+    assert_eq!(
+        app.executor_status.as_ref().unwrap().phase_label(false),
+        "Blocked"
+    );
+    assert!(
+        app.executor_status
+            .as_ref()
+            .unwrap()
+            .reason_label(false)
+            .contains("goal status unknown")
+    );
     let status = app
         .chain_p2p_status
         .clone()

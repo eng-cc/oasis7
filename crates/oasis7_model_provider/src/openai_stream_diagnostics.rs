@@ -5,10 +5,10 @@ use futures_util::StreamExt;
 use std::error::Error;
 use std::fmt;
 
-use super::decision_flow::summarize_trace_text;
 use super::openai_payload::{
-    completion_result_from_sdk_stream_events, text_output_from_sdk_stream_events,
+    completion_result_from_sdk_stream_events_with_profile, text_output_from_sdk_stream_events,
 };
+use super::summarize_trace_text;
 use super::{LlmClientError, LlmCompletionResult, OpenAiChatCompletionClient};
 
 impl fmt::Debug for OpenAiChatCompletionClient {
@@ -27,18 +27,18 @@ impl fmt::Debug for OpenAiChatCompletionClient {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamTransportMetadata {
-    pub(super) http_status: Option<u16>,
-    pub(super) request_timeout_ms: u64,
-    pub(super) response_version: Option<String>,
-    pub(super) content_type: Option<String>,
-    pub(super) content_encoding: Option<String>,
-    pub(super) transfer_encoding: Option<String>,
-    pub(super) content_length: Option<String>,
-    pub(super) connection: Option<String>,
-    pub(super) frame_count: usize,
-    pub(super) decoded_frame_count: usize,
-    pub(super) elapsed_ms: u64,
-    pub(super) nested_transport_cause: String,
+    pub http_status: Option<u16>,
+    pub request_timeout_ms: u64,
+    pub response_version: Option<String>,
+    pub content_type: Option<String>,
+    pub content_encoding: Option<String>,
+    pub transfer_encoding: Option<String>,
+    pub content_length: Option<String>,
+    pub connection: Option<String>,
+    pub frame_count: usize,
+    pub decoded_frame_count: usize,
+    pub elapsed_ms: u64,
+    pub nested_transport_cause: String,
 }
 
 fn redact_transport_cause(raw: &str) -> String {
@@ -61,7 +61,7 @@ fn redact_transport_cause(raw: &str) -> String {
     summarize_trace_text(output.join(" ").as_str(), 240)
 }
 
-pub(super) fn format_stream_transport_diagnostics(metadata: &StreamTransportMetadata) -> String {
+pub fn format_stream_transport_diagnostics(metadata: &StreamTransportMetadata) -> String {
     format!(
         "responses stream transport diagnostics: http_status={} request_timeout_ms={} response_version={} content_type={} content_encoding={} transfer_encoding={} content_length={} connection={} frames={} decoded_frames={} elapsed_ms={} cause={}",
         metadata
@@ -153,7 +153,7 @@ impl OpenAiChatCompletionClient {
         clippy::result_large_err,
         reason = "Stable provider transport seam retains the structured request error contract."
     )]
-    pub(super) fn send_responses_request(
+    pub fn send_responses_request(
         &self,
         client: &async_openai::Client<async_openai::config::OpenAIConfig>,
         payload: CreateResponse,
@@ -179,7 +179,8 @@ impl OpenAiChatCompletionClient {
             while let Some(event) = stream.next().await {
                 events.push(event.map_err(OpenAiRequestError::from)?);
             }
-            completion_result_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
+            completion_result_from_sdk_stream_events_with_profile(events, self.legacy_tool_profile)
+                .map_err(OpenAiRequestError::Completion)
         })
     }
 
@@ -187,7 +188,7 @@ impl OpenAiChatCompletionClient {
         clippy::result_large_err,
         reason = "Stable provider transport seam retains the structured request error contract."
     )]
-    pub(super) fn send_responses_request_for_text(
+    pub fn send_responses_request_for_text(
         &self,
         client: &async_openai::Client<async_openai::config::OpenAIConfig>,
         payload: CreateResponse,
@@ -233,7 +234,8 @@ impl OpenAiChatCompletionClient {
             let events = self
                 .collect_instrumented_stream_events(&mut payload)
                 .await?;
-            completion_result_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
+            completion_result_from_sdk_stream_events_with_profile(events, self.legacy_tool_profile)
+                .map_err(OpenAiRequestError::Completion)
         })
     }
 
@@ -350,7 +352,7 @@ impl OpenAiChatCompletionClient {
 }
 
 #[derive(Debug)]
-pub(super) enum OpenAiRequestError {
+pub enum OpenAiRequestError {
     Timeout(String),
     ParseBody(String),
     Completion(LlmClientError),

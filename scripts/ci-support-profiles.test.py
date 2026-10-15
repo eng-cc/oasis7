@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tomllib
 import unittest
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,6 +53,29 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertNotIn('cargo test -p oasis7 ', result.stdout)
         self.assertNotIn('full-inventory', result.stdout)
 
+    def test_model_provider_runs_integration_tests_and_strict_clippy(self):
+        result = self.invoke(json.dumps(['oasis7_model_provider']))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('clippy -p oasis7_model_provider --all-targets', result.stdout)
+        self.assertIn('cargo test -p oasis7_model_provider --all-targets', result.stdout)
+        self.assertNotIn('cargo test -p oasis7_model_provider --lib', result.stdout)
+        self.assertNotIn('cargo test -p oasis7 ', result.stdout)
+        self.assertNotIn('full-inventory', result.stdout)
+
+    def test_main_portable_harness_keeps_native_clients_out_of_wasm(self):
+        manifest = tomllib.loads((ROOT / 'crates/oasis7/Cargo.toml').read_text())
+        native = manifest['target']['cfg(not(target_arch = "wasm32"))']['dependencies']
+        self.assertIn('oasis7_agent_harness', manifest['dependencies'])
+        self.assertNotIn('oasis7_agent_harness', native)
+        for package in ('oasis7_game_client', 'oasis7_model_provider'):
+            self.assertNotIn(package, manifest['dependencies'])
+            self.assertIn(package, native)
+        harness = tomllib.loads((ROOT / 'crates/oasis7_agent_harness/Cargo.toml').read_text())
+        native_harness = harness['target']['cfg(not(target_arch = "wasm32"))']['dependencies']
+        for package in ('oasis7_game_client', 'oasis7_client_api'):
+            self.assertNotIn(package, harness['dependencies'])
+            self.assertIn(package, native_harness)
+
     def test_invalid_lists_fail_before_execution(self):
         for value in ['[]', '["unknown"]', '["oasis7_agent_api", "oasis7_agent_api"]',
                       'null', '{}', '[1]', 'invalid']:
@@ -93,6 +117,8 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         legacy = DRIVER.split('run_oasis7_workspace_support_crate_tests() {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('run_cargo test -p oasis7_model_provider --all-targets', legacy)
+        self.assertIn('run_cargo_clippy -p oasis7_model_provider --all-targets', legacy)
         # Independent old full entry is retained: profiles must cover every package
         # in it, not merely agree with their own inventory constant.
         self.assertEqual(set(module.SUPPORT_PROFILES),

@@ -489,6 +489,13 @@ fn handle_chain_status_connection(
     }
 
     match path {
+        "/v1/world/executor-status" => {
+            let payload = super::native_agent_client::snapshot();
+            let bytes =
+                serde_json::to_vec(&payload).map_err(|_| "executor status encoding failed")?;
+            write_json_response(&mut stream, 200, &bytes, head_only)
+                .map_err(|_| "executor status response unavailable")?;
+        }
         "/healthz" => {
             write_json_response(&mut stream, 200, b"{\"ok\":true}", head_only)
                 .map_err(|err| format!("failed to write /healthz response: {err}"))?;

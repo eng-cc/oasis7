@@ -173,6 +173,9 @@
     "oasis7_game_client": [
       "workspace_support"
     ],
+    "oasis7_model_provider": [
+      "workspace_support"
+    ],
     "oasis7_local_signer": [
       "workspace_support"
     ],

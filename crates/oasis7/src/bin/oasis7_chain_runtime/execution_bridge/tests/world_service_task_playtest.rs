@@ -887,3 +887,6 @@ pub(super) fn retry_private<T>(
         }
     }
 }
+
+#[path = "world_service_task_native_runner_conformance.rs"]
+mod native_runner_conformance;

@@ -21,6 +21,15 @@ level `WorldServiceTransport` verifies request-bound service envelopes; callers 
 its generic methods must also validate world, scope, evidence and business correlation.
 A service signature is not an independent consensus or durable receipt proof.
 
+`lookup_typed` retains error categories for recovery decisions. After one
+submission, the high-level client retries only the original result query for
+transport failure, HTTP 503 or bounded Retry-After advice. It keeps forty attempts
+within an eight-second query window; an already in-flight read retains its
+configured timeout. Assurance/configuration failures stop immediately. Neither
+query retry nor an unknown result creates a replacement action or signature.
+Native Harness model-call reservations are separately encrypted and locked in
+the local operation store; they do not become world task authority.
+
 Public JSON observations explicitly use `/v1/world/view-json`: the server applies
 the same pinning and authorization as `/v1/world/view`, normalizes the projection to
 JSON, then signs it in the distinct path domain. `VerifiedTaskWorldView` retains the

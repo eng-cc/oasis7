@@ -193,6 +193,7 @@ impl ClientLauncherApp {
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 self.render_top_status_bar(ui);
+                self.render_executor_status(ui);
             });
     }
 

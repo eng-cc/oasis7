@@ -55,6 +55,7 @@ mod app_process;
 mod app_process_web;
 mod chain_pos_defaults;
 mod config_ui;
+mod executor_status;
 mod explorer_window;
 #[cfg(not(target_arch = "wasm32"))]
 mod feedback_entry;
@@ -1029,6 +1030,7 @@ struct ClientLauncherApp {
     chain_p2p_status: Option<WebChainP2pStatus>,
     chain_observability_status: Option<WebChainNodeObservabilityStatus>,
     chain_replication_status: Option<WebChainReplicationStatus>,
+    executor_status: Option<oasis7_launcher_ui::AgentExecutorStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     #[cfg(not(target_arch = "wasm32"))]
     running: Option<RunningProcess>,
@@ -1095,6 +1097,7 @@ impl Default for ClientLauncherApp {
             chain_p2p_status: None,
             chain_observability_status: None,
             chain_replication_status: None,
+            executor_status: None,
             chain_recovery: None,
             #[cfg(not(target_arch = "wasm32"))]
             running: None,
