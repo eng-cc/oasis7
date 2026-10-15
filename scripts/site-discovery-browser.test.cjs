@@ -128,6 +128,21 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   assert.equal(await p.evaluate(()=>window.heroCanvasContexts),0);assert.equal(await p.locator('canvas[data-hero-canvas]').count(),0);
   await c.close();record('normal-motion homepage creates no hidden Canvas context');
  }
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale,viewport:{width:390,height:844}});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();const route=locale==='zh-CN'?'/':'/en/';await p.goto(origin+route);
+  assert.equal(await p.locator('[data-case-result]').count(),1);assert.equal(await p.locator('section#world').count(),0);assert.equal(await p.locator('footer #world').getAttribute('href'),'observations/');
+  await p.locator('.case-source a[href="#case-conditions"]').click();assert.equal(await p.locator('#case-conditions').getAttribute('open'),'');
+  await p.locator('#case-conditions > summary').click();await p.locator('.case-source a[href="#case-conditions"]').click();assert.equal(await p.locator('#case-conditions').getAttribute('open'),'');
+  await p.locator('.hero-overview-link').click();await p.locator('.preview-paths a[href="#package-download"]').click();await p.waitForTimeout(700);
+  assert.ok(await p.locator('[data-download-platform-button="windows"]').isVisible());const top=await p.locator('#package-download').evaluate(e=>e.getBoundingClientRect().top);assert.ok(top>=-1&&top<250,String(top));
+  assert.equal(await p.locator('meta[name="oasis7-site-build"]').getAttribute('content'),'20261015-visible-results');await c.close();record(locale+' result, separate setup paths and direct mobile platform access');
+ }
+ {
+  const c=await context({viewport:{width:390,height:844}});const p=await c.newPage();await p.goto(origin+'/story/');await p.waitForFunction(()=>document.querySelector('[data-story-reader]').dataset.readerState==='ready');
+  assert.equal(await p.locator('.reader-nav-details').getAttribute('open'),null);await p.locator('.reader-nav-details > summary').click();await p.locator('[data-story-src$="chapter-02.md"]').first().click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').dataset.readerState==='ready');
+  await p.locator('[data-story-start]').click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').dataset.readerState==='ready');assert.ok((await p.locator('[data-story-src][aria-pressed="true"]').getAttribute('data-story-src')).endsWith('volume-01-chapter-01.md'));
+  assert.equal(await p.title(),'绿洲2076｜oasis7世界观小说');await c.close();record('novel start returns to first chapter after a different selection');
+ }
  // Reader empty/error/retry and both late response directions.
  for(const first of ['empty','error','late-success','late-error']){
   const c=await context({locale:'en-US'});let attempts=0;
@@ -139,7 +154,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   });await c.route('**/volume-01-chapter-02.md',r=>r.fulfill({body:'# New chapter\n\nB is authoritative for this reading selection.'}));
   const p=await c.newPage();await p.goto(origin+'/story/');
   assert.ok(p.url().endsWith('/story/'));
-  if(first.startsWith('late-')){await p.locator('[data-story-src$="chapter-02.md"]').first().click();await p.waitForTimeout(950);assert.ok((await p.locator('[data-story-content]').innerText()).includes('B is authoritative'));assert.equal(await p.locator('.reader-panel').getAttribute('aria-busy'),'false');}
+  if(first.startsWith('late-')){await p.locator('.reader-nav-details > summary').click();await p.locator('[data-story-src$="chapter-02.md"]').first().click();await p.waitForTimeout(950);assert.ok((await p.locator('[data-story-content]').innerText()).includes('B is authoritative'));assert.equal(await p.locator('.reader-panel').getAttribute('aria-busy'),'false');}
   else {await p.waitForFunction(()=>document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='empty'||document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='error');assert.equal(await p.locator('[data-story-content]').innerText(),'');await p.locator('[data-story-retry]').click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='ready');assert.ok((await p.locator('[data-story-content]').innerText()).includes('Readable current text'));}
   await c.close();record('reader '+first+' / real recovery / English does not invent route');
  }
@@ -154,7 +169,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   await c.route('**/volume-01-chapter-01.md',async r=>{attempts++;const first=attempts===1;await new Promise(ok=>setTimeout(ok,first?600:900));await r.fulfill({body:first?'   ':'# Fresh chapter\n\nFresh after retry.'});});
   const p=await c.newPage();await p.goto(origin+'/story/');await p.locator('[data-story-retry]').click();await p.waitForTimeout(1100);
   assert.ok((await p.locator('[data-story-content]').innerText()).includes('Fresh after retry'));
-  await p.locator('[data-story-src$="chapter-02.md"]').first().click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='ready');
+  await p.locator('.reader-nav-details > summary').click();await p.locator('[data-story-src$="chapter-02.md"]').first().click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='ready');
   await p.locator('[data-story-src$="chapter-01.md"]').first().click();await p.waitForFunction(()=>document.querySelector('[data-story-reader]').getAttribute('data-reader-state')==='ready');
   assert.ok((await p.locator('[data-story-content]').innerText()).includes('Fresh after retry'));await c.close();record('same chapter retry ignores late cache writer');
  }
