@@ -371,7 +371,7 @@ fn explicit_pairings_use_same_candidate_coverage_without_following_targets() {
             .collect::<Vec<_>>(),
         [
             "resolved",
-            "fragment_unchecked",
+            "missing_fragment",
             "missing",
             "unread",
             "outside_scope",
@@ -488,4 +488,311 @@ fn pairing_uses_first_field_delimiter_even_when_link_labels_contain_colons() {
     );
     assert_eq!(pairs.targets[0].declaration_line, 3);
     assert_eq!(pairs.targets[1].declaration_line, 4);
+}
+
+#[test]
+fn pairing_fragments_resolve_only_unique_real_anchors_in_the_same_revision() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    let targets = [
+        "design.md",
+        "design.md#%E8%AE%BE%E8%AE%A1-api",
+        "design.md#contract",
+        "design.md#inline",
+        "design.md#duplicate",
+        "design.md#collision",
+        "design.md#code",
+        "design.md#comment",
+        "design.md#absent",
+        "design.md#setext",
+        "design.md#second",
+        "design.md#heading-dupe",
+    ];
+    fs::write(
+        root.join("doc/prd.md"),
+        format!(
+            "# Product\n\n- 配对系统设计：{}\n",
+            targets
+                .iter()
+                .map(|target| format!("[target]({target})"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join("doc/design.md"),
+        r#"# **设计** `API`
+
+<a title="a > b" id='contract'></A>
+
+## Contract body
+
+An <a id="inline"></a>inline anchor.
+
+<a id="duplicate"></a>
+<a id="duplicate"></a>
+
+<a id="collision"></a>
+
+## collision
+
+```md
+<a id="code"></a>
+## code
+```
+
+<!--
+<a id="comment"></a>
+-->
+
+Setext
+------
+
+<a id="second"></a>
+
+## Second body
+
+## heading-dupe
+
+## heading-dupe
+"#,
+    )
+    .unwrap();
+    git(&root, &["add", "doc/design.md"]);
+    core.refresh().unwrap();
+    let snapshot = core.snapshot();
+    let page = core.document_inventory(query.clone()).unwrap();
+    let pairs = page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap();
+    assert_eq!(
+        pairs
+            .targets
+            .iter()
+            .map(|e| e.resolution.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "resolved",
+            "resolved",
+            "resolved",
+            "resolved",
+            "ambiguous",
+            "ambiguous",
+            "missing_fragment",
+            "missing_fragment",
+            "missing_fragment",
+            "resolved",
+            "resolved",
+            "ambiguous"
+        ]
+    );
+    let selected_titles = pairs
+        .targets
+        .iter()
+        .take(4)
+        .map(|edge| {
+            let section = snapshot
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == edge.target_section.as_ref())
+                .unwrap();
+            assert_eq!(Some(&section.revision), edge.target_revision.as_ref());
+            section.title.as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        selected_titles,
+        ["设计 API", "设计 API", "Contract body", "Contract body"]
+    );
+    let setext = &pairs.targets[9];
+    assert_eq!(
+        snapshot
+            .sections
+            .iter()
+            .find(|s| Some(&s.id) == setext.target_section.as_ref())
+            .unwrap()
+            .title,
+        "Setext"
+    );
+    assert_eq!(
+        snapshot
+            .sections
+            .iter()
+            .find(|s| Some(&s.id) == pairs.targets[10].target_section.as_ref())
+            .unwrap()
+            .title,
+        "Second body"
+    );
+    assert!(
+        pairs
+            .targets
+            .iter()
+            .filter(|e| e.resolution != "resolved")
+            .all(|e| e.target_section.is_none())
+    );
+    let old_snapshot = page.snapshot_id;
+    fs::write(root.join("doc/design.md"), "# Changed\n").unwrap();
+    core.refresh().unwrap();
+    let mut expired = query;
+    expired.snapshot_id = Some(old_snapshot);
+    assert!(core.document_inventory(expired).is_err());
+}
+
+#[test]
+fn old_pairing_cache_retains_diagnostics_but_has_no_navigation_locator() {
+    let (tmp, mut core, query) = fixture();
+    fs::write(
+        tmp.path().join("repo/doc/prd.md"),
+        "# Product\n\n- 配对系统设计：[target](empty.md)\n",
+    )
+    .unwrap();
+    core.refresh().unwrap();
+    drop(core);
+    let db = rusqlite::Connection::open(tmp.path().join("db")).unwrap();
+    let key = format!("document_inventory_v1:{}", query.project_id);
+    let raw: String = db
+        .query_row("SELECT value FROM cache WHERE key=?1", [&key], |r| r.get(0))
+        .unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    for file in value["files"].as_array_mut().unwrap() {
+        if let Some(targets) = file
+            .get_mut("pairings")
+            .and_then(|p| p.get_mut("targets"))
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for target in targets {
+                target.as_object_mut().unwrap().remove("targetSection");
+                target.as_object_mut().unwrap().remove("targetRevision");
+            }
+        }
+    }
+    db.execute(
+        "UPDATE cache SET value=?1 WHERE key=?2",
+        [value.to_string(), key],
+    )
+    .unwrap();
+    let core = CommandCenter::open(tmp.path().join("db")).unwrap();
+    let page = core.document_inventory(query).unwrap();
+    let edge = &page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap()
+        .targets[0];
+    assert_eq!(edge.resolution, "resolved");
+    assert!(edge.target_section.is_none());
+    assert!(edge.target_revision.is_none());
+}
+
+#[test]
+fn adjacent_anchor_aliases_all_address_the_following_heading() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    fs::write(root.join("doc/prd.md"), "# Product\n\n- 配对系统设计：[a](design.md#a) [b](design.md#b) [c](design.md#c) [d](design.md#d)\n").unwrap();
+    fs::write(root.join("doc/design.md"), "# Intro\n\n<a id='a'></a>\n<a id='b'></a>\n\n## First\n\n<a id='c'></a><a id='d'></a>\n\n## Second\n").unwrap();
+    git(&root, &["add", "doc/design.md"]);
+    core.refresh().unwrap();
+    let snapshot = core.snapshot();
+    let page = core.document_inventory(query).unwrap();
+    let pairs = page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap();
+    let titles = pairs
+        .targets
+        .iter()
+        .map(|edge| {
+            assert_eq!(edge.resolution, "resolved");
+            snapshot
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == edge.target_section.as_ref())
+                .unwrap()
+                .title
+                .as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(titles, ["First", "First", "Second", "Second"]);
+}
+
+#[test]
+fn raw_html_text_never_produces_navigable_anchors() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    fs::write(root.join("doc/prd.md"), "# Product\n\n- 配对系统设计：[fake](design.md#fake) [inline](design.md#inline-fake) [real](design.md#real)\n").unwrap();
+    fs::write(root.join("doc/design.md"), "# Design\n\n<textarea>\n<a id='fake'></a>\n</textarea >\n\nText <textarea><a id='inline-fake'></a></textarea >\n\n<a id='real'></a>\n\n## Actual target\n").unwrap();
+    git(&root, &["add", "doc/design.md"]);
+    core.refresh().unwrap();
+    let page = core.document_inventory(query).unwrap();
+    let edges = &page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap()
+        .targets;
+    assert_eq!(
+        edges
+            .iter()
+            .map(|e| e.resolution.as_str())
+            .collect::<Vec<_>>(),
+        ["missing_fragment", "missing_fragment", "resolved"]
+    );
+}
+
+#[test]
+fn heading_punctuation_and_explicit_id_case_follow_navigation_semantics() {
+    let (tmp, mut core, query) = fixture();
+    let root = tmp.path().join("repo");
+    fs::write(root.join("doc/prd.md"), "# Product\n\n- 配对系统设计：[heading](design.md#状态事务) [upper](design.md#Contract) [lower](design.md#contract) [wrong](design.md#CONTRACT)\n").unwrap();
+    fs::write(root.join("doc/design.md"), "# Design\n\n## 状态、事务\n\n<a id='Contract'></a>\n\n## Upper target\n\n<a id='contract'></a>\n\n## Lower target\n").unwrap();
+    git(&root, &["add", "doc/design.md"]);
+    core.refresh().unwrap();
+    let snapshot = core.snapshot();
+    let page = core.document_inventory(query).unwrap();
+    let edges = &page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap()
+        .targets;
+    assert_eq!(
+        edges
+            .iter()
+            .map(|e| e.resolution.as_str())
+            .collect::<Vec<_>>(),
+        ["resolved", "resolved", "resolved", "missing_fragment"]
+    );
+    let titles = edges
+        .iter()
+        .take(3)
+        .map(|edge| {
+            snapshot
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == edge.target_section.as_ref())
+                .unwrap()
+                .title
+                .as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(titles, ["状态、事务", "Upper target", "Lower target"]);
 }
