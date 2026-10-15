@@ -56,7 +56,7 @@ Do not use this skill when:
 ## Oasis7-Specific Surfaces
 
 - `.agents/roles/gameplay_designer.md`
-- GitHub Project task status and issue evidence comments
+- Git, PR, actual CI and review records; an existing Task/Project may be used when needed under `doc/engineering/workflow/source-of-truth.md`
 - gameplay/runtime tests or playtest evidence for changed mechanics
 
 ## Known Failure Modes

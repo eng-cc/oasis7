@@ -85,13 +85,17 @@ fn read_candidate(
             0
         } else if name == "doc/engineering/workflow/source-of-truth.md" {
             1
-        } else if name.starts_with("doc/product/")
-            || name.ends_with("/prd.md")
-            || name == "AGENTS.md"
+        } else if name == "AGENTS.md"
+            || name == "skills/oasis7-command-center/references/project-map.md"
+            || (name.starts_with("doc/") && name.ends_with("/README.md"))
         {
+            // Keep structural navigation available when body documents exhaust
+            // either the path count or total byte budget.
             2
-        } else {
+        } else if name.starts_with("doc/product/") || name.ends_with("/prd.md") {
             3
+        } else {
+            4
         };
         (priority, name.into_owned())
     });

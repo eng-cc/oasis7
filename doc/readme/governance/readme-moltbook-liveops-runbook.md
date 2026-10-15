@@ -8,7 +8,7 @@
 - Channel: `Moltbook`
 - Last Platform Verified: `unverified in current environment`
 - Verification Failure Policy: `fail_closed`；平台机制或发布可见性无法确认时，只允许人工检查、记录 blocker 或暂停，不自动发帖
-- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + GitHub 回流 + GitHub task issue evidence 回写`
+- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + GitHub 回流 + 实际 PR 或已有 Task 的证据回写`
 - Source Docs:
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/readme/governance/readme-moltbook-post-pack.md`
@@ -41,7 +41,7 @@
    - `official Moltbook integration`
 4. 确认外链只指向当前稳定公开入口。
 5. 确认素材与主张一致，不拿 `software_safe` 或 `pure_api` 去替代 3D 视觉 claim。
-6. 记录发帖时间、帖子标题和 post id，便于后续巡检和 GitHub task issue evidence 回写。
+6. 记录发帖时间、帖子标题和 post id，便于后续巡检和实际 PR 或已有 Task 的证据回写。
 
 ## 3. 发帖后 24 小时巡检
 前 24 小时是高价值窗口。建议最少按以下节奏检查：

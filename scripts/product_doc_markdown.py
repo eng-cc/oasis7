@@ -10,6 +10,7 @@ GFM extensions are intentionally not required for this contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 try:
     from markdown_it import MarkdownIt
@@ -48,6 +49,7 @@ class MarkdownHtml:
     content: str
 
 
+@lru_cache(maxsize=64)
 def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
     """Return parsed block spans with source-map line positions.
 
@@ -65,6 +67,7 @@ def parse_markdown_blocks(text: str) -> tuple[MarkdownBlock, ...]:
     return tuple(blocks)
 
 
+@lru_cache(maxsize=64)
 def parse_markdown_html(text: str) -> tuple[MarkdownHtml, ...]:
     """Return HTML nodes while excluding code spans and code blocks.
 
@@ -101,6 +104,7 @@ def parse_markdown_html(text: str) -> tuple[MarkdownHtml, ...]:
     return tuple(nodes)
 
 
+@lru_cache(maxsize=64)
 def parse_markdown_links(text: str) -> tuple[MarkdownLink, ...]:
     """Return clickable Markdown link nodes, excluding images and code nodes.
 
