@@ -3052,7 +3052,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 3.0.3",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -9486,16 +9486,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.256.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec1492381bfd5ea51c2a99a919b676662559925cb8d7490547ec2e14c1ad3eb1"
-dependencies = [
- "leb128fmt",
- "wasmparser 0.256.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.258.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f64765e43c000fae008a48db8b288e175e237fc9ce20a26586836878c1bee89f"
@@ -9561,7 +9551,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "wasm-encoder 0.256.0",
+ "wasm-encoder 0.261.0",
  "wasmparser 0.256.0",
 ]
 
