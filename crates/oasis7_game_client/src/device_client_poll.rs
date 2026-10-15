@@ -3,9 +3,9 @@
 use super::*;
 use crate::WorldServiceClientError;
 use std::time::Instant;
-const POLL_ATTEMPTS: usize = 40;
+pub(super) const POLL_ATTEMPTS: usize = 40;
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
-const POLL_WINDOW: Duration = Duration::from_secs(8);
+pub(super) const POLL_WINDOW: Duration = Duration::from_secs(8);
 /// Emit only a bounded public category/status, never response text or proofs.
 pub(super) fn failure_tag(error: &crate::WorldServiceClientError) -> String {
     use crate::WorldServiceClientError;
@@ -24,7 +24,7 @@ fn query_error(error: &WorldServiceClientError) -> String {
         failure_tag(error)
     )
 }
-fn retry_delay(error: &WorldServiceClientError) -> Option<Duration> {
+pub(super) fn retry_delay(error: &WorldServiceClientError) -> Option<Duration> {
     match error {
         WorldServiceClientError::Transport(_)
         | WorldServiceClientError::Rejected { status: 503, .. } => Some(POLL_INTERVAL),

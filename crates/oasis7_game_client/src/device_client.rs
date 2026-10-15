@@ -427,15 +427,7 @@ impl Client {
             return Ok(request);
         }
         let original = self.original_prepare(operation)?;
-        let prepared = self
-            .remote
-            .prepare_task_context(&original)
-            .map_err(|error| {
-                format!(
-                    "private preparation {}; retry original operation",
-                    failure_tag(&error)
-                )
-            })?;
+        let prepared = self.prepare_original(&original)?;
         let signed =
             authority::sign_read_request("scheduler", public_prefix(&prepared)?, &self.key_hex)?;
         self.cache_intent(
@@ -509,3 +501,6 @@ use polling::failure_tag;
 
 #[path = "device_client_quote_retry.rs"]
 mod quote_retry;
+
+#[path = "device_client_prepare_retry.rs"]
+mod prepare_retry;

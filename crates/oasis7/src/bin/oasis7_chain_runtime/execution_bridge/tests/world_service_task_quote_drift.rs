@@ -17,8 +17,8 @@ struct Fixture {
     create: SubmitIntentRequest<WorldServicePayloadV1>,
     height: u64,
 }
-fn fixture() -> Fixture {
-    let (dir, mut driver, world, owner, owner_public) = production_playtest::fixture();
+fn fixture(recipe: bool) -> Fixture {
+    let (dir, mut driver, world, owner, owner_public) = production_playtest::fixture_kind(!recipe);
     let create = game_task_tests::create(&world, &owner, "context-task");
     commit(&mut driver, 3, create.clone());
     let c = game_task::current_control(&driver.execution_world, "agent-a")
@@ -237,9 +237,9 @@ impl Fixture {
                             schema_revision: 1,
                             context_proof: self.get.clone(),
                             expected_base_binding: base,
-                            factory_id: "quote-only-new-factory".into(),
+                            factory_id: oasis7::runtime::STARTER_SMELTER_FACTORY_ID.into(),
                             factory_kind: "factory.smelter.mk1".into(),
-                            site_id: "production-site".into(),
+                            site_id: "starter-site".into(),
                         },
                         &self.delegate,
                     )
@@ -250,15 +250,37 @@ impl Fixture {
         }
     }
     fn advance(&mut self) {
-        commit(&mut self.driver, self.height, self.create.clone());
+        // Administrative intent receipts (including duplicate creates) do not
+        // advance simulation time. Use the established empty simulation block
+        // path, rather than fabricating a clock or extending the lease.
+        let height = self.height;
+        let before = self.driver.execution_world.state().time;
+        self.driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".into(),
+                node_id: "node-a".into(),
+                proposer_id: "node-a".into(),
+                height,
+                slot: height,
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: compute_consensus_action_root(&[]).unwrap(),
+                committed_actions: vec![],
+                committed_at_unix_ms: height as i64 * 1000,
+            })
+            .unwrap();
         self.height += 1;
+        assert!(
+            self.driver.execution_world.state().time > before,
+            "empty canonical simulation block must advance the real clock"
+        );
     }
 }
 #[test]
 fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
     for terminal in ["expiry", "fence"] {
-        let mut f = fixture();
         for recipe in [false, true] {
+            let mut f = fixture(recipe);
             let (auth_path, mut invalid_auth) = f.quote(recipe, false);
             invalid_auth["signature_hex"] = serde_json::json!("00".repeat(64));
             let (status, body) = http(
@@ -289,6 +311,20 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
             assert_eq!(status, 409, "{path}: {body}");
             assert_eq!(body["error"], TASK_QUOTE_BASE_DRIFT);
             let (path, current) = f.quote(recipe, false);
+            // A business-authorized quote must reach delivery. The production
+            // fixture grants recipe scheduling; the starter fixture separately
+            // grants construction at its declared site/factory identity.
+            let (status, body) = http(
+                &f.dir,
+                &f.runtime,
+                &f.signer,
+                Some(&f.store),
+                path,
+                &current,
+                "",
+            );
+            assert_eq!(status, 200, "authorized quote {path}: {body}");
+            let delivered = std::cell::Cell::new(false);
             let (status, body) = http_with_hook(
                 &f.dir,
                 &f.runtime,
@@ -298,59 +334,73 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
                 &current,
                 "",
                 || {
+                    delivered.set(true);
                     commit(&mut f.driver, f.height, f.create.clone());
                 },
             );
             f.height += 1;
+            assert!(
+                delivered.get(),
+                "authorized quote did not reach delivery hook: {path} {body}"
+            );
             assert_eq!(status, 409, "{path}: {body}");
             assert_eq!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
-        }
-        if terminal == "expiry" {
-            while f.driver.execution_world.state().time <= f.get.request.context.valid_until_tick.0
-            {
-                f.advance();
+            if terminal == "expiry" {
+                for _ in 0..=TASK_CONTEXT_LEASE_TICKS {
+                    if f.driver.execution_world.state().time
+                        > f.get.request.context.valid_until_tick.0
+                    {
+                        break;
+                    }
+                    f.advance();
+                }
+                assert!(
+                    f.driver.execution_world.state().time
+                        > f.get.request.context.valid_until_tick.0,
+                    "captured context did not expire within its actual bounded lease"
+                );
+            } else {
+                let control = game_task::current_control(&f.driver.execution_world, "agent-a")
+                    .unwrap()
+                    .unwrap();
+                let stop = request(
+                    &f.world,
+                    WorldServicePayloadV1::GameExecutorControl(
+                        sign_read_request(
+                            GAME_EXECUTOR_CONTROL_DOMAIN,
+                            GameExecutorControlV1 {
+                                api_rev: 1,
+                                client_operation_id: "quote-stop".into(),
+                                fence: GameTaskFenceV1::from_control(&control),
+                                operation: GameExecutorOperationV1::Stop,
+                            },
+                            &f.owner,
+                        )
+                        .unwrap(),
+                    ),
+                );
+                commit(&mut f.driver, f.height, stop);
             }
-        } else {
-            let control = game_task::current_control(&f.driver.execution_world, "agent-a")
-                .unwrap()
-                .unwrap();
-            let stop = request(
-                &f.world,
-                WorldServicePayloadV1::GameExecutorControl(
-                    sign_read_request(
-                        GAME_EXECUTOR_CONTROL_DOMAIN,
-                        GameExecutorControlV1 {
-                            api_rev: 1,
-                            client_operation_id: "quote-stop".into(),
-                            fence: GameTaskFenceV1::from_control(&control),
-                            operation: GameExecutorOperationV1::Stop,
-                        },
-                        &f.owner,
-                    )
-                    .unwrap(),
-                ),
-            );
-            commit(&mut f.driver, f.height, stop);
+            {
+                let (path, proof) = f.quote(recipe, false);
+                let (status, body) = http(
+                    &f.dir,
+                    &f.runtime,
+                    &f.signer,
+                    Some(&f.store),
+                    path,
+                    &proof,
+                    "",
+                );
+                assert!(
+                    matches!(status, 403 | 409),
+                    "{terminal} {path}: {status} {body}"
+                );
+                assert_ne!(body["error"], TASK_QUOTE_BASE_DRIFT);
+                assert_ne!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
+            }
+            drop(f.store);
+            std::fs::remove_dir_all(f.dir).unwrap();
         }
-        for recipe in [false, true] {
-            let (path, proof) = f.quote(recipe, false);
-            let (status, body) = http(
-                &f.dir,
-                &f.runtime,
-                &f.signer,
-                Some(&f.store),
-                path,
-                &proof,
-                "",
-            );
-            assert!(
-                matches!(status, 403 | 409),
-                "{terminal} {path}: {status} {body}"
-            );
-            assert_ne!(body["error"], TASK_QUOTE_BASE_DRIFT);
-            assert_ne!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
-        }
-        drop(f.store);
-        std::fs::remove_dir_all(f.dir).unwrap();
     }
 }
