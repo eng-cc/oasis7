@@ -32,10 +32,10 @@
     <link rel="alternate" hreflang="en" href="https://oasis7.tech/en/" />
     <link rel="alternate" hreflang="x-default" href="https://oasis7.tech/" />
     <link rel="icon" type="image/svg+xml" href="../assets/images/favicon.svg" />
-    <link rel="stylesheet" href="../assets/styles.css?v=20261015-readable-gameplay" />
+    <link rel="stylesheet" href="../assets/styles.css?v=20261015-case-first" />
     <link rel="alternate" type="application/rss+xml" title="oasis7" href="../en/feed.xml" />
     <script defer src="../assets/release-candidate.js?v=20261015-readable-gameplay"></script>
-    <script defer src="../assets/app.js?v=20261015-readable-gameplay"></script>
+    <script defer src="../assets/app.js?v=20261015-case-first"></script>
   </head>
   <body class="discovery-page">
     <a class="skip-link" href="#top">Skip to main content</a>
@@ -45,11 +45,11 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#proof">Gameplay</a>
-        <a href="#world">World records</a>
-        <a href="#progress">Development</a>
-        <a href="#download">Get the preview</a>
-      </nav>
+<a href="#proof">Gameplay</a>
+<a href="#progress">Development</a>
+<a href="#lore">World lore</a>
+<a href="#download">Get the preview</a>
+</nav>
       <button class="menu-button" type="button" aria-label="Toggle menu" data-menu-toggle>
         ☰
       </button>
@@ -74,7 +74,6 @@
 
     <main id="top" tabindex="-1">
       <section class="hero section section-hero landing-chapter landing-hero" id="hero" data-reveal>
-        <canvas class="hero-canvas" data-hero-canvas aria-hidden="true"></canvas>
         <div class="hero-grid">
           <div>
             <p class="eyebrow">AI-Agent Civilization Sim</p>
@@ -101,112 +100,35 @@
         <p class="hero-telemetry-label" id="hero-art-caption">CIVILIZATION CARTOGRAPHY · WORLD ATMOSPHERE · CONCEPT ART</p>
       </section>
 
-      <section id="proof" class="section landing-chapter landing-proof" data-reveal>
-        <div class="decision-walkthrough" data-decision-walkthrough data-provenance="illustrative"><p class="eyebrow">Illustrative example · no runtime outcome</p><h3>Your direction. Agents acting within constraints.</h3>
-<p class="decision-lead" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">Goal, response, consequence, and another choice. Reading this page has no world effect.</p>
-<div class="decision-panels" role="group" aria-label="Reading steps">
-<article id="decision-0" data-decision-panel="0"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/></svg></span> 01</p><h4><span data-decision-step="0"><span class="decision-step-index" aria-hidden="true">01</span>Goal and boundaries</span></h4><p>Keep production moving; preserve energy. Set a direction and boundaries.</p><p class="hero-support-copy" data-homepage-claim="indirect-agency">You can influence a civilization, but you cannot decide every step for its Agents.</p><div class="decision-atmosphere" aria-hidden="true"></div></article>
-<article id="decision-1" data-decision-panel="1"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19v-3a7 7 0 1 1 9-6v5h-4v4z"/><circle cx="12" cy="9" r="2"/></svg></span> 02</p><h4><span data-decision-step="1"><span class="decision-step-index" aria-hidden="true">02</span>Agent response</span></h4><p>The Agent plans within resource limits. A plan is not completion.</p><div class="decision-atmosphere" aria-hidden="true"></div></article>
-<article id="decision-2" data-decision-panel="2"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7zm0 10v10M3 7l9 5 9-5M8 4l9 5"/></svg></span> 03</p><h4><span data-decision-step="2"><span class="decision-step-index" aria-hidden="true">03</span>Consequences</span></h4><p>No runtime receipt is available in this example. Actual results remain unknown.</p><div class="decision-atmosphere" aria-hidden="true"></div></article>
-<article id="decision-3" data-decision-panel="3"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></span> 04</p><h4><span data-decision-step="3"><span class="decision-step-index" aria-hidden="true">04</span>Choose again</span></h4><p>Check receipts and blockers, then adjust goals or boundaries. This page explains the flow; it does not operate the game.</p><div class="decision-atmosphere" aria-hidden="true"></div></article></div><details class="decision-source"><summary>Example sources · concept atmosphere art</summary><p class="decision-provenance" data-homepage-claim="provenance-story" data-evidence-provenance="illustrative">An illustrative replay based on current controlled test scenarios; <span data-homepage-claim="telemetry-boundary">not live world telemetry or a public game mode.</span></p><a class="text-link" href="https://github.com/eng-cc/oasis7/blob/b216610f117d044c20ff9aad2d73485c7c9f3174/doc/product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-002">Read the evidence boundary</a><details class="reference-details"><summary>Controlled Viewer references and illustrative logs</summary>
-        <div class="proof-switcher" data-proof-switcher>
-          <p class="proof-switcher-label">Switch crisis scenario</p>
-          <div class="proof-switcher-controls" role="group" aria-label="Switch crisis scenario" data-proof-controls>
-            <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
-              single-front
-            </button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">dual-region</button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">three-party</button>
-          </div>
-        </div>
-
-        <div class="proof-grid">
-          <figure class="proof-figure" data-proof-panel="minimal" data-proof-visible="true">
-            <a href="../assets/images/screenshots/minimal.webp" aria-label="Open full reference image"><img src="../assets/images/screenshots/minimal.webp" alt="Controlled single-front Viewer capture showing observable world state in the asteroid belt" width="2400" height="1600" loading="lazy" /></a>
-            <figcaption>Single-front: historical native Viewer capture from 2026-02-26 without an LLM, not the current interface or the production case. Sample logs below are illustrative only.</figcaption>
-          </figure>
-          <figure class="proof-figure" data-proof-panel="twin" data-proof-visible="false">
-            <a href="../assets/images/screenshots/twin_region_bootstrap.webp" aria-label="Open full reference image"><img src="../assets/images/screenshots/twin_region_bootstrap.webp" alt="Controlled dual-region Viewer capture showing two regions and their observable world state" width="2400" height="1600" loading="lazy" /></a>
-            <figcaption>Dual-region: historical native Viewer capture from 2026-02-26 without an LLM, not the current interface or the production case. Sample logs below are illustrative only.</figcaption>
-          </figure>
-          <figure class="proof-figure" data-proof-panel="triad" data-proof-visible="false">
-            <a href="../assets/images/screenshots/triad_region_bootstrap.webp" aria-label="Open full reference image"><img src="../assets/images/screenshots/triad_region_bootstrap.webp" alt="Controlled three-party governance Viewer capture showing multiple regions and observable world state" width="2400" height="1600" loading="lazy" /></a>
-            <figcaption>Three-party: historical native Viewer capture from 2026-02-26 without an LLM, not the current interface or the production case. Sample logs below are illustrative only.</figcaption>
-          </figure>
-          <article class="proof-card proof-card-key" data-proof-causal aria-live="polite">
-            <p class="proof-causal-kicker" data-proof-causal-kicker>Single-front · causal trace</p>
-            <h3 data-proof-causal-title>How this crisis leaves a trace</h3>
-            <ol class="proof-list proof-causal-list">
-              <li><span>01</span><div><strong data-proof-causal-step="0-title">Pressure arrives</strong><p data-proof-causal-step="0-copy">Resources, goals, or existing rules narrow the available choices.</p></div></li>
-              <li><span>02</span><div><strong data-proof-causal-step="1-title">Agents respond</strong><p data-proof-causal-step="1-copy">They choose production, trade, or cooperation within the current constraints.</p></div></li>
-              <li><span>03</span><div><strong data-proof-causal-step="2-title">Consequences remain</strong><p data-proof-causal-step="2-copy">World changes can enter events, replays, and audit-readable traces.</p></div></li>
-            </ol>
-            <a class="button secondary" href="#download">Get the Preview Build</a>
-          </article>
-        </div>
-        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">Default web verification entry: viewer</span>. Deeper visual and programmatic paths live in the docs hub.</p>
-
-        <details class="proof-log-details">
-          <summary>Expand the corresponding event log samples (illustrative evidence)</summary>
-          <div class="proof-log-body">
-            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[sample tick=128] minimal::harvest accepted -> +power
-[sample tick=133] minimal::scheduler stable -> next decision window
-[sample tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
-            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[sample tick=084] twin_region::agent-1 request trade(energy)
-[sample tick=091] twin_region::agent-2 accepted -> shared production boost
-[sample tick=097] twin_region::supply pact revised -> maintenance priority shifts</code></pre>
-            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[sample tick=142] triad_region::agent-3 reroute logistics via neutral node
-[sample tick=149] triad_region::multi-party pact signed
-[sample tick=155] triad_region::policy vote closes -> regime shift</code></pre>
-          </div>
-        </details>
-
-        <div class="proof-timeline" data-proof-timeline>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 128 · sample</span>
-            <p>Illustrative minimal sample: a harvest action is accepted, showing how an input-to-world action path could be linked.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 136 · sample</span>
-            <p>Illustrative minimal sample: a market spike is recorded, showing how a chain could reach a visible consequence.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 91 · sample</span>
-            <p>Illustrative dual-region sample: a trade event completes, showing how coordination could be traced into production effects.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 97 · sample</span>
-            <p>Illustrative dual-region sample: a supply pact is revised, showing how strategy inputs could alter cooperation structure.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 149 · sample</span>
-            <p>Illustrative three-party sample: a multi-party pact is recorded in an auditable trail, showing how governance signaling could be audited.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 155 · sample</span>
-            <p>Illustrative three-party sample: a governance vote closes, showing how institutional consequences could be observed.</p>
-          </article>
-        </div>
-        </details></details></div>
-
-<article class="controlled-case"><p class="eyebrow">2026-10-13 · real controlled CLI test · prepared world, claimed Agent, instruction-only isolation. This is not a public world or cold-install acceptance. The historical Viewer image below is from a different run.</p><h3>A tested process: the first iron batch</h3><ol class="case-steps"><li><strong>Goal</strong><p>In a prepared test world, build a smelter from starting inventory and finish the first three iron ingots.</p></li><li><strong>Attempt and blocker</strong><p>The Agent first chose an ungranted factory: its quote was denied and no action was created. It inspected the actual grant and used the allowed smelter. A conflicting decision context was retained as rejected before continuing with a fresh context.</p></li><li><strong>World outcome</strong><p>Construction finished at tick 28. Eight ore and two fuel were supplied; one batch settled at tick 46 with three ingots and one slag. World readback showed electricity 86 and zero pending jobs.</p></li><li><strong>What next</strong><p>Check receipts and remaining resources before deciding to continue. This run stopped after the first output; it did not prove sustained production or a multi-factory chain. Read the full process or check preview requirements.</p></li></ol><p class="case-source"><a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">Player report and world readback</a> · <a href="devlog/first-iron-batch/">Read the full process →</a> · <a href="#download">Preview requirements</a></p></article><figure class="viewer-evidence"><h3>Historical Viewer interface reference</h3><a href="../assets/images/screenshots/minimal.webp"><img src="../assets/images/screenshots/minimal.webp" alt="Historical native Viewer: connection status and tick 0 in the top bar, with open-panel onboarding on the left." width="2400" height="1600" loading="lazy" /></a><figcaption>2026-02-26 · controlled native Viewer capture without an LLM · a6c34b17. It shows connection status, tick 0 and onboarding; it is neither the current interface nor a screenshot of the production case above. <a href="https://github.com/eng-cc/oasis7/blob/a6c34b177a218445fc7f6737378305c21c3c8d0d/doc/devlog/2026-02-26.md">Capture provenance</a></figcaption></figure>
-      </section>
-
-
-
+<section id="proof" class="section landing-chapter landing-proof" data-reveal>
+<div class="decision-walkthrough" data-decision-walkthrough data-provenance="runtime_capture" data-source-build="game-client-sha256:17002e27c9b28d1362cf6213ad306546d7dfc3c863b6cae97211d54e4048faf6" data-runtime-profile="prepared-world-instruction-only-cli" data-source-scenario="first-iron-batch-bounded-retry" data-source-window="2026-10-13; build ticks 27-28; production ticks 45-46; stopped after first batch" data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b" data-evidence-source="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">
+<p class="eyebrow">Real controlled process · prepared test environment · not a public-world feed</p><h2>The first iron batch. A blocker does not end the goal.</h2>
+<p class="decision-lead" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">Set a direction. Agents act within grants and resources; world results confirm completion.</p>
+<p class="hero-support-copy" data-homepage-claim="indirect-agency">You can influence a civilization, but you cannot decide every step for its Agents.</p>
+<div class="decision-panels" role="group" aria-label="Four steps of the real process"><article id="decision-0" data-decision-panel="0"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/></svg></span> 01</p><h3><span data-decision-step="0"><span class="decision-step-index" aria-hidden="true">01</span>Set the goal</span></h3><p>Build a smelter from starting inventory and finish the first iron batch.</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-1" data-decision-panel="1"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19v-3a7 7 0 1 1 9-6v5h-4v4z"/><circle cx="12" cy="9" r="2"/></svg></span> 02</p><h3><span data-decision-step="1"><span class="decision-step-index" aria-hidden="true">02</span>Meet a blocker</span></h3><p>The first factory choice was outside the grant. Its quote was denied, with no build action created.</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-2" data-decision-panel="2"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7zm0 10v10M3 7l9 5 9-5M8 4l9 5"/></svg></span> 03</p><h3><span data-decision-step="2"><span class="decision-step-index" aria-hidden="true">03</span>Adjust the plan</span></h3><p>The Agent inspected its actual grant, chose an allowed smelter, then built and supplied it.</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-3" data-decision-panel="3"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></span> 04</p><h3><span data-decision-step="3"><span class="decision-step-index" aria-hidden="true">04</span>Verify the result</span></h3><p>World records confirmed <strong>3 iron ingots</strong>. This controlled test stopped after the first batch.</p><div class="decision-atmosphere" aria-hidden="true"></div></article></div>
+<p class="case-meaning">The first output turns a goal into a verifiable world change. The next questions are whether resources are sufficient and whether the goal needs adjusting. Sustained production, expansion and cooperation require their own validation; this run did not unlock them as a next stage.</p><p class="case-source"><a href="devlog/first-iron-batch/">Read the full process →</a> · <a href="#download">What can I try now? →</a></p>
+<p class="decision-provenance" data-homepage-claim="provenance-story" data-evidence-provenance="runtime_capture" data-evidence-source="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">Adapted from retained player reports and world records. Step art is conceptual; <span data-homepage-claim="telemetry-boundary">not live world telemetry or a public game mode.</span></p>
+<details class="decision-source case-verification"><summary>Verification, version and limits</summary><p>2026-10-13 · test source 52c136a7; public reports retained at 06fb5ee9. Prepared world, claimed Agent and instruction-only isolation. An independent Agent used the formal Skill in 19 client calls. Construction finished at tick 28; after supplying eight ore and two fuel, one batch settled at tick 46 with three ingots and one slag. World readback showed electricity 86 and no pending jobs. A context conflict was preserved as rejected before continuing with a new context. GUI, cold installation and sustained multi-factory production were not validated.</p><a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">Read the original report and world readback</a></details>
+</div><details class="historical-viewer"><summary>Historical interface reference (not this run or the current UI)</summary><figure class="viewer-evidence"><h3>Historical Viewer interface reference</h3><a href="../assets/images/screenshots/minimal.webp"><img src="../assets/images/screenshots/minimal.webp" alt="Historical native Viewer: connection status and tick 0 in the top bar, with open-panel onboarding on the left." width="2400" height="1600" loading="lazy" /></a><figcaption>2026-02-26 · controlled native Viewer capture without an LLM · a6c34b17. It shows connection status, tick 0 and onboarding; it is neither the current interface nor a screenshot of the production case above. <a href="https://github.com/eng-cc/oasis7/blob/a6c34b177a218445fc7f6737378305c21c3c8d0d/doc/devlog/2026-02-26.md">Capture provenance</a></figcaption></figure></details>
+<p class="doc-entry-note"><span data-homepage-claim="default-web-entry">Default web verification entry: viewer</span> ; check the selected version’s manual for its actual startup path.</p>
+</section>
       <section id="world" class="section landing-chapter world-record-status"><h2>World records</h2><p>No entries in the World records archive yet. Start with <a href="#progress">development progress</a>. <a href="observations/">Record archive and publication status →</a></p></section>
       <div class="discovery-editorial-grid">
 
       <section id="progress" class="section landing-chapter landing-progress">
         <p class="eyebrow">DEVELOPMENT</p><h2>Development</h2>
 
-        <article class="editorial-row" data-content-summary="first-iron-batch"><div><p class="eyebrow">DEVLOG · <time datetime="2026-10-15">2026-10-15</time></p><h3><a href="devlog/first-iron-batch/">The first iron batch: from a denied quote to real output</a></h3><p class="editorial-synopsis" data-content-description>A real controlled CLI process: inspect grants, build and supply a smelter, then verify three iron ingots against world receipts.</p></div></article>
-<article class="editorial-row" data-content-summary="discovery-first"><div><p class="eyebrow">DEVLOG · <time datetime="2026-10-14">2026-10-14</time></p><h3><a href="../en/devlog/discovery-first/">Understand a decision before installing</a></h3><p class="editorial-synopsis" data-content-description>A clearer role, an honest example, and a choice to keep reading.</p></div><a class="text-link" href="../en/devlog/">All devlogs →</a></article>
+        <article class="editorial-row" data-content-summary="first-iron-batch"><div><p class="eyebrow">DEVLOG · <time datetime="2026-10-15">2026-10-15</time></p><h3><a href="devlog/first-iron-batch/">The first iron batch: from a denied quote to real output</a></h3><p class="editorial-synopsis" data-content-description>An Agent recovers from a denied first attempt and completes its first iron batch, confirmed by world records.</p></div></article>
+<article class="editorial-row" data-content-summary="discovery-first"><div><p class="eyebrow">DEVLOG · <time datetime="2026-10-14">2026-10-14</time></p><h3><a href="../en/devlog/discovery-first/">Understand a decision before installing</a></h3><p class="editorial-synopsis" data-content-description>A clearer role, an honest example, and a choice to keep reading.</p></div><a class="text-link" href="feed.xml">Subscribe to updates (RSS)</a><a class="text-link" href="../en/devlog/">All devlogs →</a></article>
       </section>
 
 <section id="download" class="section landing-chapter landing-download discovery-portal portal-preview">
         <h2>Technical preview</h2><p class="section-intro">A local environment and your model configuration are required. Public web join is not open. Check platform, costs and unsigned-package risks before downloading.</p><details class="preview-installation" data-preview-details><summary>Preview details →</summary><div class="preview-installation-body"><dl class="preview-quickfacts"><div><dt>What you can try</dt><dd>Local technical preview and controlled validation; not public web join.</dd></div><div><dt>What to prepare</dt><dd>A supported desktop, local environment and model provider configuration. Natural language does not mean zero setup.</dd></div><div><dt>Models and cost</dt><dd>You choose and configure the model. Calls use the allowance of that service account and may incur charges under its billing rules. This site provides no free model allowance or credential input.</dd></div><div><dt>Saving and upgrades</dt><dd>Back up configuration and world data before upgrading. Check release-specific signing and compatibility; automatic migration is not promised.</dd></div></dl>
-        <section class="preview-first-steps"><h3>First preview: confirm entry before trying a goal</h3><ol><li><strong>Choose a version and platform.</strong>Read the candidate-specific release notes, checksum and signing risks below before installing. The homepage case identifies test source; it does not prove the same capability in this download.</li><li><strong>Prepare the model and environment.</strong>Configure your service account following that version’s notes. For source-based local play, use the <a href="../doc/en/viewer-manual.html">Viewer manual</a>; existing builds and valid configuration are required.</li><li><strong>Confirm entry.</strong>For source play, wait for the ready output and GAME_URL described in the manual. Check the actual connection, world and Agent, then read the current goal. Installation or an accepted action is not proof of world output.</li><li><strong>Complete one observation.</strong>Find the current goal and its receipt or blocker. Distinguish the goal, attempt and result before continuing. This guide does not promise that every release package can reproduce the production case above.</li></ol><p>Startup or connection trouble? Read <a href="../doc/en/viewer-manual.html#troubleshooting">troubleshooting</a> or <a href="https://github.com/eng-cc/oasis7/issues">report an issue</a> with version, platform and redacted errors. Never send keys.</p></section>
+        <section class="preview-validation"><h3>What has been verified for this version?</h3><dl>
+<div><dt>Download candidate · <strong data-package-candidate-tag>2026-06-03_v2</strong></dt><dd><p data-package-validation-copy data-verified-release="2026-06-03_v2">Public records confirm Windows, macOS and Linux packages were built and published. No recoverable same-package installation, first-entry or game-goal acceptance record is available.</p><a href="https://github.com/eng-cc/oasis7/actions/runs/26886794547">Recorded 2026-06-03_v2 build and publication</a></dd></div>
+<div><dt>The homepage case</dt><dd>A prepared-world CLI test on October source 52c136a7 confirmed three iron ingots. Equivalence with the recommended installer has not been demonstrated.</dd></div>
+<div><dt>Unavailable paths and a starting point</dt><dd>Public web join and zero-setup play are unavailable. If you choose an experimental installation, first check launcher configuration and its preview entry. This is a suggested goal, not passed package acceptance. You can read and verify the complete case without installing.</dd></div>
+</dl></section><section class="preview-first-steps"><h3>First preview: confirm entry before trying a goal</h3><ol><li><strong>Choose a version and platform.</strong>Read the candidate-specific release notes, checksum and signing risks below before installing. The homepage case identifies test source; it does not prove the same capability in this download.</li><li><strong>Prepare the model and environment.</strong>Configure your service account following that version’s notes. For source-based local play, use the <a href="../doc/en/viewer-manual.html">Viewer manual</a>; existing builds and valid configuration are required.</li><li><strong>Confirm entry.</strong>For source play, wait for the ready output and GAME_URL described in the manual. Check the actual connection, world and Agent, then read the current goal. Installation or an accepted action is not proof of world output.</li><li><strong>Complete one observation.</strong>Find the current goal and its receipt or blocker. Distinguish the goal, attempt and result before continuing. This guide does not promise that every release package can reproduce the production case above.</li></ol><p>Startup or connection trouble? Read <a href="../doc/en/viewer-manual.html#troubleshooting">troubleshooting</a> or <a href="https://github.com/eng-cc/oasis7/issues">report an issue</a> with version, platform and redacted errors. Never send keys.</p></section>
         <p class="release-status" data-release-status role="status">Last recorded version; latest not confirmed.</p>
         <p class="release-meta">
           Current version: <strong data-release-tag>2026-06-03_v2</strong>
@@ -358,7 +280,7 @@
       </div>
 
 
-      <section class="section lore-entry"><details class="reference-details"><summary>Explore the world through fiction</summary><p class="eyebrow">WORLD-BUILDING FICTION · CHINESE</p><h2>绿洲 2076</h2><p>After retirement, a group of people builds a life in the asteroid belt. Their first task is to keep the lights on. Fictional embodiment is not a current game feature.</p><a class="text-link" href="../story/">Start reading (Chinese) →</a></details></section>
+      <section id="lore" class="section lore-entry"><details class="reference-details"><summary>Explore the world through fiction</summary><p class="eyebrow">WORLD-BUILDING FICTION · CHINESE</p><h2>绿洲 2076</h2><p>After retirement, a group of people builds a life in the asteroid belt. Their first task is to keep the lights on. Fictional embodiment is not a current game feature.</p><a class="text-link" href="../story/">Start reading (Chinese) →</a></details></section>
             <section id="world-laws" class="section landing-chapter landing-laws" data-homepage-claim="world-laws" data-reveal>
         <details class="reference-details"><summary>World rules and player boundaries</summary><div class="laws-heading">
           <div>
@@ -468,7 +390,7 @@
       </section>
     </main>
 
-    <footer class="footer"><div class="footer-links"><a href="../en/feed.xml">RSS</a><a href="../story/">Novel · Chinese</a><a href="../doc/en/">Documentation</a><a href="https://github.com/eng-cc/oasis7">GitHub</a></div>
+    <footer class="footer"><div class="footer-links"><a href="observations/">World records</a><a href="../en/feed.xml">RSS</a><a href="../story/">Novel · Chinese</a><a href="../doc/en/">Documentation</a><a href="https://github.com/eng-cc/oasis7">GitHub</a></div>
       <p>© <span data-year></span> oasis7. This is a limited playable technical preview, not closed beta or a public launch.</p>
     </footer>
   </body>
