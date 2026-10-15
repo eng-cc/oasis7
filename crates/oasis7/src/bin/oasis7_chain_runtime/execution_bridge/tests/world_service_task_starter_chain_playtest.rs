@@ -257,6 +257,7 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
             .unwrap();
         let mut categories = CleanupCategories::default();
         let mut originals = Vec::new();
+        let mut factory_quote_probe_state = FactoryQuoteProbeState::default();
         for stage in 0..4 {
             let mut settled = None;
             for attempt in 0..8 {
@@ -329,6 +330,7 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
                         &delegate,
                         &get,
                         &mut captured,
+                        &mut factory_quote_probe_state,
                         deadline,
                         metadata["endpoint"].as_str().unwrap(),
                         &root,
@@ -698,6 +700,12 @@ enum ContextRead {
     Expired,
 }
 
+#[derive(Default)]
+struct FactoryQuoteProbeState {
+    contract_probes_completed: bool,
+    stale_base_rejected_while_live: bool,
+}
+
 fn context_expired_conflict(
     error: &oasis7::world_service::client::WorldServiceClientError,
     canonical_tick: u64,
@@ -797,6 +805,7 @@ fn build_action(
     delegate: &str,
     get: &SignedReadRequest<TaskContextGetV1>,
     captured: &mut CapturedTaskContextV1,
+    probe_state: &mut FactoryQuoteProbeState,
     deadline: Instant,
     endpoint: &str,
     root: &Path,
@@ -850,6 +859,34 @@ fn build_action(
         assert!(quote.quote.rejection.is_none());
         assert_eq!(quote.quote.authorization.cost_units, 6);
         assert_eq!(quote.quote.electricity_after, Some(94));
+        let refresh_after_probes =
+            !probe_state.contract_probes_completed || !probe_state.stale_base_rejected_while_live;
+        if probe_state.contract_probes_completed {
+            if !probe_state.stale_base_rejected_while_live {
+                if !reject_stale_factory_quote_while_live(
+                    client,
+                    &proof,
+                    deadline,
+                    get.request.context.valid_until_tick.0,
+                    canonical_tick,
+                ) {
+                    return None;
+                }
+                probe_state.stale_base_rejected_while_live = true;
+            }
+            if refresh_after_probes {
+                match read_context_until_expiry(client, get, deadline, canonical_tick) {
+                    ContextRead::Captured(refreshed) => *captured = *refreshed,
+                    ContextRead::Expired => return None,
+                }
+                eprintln!("TASK_FACTORY_QUOTE_PROBE phase=post_probe_context_refreshed");
+                continue;
+            }
+            eprintln!("TASK_FACTORY_QUOTE_PROBE phase=post_probe_quote_selected");
+            captured.current_public_context = quote.current_public_context;
+            return Some(quote.quote.action);
+        }
+
         factory_quote_retry::assert_delayed_factory_quote_retry_reuses_original(
             &proof, &quote, delegate,
         );
@@ -997,11 +1034,79 @@ fn build_action(
                     .goal_text
             )
         );
-        captured.current_public_context = quote.current_public_context;
-        return Some(quote.quote.action);
+        probe_state.contract_probes_completed = true;
+        eprintln!("TASK_FACTORY_QUOTE_PROBE phase=probe_batch_completed");
+        if !reject_stale_factory_quote_while_live(
+            client,
+            &proof,
+            deadline,
+            get.request.context.valid_until_tick.0,
+            canonical_tick,
+        ) {
+            return None;
+        }
+        probe_state.stale_base_rejected_while_live = true;
+        match read_context_until_expiry(client, get, deadline, canonical_tick) {
+            ContextRead::Captured(refreshed) => *captured = *refreshed,
+            ContextRead::Expired => return None,
+        }
+        eprintln!("TASK_FACTORY_QUOTE_PROBE phase=post_probe_context_refreshed");
+        continue;
     }
     panic!("starter chain deadline exhausted during factory quote refresh");
 }
+
+fn reject_stale_factory_quote_while_live(
+    client: &RemoteWorldServiceClient,
+    proof: &SignedReadRequest<TaskFactoryQuoteRequestV1>,
+    deadline: Instant,
+    valid_until_tick: u64,
+    canonical_tick: &impl Fn() -> u64,
+) -> bool {
+    let quoted_base_tick = proof.request.expected_base_binding.base_tick;
+    while canonical_tick() <= quoted_base_tick {
+        if canonical_tick() > valid_until_tick {
+            return false;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "starter chain deadline exhausted waiting for a canonical quote-base change"
+        );
+        let pause =
+            Duration::from_millis(25).min(deadline.saturating_duration_since(Instant::now()));
+        if !pause.is_zero() {
+            std::thread::sleep(pause);
+        }
+    }
+    if canonical_tick() > valid_until_tick {
+        return false;
+    }
+    let stale_quote = super::production_playtest::retry_same_signed_private_quote_until(
+        proof,
+        deadline,
+        |original| client.quote_task_factory(original),
+    );
+    assert!(
+        matches!(
+            stale_quote,
+            Err(
+                oasis7::world_service::client::WorldServiceClientError::Rejected {
+                    status: 409,
+                    ..
+                }
+            )
+        ),
+        "the original quote proof must be rejected after a canonical base change"
+    );
+    if canonical_tick() > valid_until_tick {
+        return false;
+    }
+    eprintln!(
+        "TASK_FACTORY_QUOTE_PROBE phase=stale_base_rejected tick_advanced=true lease_live=true"
+    );
+    true
+}
+
 fn recipe_action(
     client: &RemoteWorldServiceClient,
     delegate: &str,
