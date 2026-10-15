@@ -3734,11 +3734,11 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .discovery-page:not(.content-page) main { max-width:1220px; margin-top:0; padding-inline:20px; }
 .discovery-page:not(.content-page) .eyebrow { background:none; border:0; padding:0; color:#9eb8ab; font-size:.7rem; letter-spacing:.06em; }
 .discovery-page:not(.content-page) .button.primary { background:#b4efd2; border-color:#b4efd2; border-radius:3px; color:#10291e; box-shadow:0 0 22px #91e3ba20; }
-.discovery-page .landing-hero, html[lang="en"] .discovery-page .landing-hero { isolation:isolate; min-height:0; margin:0; padding:36px 0 28px; border:0; border-radius:0; background:none; box-shadow:none; overflow:visible; }
+.discovery-page .landing-hero, html[lang="en"] .discovery-page .landing-hero { isolation:isolate; min-height:0; margin:0; padding:18px 0 18px; border:0; border-radius:0; background:none; box-shadow:none; overflow:visible; }
 .discovery-page .landing-hero::after, .discovery-page .landing-hero::before, .discovery-page .hero-canvas { display:none; }
 .discovery-page .landing-hero .hero-grid { display:block; min-height:0; position:relative; }
 .discovery-page .landing-hero .hero-grid > div { position:relative; z-index:2; width:57%; padding:0; }
-.discovery-page .landing-hero .hero-visual { position:absolute; inset:-36px -20px -28px 22%; width:auto; margin:0; z-index:-1; }
+.discovery-page .landing-hero .hero-visual { position:absolute; inset:-18px -20px -18px 22%; width:auto; margin:0; z-index:-1; }
 .discovery-page .landing-hero .hero-visual::before { display:none; }
 .discovery-page .landing-hero .hero-key-art { width:100%; height:100%; min-height:0; margin:0; border:0; border-radius:0; background:none; box-shadow:none; overflow:visible; }
 .discovery-page .landing-hero .hero-key-art img { width:100%; height:100%; min-height:0; object-fit:cover; object-position:65% center; opacity:.94; mask-image:linear-gradient(90deg,transparent,#000 34%),linear-gradient(0deg,transparent,#000 13%,#000 90%,transparent); mask-composite:intersect; }
@@ -3767,12 +3767,12 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .decision-panels h4 button[aria-pressed="true"] { color:#b4efd2; }
 .decision-panels article p { font-size:.78rem; line-height:1.55; margin:4px 0; }
 .decision-panels article p.hero-support-copy { font-size:.73rem; color:#a9c2b4; }
-.decision-atmosphere { height:75px; margin-top:auto; flex-shrink:0; background:url("images/hero/asteroid-industrial-cluster-20261015.webp") 12% center/180% auto; mask-image:linear-gradient(0deg,#000 65%,transparent); }
+.decision-atmosphere { height:60px; margin-top:auto; flex-shrink:0; background:url("images/hero/asteroid-industrial-cluster-20261015.webp") 12% center/180% auto; mask-image:linear-gradient(0deg,#000 65%,transparent); }
 .decision-panels article:nth-child(2) .decision-atmosphere { background-image:url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:80% 70%; }
 .decision-panels article:nth-child(3) .decision-atmosphere { background-position:75% 70%; }
 .decision-panels article:nth-child(4) .decision-atmosphere { background-image:url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:35% 30%; }
 .decision-source { margin-top:9px; font-size:.72rem; color:#b8ccbf; }
-.decision-source summary { cursor:pointer; min-height:28px; }
+.decision-source summary { cursor:pointer; min-height:22px; }
 .decision-provenance { font-size:.7rem; color:#bbaa87; margin:4px 0; }
 .decision-walkthrough > .text-link { font-size:.74rem; }
 .discovery-page .reference-details { padding:8px 0; }
@@ -3809,9 +3809,9 @@ body.discovery-page:not(.content-page)::before { display:none; }
 @media (max-width:760px) {
  .discovery-page:not(.content-page) main { padding-inline:18px; }
  .discovery-page:not(.content-page) > .topbar { padding:4px 12px; }
- .discovery-page .landing-hero { padding:24px 0 20px; }
+ .discovery-page .landing-hero { padding:12px 0 14px; }
  .discovery-page .landing-hero .hero-grid > div { width:100%; }
- .discovery-page .landing-hero .hero-visual { inset:-24px -18px -20px 0; opacity:.75; }
+ .discovery-page .landing-hero .hero-visual { inset:-12px -18px -14px 0; opacity:.75; }
  .discovery-page .landing-hero .hero-key-art img { mask-image:linear-gradient(90deg,transparent,#000 80%),linear-gradient(0deg,transparent,#000 35%); object-position:75% center; }
  .discovery-page .landing-hero .hero-key-art::after { background:linear-gradient(90deg,#06110fe8,#06110f55); }
  .discovery-page .hero h1, html[lang="zh-CN"] .discovery-page .hero h1 { font-size:1.85rem; max-width:340px; margin:6px 0 10px; }
@@ -3857,4 +3857,11 @@ body.discovery-page:not(.content-page)::before { display:none; }
  .discovery-editorial-grid .editorial-row { display:block; }
  .discovery-editorial-grid .editorial-row h3 { font-size:.8rem; }
  .discovery-editorial-grid .editorial-row [data-content-description] { font-size:.7rem; }
+}
+
+@media(max-width:760px) {
+ .discovery-page .landing-hero .eyebrow { margin:0 0 4px; font-size:.6rem; }
+ .discovery-page .hero-entry-note { margin-top:5px; }
+ .decision-source { margin-top:4px; }
+ .decision-walkthrough { padding-bottom:4px; }
 }
