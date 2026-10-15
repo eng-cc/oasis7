@@ -5,7 +5,7 @@
 ## 从这里开始
 - 想快速理解核心玩法骨架：先在 `../prd.md` 确认活跃基线与路由，再读 `gameplay-top-level-design.prd.md` 的 bounded 专业合同
 - 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 由同候选 PR 与实际验证记录 与 `../../testing/evidence/` 确认。
-- 想把同类游戏借鉴落到经营决策、目标委托和回访：先读[首局产品设计的采用边界](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#borrowed-gameplay-patterns)，再读[组合系统设计](gameplay-decision-delegation-return.design.md)；真实合作与策略复用保持后续范围，不增加当前首产物或邀请测试门槛。
+- 想了解经营决策、目标委托和回访的体验与实现边界：先读[首局产品设计的范围与优先顺序](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#gameplay-experience-priorities)，再读[组合系统设计](gameplay-decision-delegation-return.design.md)；真实合作与策略复用保持后续范围，不增加当前首产物或邀请测试门槛。
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-mature-world-progression-contract.prd.md` 的专业合同
 - 想确认区域 charter、tenure 与公共融资如何形成玩家可读、可恢复且不封锁独立路线的制度循环：先读 `../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `gameplay-regional-charter-tenure-funding-contract.prd.md`
@@ -30,7 +30,7 @@
 - `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同，并在 [generic mature-world recognition/opportunity leaf](./gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity) 中承接 `REQ-WR-MW-004` / `MW-11` 的专业玩法语义；不新增 PRD-ID 或 authority，产品承诺仍由 mature-world 产品分册拥有。
 - `gameplay-regional-charter-tenure-funding-contract.prd.md` 拥有 `PRD-GAME-017` 的区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家动作与验收；产品 `GR-004` 至 `GR-008` 仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有，runtime/P2P/QA 保留各自执行与验证 authority。
 - `gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md` 拥有 `PRD-GAME-019` 的普通治理主体聚合、资格/委托、公开审计、重复主体纠错/申诉、事项快照、OC 外部转让与单向非治理额度桥玩家动作和验收；其中 GCB-005 的事项快照与额度桥由 AC-GAME-019-04/05 承接，产品 `GCB-004/005` 仍由 `governed-common-decisions-and-constitutional-boundaries.prd.md` 拥有，runtime/P2P/QA 保留各自执行与验证 authority。
-- `gameplay-industrial-creation-and-cross-region-market-contract.prd.md` 拥有 `PRD-GAME-018` 的工业创建、许可/开放、OC/世界资格分离、跨区发现/物理交付/escrow 里程碑与争议恢复玩家合同；当前消费 active `GR-009..011`、`SC31-009/AC-SC31-010/011` 与 `ES-004` 产品 authority，其中工业/世界资格隔离仅保留 GR-011 边界；常态/危机保供不在本合同重新定义。
+- `gameplay-industrial-creation-and-cross-region-market-contract.prd.md` 拥有 `PRD-GAME-018` 的工业创建、许可/开放、OC/世界资格隔离、跨区发现/物理交付/escrow 里程碑与争议恢复玩家合同；当前消费 active `GR-009..011`、`SC31-009/AC-SC31-010/011` 与 `ES-004` 产品 authority，其中工业/世界资格隔离仅保留 GR-011 边界；常态/危机保供不在本合同重新定义。
 - GitHub Project task status 与 issue evidence comments 是 retention、preview、经济规则和放行门禁的执行状态入口。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 

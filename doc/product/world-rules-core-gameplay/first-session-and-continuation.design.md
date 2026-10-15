@@ -49,25 +49,25 @@
 
 0–30 分钟是体验观察窗口，不是按时触发剧情或事故的脚本；首次持续能力仍按玩法总纲的独立窗口评价，不要求首产物完成者当场继续。失败恢复与单约束理解迁移可在对应验证场景观察，不强迫所有新玩家经历事故。
 
-<a id="borrowed-gameplay-patterns"></a>
-### 1.3 同类游戏借鉴：采用边界与优先顺序
+<a id="gameplay-experience-priorities"></a>
+### 1.3 经营决策与持续游玩：设计范围与优先顺序
 
-玩家已经做成第一笔铁锭，却仍可能不知道自己的决定改变了什么、为什么下一步值得做，以及离开后回来该从哪里继续。本节细化既有产品要求的解决方案，不另立六个功能模块或新的产品要求真值；原 REQ/AC、首产物与首次持续能力的完成边界不变。
+玩家已经做成第一笔铁锭，却仍可能不知道自己的决定改变了什么、为什么下一步值得做，以及离开后回来该从哪里继续。本节围绕这些问题细化体验方案，继续由现有 PRD 统一定义要求；原 REQ/AC、首产物与首次持续能力的完成边界不变。
 
 先将经营分支、目标委托、可读因果和回访组合在同一工业链上。真实合作和策略复用是后续方案：当前只明确不误导的用途表达和复用边界，不把它们提升为邀请测试或首产物的新前置。下表的顺序表示设计取舍，不是排期或已完成状态。
 
-| 借鉴点与参照 | 当前采用的设计 | 对应产品要求 | 不照搬的部分 |
+| 体验目标 | 设计方案 | 对应产品要求 | 范围边界 |
 | --- | --- | --- | --- |
-| 有机会成本的经营；Factorio、Screeps | 比较真实投入、余量、占用、形成能力及后续两个决策 | [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001)、[002](first-session-and-continuation.prd.md#req-first-branch-002) | 不以更多批量按钮、隐藏惩罚或必经升级顺序代替策略 |
-| 默认代办、逐步开放定制；Desynced、Screeps | 玩家给目标与支持的边界，Agent 执行授权内步骤，需要新增判断时再请示 | [具体样本](first-session-and-continuation.prd.md#first-session-concrete-sample)、[间接控制](indirect-control-agency-and-continuation.prd.md#req-wr-ia-003) | 不要求新人先编程，不把软偏好当强制授权 |
-| 因果可预测、失败可纠正；Factorio | 当前方案、投入、主要阻塞和真实下一步放在同一决策面 | [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002)、[005](first-session-and-continuation.prd.md#req-first-industrial-005)、[006](first-session-and-continuation.prd.md#req-first-industrial-006) | 不另建诊断系统，不让玩家从原始日志拼接结果 |
-| 值得记住的成果与回访；SpaceMolt、RimWorld | 按原意图与权威结果组织进展摘要，帮助恢复下一次决定 | [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008) | 不强制制造事故，不用生成叙事补齐缺失事实 |
-| 真实需求带来合作；Eco | 当前区分潜在用途与已确认需求，后续验证一笔真实合作 | [生产/交付边界](first-session-and-continuation.prd.md#req-first-industrial-004)、[工业需求专题](industrial-demand-goals-and-settlement.prd.md) | 不先搭建完整市场、政府或强制全体协作终局 |
-| 成功办法沉淀为能力；EVE Frontier、Desynced | 后续先复用现有目标配置或受支持模块，采用时重新核验条件 | [自治与授权](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)、[区域能力与扩展](governed-regional-capabilities-and-extensions.prd.md) | 不先做策略商城，不保存或复制永久授权 |
+| 有机会成本的经营 | 比较真实投入、余量、占用、形成能力及后续两个决策 | [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001)、[002](first-session-and-continuation.prd.md#req-first-branch-002) | 不以更多批量按钮、隐藏惩罚或必经升级顺序代替策略 |
+| 默认代办、逐步开放定制 | 玩家给目标与支持的边界，Agent 执行授权内步骤，需要新增判断时再请示 | [具体样本](first-session-and-continuation.prd.md#first-session-concrete-sample)、[间接控制](indirect-control-agency-and-continuation.prd.md#req-wr-ia-003) | 不要求新人先编程，不把软偏好当强制授权 |
+| 因果可预测、失败可纠正 | 当前方案、投入、主要阻塞和真实下一步放在同一决策面 | [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002)、[005](first-session-and-continuation.prd.md#req-first-industrial-005)、[006](first-session-and-continuation.prd.md#req-first-industrial-006) | 不另建诊断系统，不让玩家从原始日志拼接结果 |
+| 值得记住的成果与回访 | 按原意图与权威结果组织进展摘要，帮助恢复下一次决定 | [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008) | 不强制制造事故，不用生成叙事补齐缺失事实 |
+| 真实需求带来合作 | 当前区分潜在用途与已确认需求，后续验证一笔真实合作 | [生产/交付边界](first-session-and-continuation.prd.md#req-first-industrial-004)、[工业需求专题](industrial-demand-goals-and-settlement.prd.md) | 不先搭建完整市场、政府或强制全体协作终局 |
+| 成功办法沉淀为能力 | 后续先复用现有目标配置或受支持模块，采用时重新核验条件 | [自治与授权](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)、[区域能力与扩展](governed-regional-capabilities-and-extensions.prd.md) | 不先做策略商城，不保存或复制永久授权 |
 
 这些方案的跨组件接线、当前接点与差距、异常恢复和场景映射由[经营决策、目标委托与回访续接系统设计](../../game/gameplay/gameplay-decision-delegation-return.design.md#21-需求承接与分配表)承接。产品功能的状态仍按配对 PRD 与实际证据表达；本节不把设计细化升级为实现完成、真人验证或公开可用。
 
-<a id="borrowed-branch-experience"></a>
+<a id="operating-branch-experience"></a>
 ### 1.4 经营分支：让两条路线改变后续生活
 
 优先比较现有“深化 Smelter 生产线”和“建设 Assembler、开放第二条生产线”，但只在对应阶段、当前规则和真实可用动作支持时展开。首笔铁锭完成时可以先查看 Assembler 的用途和缺口，不要求立即提供两条可提交路线，也不要求当场建成。
@@ -84,7 +84,7 @@
 
 反证信号是玩家只记住“哪个按钮推荐度高”，却说不出放弃了什么，或后续两个决策没有变化。验证先做同初始状态下的规则对照，再观察玩家自己的理由；不把模拟分叉带入正式世界复制资源。
 
-<a id="borrowed-delegation-experience"></a>
+<a id="goal-delegation-experience"></a>
 ### 1.5 目标委托：少确认，不少约束
 
 委托首读回答“要做成什么、允许怎样做、遇到什么再来问我”。例如采用一份当前可执行的首笔生产方案，Agent 可代办已接入且被授权覆盖的步骤；没有接线的建厂、补料或排产仍明确由玩家完成。任务目标不是无限许可，也不因为模型说理解了就产生执行保证。
@@ -93,7 +93,7 @@
 
 玩家可表达“偏向保留资源”等软偏好，但只有系统实际强制执行的额度/范围才能称作保证。界面应让两者可辨识；不支持的硬限制不能伪装成可保存的开关。验证用一个受支持约束的变化观察 Agent 行为，而不是统计对话轮数、确认数量或生成解释长度。
 
-<a id="borrowed-causality-experience"></a>
+<a id="readable-causality-experience"></a>
 ### 1.6 可读因果：同一个对象上的方案、阻塞与结果
 
 围绕当前工厂只前景化目标、实际投入、主要阻塞和下一动作。提交前看到的是“这份方案预计使用什么、形成什么、还受什么条件限制”；提交后看到的是“实际接受/执行到哪里、消费或保留了什么、结果是否已确认”。两个阶段不能共用一个模糊的“成功”标签。
@@ -102,7 +102,7 @@
 
 在世界舞台关联选中工厂、实际依赖的输入与已结算产物，帮助玩家理解过程；只表现当前配方真正依赖的环节，不为表现效果虚构运输或多输入等待。技术身份和账本可展开查看，不要求新人读原始 JSON 才知道下一步。
 
-<a id="borrowed-return-experience"></a>
+<a id="return-visit-experience"></a>
 ### 1.7 成果与回访：关心变化，而不是阅读流水账
 
 回访首读采用四个问题：“上次我选了什么；此后能确认什么变化；哪些成果、风险与义务还在；现在有什么值得决定”。旧目标未完成时先帮助续接，目标已完成时再展开后继用途；不要重新把玩家送回首局教学。
@@ -113,7 +113,7 @@
 
 损失、授权失效和未决请求优先于普通环境消息；重复事件可以合并，关键义务不能被摘要吞掉。回访是否有吸引力，以玩家能否恢复目标、解释变化并自主选择下一步观察；摘要长度、自动重连和 Agent 持续活动不证明真实留存。
 
-<a id="borrowed-cooperation-experience"></a>
+<a id="demand-cooperation-experience"></a>
 ### 1.8 真实合作：先有用途，再有已确认需求
 
 当前先把后继用途讲准确：某产物可用于自己的下一项能力，不等于附近经营者正在求购；出现需求描述，也不等于已签约或已交付。无真实需求记录时使用“潜在用途/自己的后继目标”，不能让 action 对应的固定文案或 Agent 想象承担需求证明。
@@ -122,7 +122,7 @@
 
 当前 production_only 首产物继续独立完成；真实需求、合作承诺、交付与需求减少各自取证，不把完整市场或 terminal-admission 正向链提前加入首局。后续方案由原工业需求与市场专题继续细化，而不是建立平行经济系统。
 
-<a id="borrowed-reuse-experience"></a>
+<a id="strategy-reuse-experience"></a>
 ### 1.9 复用成功办法：先保存方法，不保存权力
 
 后续从玩家已经反复使用、且有真实效果的一种经营办法开始：说明它解决什么问题、适用对象和前置条件、哪些参数可以调整，以及过去在哪些条件下有效。优先复用现有目标配置、参数或受支持模块，不要求普通玩家先理解 WASM，也不把每个办法都变成独立程序。
@@ -130,21 +130,6 @@
 “保存办法”不产生世界效果；“再次采用”重新检查当前对象、版本、能力、成本和授权，并形成新的合法目标。旧授权、凭据、未决请求和过去余额不能跟随模板复制，过去的成功不保证再次获得相同收益。使用别人的模板也不扩大读取或执行权限。
 
 保存位置、版本兼容、分享范围和具体采用入口尚未确定前，只保留后续设计候选，不呈现已可用的保存/执行功能。反证信号是模板只减少重复输入，却没有值得重复的玩法，或玩家不能解释采用后会做什么；此时不扩展成商城、排行榜或新的编程平台。
-
-<a id="borrowed-gameplay-sources"></a>
-### 1.10 借鉴来源与证据边界
-
-下列官方资料于 2026-10-15 核对，仅支持相应机制描述。采用理由及对 oasis7 的适配是本设计判断，不把竞品功能、宣传目标或更新记录当作本项目实现、市场或留存证据。未进行竞品长时实机对照测试。
-
-| 官方来源 | 可借鉴机制 | 本设计采用与舍弃 |
-| --- | --- | --- |
-| [Factorio：Friday Facts #448，2026-10-09](https://factorio.com/blog/post/fff-448) | 可见规则改善结果可预测性，调整支配性方案以扩大有效设计空间 | 采用可读成本与真实取舍；不复制数值、惩罚或太空平台系统 |
-| [Screeps：Introduction](https://docs.screeps.com/introduction.html) | 行为可持续执行，玩家可以间歇检查经营结果 | 采用低频战略介入；不要求新人写 JavaScript，不承诺本项目未验证的离线自治 |
-| [Desynced：开发者商店介绍](https://store.steampowered.com/app/1450900/Desynced/) | 自动物流先可用，参数与可视化脚本提供更深定制 | 采用渐进式委托；不把无传送带物流或脚本编辑器增加为首局前置 |
-| [SpaceMolt：更新记录](https://spacemolt.com/changelog) | 通知、原动作记录和持续资产结果帮助异步经营 | 采用重要变化与待决事项的回访阅读；不直接复制任务、派系或租金体系 |
-| [RimWorld：开发者商店介绍](https://store.steampowered.com/app/294100/RimWorld/) | 系统结果可以形成玩家记得住的经历 | 采用基于真实后果的进展片段；不引入强制事故导演或用叙事替代证据 |
-| [Eco：开发者商店介绍](https://store.steampowered.com/app/382310/Eco/) | 专业化、异步商店与合同让参与者在不同时间相互服务 | 采用真实需求与自愿合作；不复制共同终局、政府或整套经济系统 |
-| [EVE Frontier：官方 FAQ](https://evefrontier.com/en/faq) | 可编程设施与使用他人系统区分开发者和普通玩家参与层次 | 采用先呈现用途再开放定制；不复制链上资产、清档策略或无限授权 |
 
 ## 2. 代表性片段与阶段信息
 
@@ -244,7 +229,7 @@ Viewer 与 pure API 共享权威事实和玩家语义；每个入口分别证明
 
 系统接点分别由 [Viewer 当前方案交互](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)、[M4 报价到提交](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)、[Runtime 未知结果与恢复](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation) 承接；这些是实现与验证义务，不是本次已运行游戏的声明。
 
-借鉴方案的七类独立场景见[系统设计验证映射](../../game/gameplay/gameplay-decision-delegation-return.design.md#111-验证映射表)：真实分支、目标约束改变行为、授权累计边界、报价与原请求一致性、阻塞理解、回访事实连续性、用途/需求/交付分层。沿用上述分项判定，合作与模板候选不加入当前首产物验收；场景名称不代表已有同名测试或已取得真人证据。
+本设计的七类独立场景见[系统设计验证映射](../../game/gameplay/gameplay-decision-delegation-return.design.md#111-验证映射表)：真实分支、目标约束改变行为、授权累计边界、报价与原请求一致性、阻塞理解、回访事实连续性、用途/需求/交付分层。沿用上述分项判定，合作与模板候选不加入当前首产物验收；场景名称不代表已有同名测试或已取得真人证据。
 
 ## 10. 相邻权威与未决边界
 

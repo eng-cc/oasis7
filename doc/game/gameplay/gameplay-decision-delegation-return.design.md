@@ -4,7 +4,7 @@
 - Owner role：`gameplay_designer`
 - 专业协同：`producer_system_designer`、`runtime_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer`
 - 产品要求：[`首局与持续游玩 PRD`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)
-- 产品体验方案：[`借鉴范围与具体体验`](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#borrowed-gameplay-patterns)
+- 产品体验方案：[`设计范围与具体体验`](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#gameplay-experience-priorities)
 - 系统边界：本文只细化既有产品要求的组合接线、事实投影、异常与验证。领域规则、授权、报价、结算和持久化仍由相邻专业 authority 拥有。
 - 审读范围：对应现有 Smelter 首产物、后继工业分支、间接控制和 Viewer/API 接点；实现状态与实际候选证据从 PR 和验证记录读取，不从本设计的 active 状态推导。
 
@@ -160,7 +160,7 @@ first_delivery_preview 的兼容字段名不赋予交付语义。实现前先沿
 
 ## 8. 部署、安全与运行约束
 
-本设计不新增服务、开放端口、模型提供商、凭据或生产权限。Viewer/API 使用已有认证和可见性过滤；公开需求与私有经营记录按原 authority 区分。引用外部竞品资料只是设计依据，不能作为运行时授权或外部数据依赖。
+本设计不新增服务、开放端口、模型提供商、凭据或生产权限。Viewer/API 使用已有认证和可见性过滤；公开需求与私有经营记录按原 authority 区分。
 
 Agent 的目标、收到的消息和导入模板均不覆盖系统授权。没有强制预算校验时不宣称硬限额；不得为演示自动化而使用 debug 注入、免费输入或更高权限。停止后续代办与取消已提交请求分别处理，失效授权不能阻止合法查询原请求已经发生的结果，但查询本身仍遵循当前读取权限。
 
@@ -205,5 +205,3 @@ Agent 的目标、收到的消息和导入模板均不覆盖系统授权。没�
 | 何时引入真实合作 | 当前先纠正用途/需求表达；真实需求方、合法交付与失败处置具备后，由原工业/市场专题承接 | producer/gameplay/M4；不作为首产物、邀请测试或本设计通过的新增条件 |
 | 何时引入策略复用 | 先证明有值得重复的有效玩法，再选择现有配置/模块的最小复用入口；保存与授权分离 | producer/Agent/runtime/WASM；对象/版本/权限和兼容方案明确后细化 |
 | 可读摘要误导或泄露 | 确定性事实优先、可见性先过滤、因果不足不补全；语言润色不参与执行 | Viewer/runtime/QA；任何事实来源或摘要组件变更时复核 |
-
-竞品资料与采用/不采用理由归[产品设计的来源表](../../product/world-rules-core-gameplay/first-session-and-continuation.design.md#borrowed-gameplay-sources)。它们支持设计启发，不证明 oasis7 的实现、平衡、留存或商业结果。
