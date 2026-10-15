@@ -77,11 +77,23 @@
 <a id="req-agent-surface-001"></a>
 ### REQ-AGENT-SURFACE-001：跨 surface 保留同一决策锚点
 
+Trace ID: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef
+
+- 功能点：[REQ-AGENT-SURFACE-001](#req-agent-surface-001)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-001](#ac-agent-surface-001)，不扩大入口或阶段。
+- 系统设计状态：未核实
+- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“viewport/语言/连接状态的同一决策锚点”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：核清viewport/语言/连接状态的同一决策锚点的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+
 - 要求：在受支持 viewport、语言和连接状态下，玩家必须能找到当前目标、主要 blocker、最近可信反馈和下一决策或恢复入口；呈现变化不得改写权限或世界结果。
 - 验收：AC-AGENT-SURFACE-001
 
 <a id="ac-agent-surface-001"></a>
 ### AC-AGENT-SURFACE-001：窄屏、fallback 与恢复状态仍可读
+
+Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；承接[REQ-AGENT-SURFACE-001](#req-agent-surface-001)。
 
 - 覆盖要求：REQ-AGENT-SURFACE-001
 - 场景与结果：代表性 desktop、窄屏、低高度和双语 fallback 样例中，四个决策锚点仍可辨认；中断、恢复中、恢复失败和已接受结果保持不同语义，并提供真实下一步。
@@ -90,11 +102,23 @@
 <a id="req-agent-surface-002"></a>
 ### REQ-AGENT-SURFACE-002：不支持行动不得伪装成传输失败
 
+Trace ID: O7-REQ-d7081137-94a9-4524-b08a-fc3fbfcb9f64
+
+- 功能点：[REQ-AGENT-SURFACE-002](#req-agent-surface-002)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-002](#ac-agent-surface-002)，不扩大入口或阶段。
+- 系统设计状态：未核实
+- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“模式不支持、权限/规则阻塞、传输中断与未知请求区分”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：核清模式不支持、权限/规则阻塞、传输中断与未知请求区分的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+
 - 要求：当当前模式不支持某行动、权限/规则阻塞或请求已被接受时，surface 必须与连接中断和未确认请求区分，并给出适用的替代、等待、返回或重新验证路径。
 - 验收：AC-AGENT-SURFACE-002
 
 <a id="ac-agent-surface-002"></a>
 ### AC-AGENT-SURFACE-002：重连不会创造能力或世界效果
+
+Trace refs: O7-REQ-d7081137-94a9-4524-b08a-fc3fbfcb9f64；承接[REQ-AGENT-SURFACE-002](#req-agent-surface-002)。
 
 - 覆盖要求：REQ-AGENT-SURFACE-002
 - 场景与结果：不支持行动、权限阻塞、已接受未结算请求和断连同时出现时，首要解释按当前权威语义呈现；重连、刷新、后台 tick 或跨入口查看不会把请求变成成功、取消或第二次世界效果。
@@ -102,6 +126,16 @@
 
 <a id="req-agent-surface-003"></a>
 ### REQ-AGENT-SURFACE-003：个人行动反馈必须属于当前玩家
+
+Trace ID: O7-REQ-41b03765-cccf-4a1f-814c-7b498dc975f6
+
+- 功能点：[REQ-AGENT-SURFACE-003](#req-agent-surface-003)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-003](#ac-agent-surface-003)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-feedback-isolation)：请求连接、已验证玩家及世界故障的隔离与身份切换；各正式表面的呈现及真实多人组合范围须另核。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：各正式表面的呈现及真实多人组合范围须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
 
 - 性质与适用条件：目标要求；适用于正式玩家表面的个人行动反馈及其重连、刷新和身份切换。
 - 要求：产品必须依据经确认的当前身份展示该玩家有权读取的行动反馈；无关玩家或匿名请求的失败不得覆盖、追加到或暴露为本人的个人反馈。匿名请求可以获得自身有权获得的拒绝说明，但不能借请求中的身份声明影响已鉴权玩家。
@@ -112,6 +146,8 @@
 <a id="ac-agent-surface-003"></a>
 ### AC-AGENT-SURFACE-003：两名玩家与匿名失败互不污染
 
+Trace refs: O7-REQ-41b03765-cccf-4a1f-814c-7b498dc975f6；承接[REQ-AGENT-SURFACE-003](#req-agent-surface-003)。
+
 - 覆盖要求：[REQ-AGENT-SURFACE-003](#req-agent-surface-003)。
 - 给定：两名已鉴权玩家各自已有可信个人反馈，以及一个未鉴权连接。
 - 当：分别由本人、另一玩家和匿名连接发起被拒绝的请求，并交叉刷新、重连或切换身份读取反馈。
@@ -119,6 +155,16 @@
 
 <a id="req-agent-surface-004"></a>
 ### REQ-AGENT-SURFACE-004：拒绝原因必须支持真实下一步
+
+Trace ID: O7-REQ-e3a70494-b3f3-4220-a654-6c9f07cdb8a4
+
+- 功能点：[REQ-AGENT-SURFACE-004](#req-agent-surface-004)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-004](#ac-agent-surface-004)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-error-code-preservation)：合法鉴权后的业务错误码保真；各失败类别到玩家恢复动作的完整表现承接须另核。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：各失败类别到玩家恢复动作的完整表现承接须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
 
 - 性质与适用条件：目标要求；适用于本人有权获得的行动拒绝与失败说明。
 - 要求：产品必须保留足以区分修正输入、重新确认身份或权限、补齐世界条件、等待或安全停止的失败含义；已有明确原因不能统一降成“请求错误”或“请重连”。原因不足或结果未知时如实说明，不能编造成功、失败细节或必然有效的重试。
@@ -129,6 +175,8 @@
 <a id="ac-agent-surface-004"></a>
 ### AC-AGENT-SURFACE-004：不同失败仍能选择正确恢复路径
 
+Trace refs: O7-REQ-e3a70494-b3f3-4220-a654-6c9f07cdb8a4；承接[REQ-AGENT-SURFACE-004](#req-agent-surface-004)。
+
 - 覆盖要求：[REQ-AGENT-SURFACE-004](#req-agent-surface-004)。
 - 给定：身份有效但行动输入不合法、权限不足、世界前置不满足，以及投递后结果未知的独立样例。
 - 当：玩家读取各自反馈并选择下一步。
@@ -136,6 +184,16 @@
 
 <a id="req-agent-surface-005"></a>
 ### REQ-AGENT-SURFACE-005：提交前检查必须与当前提交资格一致
+
+Trace ID: O7-REQ-e393156d-2326-4d75-a0cb-ffba6ed74e5d
+
+- 功能点：[REQ-AGENT-SURFACE-005](#req-agent-surface-005)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-005](#ac-agent-surface-005)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#collect-data-preflight-consistency)：CollectData 同一权威状态下预检与提交资格一致；其他受支持行动的适用范围和正式表面反馈须另核。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：其他受支持行动的适用范围和正式表面反馈须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
 
 - 性质与适用条件：目标要求；仅适用于已提供提交前检查的受支持行动，不要求所有行动新增检查入口。
 - 要求：对同一经确认身份、同一行动意图与同一权威世界状态，检查对共享资格条件的判断必须与提交时的资格校验一致；无法确认身份或权威状态时明确不可确认或阻塞。检查不得被表达为行动已接受、已执行或已结算，也不保证状态变化后的提交成功。
@@ -145,6 +203,8 @@
 
 <a id="ac-agent-surface-005"></a>
 ### AC-AGENT-SURFACE-005：资格一致且状态变化后重新判断
+
+Trace refs: O7-REQ-e393156d-2326-4d75-a0cb-ffba6ed74e5d；承接[REQ-AGENT-SURFACE-005](#req-agent-surface-005)。
 
 - 覆盖要求：[REQ-AGENT-SURFACE-005](#req-agent-surface-005)。
 - 给定：相同身份、行动与权威状态下的合格和不合格样例，另有检查后权限、绑定或资源条件改变的样例。

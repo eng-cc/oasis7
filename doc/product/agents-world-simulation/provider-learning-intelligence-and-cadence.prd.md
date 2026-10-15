@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：准入、学习和情报的取舍直接写在玩家边界；范围：长期provider学习与情报产品语义；风险：长期目标不得冒充当前能力，专业状态字段尚由owner裁定；映射：[玩家体验与决策](#2-范围与玩家边界)、[风险与未决边界](#3-权威与冲突处理)
+
 - 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
@@ -79,11 +81,23 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 <a id="req-agent-learning-001"></a>
 ### REQ-AGENT-LEARNING-001：provider 准入必须受范围与固定节奏约束
 
+Trace ID: O7-REQ-86ed9522-e22d-4706-9b1e-3e1452a9fb3c
+
+- 功能点：[REQ-AGENT-LEARNING-001](#req-agent-learning-001)；适用范围沿本条原条件与 [AC-AGENT-LEARNING-001](#ac-agent-learning-001)，不扩大入口或阶段。
+- 系统设计状态：未核实
+- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“准入生命周期、权限/tier与固定cadence公平”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：核清准入生命周期、权限/tier与固定cadence公平的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+
 - 要求：provider profile 只有在适用场景、权限、tier 和证据范围内才可被选择或形成新的权威意图来源；所有 provider 共享同一权威 cadence 与 action slots，不因性能、调用量或付费便利获得额外世界机会。
 - 验收：AC-AGENT-LEARNING-001
 
 <a id="ac-agent-learning-001"></a>
 ### AC-AGENT-LEARNING-001：暂停、撤销与恢复不绕过权威节奏
+
+Trace refs: O7-REQ-86ed9522-e22d-4706-9b1e-3e1452a9fb3c；承接[REQ-AGENT-LEARNING-001](#req-agent-learning-001)。
 
 - 覆盖要求：REQ-AGENT-LEARNING-001
 - 场景与结果：证据不足、超出范围、暂停或撤销的 profile 不能提交新的权威意图；恢复只进入新的已证实范围，重新确认后的请求仍按正常 slot 进入，不增加排序优先级或额外世界效果。
@@ -92,11 +106,23 @@ provider profile 的产品基础状态依次为 `证据不足 -> 评估中 -> �
 <a id="req-agent-learning-002"></a>
 ### REQ-AGENT-LEARNING-002：训练与认证变化必须保留能力范围和历史
 
+Trace ID: O7-REQ-dc313559-e262-478c-8a8d-ee2f9817e5e7
+
+- 功能点：[REQ-AGENT-LEARNING-002](#req-agent-learning-002)；适用范围沿本条原条件与 [AC-AGENT-LEARNING-002](#ac-agent-learning-002)，不扩大入口或阶段。
+- 系统设计状态：未核实
+- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“训练/认证变化、当前能力与历史及待决重确认”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：核清训练/认证变化、当前能力与历史及待决重确认的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+
 - 要求：训练、认证、模块和重训只能在新证据明确支持的范围内改变能力；复核、失败、到期或撤销期间必须显示当前有效范围与受影响行动，并保留既有 provenance、责任和已结算结果。
 - 验收：AC-AGENT-LEARNING-002
 
 <a id="ac-agent-learning-002"></a>
 ### AC-AGENT-LEARNING-002：重训成功不会自动恢复旧待决请求
+
+Trace refs: O7-REQ-dc313559-e262-478c-8a8d-ee2f9817e5e7；承接[REQ-AGENT-LEARNING-002](#req-agent-learning-002)。
 
 - 覆盖要求：REQ-AGENT-LEARNING-002
 - 场景与结果：能力复核/重训/撤销期间，超出当前范围的请求进入 Wait、拒绝、过期或明确低风险替代；后续训练成功也不自动恢复旧待决请求，必须在当前 scope 重新确认或以关联新请求提交，且不产生重复世界效果。

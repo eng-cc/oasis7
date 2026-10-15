@@ -17,13 +17,16 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 的合同、服务失败、声誉和 R&D 连续性是产品结果合同；独立 design 不增加另一层玩家信息或控件语义。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
 ## 1. 产品目标
 
 玩家可以自由协商、委托 Agent 并在同一世界中形成可信协作，但非绑定交流不能被误当作已成交或强制义务。只有经有效授权、明确接受和权威校验的 Agent-rendered 合同才产生绑定世界后果。持续服务允许有成本的违约、证据和救济，而争端、声誉与 R&D 归因保持局部、可审计、可更新且不把身份永久污名化或私有化。
 
 本目标不声称当前社交事实、合同、仲裁、声誉或 R&D 机制已经实现；现有社交事实与产业专业合同仍是更窄的专业真值，任何当前可用性须由相应 authority、QA 和根 `README.md` 支持。
 
-## 2. 范围与玩家边界
+<a id="2-范围与玩家边界"></a>
+## 2. 范围与玩家体验边界
 
 ### 2.1 沟通与绑定合同
 
@@ -67,12 +70,23 @@
 <a id="req-wr-cr-001"></a>
 ### REQ-WR-CR-001：绑定合同必须经过授权、接受与权威校验
 
+Trace ID: O7-REQ-16ef3247-1587-4cd8-84ab-03a9bb18a17f
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 要求：人类沟通、草稿、未接受提议和 Agent 建议保持非绑定；只有授权范围内渲染的明确条款、主体明确接受并获得权威校验 receipt 后，才可以创建绑定义务和世界效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-CR-001](#ac-wr-cr-001)
 
 <a id="ac-wr-cr-001"></a>
 ### AC-WR-CR-001：预览与待校验接受不伪装成交付
+
+Trace refs: O7-REQ-16ef3247-1587-4cd8-84ab-03a9bb18a17f；声明：[REQ-WR-CR-001](#req-wr-cr-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-CR-001
 - 给定：一份包含授权来源、范围和义务的 Agent-rendered offer，以及一份普通聊天或草稿。
@@ -82,12 +96,23 @@
 <a id="req-wr-cr-002"></a>
 ### REQ-WR-CR-002：持续服务失败必须提供有界恢复而不重复效果
 
+Trace ID: O7-REQ-805fc92a-bbcb-4e77-b2d8-e40105522a0d
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 要求：跨时间服务按检查点保留已完成结果、未履行范围、责任和可执行下一步；玩家可选择修复/重新履行、终止/结清、最小争议保全或显式继受，且 retry、reconnect 和续期不能重复交付、扣款或静默转移责任。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-CR-002](#ac-wr-cr-002)
 
 <a id="ac-wr-cr-002"></a>
 ### AC-WR-CR-002：检查点失败只影响对应范围
+
+Trace refs: O7-REQ-805fc92a-bbcb-4e77-b2d8-e40105522a0d；声明：[REQ-WR-CR-002](#req-wr-cr-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-CR-002
 - 给定：一个已 active 的持续维护、运输或协作合同在检查点部分完成或 default。
@@ -97,12 +122,23 @@
 <a id="req-wr-cr-003"></a>
 ### REQ-WR-CR-003：社交事实预览与声誉、R&D 归因必须保持情境边界
 
+Trace ID: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 要求：玩家发布或质疑社会事实、或声明关系前，必须能查看只读预览，了解可能受影响的主体、合作/治理/claim 表面和争端/质押风险，并据此选择继续或暂缓；预览不判定事实、不处理质押、不改变资格或权限、不保证合作、访问、排名、治理权重或奖励。声誉按主体与情境记录，并支持到期、更新和有界申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。当该记录被世界内机会消费时，仍由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)约束机会的作用域、容量、待决、结算和恢复边界；入口组合边界见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)；本要求不授予区域分配或优先级，也不声称当前实现或 readiness。
 - 专业权威：[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md)、[`social-fact-ledger-declarative-reputation.design.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-CR-003](#ac-wr-cr-003)
 
 <a id="ac-wr-cr-003"></a>
 ### AC-WR-CR-003：社交事实预览、转让、更新与申诉保持情境边界
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；声明：[REQ-WR-CR-003](#req-wr-cr-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-CR-003
 - 给定：玩家准备发布或质疑社会事实、声明关系；主体在特定地点、服务和时间范围内有情境声誉记录，并参与已声明 R&D charter 的工作。
@@ -158,3 +194,9 @@
 | [REQ-WR-CR-001](#req-wr-cr-001) / [AC-WR-CR-001](#ac-wr-cr-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-CR-002](#req-wr-cr-002) / [AC-WR-CR-002](#ac-wr-cr-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-CR-003](#req-wr-cr-003) / [AC-WR-CR-003](#ac-wr-cr-003) | `producer_system_designer` | [`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md)、[`social-fact-ledger-declarative-reputation.design.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md)、[`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 提交前 preview 的受影响主体/合作/治理/claim/争端/质押风险与无 entitlement/readiness 承诺；本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+
+## 未决问题与证据边界
+
+绑定合同、持续服务恢复、情境声誉和 R&D 归因各自的专业合同及验证范围须逐项核对；本文不裁定经济参数、仲裁权限或归因算法，不把预览/提案/历史记录视为已生效结果。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

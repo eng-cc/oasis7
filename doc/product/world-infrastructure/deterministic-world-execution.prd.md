@@ -11,7 +11,8 @@
 
 本文定义分布式共识底层之上的确定性世界执行层。它是基础设施内部的上层：接收已签名意图、在版本化规则边界内确定性重执行、提交已最终化结果，并向游戏、Agent 与玩家入口提供稳定协议；它不定义那些消费者的规则、行为或界面。
 
-### 使用者情境、正常路径与选择
+<a id="使用者情境正常路径与选择"></a>
+### 使用者体验、正常路径与决策
 
 玩家提交行动后需要知道它是否真正生效，Agent 需要基于真实结果继续规划，验证者需要确认同一输入确实得到相同结果。正常路径是：消费者确认目标 `world_id`、已验证可服务状态和协议兼容性，签名并提交 intent；活动验证者按同一版本、有序输入和父状态重执行，在可验证最终性成立后形成 committed receipt，消费者再据此更新世界结论。客户端 compatibility declaration 只说明客户端是否能理解协议，执行版本仍按 §2.2 的 canonical block 与激活边界确定。
 
@@ -26,7 +27,7 @@
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 提交边界沿用 [P2P 合法 authority profile](../../p2p/prd.md#p2p-authority-profiles)：受控单权威不等于 BFT；超时/断连且不能证明未提交时必须表达提交未知并按原身份核对，下文无效果 pending 只用于已知尚无效果的请求。实际开放路径的投入、产出、事件、结果、里程碑和去重事实共同持久提交，replay 不重发外部行为。固定身份与合法 manifest/profile 激活链保持连续，不把版本升级当新世界。
 
 ## 1. 执行与共识边界
@@ -61,12 +62,22 @@
 
 当前 runtime/consensus 集成不得因本产品目标自动被表述为 BFT-ready、分区恢复完成或可公开发行。完整目标需要 runtime version activation、certificate-gated execution/replication、replay compatibility、恢复后的 root verification，以及与 P2P 相同候选版本的对抗性证据。
 
-## 4. 叶子需求与可观察验收
+<a id="4-叶子需求与可观察验收"></a>
+## 4. 叶子要求与可观察验收
 
 这些叶子把本专题的四类可独立失败义务映射到现有 DE 汇总标准；它们只表达产品可观察结果和证据边界，不复制 runtime/P2P 的字段、状态机或 schema。
 
 <a id="req-dwe-001"></a>
 ### REQ-DWE-001：同输入确定性提交
+
+- Trace ID: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607
+- 适用范围：本条要求及对应 AC-DWE-001，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-deterministic-design)；同输入执行与原子拒绝已有设计；全部验证者组合、实例隔离和消费者完整范围仍须逐项核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，同输入执行与原子拒绝已有设计；全部验证者组合、实例隔离和消费者完整范围仍须逐项核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 同一 execution version、已排序输入和 parent committed world state 必须产生同一权威结果；缺少适用证明、输入冲突、越权或版本不匹配时，执行不得产生部分世界效果。同一模块能力的不同实例必须保持结果隔离：一次已确认操作只影响其被授权的目标实例；目标不明确、失效或越权时，不能改写其他实例或产生部分业务结果。
 
@@ -76,12 +87,23 @@
 <a id="ac-dwe-001"></a>
 ### AC-DWE-001：验证者重执行与拒绝边界
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；唯一要求声明：[REQ-DWE-001](#req-dwe-001)。
+
 在同一候选中，活动验证者和适用 replay 对相同版本、输入和世界状态得到一致结果；缺证、冲突、越权或版本不匹配的样例被原子拒绝且没有部分 receipt、资源或状态变化。多实例样例须证明对一个实例的操作不会串写另一个实例；无法唯一确认被授权目标的请求无部分业务结果，消费者能够区分拒绝与成功。该验收由 runtime 的执行/回放合同与 P2P/QA 的组合证据共同判定，单节点成功不能代签；实例命令的具体承接见 [runtime 实例命令设计](../../world-runtime/design.md#module-instance-command-design)，设计采纳不表示当前实例隔离已实现。
 
 - 对应需求：[REQ-DWE-001](#req-dwe-001)。
 
 <a id="req-dwe-002"></a>
 ### REQ-DWE-002：finality 缺失时保持无效果待决
+
+- Trace ID: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405
+- 适用范围：本条要求及对应 AC-DWE-002，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-pending-design)；待决恢复已有目标设计；通用 pending 持久字段、消费者反馈与真实恢复范围仍须核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，待决恢复已有目标设计；通用 pending 持久字段、消费者反馈与真实恢复范围仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 签名 intent 在 finality 不可用、陈旧或无法验证时必须保持可读的无效果待决；恢复后按当时有效权限和前置条件重新裁决，只有 committed receipt 才能更新玩家、Agent 或入口的世界结论。
 
@@ -91,12 +113,23 @@
 <a id="ac-dwe-002"></a>
 ### AC-DWE-002：待决请求恢复重审
 
+Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405；唯一要求声明：[REQ-DWE-002](#req-dwe-002)。
+
 finality 中断样例能区分仍待决、被拒绝/过期、须重新规划和已生效；本地排队、重连、提交回执或界面成功不产生资源、资格、控制权或阶段完成，恢复后的结论只由对应 committed receipt 改变。证据必须覆盖恢复重审和消费者可读状态，不把 transport green 当作世界结果。
 
 - 对应需求：[REQ-DWE-002](#req-dwe-002)。
 
 <a id="req-dwe-003"></a>
 ### REQ-DWE-003：同一 intent lineage 至多一次效果
+
+- Trace ID: O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6
+- 适用范围：本条要求及对应 AC-DWE-003，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-lineage-design)；互斥胜者已有目标设计；专业互斥标记、持久原子处置与跨消费者竞态仍须核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，互斥胜者已有目标设计；专业互斥标记、持久原子处置与跨消费者竞态仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 被专业域标记为互斥成员的原请求、撤回或 replacement 必须共享可读 lineage，并由首个有效 committed receipt 原子决定唯一胜者；拒绝或过期只终止自身，独立且未标记互斥的 intent 不被无故取消。
 
@@ -106,12 +139,23 @@ finality 中断样例能区分仍待决、被拒绝/过期、须重新规划和�
 <a id="ac-dwe-003"></a>
 ### AC-DWE-003：替代、重试与 receipt 重放
 
+Trace refs: O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6；唯一要求声明：[REQ-DWE-003](#req-dwe-003)。
+
 竞态中的 linked replacement/withdrawal、重复提交和 receipt replay 样例至多产生一个有效世界效果；未获胜成员被明确终止，独立 intent 仍可按专业合同并发。验收关注单次效果和可追溯关联，不冻结 lineage、去重或 receipt 的实现字段。
 
 - 对应需求：[REQ-DWE-003](#req-dwe-003)。
 
 <a id="req-dwe-004"></a>
 ### REQ-DWE-004：canonical block 决定 governing version
+
+- Trace ID: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc
+- 适用范围：本条要求及对应 AC-DWE-004，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-version-design)；选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 intent 的 governing version 必须由其首次进入已 committed、finality-verified 的 canonical execution block 与 manifest activation boundary 决定；客户端 compatibility declaration、提交时间、本地版本或 candidate block 不能选择世界规则。已确认历史按原 block 的 manifest replay，激活证据缺失或冲突时 fail closed。
 
@@ -120,6 +164,8 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 
 <a id="ac-dwe-004"></a>
 ### AC-DWE-004：版本激活窗口与历史回放
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；唯一要求声明：[REQ-DWE-004](#req-dwe-004)。
 
 激活窗口样例证明待决 intent 在激活后按新 manifest 重新校验，不兼容时原子拒绝/过期或由主体明确重提；不能静默翻译 payload、沿用旧报价/资格或产生部分副作用。旧 receipt 仍按原 block manifest replay，缺失或冲突的激活证据阻断执行和恢复，消费者能区分待决、拒绝/过期、重规划与已结算。
 
@@ -139,7 +185,7 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 
 ## 未决问题与追踪解释
 
-准确专业设计及 QA 场景回链见下表；[文档接收任务 #4180](https://github.com/eng-cc/oasis7/issues/4180)记录本次三层接收与文档检查，不能代替实现、semantic verdict 或 full 执行证明。设计/接收可定位的问题可据此复核，仍缺的当前能力、同候选证据与真实环境保持未证明；专业 owner 与 QA 的判定权不变。
+准确专业设计及 QA 场景回链见下表；[历史文档接收任务 #4180](https://github.com/eng-cc/oasis7/issues/4180)记录当时三层接收与文档检查，不能代替实现、semantic verdict 或 full 执行证明。设计/接收可定位的问题可据此复核，仍缺的当前能力、同候选证据与真实环境保持未证明；专业 owner 与 QA 的判定权不变。
 
 本专题四组叶子并不代替根 SC-1～SC-10 的组合验收。追踪表中重复的工业状态锚点与模块导航不能单独证明通用确定性、待决、互斥 lineage、版本激活的系统设计承接；产品 owner 不代替 runtime/P2P 的技术 owner、Agent/Viewer 的消费者 owner 或 QA 的验证判断。正文目标、专业设计、当前实现与执行证据分别成立，不能由文档采纳推导能力或发行完成。
 
@@ -149,7 +195,7 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 | DWE-004 的激活证明、工件可用性、首次已提交区块选版、跨版本 linked replacement 与历史 replay 如何共同验证？ | runtime、适用 WASM/模块 owner、P2P、消费者 owner 与 QA；需要激活窗口、历史版本、失败关闭和消费者重规划判定 | 条款及同候选验证设计可定位后复核；缺证/冲突时仍按正文拒绝或无效果待决，不锁定旧版本、不静默翻译 |
 | DWE-001 的 required 局部检查与 SC-4 的 full 组合证据如何区分？ | runtime/P2P 与 QA；需要全部活动验证者及 replay 的适用范围和证据身份 | 验证设计明确范围后确认；局部检查不能代签组合条件，DWE-004/DE-4 仍按 full 验收 |
 
-问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；任务、依赖和解决进度由 Git、PR 与实际 CI 记录 维护，本表不维护第二台账。下面的“验证证据”导航描述不表示测试已接入或已执行，准确专业设计及验证回链尚须复核。
+问题的历史接收来源为[已关闭的文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)；该任务已关闭，不恢复其当前义务；任务、依赖和解决进度由 Git、PR 与实际 CI 记录维护，本表不维护第二台账。下面的“验证证据”导航描述不表示测试已接入或已执行，准确专业设计及验证回链尚须复核。
 
 ## 全量语义追踪
 
