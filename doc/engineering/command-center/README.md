@@ -151,7 +151,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
-2026-10-15 候选源码核对：[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的工作树文件清单与逐项覆盖已有 [Core 查询](../../../tools/oasis7-command-center/core/src/document_inventory.rs)及[规范视图](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx)承接，可按标题/路径和读取结果筛选、分页，查看空文件/遗漏并进入同版本章节。清单与章节/搜索同事务发布，旧缓存缺失或损坏不删除个人数据；能力边界见[专题设计](document-tree.design.md#111-验证映射表)。这不提供三种树投影、显式配对、固定提交基线或独立树快照。真实桌面的实际候选、环境、验收范围和合入事实由实现 PR 承载，未据此刷新其他项目/部署事实；完整 AC-CC-016 仍待验收。
+2026-10-15 候选源码核对：[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的工作树文件清单与逐项覆盖已有 [Core 查询](../../../tools/oasis7-command-center/core/src/document_inventory.rs)及[规范视图](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx)承接，可按标题/路径和读取结果筛选、分页，查看空文件/遗漏并进入同版本章节。清单与章节/搜索同事务发布，旧缓存缺失或损坏不删除个人数据；能力边界见[专题设计](document-tree.design.md#111-验证映射表)。详情已展示文件头“配对系统设计”链接、声明行和文件级读取诊断，跨行/超预算字段标记解析不完整，旧缓存提示刷新；带锚点目标未核对章节。这不提供三种树投影、配对跳转、固定提交基线或独立树快照。真实桌面的实际候选、环境、验收范围和合入事实由实现 PR 承载，未据此刷新其他项目/部署事实；完整 AC-CC-016 仍待验收。
 
 <a id="cc-status-attention"></a>
 
