@@ -76,6 +76,8 @@ Phase 1 metadata-only signed transaction closure is complete. The principal risk
 
 | ID | Decision |
 | --- | --- |
-| `PRD-P2P-ITX-001` | Sign every implemented transaction metadata field and use the same shape in node re-verification. |
-| `PRD-P2P-ITX-002` | Use live chain status without launcher-local identity fallback. |
-| `PRD-P2P-ITX-003` | Keep fee execution, sponsor semantics and priority policy as separately designed Phase 2+ work. |
+| <a id="itx-001"></a>`PRD-P2P-ITX-001` | Sign every implemented transaction metadata field and use the same shape in node re-verification. |
+| <a id="itx-002"></a>`PRD-P2P-ITX-002` | Use live chain status without launcher-local identity fallback. |
+| <a id="itx-003"></a>`PRD-P2P-ITX-003` | Keep fee execution, sponsor semantics and priority policy as separately designed Phase 2+ work. |
+
+专业设计追踪导航：[PRD-P2P-ITX-001 字段](mainchain-token-ideal-transaction.design.md#itx-signed-metadata)、[结构校验](mainchain-token-ideal-transaction.design.md#itx-validation)、[展示边界](mainchain-token-ideal-transaction.design.md#itx-surface)、[PRD-P2P-ITX-002 live identity](mainchain-token-ideal-transaction.design.md#itx-live-identity)、[PRD-P2P-ITX-003 Phase 2+ 边界](mainchain-token-ideal-transaction.design.md#itx-phase2-gate)。仅定位上表既有决策，不更新实现或验收状态。
