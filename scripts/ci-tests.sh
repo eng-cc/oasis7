@@ -246,8 +246,6 @@ if raw.startswith('plan:'):
         raise SystemExit('unknown support profile plan version')
     else:
         profiles = plan.get('workspace_support_profiles')
-        if plan.get('scope') == 'full' and set(profiles or []) != set(module.SUPPORT_PROFILES):
-            raise SystemExit('full plan omitted support profiles')
 else:
     profiles = json.loads(raw)
 if (not isinstance(profiles, list) or not profiles or
@@ -255,6 +253,11 @@ if (not isinstance(profiles, list) or not profiles or
         len(set(profiles)) != len(profiles) or
         not set(profiles).issubset(module.SUPPORT_PROFILES)):
     raise SystemExit('invalid or missing workspace support profiles')
+# A trusted base planner cannot name newly extracted packages. Full scope
+# always expands to the candidate inventory after validating its known input,
+# so an additive profile never narrows or breaks the full support job.
+if raw.startswith('plan:') and plan.get('scope') == 'full':
+    profiles = list(module.SUPPORT_PROFILES)
 print('\n'.join(sorted(profiles)))
 PY
   ) || return 2

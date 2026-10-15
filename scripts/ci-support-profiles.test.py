@@ -71,15 +71,21 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertIn('full-inventory', result.stdout)
 
     def test_plan_omissions_and_unknown_versions_rejected(self):
-        for plan in [dict(groups=['workspace_support'], scope='full',
-                          workspace_support_profile_version=1,
-                          workspace_support_profiles=['oasis7_agent_api']),
-                     dict(groups=['workspace_support'], scope='targeted',
+        for plan in [dict(groups=['workspace_support'], scope='targeted',
                           workspace_support_profile_version=1),
                      dict(groups=['workspace_support'], workspace_support_profile_version=2)]:
             result = self.invoke('plan:' + json.dumps(plan))
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertNotIn('cargo test', result.stdout)
+
+    def test_trusted_base_full_plan_expands_new_candidate_profiles(self):
+        plan = dict(groups=['workspace_support'], scope='full',
+                    workspace_support_profile_version=1,
+                    workspace_support_profiles=['oasis7_agent_api'])
+        result = self.invoke('plan:' + json.dumps(plan))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('support profile completed: oasis7_game_client', result.stdout)
+        self.assertIn('support profile completed: wasm_module_observe', result.stdout)
 
     def test_full_inventory_preserves_packages_and_special_commands(self):
         import importlib.util
