@@ -13,7 +13,9 @@ pub(super) fn process(
     verify_recipe_quote_request(&proof).map_err(|_| PrivateError::Invalid)?;
     let context_proof = &proof.request.context_proof;
     let fence = &context_proof.request.context.fence;
-    let pinned = pinned(service, fence, &proof.subject_public_key, true)?;
+    let pinned = service.pin(None)?;
+    let task = validate_pinned_task(service, &pinned, fence, &proof.subject_public_key, true)?;
+    let pinned = task.pinned;
     if pinned
         .world
         .current_cognition_base_binding()
@@ -22,7 +24,7 @@ pub(super) fn process(
     {
         return Err(PrivateError::Conflict);
     }
-    let captured = load_captured(service, store, context_proof, &pinned)?;
+    let captured = load_captured(service, store, context_proof, &task)?;
     let quote = pinned
         .world
         .builtin_recipe_quote(
@@ -43,17 +45,16 @@ pub(super) fn process(
         .validate_against(&proof)
         .map_err(|_| PrivateError::Recovery)?;
     before_delivery();
-    let fresh = pinned_check(service, fence, &proof.subject_public_key, true)?;
-    if fresh.commit != pinned.commit {
+    let fresh = service.pin(None)?;
+    let fresh_task = validate_pinned_task(service, &fresh, fence, &proof.subject_public_key, true)?;
+    if fresh_task.pinned.commit != pinned.commit {
         return Err(PrivateError::Conflict);
     }
-    game_task::validate_task_context_capture(
-        &fresh.world,
-        &context_proof.request.context,
-        &proof.subject_public_key,
-    )
-    .map_err(|_| PrivateError::Conflict)?;
-    check_record_live(&fresh, &captured.prepared, None)?;
+    fresh_task
+        .history
+        .validate_prefix_capture(&context_proof.request.context, &proof.subject_public_key)
+        .map_err(|_| PrivateError::Conflict)?;
+    check_record_live(fresh_task.pinned, &captured.prepared, None)?;
     service
         .signed(TASK_RECIPE_QUOTE_PATH, &proof, output)
         .map_err(PrivateError::from)

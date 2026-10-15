@@ -510,6 +510,62 @@ impl ValidatedRetentionHistory<'_> {
         Ok(select_current(self.world, agent, &self.tasks)?.and_then(|task| task.publish.clone()))
     }
 
+    /// The current control selected from this view's complete task history.
+    /// The view is bound to the immutable World it validated and cannot be
+    /// supplied with a different World by the caller.
+    #[doc(hidden)]
+    pub fn current_control(&self, agent: &str) -> Result<Option<GameTaskControlV1>, String> {
+        Ok(select_current(self.world, agent, &self.tasks)?.map(|task| task.control.clone()))
+    }
+
+    /// Revalidate the caller's live executor fence against this view's World.
+    #[doc(hidden)]
+    pub fn validate_task_executor(
+        &self,
+        fence: &oasis7_agent_api::game::GameTaskFenceV1,
+        subject: &str,
+    ) -> Result<(), String> {
+        executor::validate_task_executor_against_tasks(self.world, fence, subject, &self.tasks)
+    }
+
+    /// Revalidate the caller's live reader fence against this view's World.
+    #[doc(hidden)]
+    pub fn validate_task_reader(
+        &self,
+        fence: &oasis7_agent_api::game::GameTaskFenceV1,
+        subject: &str,
+    ) -> Result<(), String> {
+        executor::validate_task_reader_against_tasks(self.world, fence, subject, &self.tasks)
+    }
+
+    /// Find the unique accepted canonical prefix matching this capture.
+    /// Duplicate matches remain an error, as they are on the canonical scan path.
+    #[doc(hidden)]
+    pub fn matching_task_prefix(
+        &self,
+        context: &oasis7_agent_api::game::TaskContextIdentityV1,
+        subject: &str,
+    ) -> Result<Option<&CanonicalIntentResultV1>, String> {
+        let mut selected = None;
+        for result in &self.prefixes {
+            let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
+                continue;
+            };
+            let SchedulerOperationV1::TaskProviderPrefix { context: captured } =
+                &signed.request.operation
+            else {
+                continue;
+            };
+            if captured == context
+                && signed.subject_public_key == subject
+                && selected.replace(result).is_some()
+            {
+                return Err("ambiguous canonical task context prefix".into());
+            }
+        }
+        Ok(selected)
+    }
+
     /// Canonical non-rejected prefix candidates; validate each capture against
     /// current authority with `validate_prefix_capture` before retaining it.
     #[doc(hidden)]

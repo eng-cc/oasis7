@@ -704,6 +704,15 @@ fn world_snapshot_restore_rejects_corrupt_non_task_result_identity() {
         .world_service_results
         .get_mut(&key)
         .unwrap()["request"]["signed_payload"]["payload"]["signature_hex"] = "00".repeat(64).into();
+    assert!(
+        validate_retention_history_results(
+            &world,
+            &invalid_signature
+                .capability_revocation_state
+                .world_service_results
+        )
+        .is_err()
+    );
     assert_restore_denied(invalid_signature);
 
     let mut invalid_payload_digest = snapshot.clone();
@@ -712,6 +721,15 @@ fn world_snapshot_restore_rejects_corrupt_non_task_result_identity() {
         .world_service_results
         .get_mut(&key)
         .unwrap()["request"]["correlation"]["payload_digest"] = "00".repeat(32).into();
+    assert!(
+        validate_retention_history_results(
+            &world,
+            &invalid_payload_digest
+                .capability_revocation_state
+                .world_service_results
+        )
+        .is_err()
+    );
     assert_restore_denied(invalid_payload_digest);
 
     let mut invalid_outer_key = snapshot;
@@ -724,6 +742,15 @@ fn world_snapshot_restore_rejects_corrupt_non_task_result_identity() {
         .capability_revocation_state
         .world_service_results
         .insert("wrong-outer-key".into(), record);
+    assert!(
+        validate_retention_history_results(
+            &world,
+            &invalid_outer_key
+                .capability_revocation_state
+                .world_service_results
+        )
+        .is_err()
+    );
     assert_restore_denied(invalid_outer_key);
 }
 
