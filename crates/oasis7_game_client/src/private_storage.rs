@@ -338,11 +338,8 @@ pub fn initialize_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
 
 #[cfg(all(test, target_os = "linux"))]
 mod linux_tests {
-    //! Local encrypted record primitives; callers own payload and authorization semantics.
-    use std::path::Path;
-    use zeroize::Zeroizing;
-
-    const MAX_PRIVATE_GOAL_FILE_BYTES: usize = 32 * 1024;
+    use super::{random, sync};
+    use cap_std::fs::Dir;
 
     #[test]
     fn private_goal_directory_sync_uses_held_directory_after_rename() {
