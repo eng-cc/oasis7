@@ -146,14 +146,16 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         if start_cut.anchor.head().record().position + 1 != transition.body.boundary_position {
             return Err("healthy arm predecessor differs from the actual published cut".into());
         }
-        let armed =
-            crate::formal_live_runtime::quiesce::arm_before_deadline(case.scenario_deadline.expires_at, || {
+        let armed = crate::formal_live_runtime::quiesce::arm_before_deadline(
+            case.scenario_deadline.expires_at,
+            || {
                 runtime.durable_set_arm.arm(
                     &transition.body.operation_id,
                     transition.clone(),
                     &start_cut.anchor,
                 )
-            })?;
+            },
+        )?;
         (start_cut, transition, armed)
     }; // Release admission before any public request or boundary wait.
     let boundary_position = transition.body.boundary_position;
