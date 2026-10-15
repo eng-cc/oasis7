@@ -345,10 +345,10 @@ Trace ID: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7
 
 - 功能点：[REQ-EXT-005](#req-ext-005)；适用范围沿本条原条件与 [AC-EXT-005](#ac-ext-005)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-actions)已承接原操作查询、受理/结算、同键冲突和读取权限；同文件需求承接/验证表反链本条AC。剩余：结果进入后续认知与玩家反馈的跨专业精确承接仍须核对；api-actions已覆盖原操作/结算/幂等。 不代表实现或发布。
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-actions)已承接原操作查询、受理/结算、同键冲突和读取权限；同文件需求承接/验证表反链本条AC。剩余：结果进入后续认知与玩家反馈的跨专业精确承接仍须核对；api-actions已覆盖原操作/结算/幂等。 不代表实现或发布。[loopback反馈关联](../../world-simulator/llm/provider-loopback-http-contract.design.md#41-harness-contract-alignment)补充target/legacy路由隔离与Runtime receipt关联边界，未覆盖各真实Runtime结果进入后续认知和玩家反馈的全链路。
 - 实现状态：部分实现
 - 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L389)：原签名缓存、lookup/replay及同回执恢复；历史两次实际移动；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余全部拒绝/失败组合及玩家反馈端到端，不推导端到端完成。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。 新增loopback局部关系审读基线为2026-10-15的`4e94163a3dff9ba69f6959b406ca3fcedf8aa097`及本次文档候选；未新增行为验证。
 - 剩余范围：设计：结果进入后续认知与玩家反馈的跨专业精确承接仍须核对；api-actions已覆盖原操作/结算/幂等。；实现/验证：全部拒绝/失败组合及玩家反馈端到端。
 
 - 要求：行动结果必须关联到正确 Agent 与任务，已结算成功、拒绝、失败和待决的真实含义必须进入后续决策及玩家反馈；模型自报、请求接受或超时不能代替世界结算，也不能隐式触发另一轮重复执行。
