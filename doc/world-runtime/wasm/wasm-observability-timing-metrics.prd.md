@@ -23,7 +23,7 @@
 
 ### OBS-03 专业接受条件
 
-产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
 
 输入：dry_run无timing、repeat0、private payload、timing变化。断言：显式missing/error；无secret；execution ID/charge不变。目标字段、算法和恢复条件由 [OBS-03精确设计](wasm-observability-timing-metrics.design.md#sr2-metrics-contract) 承接；跨域 proof/publication obligation 由 [OBS-03外部接收器](wasm-observability-timing-metrics.design.md#sr2-metrics-contract) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
 
@@ -85,7 +85,7 @@
 <a id="sr2-obligation-sc-5"></a>
 ### SC-5 原始条款
 
-产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
 
   - SC-5: 指标设计不得把 `trace_id`、原始 payload 或无界 `module_id` 明细直接写入默认 status payload，默认口径需满足 bounded cardinality 与 deterministic isolation。
 
@@ -134,7 +134,7 @@
 <a id="sr2-obligation-ac-4"></a>
 ### AC-4 原始条款
 
-产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
 
   - AC-4: `/v1/chain/status` 必须新增 `wasm` section，并沿用 storage/traffic 的共享 snapshot 语义，不得把 timing 指标直接写入世界状态或共识数据。
 <a id="sr2-obligation-ac-5"></a>
@@ -203,7 +203,7 @@
 <a id="sr2-obligation-nfr-2"></a>
 ### NFR-2 原始条款
 
-产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本、同输入、同父状态产生同一权威结果；本条仅要求本地timing不进入world/replay/执行身份或计费，不以观测可用性证明确定性提交。
 
   - NFR-2: 观测写入不得改变 deterministic execution 输出；所有 timing/metrics 仅限本地观测层，不得进入共识数据、world state 或 replay contract。
 <a id="sr2-obligation-nfr-3"></a>

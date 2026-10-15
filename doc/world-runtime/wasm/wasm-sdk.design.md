@@ -82,10 +82,14 @@ no_std wire 扩展先以实际消费者明确 target、允许的依赖与不支�
 <a id="sdk-legacy"></a>
 ### 6.3 Legacy defaults 与版本拒绝
 
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；既有产品要求：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节已限定的局部义务，不替代该要求的完整验收。
+
 保持§6.1旧manifest optional/default、tick缺省及effect/emit顺序；新target known/unknown/null严格解码与历史wasm-1分开，SDK不生成finality。
 
 <a id="sdk-lifecycle"></a>
 ### 6.4 Lifecycle 导出
+
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；既有产品要求：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)。仅承接本节已限定的局部义务，不替代该要求的完整验收。
 
 alloc/reduce/call及两种dispatch沿用原签名与init/teardown顺序；导出宏只是ABI入口，不能重定义模块业务或世界发布。同版本相同输入下，SDK内部整理不得改变dispatch产出的业务效果；验证需比较旧/新consumer结果，不能仅比较导出名。
 
@@ -97,10 +101,14 @@ ModuleCallInput/Context/EffectIntent/Emit/Output由SDK wire单一拥有；代表
 <a id="sdk-cbor"></a>
 ### 6.6 CBOR 与长度兼容
 
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；既有产品要求：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节已限定的局部义务，不替代该要求的完整验收。
+
 沿用runtime wasm-1字段/default/output_bytes和序列顺序。现有serde_cbor helper调用并不自行证明所有target strict canonical重编码规则已实现；新codec须以旧字节fixtures逐项比较。
 
 <a id="sdk-new-fields"></a>
 ### 6.7 新字段与回滚
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；既有产品要求：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节已限定的局部义务，不替代该要求的完整验收。
 
 新增字段/feature沿用§10兼容规则，先说明默认值、旧模块与wasm32影响；禁止借内部API迁移破坏ABI或重写历史bytes。
 

@@ -12,7 +12,7 @@
 
 ### SDK-01 专业接受条件
 
-产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
 
 输入：旧 manifests/defaults/export与target known/unknown/null codec matrix。断言：old bytes/defaults保持；strict new codec显式失败。目标字段、算法和恢复条件由 [SDK-01精确设计](wasm-sdk.design.md#sr2-sdk-contract) 承接；跨域 proof/publication obligation 由 [SDK-01外部接收器](wasm-sdk.design.md#sr2-sdk-contract) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
 
@@ -64,7 +64,7 @@
 <a id="sr2-sdk-rule-2"></a>
 ### SDK rule 2 原始条款
 
-产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本同输入结果稳定；本条仅约束SDK内部整理不静默改变lifecycle dispatch与业务效果，导出形式或局部hook测试不证明确定性提交。
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；产品承接子范围：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的同版本同输入结果稳定；本条仅约束SDK内部整理不静默改变lifecycle dispatch与业务效果，导出形式或局部hook测试不证明确定性提交。
 
 2. `alloc`、`reduce`、`call` 导出，`LifecycleStage`、`WasmModuleLifecycle`、`dispatch_reduce`、`dispatch_call` 与 `export_wasm_module!` 保持稳定；SDK 内部收敛不得静默改变模块种类、生命周期或业务效果。
 <a id="sr2-sdk-rule-3"></a>
@@ -74,7 +74,7 @@
 <a id="sr2-sdk-rule-4"></a>
 ### SDK rule 4 原始条款
 
-产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
 
 4. wire 编解码使用与 runtime `wasm-1` 一致的 Canonical CBOR 字段和默认值；输入、输出与 `output_bytes` 口径必须保持兼容。
 <a id="sr2-sdk-rule-5"></a>
@@ -84,7 +84,7 @@
 <a id="sr2-sdk-rule-6"></a>
 ### SDK rule 6 原始条款
 
-产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；产品承接子范围：[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的已确认历史按原block manifest replay；本条仅保持旧wire/default/字节长度与版本兼容，不由SDK选择governing version、激活manifest或执行历史replay。
 
 6. 新字段或 feature 必须说明默认值、旧模块兼容性和 wasm32 构建影响。破坏性 ABI 变化不能通过 SDK 整理任务夹带进入。
 

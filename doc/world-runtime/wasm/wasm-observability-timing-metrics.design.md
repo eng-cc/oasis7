@@ -187,6 +187,8 @@ task issue / Project 维护。稳定 schema、边界和验证入口由本文、P
 
 <a id="obs-isolation"></a>
 ## 3. 设计原则
+
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；既有产品要求：[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)。仅承接本节已限定的局部义务，不替代该要求的完整验收。
 - 原则-1：指标必须复用既有 `shared snapshot -> status payload -> external summary` 模式，不再平行创造另一套日志协议。
 - 原则-2：wall-clock timing 只属于本地观测层，绝不能进入 deterministic world state、event log 或共识数据。
 - 原则-3：默认 surface 只暴露 bounded counters、sums、buckets；模块级明细必须是 top-N 或 allowlist，而非全量 map。
