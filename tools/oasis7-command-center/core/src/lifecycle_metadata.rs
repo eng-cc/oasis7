@@ -312,7 +312,12 @@ fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     {
         return Err("successor target is external, absolute, or unsafe".into());
     }
-    if fragment.is_some_and(|f| f.chars().any(|c| c.is_control() || c.is_whitespace())) {
+    // Decode URL fragments once before validating and resolving the anchor.
+    let fragment = fragment.map(decode).transpose()?;
+    if fragment
+        .as_deref()
+        .is_some_and(|f| f.chars().any(|c| c.is_control() || c.is_whitespace()))
+    {
         return Err("unsafe successor fragment".into());
     }
     let parent = source.rsplit_once('/').map_or("", |(p, _)| p);
@@ -338,7 +343,7 @@ fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     if !(path.starts_with("doc/") || path == "AGENTS.md") || !path.ends_with(".md") {
         return Err("successor target is outside indexed document scope".into());
     }
-    Ok(match fragment.filter(|f| !f.is_empty()) {
+    Ok(match fragment.as_deref().filter(|f| !f.is_empty()) {
         Some(f) => format!("{path}#{f}"),
         None => path,
     })
