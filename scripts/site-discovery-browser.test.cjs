@@ -22,6 +22,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
     fourth:document.querySelector('[data-decision-step="3"]').getBoundingClientRect().bottom,
     art:getComputedStyle(document.querySelector('.hero-visual')).position,
     rail:getComputedStyle(document.querySelector('.decision-panels')).gridTemplateColumns.split(' ').length}));
+   assert.equal(await p.locator('.discovery-editorial-grid a[href*="story"]').count(),0);assert.equal(await p.locator('main > #world-laws').count(),1);assert.equal(await p.locator('#contribute #world-laws').count(),0);
    assert.equal(layout.art,'absolute');assert.ok(layout.proof<550,JSON.stringify(layout));
    assert.equal(layout.rail,width===390?1:4);assert.ok(layout.fourth<1000,JSON.stringify(layout));
   }

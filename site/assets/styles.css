@@ -3784,7 +3784,7 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .discovery-editorial-grid .section::before { position:relative; display:block; order:2; content:""; height:86px; flex-shrink:0; margin:12px 0; border:0; border-radius:0; opacity:.8; mask:none; background:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-industrial-cluster-20261015.webp") center/cover; }
 .discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-image2-20260718.webp"); }
 .discovery-editorial-grid .portal-preview::before { background-position:80% 70%; }
-.discovery-editorial-grid .portal-lore::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:30% center; }
+.discovery-editorial-grid .portal-rules::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-image2-20260718.webp"); background-position:30% center; }
 .discovery-editorial-grid .eyebrow { margin:0 0 5px; }
 .discovery-editorial-grid h2 { font-size:1.02rem; line-height:1.4; margin:0 0 6px; }
 .discovery-editorial-grid p { font-size:.76rem; line-height:1.6; margin:4px 0; }
