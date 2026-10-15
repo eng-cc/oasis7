@@ -168,9 +168,21 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - 现有 main schedule/manual-full `full-regression` 是唯一工具 writer，准备成功后立即保存，再运行 full tests。Rust 大缓存身份保持 `ci-full-regression-trusted-v2`。首次写入与后续自然 Viewer PR 的热命中需分别从日志核实；热路径应无 CLI 源码安装，缓存成功不代表 full 回归通过。
 - Linux packaging 与 full 通过 discovery 运行 local-signer 完整 suite：`python3 scripts/ci-local-signer-tests.py`。只允许已知 Darwin descriptor 项 skip；零测试、缺 native 项、导入错误、其他 skip 或失败均返回非零。
 - fleet-health 的 macOS 分片执行 `TMPDIR=/private/tmp python3 scripts/ci-local-signer-tests.py --require-darwin`，native descriptor 必须真实成功且整个 suite 不得 skip。测试目录与 local-file-signing runbook 选择 packaging/fleet；四个 Python 生产入口另选 workspace_support；未知生产模块继续 full。
-- CI 控制改动的 PR 仍由可信 base selector 选择全部 24 组。候选 selector 的精确路由仅在合入后成为可信规则，required-gate 的组集合与失败判定保留。
+- CI 控制改动的 PR 仍由可信 base selector 选择全部适用组。候选 selector 的精确路由仅在合入后成为可信规则，required-gate 的组集合与失败判定保留。
 - 本地合同验证：`bash scripts/plan-wasm-determinism-scope.test.sh`、`bash scripts/ensure-wasm-bindgen-cli.test.sh`、`python3 scripts/ci-local-signer-tests.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`；前三项接入 workflow_governance。
 - net 的 libp2p/Python/WASM 检查、Viewer auth smoke 与 performance visual build 均通过 `ci-tests.sh --group` 执行一次；YAML 负责工具、浏览器和依赖准备。stable 安装使用 minimal 并显式安装 rustfmt/clippy，nightly、rust-src 与 WASM targets 保留。
+
+<a id="ci-formal-process-validation"></a>
+### 真实进程分片与产物复用验证
+
+要求与机制见[真实进程验收要求](doc/testing/ci/ci-tiered-execution.prd.md#ci-formal-process)和[调度设计](doc/testing/ci/ci-tiered-execution.design.md#ci-formal-process-design)。
+
+- `./scripts/ci-tests.sh required`：普通检查，不隐式启动独立重型链路。
+- `./scripts/ci-tests.sh required --group formal_process`：准备产物后顺序执行全部真实进程分片；兼容入口 `./scripts/formal-live-local-tests.sh "$PWD"` 调用相同清单和运行器。
+- `./scripts/ci-tests.sh full`：full-standard 加重型验收。本地/CI 内部 `full-standard` 只执行普通与扩展检查；nightly/manual-full 另起共享产物矩阵，不执行两次重型链路。
+- 合同回归：`python3 scripts/ci-formal-process.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`。使用 Python 3.11+；覆盖精确零匹配、清单遗漏/重复、旧基线扩大、选中后失败/取消/跳过、绝对期限和真实小型 libtest。
+- hosted 验证检查构建与各消费 job 位于不同 Linux runner：下载同 tested SHA 的 tar、核对 manifest、无本地 target 前置时运行全部真实用例。不得在分片调用 Cargo。普通组和重型矩阵都在公共构建后启动，任一必选分片失败则固定汇总失败。
+- `output/formal-process/results.jsonl` 记录每个命令的开始时间、耗时、退出码、超时、测试数和清理状态。只上传此安全摘要；详细输出查看 job 日志，失败世界目录不自动上传。缺摘要、缺产物和构建失败须从 Actions 失败步骤诊断，不能计为通过。
 
 <a id="ci-dependency-installation-validation"></a>
 ### CI 依赖安装与 Release 工具缓存核验

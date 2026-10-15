@@ -33,6 +33,10 @@ def validate_candidate_graph(workflow, config):
         raise ValueError('fleet must run all three hosts and POSIX cleanup smoke')
     for group in config['groups']:
         job = jobs[group.replace('_', '-')]
+        if group == 'formal_process':
+            if 'always()' not in job or 'ci-formal-plan.py --selected' not in job:
+                raise ValueError('formal aggregation must execute and validate results')
+            continue
         if ("needs.select.result == 'success'" not in job
                 or "fromJSON(needs.select.outputs.plan).scope == 'full'" not in job):
             raise ValueError('group requires successful select and full migration fallback')
@@ -64,7 +68,7 @@ class Workflow(unittest.TestCase):
         writer = JOBS['full-regression'].split('    steps:\n', 1)[1]
         candidate = JOBS['candidate-full-regression'].split('    steps:\n', 1)[1]
         candidate = re.sub(r'      - name: Record exact candidate identity\n.*?(?=      - name: Resolve)', '', candidate, flags=re.S)
-        writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - name: Run full)', '', writer, flags=re.S)
+        writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - (?:name: Run full|uses: actions/download-artifact))', '', writer, flags=re.S)
         writer = re.sub(r'      - name: Save prepared wasm-bindgen tool cache\n.*?(?=      - name:)', '', writer, flags=re.S)
         candidate = candidate.replace('          save-if: false\n', '')
         candidate = candidate.replace('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0',
@@ -273,7 +277,12 @@ class Workflow(unittest.TestCase):
         self.assertIn('ci-required-result.py', gate)
         for group in CONFIG['groups']:
             job = JOBS[group.replace('_', '-')]
-            self.assertIn('    needs: select\n', job)
+            if group == 'formal_process':
+                self.assertIn('always()', job)
+                self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', job)
+                continue
+            dependency = 'needs: [select, oasis7-test-build]' if group == 'oasis7_required' else 'needs: select'
+            self.assertIn(dependency, job)
             self.assertIn(f"needs.select.outputs.run_{group} == 'true'", job)
             self.assertIn("needs.select.result == 'success'", job)
             self.assertIn("fromJSON(needs.select.outputs.plan).scope == 'full'", job)

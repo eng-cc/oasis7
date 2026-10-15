@@ -224,3 +224,30 @@ TOML 中单引号字符串、引号表名和同行元素均以解析后语义为
 历史 [Issue #1808](https://github.com/eng-cc/oasis7/issues/1808) 中的旧 PM 工具问题随 [#4354](https://github.com/eng-cc/oasis7/pull/4354) 退出当前实现；本设计保留可适用于现行 CI 的依赖准备与缓存问题，不恢复旧任务或验收状态机。选择共享预编译安装器，是因为现有实现已集中拥有来源、摘要和版本检查，可以直接去掉 Release 的重复源码安装路径。
 
 `repository_health_engineer` 维护安装器、缓存接线及 apt 观察；`qa_engineer` 协作核对真实运行证据。主要残余风险是外部下载服务可用性、main seed 尚未产生、缓存被回收以及旧 tag 缺少安装器；这些情况分别按既有失败语义或正确冷路径处理。版本、平台、来源策略或 cache action 更新时重新审读受影响合同；没有实际 hosted 数据时保留未知项，不从文档状态推导发布成功。
+
+<a id="ci-formal-process-design"></a>
+## 真实进程验收的边界与结构
+
+Trace refs: O7-REQ-d9292810-5229-417f-9fc8-262ee04759c7
+
+承接[共享产物要求](ci-tiered-execution.prd.md#ci-formal-process)。`oasis7-test-build` 从 Cargo JSON 的 executable 字段收集可执行文件；普通 `oasis7-required` 与 `formal-process-tests` 共同依赖它。产物以 tar 保存权限，不传输整个 target。保持 debug/test harness、required features 的 production runtime、release endpoint 及 default-feature snapshot harness 的不同构建变体；Viewer 与 Cargo 集成测试引用的普通二进制同时保存。保持相同 checkout 布局，恢复编译时嵌入的 Cargo 程序路径，设置包工作目录、动态库路径及既有二进制环境。
+
+分片清单由 `scripts/ci-formal-process-suites.json` 拥有，实际名称以下载 harness 的 `--list`/`--ignored --list` 核对。清单中的旧过滤器用于检出重命名、遗漏和新增未分配验收；辅助入口单独登记，不运行整个 ignored 集合。
+
+| 旧入口覆盖 | 新归属 |
+| --- | --- |
+| protected endpoint 协议、崩溃、effect、handoff、availability、survivor | runtime-protocol |
+| protected endpoint 长历史 | world-history |
+| formal healthy durable set、owner 故障 | healthy-set |
+| distfs endpoint qualification、recovered children、C10 长记录 | storage-recovery |
+| world initialization、full state sync、local-node-lifecycle、legacy migration | lifecycle-cli |
+| oasis7 lib / runtime bin required-feature 的非 ignored formal | runtime-protocol，保留原二进制环境 |
+| distfs default-feature lib 的非 ignored formal | storage-recovery，保留原二进制环境 |
+
+后三类原 formal 命令未证明与普通环境等价，继续执行；snapshot_progress 与 legacy fields 回填仍使用原 default features。独立 ignored 验收按 `--exact --ignored --test-threads=1 --nocapture` 串行运行，矩阵 `fail-fast: false`、`max-parallel: 3`。world-history job 上限 45 分钟，其他分片初始保护上限 90 分钟；每次子命令绝对上限 40 分钟，均为防挂保护而非性能目标，后续按真实基线调整。
+
+`formal-process` 使用 always 汇总：选中时构建和矩阵均须 success；未选中时矩阵须 skipped，明确输出 not_selected。required-gate 只新增此固定依赖。可信 base 尚无 formal_process 时，仅保守扩大：full 或相关 Rust 组选择全部分片；不修改旧计划使旧结果校验器接受未知组。新 base 通过原 Cargo 反向图映射选择 formal_process。schedule/manual-full 明确选全部重型分片，普通 full-standard 不重复执行重型链路；专用 package dispatch 保持原行为。
+
+进程运行器使用单调绝对期限、20 秒存活心跳及独立进程所有权标识。Linux 扫描同 UID 环境标识并核对进程 starttime，清理包括脱离原进程组的自有后代；macOS 本地兼容使用独立进程组。退出码、超时、实际测试数、清理结果分别保存。摘要产物只含测试名和运行元数据；原输出通过 nocapture 进入 job 日志，不打包临时世界目录。
+
+验证方法见[测试手册](../../../testing-manual.md#ci-formal-process-validation)。具体候选、失败、独立评审及 hosted 结果归当前 PR，未完成真实 runner 验证不得宣称产物复用已验收。

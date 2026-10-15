@@ -45,12 +45,13 @@ cache-mode: read
 
 jobs:
   select:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name != 'workflow_dispatch' || inputs.run_mode == 'full'
     runs-on: ubuntu-24.04
     outputs:
       plan: ${{ steps.select.outputs.plan }}
       run_baseline: ${{ steps.select.outputs.run_baseline }}
       run_rust_baseline: ${{ steps.select.outputs.run_rust_baseline }}
+      run_formal_process: ${{ steps.formal-select.outputs.run_formal_process }}
       run_oasis7_required: ${{ steps.select.outputs.run_oasis7_required }}
       run_consensus: ${{ steps.select.outputs.run_consensus }}
       run_distfs: ${{ steps.select.outputs.run_distfs }}
@@ -86,9 +87,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
+            printf 'plan={"scope":"explicit-full","groups":[]}\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           git cat-file -e "${BASE_SHA}^{commit}"
           git cat-file -e "${SOURCE_SHA}^{commit}"
           tested_sha="$(git rev-parse HEAD)"
@@ -100,7 +106,18 @@ jobs:
           python3 "$authority/plan-rust-required-scope.py" --base-ref "$BASE_SHA" --head-ref "$SOURCE_SHA" --test-ref "$tested_sha" --github-output "$GITHUB_OUTPUT" --output "$RUNNER_TEMP/selection.json"
           printf 'Base: %s\nSource HEAD: %s\nTested merge: %s\n' "$BASE_SHA" "$SOURCE_SHA" "$tested_sha" >>"$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/selection.json" >>"$GITHUB_STEP_SUMMARY"
+      - id: formal-select
+        name: Resolve formal selection with conservative old-baseline fallback
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'run_formal_process=true' >>"$GITHUB_OUTPUT"
+          else
+            python3 scripts/ci-formal-plan.py --plan "$RUNNER_TEMP/selection.json" --config "$RUNNER_TEMP/ci-authority/ci-required-scope.json" --github-output "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         with:
           name: ci-authority
           path: ${{ runner.temp }}/ci-authority
@@ -183,8 +200,57 @@ jobs:
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash ./scripts/ci-tests.sh required --group "rust_baseline" --repo-root "$GITHUB_WORKSPACE"
 
-  oasis7-required:
+  oasis7-test-build:
     needs: select
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_oasis7_required == 'true' ||
+       needs.select.outputs.run_formal_process == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchains
+        shell: bash
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+          rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
+          rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
+          rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          save-if: false
+          shared-key: ci-full-regression-trusted-v2
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
+          cache-on-failure: true
+      - name: Install native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - name: Build test artifacts once
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 scripts/ci-test-artifacts.py build --bundle "$RUNNER_TEMP/native-tests"
+          tar -C "$RUNNER_TEMP/native-tests" -cf "$RUNNER_TEMP/native-tests.tar" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-tests-${{ github.sha }}
+          path: ${{ runner.temp }}/native-tests.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 2
+
+  oasis7-required:
+    needs: [select, oasis7-test-build]
     if: >-
       needs.select.result == 'success' &&
       (needs.select.outputs.run_oasis7_required == 'true' ||
@@ -217,13 +283,81 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-tests-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Unpack native executables preserving modes
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-tests"
+          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
       - name: Execute selected group
         shell: bash
         env:
+          OASIS7_CI_TEST_BUNDLE: ${{ runner.temp }}/native-tests
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash ./scripts/ci-tests.sh required --group "oasis7_required" --repo-root "$GITHUB_WORKSPACE"
+
+  formal-process-tests:
+    needs: [select, oasis7-test-build]
+    if: needs.select.outputs.run_formal_process == 'true'
+    timeout-minutes: ${{ matrix.suite == 'world-history' && 45 || 90 }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-tests-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Unpack native executables preserving modes
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-tests"
+          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
+      - name: Run exact formal process suite without Cargo
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SUITE: ${{ matrix.suite }}
+        run: python3 scripts/ci-test-artifacts.py run --bundle "$RUNNER_TEMP/native-tests" --suite "$SUITE" --results output/formal-process/results.jsonl
+      - name: Upload safe process diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-process-${{ matrix.suite }}-${{ github.run_attempt }}
+          path: output/formal-process/results.jsonl
+          if-no-files-found: warn
+          retention-days: 7
+
+  formal-process:
+    needs: [select, oasis7-test-build, formal-process-tests]
+    if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_mode == 'full')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate all formal process results
+        env:
+          SELECTED: ${{ needs.select.outputs.run_formal_process }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci-formal-plan.py --selected "$SELECTED" --needs "$NEEDS"
 
   consensus:
     needs: select
@@ -1070,7 +1204,7 @@ jobs:
     name: required-gate
     if: always() && (github.event_name == 'pull_request' || github.event_name == 'push')
     runs-on: ubuntu-24.04
-    needs: [select, baseline, rust-baseline, oasis7-required, consensus, distfs, node, net, viewer-js-required, viewer-performance-report, pixel-world-bridge, launcher-web, workspace-support, scenario-regression, operational-contracts, packaging-contracts, workflow-governance, codex-agent-config-validation, compile-metrics, site-quality, doc-checker-contracts, cargo-tooling-contracts, windows-rollout, macos-package-contract, fleet-health]
+    needs: [select, baseline, rust-baseline, oasis7-required, formal-process, consensus, distfs, node, net, viewer-js-required, viewer-performance-report, pixel-world-bridge, launcher-web, workspace-support, scenario-regression, operational-contracts, packaging-contracts, workflow-governance, codex-agent-config-validation, compile-metrics, site-quality, doc-checker-contracts, cargo-tooling-contracts, windows-rollout, macos-package-contract, fleet-health]
     steps:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -1087,6 +1221,7 @@ jobs:
 
   full-regression:
     cache-mode: write
+    needs: oasis7-test-build
     if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))
     runs-on: ubuntu-24.04
     steps:
@@ -1209,8 +1344,19 @@ jobs:
         with:
           path: ${{ runner.temp }}/cache-permission-sentinel
           key: oasis7-cache-permission-sentinel-trusted-v2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-tests-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Unpack native executables preserving modes
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-tests"
+          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
       - name: Run full test tier
-        run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
+        env:
+          OASIS7_CI_TEST_BUNDLE: ${{ runner.temp }}/native-tests
+          SOURCE_SHA: ${{ github.sha }}
+        run: CI_VERBOSE=1 ./scripts/ci-tests.sh full-standard
 
       - name: Run Rust governance report
         if: always()
@@ -1230,6 +1376,7 @@ jobs:
 
   candidate-full-regression:
     cache-mode: read
+    needs: oasis7-test-build
     if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'
     runs-on: ubuntu-24.04
     steps:
@@ -1336,8 +1483,19 @@ jobs:
         run: bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-tests-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Unpack native executables preserving modes
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-tests"
+          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
       - name: Run full test tier
-        run: CI_VERBOSE=1 ./scripts/ci-tests.sh full
+        env:
+          OASIS7_CI_TEST_BUNDLE: ${{ runner.temp }}/native-tests
+          SOURCE_SHA: ${{ github.sha }}
+        run: CI_VERBOSE=1 ./scripts/ci-tests.sh full-standard
 
       - name: Run Rust governance report
         if: always()
