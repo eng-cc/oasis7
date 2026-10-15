@@ -186,6 +186,19 @@ class Process(unittest.TestCase):
         with patch.object(Path, 'glob', return_value=[OtherUser()]):
             self.assertEqual(owned_processes('owned-test'), {})
 
+    def test_proc_scan_ignores_inaccessible_environment_of_unowned_same_uid_process(self):
+        class DeniedProcess:
+            name = '123456'
+            def stat(self):
+                return type('Stat', (), {'st_uid': os.getuid()})()
+            def __truediv__(self, name):
+                if name == 'stat':
+                    return type('StatFile', (), {'read_text': lambda self: '123456 (unrelated) S 1 42 42 ' + '0 '*15 + '99'})()
+                return type('Denied', (), {'read_bytes': lambda self: (_ for _ in ()).throw(PermissionError('denied'))})()
+        with patch.object(Path, 'glob', return_value=[DeniedProcess()]):
+            self.assertEqual(owned_processes('owned-test'), {})
+            self.assertEqual(owned_processes('owned-test', group=42), {123456: '99'})
+
     def test_explicit_checkout_also_owns_default_results(self):
         with patch.object(artifacts, 'ROOT', artifacts.ROOT), patch.object(artifacts, 'CONFIG', artifacts.CONFIG), patch.object(artifacts, 'execute') as execute:
             with patch.object(sys, 'argv', ['ci-test-artifacts.py', 'run', '--repo-root', str(self.root), '--bundle', str(self.root / 'bundle')]):

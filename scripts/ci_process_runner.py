@@ -11,16 +11,24 @@ import time
 import uuid
 
 
-def owned_processes(marker):
+def owned_processes(marker, group=None):
     """Linux environment marker survives double-fork/setsid; identity includes starttime."""
     found = {}
     for directory in Path('/proc').glob('[0-9]*'):
         try:
             if directory.stat().st_uid != os.getuid():
                 continue
-            if ('OASIS7_CI_PROCESS_OWNER=' + marker).encode() not in (directory / 'environ').read_bytes().split(b'\0'):
-                continue
             fields = (directory / 'stat').read_text().rsplit(')', 1)[1].split()
+            in_group = group is not None and int(fields[2]) == group
+            if not in_group:
+                try:
+                    environment = (directory / 'environ').read_bytes().split(b'\0')
+                except PermissionError:
+                    # Same-UID runner services can be non-dumpable. They are not
+                    # ours merely because their environment cannot be inspected.
+                    continue
+                if ('OASIS7_CI_PROCESS_OWNER=' + marker).encode() not in environment:
+                    continue
             if fields[0] != 'Z':
                 found[int(directory.name)] = fields[19]
         except (FileNotFoundError, ProcessLookupError):
@@ -31,11 +39,11 @@ def owned_processes(marker):
 def cleanup(process, marker):
     if Path('/proc').is_dir():
         # Never signal a saved PID without checking its current ownership and starttime.
-        initial = owned_processes(marker)
+        initial = owned_processes(marker, process.pid)
         for sig in (signal.SIGTERM, signal.SIGKILL):
-            pending = owned_processes(marker)
+            pending = owned_processes(marker, process.pid)
             for pid, identity in pending.items():
-                if owned_processes(marker).get(pid) == identity:
+                if owned_processes(marker, process.pid).get(pid) == identity:
                     try:
                         os.kill(pid, sig)
                     except ProcessLookupError:
@@ -43,7 +51,7 @@ def cleanup(process, marker):
             if pending:
                 time.sleep(0.3)
         process.poll()
-        return ('unresolved' if owned_processes(marker) else 'clean'), bool(initial)
+        return ('unresolved' if owned_processes(marker, process.pid) else 'clean'), bool(initial)
     # macOS: inspect only this new process group; zombies need no signal.
     def members():
         rows = subprocess.check_output(['ps', '-axo', 'pid=,pgid=,stat='], text=True)
