@@ -2,25 +2,28 @@
 
 ## 文档身份
 
-- 结构裁剪：理由：简单专题以玩家边界和专业权威分工组织；范围：已声明provider组合内的连续性；风险：未覆盖组合与切换验证不能升级为支持结论；映射：[范围与非目标](#4-非目标与权威边界)、[风险与未决证据](#31-验收权威与证据边界)
-
 - 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[prd.md](prd.md)
+- 配对产品 design：[provider-agent-experience-continuity.design.md](provider-agent-experience-continuity.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
 - 配套专业系统设计：[Provider Switch Intent Continuity](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-001)（DES-PSW-001..004：provider/lane 切换、候选与在途意图连续性及重连不重放）
-- Last reviewed：2026-09-25
+- 统一客户端系统设计：[Agent Game Client 边界](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-001)
+- Last reviewed：2026-10-15
 
-本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
+本文是长期产品分册，定义 Agent/provider 切换时的体验连续性，以及官方内置与外部执行方遵循同一游戏能力合同的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
 ## 设计适用性与生命周期闭合
 
-- 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 历史设计判定 Issue：#3680。
-- 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立产品 design 会重复跨 provider 的产品合同。配套专业系统设计承接 provider/lane 调用绑定与候选、在途意图的技术边界，不改变本 PRD 的 `PRD-only-sufficient` 产品设计判定，也不取得产品交互 authority。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 设计判定：`paired-design`。
+- 设计适用性理由：执行方选择、委托、独立运行、Stop、未知结果恢复涉及非平凡体验状态；[配对产品设计](provider-agent-experience-continuity.design.md)承接这些信息与选择，不复制协议实现。
+- 历史设计判定 Issue：#3680；原 `PRD-only-sufficient` 仅对应当时的窄 provider 连续性主题，不再作为扩展后主题的设计豁免。
+- 历史来源保留：[C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)、[accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)；不恢复历史任务义务。
+
 ## 1. 产品目标
+
+玩家已经认领一个 Agent，希望先用游戏提供的执行方建立工厂，之后交给自己熟悉的外部 Runtime 继续经营。玩家选择的是谁来理解目标和提出行动，不是在选择另一套游戏规则；切换不能复制 Agent、丢失已完成成果或把未知请求再执行一次。
 
 当玩家在专业域已明确场景范围的 provider 组合间切换时，切换不能带来无法解释的、实质性的体验退化。连续性以玩家可感知的目标结果、等待体验、多轮记忆与意图延续、问题可诊断性及恢复路径为准，而不要求内部实现相同。
 
@@ -28,7 +31,19 @@
 
 `player_parity` 与 `headless_agent` 是 Agent 的执行 lane，不是新的玩家访问模式。无论 Agent 经由哪一 lane 提出意图，玩家所理解、纠正或继续行动的只能是同一条权威世界结果链；lane 差异不得制造另一份世界事实、绕开裁决，或把 Agent 执行能力误述为玩家获得新的进入权限。两条 lane 的具体合同、适用范围与 `experimental` / 非默认边界由[专业域 parity 权威](../../world-simulator/llm/provider-agent-experience-parity.prd.md)维护，产品层不将其提升为当前支持、默认或发布就绪结论。
 
-## 2. 玩家边界
+<a id="first-party-agent-client"></a>
+### 1.1 官方内置与外部执行方的关系
+
+**官方内置 Harness 是第一方游戏客户端，不是世界规则或世界写入权威。** Harness 指组织模型调用、规划、工具和私有记忆的执行软件；外部 Runtime 可以保留自己的实现。两者通过同一游戏能力合同提出意图，世界 Runtime 独立决定是否允许、如何执行以及实际后果。
+
+“同一合同”承诺相同主体、授权、任务版本、世界切点及观察范围下的一致游戏语义，不承诺两个模型选择相同行动、具有相同费用/速度或私有记忆。官方身份不产生额外权限；不同角色的合法差异来自明确授权，而不是内置捷径。既有 `player_parity` 与 `headless_agent` 的观察差异仍保留，不能以统一接口扩大玩家可见信息。
+
+首个迁移样例可以限定在已有 prepared-world 工业链，但全量替换前须核对全部保留的内置能力。未覆盖能力明确保持受限或旧组合，不静默降级；公开支持范围仍由 [REQ-AGENT-PARITY-001](#req-agent-parity-001)约束。
+
+本条不取代[外部 Runtime 首期 Skill/Game API 主入口](external-agent-runtime-play.prd.md#external-runtime-canonical-interface)，也不把直接模型服务或旧 Provider callback 重新命名成真实外部 Runtime。第一方客户端是额外执行方实现，不新增玩家访问模式，不默认成为玩家入口，也不承诺免费推理或云端托管。
+
+<a id="2-玩家边界"></a>
+## 2. 范围与玩家边界
 
 - 玩家可以期待在已声明场景范围内继续理解当前目标、Agent 意图、世界结果与下一步，而不需要因 provider 切换重新猜测世界事实。
 - 当组合不在适用范围内，或体验处于受限、退化或阻塞状态时，产品必须如实表达该状态，保留权威世界真相，并给出适用于当前状态的下一步；不得把回退、静默替代或局部技术通路包装成等价体验。
@@ -94,6 +109,59 @@ Trace refs: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5；承接[REQ-AGENT-PARIT
 - 场景与结果：切换前候选不自动交给新 provider 重试；权威确认尚未生效的待决请求按原权威合同继续、拒绝、过期、取消或明确重新规划；结果未知时先按原请求核对，查询受阻保持未知，不以切换重放；只有 committed receipt 表达世界后果，受支持的撤回/替换必须走专业路径。
 - 证据边界：意图 lineage、去重、receipt 和撤回/替换状态机由 Agent/runtime/QA authority 验证；产品层不冻结 schema。
 
+<a id="req-agent-parity-003"></a>
+### REQ-AGENT-PARITY-003：内外执行方共用游戏能力与结果合同
+
+Trace ID: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01
+
+- 要求：在已声明能力范围内，官方内置和外部执行方使用相同主体、授权、任务版本、世界切点与观察范围提出同一意图时，必须遵循同一能力发现、准入、资源后果、权威结果和恢复语义；内置执行方不得凭实现位置读取额外世界状态或绕过游戏规则。
+- 理由：玩家选择执行策略，而不是选择权限漏洞或另一份世界事实。外部 Runtime 无须使用官方 Harness，世界能力也不以运行旧 Provider Bridge 为前置。
+- 验收：[AC-AGENT-PARITY-003](#ac-agent-parity-003)；与既有 [REQ-AGENT-PARITY-002](#req-agent-parity-002)组合核对未知结果和切换。
+- 功能点：REQ-AGENT-PARITY-003；范围为 §1.1 的已声明能力与可比观察范围，不承诺模型行为等价。
+- 系统设计状态：已覆盖
+- 系统设计依据：[职责与依赖](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-001)、[共享客户端合同](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-002)、[执行与恢复](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-003)、[迁移覆盖](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-006)；均为目标设计，不是实现证据。
+- 实现状态：部分实现
+- 实现与验证依据：[共享 Harness](../../../crates/oasis7_agent_harness/src/lib.rs)、[普通签名客户端](../../../crates/oasis7/src/bin/oasis7_game_client/client.rs)及[实际 Skill 范围](../../../skills/oasis7-play/SKILL.md)提供基础；内置仍有 [simulator 适配](../../../crates/oasis7/src/simulator/agent_harness_adapter.rs)。后续实现和实际验证由 [#4726](https://github.com/eng-cc/oasis7/issues/4726)承接，不以创建任务证明交付。
+- 核对日期与基线：2026-10-15；源码/原合同 `d6f6ff3d10f0f2990bf17a111d55c7b36ebf0a5d`；仅远程源码和文档审读，本次文档变更未执行行为验收。
+- 剩余范围：设计条款已承接；实现仍需共享 SDK 独立构建、内置路径迁移、能力映射及普通客户端同候选验证。
+
+<a id="ac-agent-parity-003"></a>
+### AC-AGENT-PARITY-003：没有内部捷径的同合同执行
+
+Trace refs: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01；承接[REQ-AGENT-PARITY-003](#req-agent-parity-003)。
+
+- 覆盖要求：REQ-AGENT-PARITY-003。
+- 场景与结果：在相同初始世界和有效委托下，固定合法与非法意图分别经官方客户端与独立外部入口执行，授权可见性、接受/拒绝及世界后果一致；关闭已迁移场景的旧 Provider 路径后仍可完成目标与原结果恢复。玩家看到真实成果，而非“模型已完成”的替代说明。
+- 反例：内置绕过库存/权限、从私有状态补观察、能力缺口静默回退，以及排产受理被误报为首产物，都判为不满足。
+- 证据边界：协议一致性不证明策略、速度、成本、图形体验或两个真实外部 Runtime 等价；完整首局与支持声明仍分别取证。
+
+<a id="req-agent-parity-004"></a>
+### REQ-AGENT-PARITY-004：执行方选择与运行边界必须清楚
+
+Trace ID: O7-REQ-d452396d-291d-41a5-a912-6d615b58c29e
+
+- 要求：当提供官方内置或外部执行方时，玩家必须能确认实际执行方、运行位置、模型费用/预算来源、所控 Agent 和有效委托；缺失连接、执行许可或预算时明确阻塞，不得静默改用另一模型、Runtime 或游戏身份。
+- 运行边界：选择官方客户端不等于购买托管服务。关闭观战界面不应终止已独立运行且仍获授权的执行方；执行方停止后不得声称仍在推理。已经被世界接受的生产/转运仍按世界规则推进，Stop 不追溯取消其后果。
+- 理由：源码拆分不能把安装和排障负担转嫁给玩家，也不能隐藏开销、停止或授权的真实含义。选择、停止与换执行方的在途规则继续由 [REQ-AGENT-PARITY-002](#req-agent-parity-002)拥有。
+- 验收：[AC-AGENT-PARITY-004](#ac-agent-parity-004)。
+- 功能点：REQ-AGENT-PARITY-004；仅适用实际声明的执行方/平台/访问组合，不新增默认值或运行位置承诺。
+- 系统设计状态：已覆盖
+- 系统设计依据：[独立控制与世界推进](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-003)、[执行方生命周期和费用隔离](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-005)、[受控迁移](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-006)。
+- 实现状态：未核实
+- 实现与验证依据：已有 launcher/provider 入口不证明新第一方客户端的端到端选择、生命周期和费用表达；[#4726](https://github.com/eng-cc/oasis7/issues/4726)跟踪实现与实际证据，尚无本条同候选组合结果。
+- 核对日期与基线：2026-10-15；源码/原合同 `d6f6ff3d10f0f2990bf17a111d55c7b36ebf0a5d`；仅远程源码和文档审读，未启动模型、节点或 UI。
+- 剩余范围：设计条款已承接；实现/验证需启动交付、真实运行状态、停止/恢复、预算失败与适用玩家 surface 证据。
+
+<a id="ac-agent-parity-004"></a>
+### AC-AGENT-PARITY-004：清楚选择、停止与重新继续
+
+Trace refs: O7-REQ-d452396d-291d-41a5-a912-6d615b58c29e；承接[REQ-AGENT-PARITY-004](#req-agent-parity-004)。
+
+- 覆盖要求：REQ-AGENT-PARITY-004；未知请求与切换另组合 AC-AGENT-PARITY-002。
+- 场景与结果：玩家为同一合法 Agent 选择实际支持的执行方，确认成本与权限后开始；离开观战界面再回来能区分执行方活动和世界已受理作业。断连、预算耗尽、执行器退出或 Stop 后，显示真实阻塞及安全下一步，不伪装运行或换用另一执行方。
+- 反例：源码拆分后要求玩家自行发现多个必要进程、只按 Viewer 连接显示 Agent 在线、Stop 被表达为已撤销所有产物/在途请求，均不满足。
+- 证据边界：每个声明平台与玩家入口单独验证；本地独立 worker 不证明云端托管，进程健康不证明世界任务完成。
+
 ## 2.3 叶级 owner、authority、evidence 与 test tier 追踪
 
 本表把 provider 连续性的每个新叶级关系导航到专业 owner、权威文档和未来验证证据；它不声明任何 provider 当前受支持、默认或已就绪。
@@ -102,6 +170,8 @@ Trace refs: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5；承接[REQ-AGENT-PARIT
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-PARITY-001](#req-agent-parity-001) / [AC-AGENT-PARITY-001](#ac-agent-parity-001) | `producer_system_designer`：场景范围、窄承诺和 readiness 边界；`agent_engineer`：provider/Agent 行为与失败反馈；`viewer_engineer`：受限、退化和下一步的真实表达；`qa_engineer`：适用组合的 parity 证据；专业角色各自不把技术接通或局部样本提升为产品准入。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 的已声明 provider 组合/场景样例，以及超出范围或证据不足的负例；对比目标、等待、诊断和恢复语义，并确认 blocked/limited 表达不被包装成等价体验或当前支持。 | `test_tier_full` |
 | [REQ-AGENT-PARITY-002](#req-agent-parity-002) / [AC-AGENT-PARITY-002](#ac-agent-parity-002) | `producer_system_designer`：切换窗口的产品边界；`agent_engineer`：意图 lineage、provider failure 和重试语义；`runtime_engineer`：接受/结算、去重和单一世界效果；`viewer_engineer`：候选、待决、已结算和拒绝状态可读性；`qa_engineer`：切换/重连/退化组合对账。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`provider switch system design DES-PSW-001`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-001); [`DES-PSW-002`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-002); [`DES-PSW-003`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-003); [`DES-PSW-004`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-004); [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 切换窗口覆盖候选不重放、待决请求真实结算/拒绝/过期、重连与退化不产生第二次提交，以及撤回/替换仅走专业支持路径；只有 committed receipt 表达世界后果。 | `test_tier_full` |
+| [REQ-AGENT-PARITY-003](#req-agent-parity-003) / [AC-AGENT-PARITY-003](#ac-agent-parity-003) | `agent_engineer`：客户端/执行方；`runtime_engineer`：唯一准入/效果；`qa_engineer`：同合同与反例 | `PRD-WORLD_SIMULATOR-016` / `PRD-WORLD_RUNTIME-001` / `PRD-TESTING-003` | [职责与依赖](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-001)、[共享客户端](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-002) | AGC-01..05、07..09 的实际同候选证据；真实模型另按 AGC-11 | `test_tier_full` |
+| [REQ-AGENT-PARITY-004](#req-agent-parity-004) / [AC-AGENT-PARITY-004](#ac-agent-parity-004) | `agent_engineer`：独立执行；`viewer_engineer`：状态/选择；`qa_engineer`：平台与玩家 surface | `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [运行约束](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-005)、[迁移范围](../../world-simulator/llm/agent-game-client-boundary.design.md#des-agc-006) | AGC-06、09..11：实际启动、断连、停止与预算故障；不代签托管 | `test_tier_full` |
 
 ## 3. 产品验收
 
@@ -110,6 +180,8 @@ Trace refs: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5；承接[REQ-AGENT-PARIT
 - PC-3：产品验收只引用专业域对具体组合和场景的证据，不把历史评估、局部样本或技术接通提升为当前支持、默认或发布就绪结论。
 - PC-4：代表性切换窗口样例证明：切换前的候选不会自动重放；已送出但未结算的请求保持真实待决、拒绝、失效或重新规划语义；只有 committed receipt 可以把结果表达为世界后果。切换、重连和退化均不能制造第二次提交、隐藏原请求或伪造取消/成功。
 - PC-5：若专业域提供撤回或替换，样例证明玩家只能通过该受支持路径影响在途请求，且其结果仍经权威裁决；若不提供，玩家只能查看、等待或重新规划。两个 provider 对相同目标形成的建议不会被产品表面承诺为自动合并、去重或共同授权。
+
+- PC-6：AC-AGENT-PARITY-003 与 AC-AGENT-PARITY-004 分别证明统一游戏合同和可理解的执行方生命周期；不以其中一项通过代签另一项，也不扩大 PC-1..5 的既有支持范围。
 
 ### 3.1 验收权威与证据边界
 
@@ -125,3 +197,9 @@ Trace refs: O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5；承接[REQ-AGENT-PARIT
 - 不决定 provider 的当前支持状态、默认选择、可用性、发布准入或扩面顺序。
 - 不定义意图 lineage、去重/排序、撤回/替换状态机、pending 持久化、重试、过期、receipt schema 或任何 provider 内部追踪字段。
 - 不复制或替代专业域 source 的技术和验证合同；需要具体组合判断时，回到上述专业域权威文档并由对应 owner 裁决。
+
+- 不强制外部 Runtime 使用官方 Harness、官方 SDK 或某一传输包装；公共协议可被独立客户端实现。
+- 不承诺两种执行方作出相同策略、共享私有记忆、拥有相同成本/延迟，也不因官方实现获得额外能力或公开支持。
+## 5. 取舍、风险与未决问题
+
+- 设计假设与反证：在现有启动流程中交付第一方客户端应能降低维护复杂度，而不增加玩家操作步骤；若受支持平台只能靠手动补进程才能开始/恢复，需由 `producer_system_designer` 与 launcher owner 修正方案，不能降低本条体验承诺。
