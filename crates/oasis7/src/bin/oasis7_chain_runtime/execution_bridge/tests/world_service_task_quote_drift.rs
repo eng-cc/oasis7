@@ -3,6 +3,7 @@
 use super::super::private_goal_tests::{http, http_with_hook};
 use super::*;
 use oasis7::world_service::{private_task_context::*, task_factory_quote::*, task_recipe_quote::*};
+use oasis7_client_api::world_service::task_context::TASK_CONTEXT_READ_DELIVERY_DRIFT;
 use std::path::PathBuf;
 struct Fixture {
     dir: PathBuf,
@@ -149,7 +150,7 @@ fn fixture(recipe: bool) -> Fixture {
         &prepare,
         "",
     );
-    assert_eq!(status, 200, "{body}");
+    assert_eq!(status, 200, "[response payload omitted]");
     let prepared: PreparedTaskContextV1 = serde_json::from_value(body["payload"].clone()).unwrap();
     let prefix = request(
         &world,
@@ -173,7 +174,7 @@ fn fixture(recipe: bool) -> Fixture {
         &delegate,
     )
     .unwrap();
-    let (status, body) = http(
+    let (status, _body) = http(
         &dir,
         &runtime,
         &signer,
@@ -182,7 +183,7 @@ fn fixture(recipe: bool) -> Fixture {
         &get,
         "",
     );
-    assert_eq!(status, 200, "{body}");
+    assert_eq!(status, 200, "[response payload omitted]");
     Fixture {
         dir,
         driver,
@@ -294,7 +295,7 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
             );
             assert!(
                 matches!(status, 400 | 403 | 409),
-                "invalid auth: {status} {body}"
+                "invalid auth: {status} [response payload omitted]"
             );
             assert_ne!(body["error"], TASK_QUOTE_BASE_DRIFT);
             assert_ne!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
@@ -308,13 +309,13 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
                 &stale,
                 "",
             );
-            assert_eq!(status, 409, "{path}: {body}");
+            assert_eq!(status, 409, "{path}: [response payload omitted]");
             assert_eq!(body["error"], TASK_QUOTE_BASE_DRIFT);
             let (path, current) = f.quote(recipe, false);
             // A business-authorized quote must reach delivery. The production
             // fixture grants recipe scheduling; the starter fixture separately
             // grants construction at its declared site/factory identity.
-            let (status, body) = http(
+            let (status, _body) = http(
                 &f.dir,
                 &f.runtime,
                 &f.signer,
@@ -323,7 +324,10 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
                 &current,
                 "",
             );
-            assert_eq!(status, 200, "authorized quote {path}: {body}");
+            assert_eq!(
+                status, 200,
+                "authorized quote {path}: [response payload omitted]"
+            );
             let delivered = std::cell::Cell::new(false);
             let (status, body) = http_with_hook(
                 &f.dir,
@@ -341,9 +345,9 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
             f.height += 1;
             assert!(
                 delivered.get(),
-                "authorized quote did not reach delivery hook: {path} {body}"
+                "authorized quote did not reach delivery hook: {path} [response payload omitted]"
             );
-            assert_eq!(status, 409, "{path}: {body}");
+            assert_eq!(status, 409, "{path}: [response payload omitted]");
             assert_eq!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
             if terminal == "expiry" {
                 for _ in 0..=TASK_CONTEXT_LEASE_TICKS {
@@ -394,7 +398,7 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
                 );
                 assert!(
                     matches!(status, 403 | 409),
-                    "{terminal} {path}: {status} {body}"
+                    "{terminal} {path}: {status} [response payload omitted]"
                 );
                 assert_ne!(body["error"], TASK_QUOTE_BASE_DRIFT);
                 assert_ne!(body["error"], TASK_QUOTE_DELIVERY_DRIFT);
@@ -403,4 +407,141 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
             std::fs::remove_dir_all(f.dir).unwrap();
         }
     }
+}
+
+#[test]
+fn task_context_read_refuses_delivery_head_drift() {
+    let mut f = fixture(true);
+    let error_code =
+        |body: &serde_json::Value| match body.get("error").and_then(serde_json::Value::as_str) {
+            Some(TASK_CONTEXT_READ_DELIVERY_DRIFT) => TASK_CONTEXT_READ_DELIVERY_DRIFT,
+            Some("private_goal_forbidden") => "private_goal_forbidden",
+            Some("private_goal_conflict") => "private_goal_conflict",
+            Some("private_goal_invalid") => "private_goal_invalid",
+            _ => "other_or_none",
+        };
+    // Independent request handles let the delivery hook advance the actual
+    // fixture clock while the handler retains its original immutable pin.
+    let dir = f.dir.clone();
+    let runtime = Arc::clone(&f.runtime);
+    let signer = crate::feedback_submit_api::FeedbackSubmitSigner {
+        private_key_hex: f.signer.private_key_hex.clone(),
+        public_key_hex: f.signer.public_key_hex.clone(),
+    };
+    let store = PrivateGoalStore::open(&dir.canonicalize().unwrap().join("private-goals"), [7; 32])
+        .unwrap();
+    let get = f.get.clone();
+    let proof_before = serde_json::to_value(&get).unwrap();
+    let (status, body) = http(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        TASK_CONTEXT_READ_PATH,
+        &get,
+        "",
+    );
+    assert_eq!(status, 200, "initial read error_code={}", error_code(&body));
+    let before: CapturedTaskContextV1 = serde_json::from_value(body["payload"].clone()).unwrap();
+    let results_before = f
+        .driver
+        .execution_world
+        .capability_revocation_state()
+        .world_service_results
+        .clone();
+    let delivered = std::cell::Cell::new(false);
+    let (status, body) = http_with_hook(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        TASK_CONTEXT_READ_PATH,
+        &get,
+        "",
+        || {
+            delivered.set(true);
+            f.advance();
+        },
+    );
+    assert!(delivered.get(), "context read did not reach delivery hook");
+    assert_eq!(
+        status,
+        409,
+        "delivery must not expose the stale public base; error_code={}",
+        error_code(&body)
+    );
+    assert!(
+        body["error"] == TASK_CONTEXT_READ_DELIVERY_DRIFT,
+        "delivery error_code={}",
+        error_code(&body)
+    );
+    let (status, body) = http(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        TASK_CONTEXT_READ_PATH,
+        &get,
+        "",
+    );
+    assert_eq!(
+        status,
+        200,
+        "same original read after drift error_code={}",
+        error_code(&body)
+    );
+    let recovered: CapturedTaskContextV1 = serde_json::from_value(body["payload"].clone()).unwrap();
+    assert!(
+        serde_json::to_value(&get).unwrap() == proof_before,
+        "original get proof changed"
+    );
+    assert!(recovered.prepared.identity == before.prepared.identity);
+    assert!(recovered.prepared.identity == get.request.context);
+    assert!(
+        recovered.prepared.valid_until_tick == before.prepared.valid_until_tick,
+        "immutable prepared TTL changed"
+    );
+    assert!(
+        recovered.prepared.prepare_proof.request.client_nonce
+            == before.prepared.prepare_proof.request.client_nonce,
+        "immutable prepared nonce changed"
+    );
+    assert_eq!(
+        recovered.current_public_context.captured_base_binding,
+        f.driver
+            .execution_world
+            .current_cognition_base_binding()
+            .unwrap()
+    );
+    assert!(
+        recovered.current_public_context.read_commit.position
+            > before.current_public_context.read_commit.position
+    );
+    // Reads and an empty simulation block cannot submit another action or
+    // synthesize a WorldService result under a replacement identity.
+    assert!(
+        f.driver
+            .execution_world
+            .capability_revocation_state()
+            .world_service_results
+            == results_before,
+        "context reads created or changed canonical intent results"
+    );
+    assert!(
+        f.driver
+            .execution_world
+            .state()
+            .pending_recipe_jobs
+            .is_empty()
+    );
+    assert!(
+        f.driver
+            .execution_world
+            .state()
+            .pending_factory_builds
+            .is_empty()
+    );
+    drop(store);
+    drop(f.store);
+    std::fs::remove_dir_all(dir).unwrap();
 }

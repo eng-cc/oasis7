@@ -356,13 +356,23 @@ mod tests;
 
 mod feedback;
 
-// Private error bodies are never retained. Only these fixed quote-path categories
+// Private error bodies are never retained. Only route-specific fixed read categories
 // can cross the transport boundary; all other errors keep the generic safe tag.
 fn quote_error_category(path: &str, status: u16, reader: &mut impl Read) -> Option<&'static str> {
+    use oasis7_client_api::world_service::task_context::{
+        TASK_CONTEXT_READ_DELIVERY_DRIFT, TASK_CONTEXT_READ_PATH,
+    };
     use oasis7_client_api::world_service::{
         task_factory_quote::*, task_recipe_quote::TASK_RECIPE_QUOTE_PATH,
     };
-    if status != 409 || ![TASK_FACTORY_QUOTE_PATH, TASK_RECIPE_QUOTE_PATH].contains(&path) {
+    if status != 409
+        || ![
+            TASK_FACTORY_QUOTE_PATH,
+            TASK_RECIPE_QUOTE_PATH,
+            TASK_CONTEXT_READ_PATH,
+        ]
+        .contains(&path)
+    {
         return None;
     }
     #[derive(serde::Deserialize)]
@@ -377,8 +387,13 @@ fn quote_error_category(path: &str, status: u16, reader: &mut impl Read) -> Opti
     }
     let error: ErrorCode = serde_json::from_slice(&bytes).ok()?;
     match error.error.as_str() {
-        TASK_QUOTE_BASE_DRIFT => Some(TASK_QUOTE_BASE_DRIFT),
-        TASK_QUOTE_DELIVERY_DRIFT => Some(TASK_QUOTE_DELIVERY_DRIFT),
+        TASK_QUOTE_BASE_DRIFT if path != TASK_CONTEXT_READ_PATH => Some(TASK_QUOTE_BASE_DRIFT),
+        TASK_QUOTE_DELIVERY_DRIFT if path != TASK_CONTEXT_READ_PATH => {
+            Some(TASK_QUOTE_DELIVERY_DRIFT)
+        }
+        TASK_CONTEXT_READ_DELIVERY_DRIFT if path == TASK_CONTEXT_READ_PATH => {
+            Some(TASK_CONTEXT_READ_DELIVERY_DRIFT)
+        }
         _ => None,
     }
 }

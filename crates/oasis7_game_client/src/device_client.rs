@@ -461,7 +461,7 @@ impl Client {
     }
     pub fn captured(&self, operation: &str) -> Result<CapturedTaskContextV1, String> {
         let signed = self.context_read_proof(operation)?;
-        self.remote.read_task_context(&signed).map_err(|error| {
+        self.read_context_original(&signed).map_err(|error| {
             format!(
                 "private context {}; query original results and refresh",
                 failure_tag(&error)
@@ -504,3 +504,6 @@ mod quote_retry;
 
 #[path = "device_client_prepare_retry.rs"]
 mod prepare_retry;
+
+#[path = "device_client_context_read_retry.rs"]
+mod context_read_retry;

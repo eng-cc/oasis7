@@ -30,6 +30,17 @@ query retry nor an unknown result creates a replacement action or signature.
 Native Harness model-call reservations are separately encrypted and locked in
 the local operation store; they do not become world task authority.
 
+Private preparation may retry the exact durable signed Prepare after bounded
+transport/503/cooldown failures; it never renews the stored Context or nonce.
+Context reads and factory/recipe quotes retry only their route-specific snapshot
+drift codes, at most three attempts starting within eight seconds. Context reads
+reuse the same signed Get; quote refreshes preserve the full prepared identity,
+selection and TTL. Other conflicts, permission failures and expired contexts stop.
+The server rejects a Context read whose head changes during delivery, after checking
+current authority and validity. This does not make a later Action atomic with the
+read. Once an Action is cached, recovery retains that original; a rejected Action
+is not re-signed or replaced to make progress.
+
 Public JSON observations explicitly use `/v1/world/view-json`: the server applies
 the same pinning and authorization as `/v1/world/view`, normalizes the projection to
 JSON, then signs it in the distinct path domain. `VerifiedTaskWorldView` retains the

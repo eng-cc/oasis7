@@ -145,7 +145,9 @@ fn diagnose_original_queries(client: &Client) {
                     IntentOutcome::Pending => "pending".into(),
                     IntentOutcome::Unknown => "unknown".into(),
                     IntentOutcome::Committed { .. } => "committed".into(),
-                    IntentOutcome::Rejected { .. } => "canonical_rejected".into(),
+                    IntentOutcome::Rejected { reason } => {
+                        format!("canonical_rejected_{reason:?}")
+                    }
                     IntentOutcome::Expired => "expired".into(),
                     IntentOutcome::HistoryUnavailable => "history_unavailable".into(),
                 },
@@ -229,8 +231,38 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
         )
         .unwrap()
         .run();
-        if run_result.is_err() {
+        if !matches!(&run_result, Ok(report) if report.stop_reason == NativeTaskStopReason::Completed)
+        {
             diagnose_original_queries(&client);
+            let canonical = pin();
+            for index in 0..run_config().max_turns {
+                let operation = run_config().operation_id(index);
+                let Some(original) = client
+                    .cached_intent(ClientStateKind::Action, &operation)
+                    .unwrap()
+                else {
+                    continue;
+                };
+                for result in cognition_results(&canonical.world) {
+                    if result.request.correlation != original.correlation {
+                        continue;
+                    }
+                    if let Some(reason) = result.rejected {
+                        let category = if reason
+                            == format!(
+                                "{:?}",
+                                oasis7::runtime::WorldError::DistributedValidationFailed {
+                                    reason: "stale_base".into()
+                                }
+                            ) {
+                            "stale_base"
+                        } else {
+                            "other_canonical_rejection"
+                        };
+                        eprintln!("NATIVE_CONFORMANCE_CANONICAL stage={index} category={category}");
+                    }
+                }
+            }
         }
         let report = run_result.unwrap();
         assert_eq!(
