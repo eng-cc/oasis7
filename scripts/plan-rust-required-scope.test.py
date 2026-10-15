@@ -332,7 +332,7 @@ class Selection(unittest.TestCase):
                         expected_profiles.add('oasis7_client_api')
                     self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
                     self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
-                                     'workspace_support', 'oasis7_required', 'launcher_web'})
+                                     'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})
                     base = self.git('rev-parse', 'HEAD')
 
     def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
