@@ -105,6 +105,12 @@ def build(bundle):
                 if logical in binaries:
                     raise ValueError(f'duplicate executable: {logical}')
                 source = Path(executable)
+                if variant == 'endpoint':
+                    profile = artifact['profile']
+                    if (name != 'oasis7_durability_endpoint' or test
+                            or profile['opt_level'] != '3' or profile['debug_assertions']
+                            or source.parent.name != 'release'):
+                        raise ValueError('expected optimized release endpoint artifact')
                 destination = bundle / 'bin' / logical
                 shutil.copy2(source, destination)
                 # Cargo uses the package directory as test cwd, and exposes its binaries.

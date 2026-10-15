@@ -246,6 +246,7 @@ jobs:
           name: native-tests-${{ github.sha }}
           path: ${{ runner.temp }}/native-tests.tar
           compression-level: 0
+          overwrite: true
           if-no-files-found: error
           retention-days: 2
 

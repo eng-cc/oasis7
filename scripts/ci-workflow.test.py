@@ -65,6 +65,7 @@ class Workflow(unittest.TestCase):
             self.assertIn('./scripts/ci-tests.sh full-standard', JOBS[name])
             self.assertIn('needs: oasis7-test-build', JOBS[name])
         self.assertIn('compression-level: 0', JOBS['oasis7-test-build'])
+        self.assertIn('overwrite: true', JOBS['oasis7-test-build'])
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
         required_body = driver.split('run_oasis7_required_tier_tests() {', 1)[1].split('run_scenario_regression_tests()', 1)[0]
         self.assertNotIn('formal-live-local-tests.sh', required_body)
