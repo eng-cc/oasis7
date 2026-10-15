@@ -121,6 +121,7 @@ fn main() {
             commands::open_project,
             commands::query_view,
             commands::search_rules,
+            commands::query_document_inventory,
             commands::save_decision_draft,
             commands::save_preference,
             commands::read_source,
