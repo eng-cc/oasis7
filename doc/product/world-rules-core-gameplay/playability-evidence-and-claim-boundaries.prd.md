@@ -120,6 +120,8 @@ Trace ID: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1
 - 专业权威：[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md)
 - 验收：[AC-WR-PE-002](#ac-wr-pe-002)
 
+- 局部专业设计导航：[评分子链](../../playability_test_result/design.md#feedback-score-evidence-boundary)仅说明评分来源、尝试与评审归属保留及数值不可越级代签。这不是本要求的完整系统设计依据；原未核实状态、剩余范围和实现证据边界保持不变。
+
 <a id="ac-wr-pe-002"></a>
 ### AC-WR-PE-002：低层正向证据保持低层结论
 
@@ -145,6 +147,8 @@ Trace ID: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07
 - 要求：`go/watch/hold/block` 只能比较同一体验目标、formal 玩家入口、候选版本/变更范围、证据窗口及适用环境（若环境影响解释）的证据；范围不明或证据不可回链时不得升级结论。
 - 专业权威：[`doc/testing/prd.md`](../../testing/prd.md)、[`testing-manual.md`](../../../testing-manual.md)
 - 验收：[AC-WR-PE-003](#ac-wr-pe-003)
+
+- 局部专业设计导航：[评分子链](../../playability_test_result/design.md#feedback-score-comparison-boundary)仅说明描述性评分组与产品比较单位的区别及独立阻断保留。这不是本要求的完整系统设计依据；原未核实状态、剩余范围和实现证据边界保持不变。
 
 <a id="ac-wr-pe-003"></a>
 ### AC-WR-PE-003：不匹配样本不能抵消阻断

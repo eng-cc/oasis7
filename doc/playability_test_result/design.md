@@ -57,14 +57,30 @@
 
 缺答、非法单选多勾或未评审会阻断相应计算，不补值、不重分配权重；运行未入局与证据缺失继续按 RunResult 表达。汇总器先固定当前候选及来源分组，再选择该组的完整已评卡片；排除理由和数量必须可见，旧卡、新卡及 AI/真人来源不暗中混合。保存新评审而保留旧答案/旧结论，不能用重算覆盖历史事实。数值建议、owner 结论、玩家杠杆和发布证据保持可分别审阅。
 
+<a id="feedback-score-evidence-boundary"></a>
+### 评分证据隔离
+
+Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1；承接[评分证据层级](prd.md#feedback-score-evidence-level)的局部负向边界。计算结果保留当前尝试、原始答案、来源和 review_status 的关联；未评审、未执行、缺答和非法回答保持未知，已有独立阻断不因未知总分消失。数值建议、owner 裁决、玩家杠杆、L4/L5 及发布判断分别审阅；高分不能把 AI 来源包装为真实人类意愿，不能把数值“继续可玩”转为产品 go 或发布放行。实际 RunResult、试玩和所有下游 claim 消费者仍由各自 authority 负责，本节不证明它们已实现隔离。
+
+<a id="feedback-score-comparison-boundary"></a>
+### 评分比较边界
+
+Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07；承接[评分汇总与产品比较单位](prd.md#feedback-score-comparison-scope)。沿卡片唯一合同保留组键、原始卡片值、有效/未知/排除数量与逐卡阻断；完整卡片的描述性均值不能填补缺卡或抵消其他组的阻断。向产品评审提供汇总时，明确同评分组不等于同产品比较单位：体验目标、formal 入口、候选/变更、窗口及条件化环境仍需原 owner 独立核对；范围不明不能从均值提升结论。此处不增设字段、阈值、自动聚合器或新的比较/发布规则。
+
 ### 2.1 需求承接与分配表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [评分与证据边界](prd.md#feedback-score-product-contract) | 同一答卷唯一复算；缺失不补值；历史及多卡来源可区分 | [计算与回流](#feedback-score-calculation-design) | QA/玩法 owner 评审答案、最终结论和发布输入 | 不实现业务评分器、不代签 L4/L5 或发布结论 |
+| [评分复算合同](prd.md#feedback-score-product-contract) | 同答卷唯一复算，缺失不补值；五维与题目映射只引用唯一卡片合同 | [计算与回流](#feedback-score-calculation-design) | QA/玩法 owner；卡片评分合同 | 产品适用性：N/A；reason=此行只分配问卷数学复算，不定义玩家价值或发布验收；scope=题目映射、完整性、精度及数值建议，产品证据交集由以下两行独立承接 |
+| Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1；[评分证据层级](prd.md#feedback-score-evidence-level) | 已评来源与当前尝试保留，数值不能代签更高层证据或发布 | [评分证据隔离](#feedback-score-evidence-boundary) | QA/producer 与 L4/L5、发行 authority | 只覆盖评分输出解释，不证明实际试玩或全部 claim 消费者 |
+| Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07；[比较单位边界](prd.md#feedback-score-comparison-scope) | 同评分组均值不等于同产品比较单位，逐卡独立阻断不被抵消 | [评分比较边界](#feedback-score-comparison-boundary) | QA/producer；产品比较单位 authority | 不实现聚合器，不替 owner 核定全部产品建议入口 |
 
 ### 11.1 验证映射表
 
+以下是静态复算与文档审阅计划；实际输入、候选版本、结果和未覆盖项记在当前 PR，不冒充真实试玩。
+
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [评分与证据边界](prd.md#feedback-score-product-contract) | [计算与回流](#feedback-score-calculation-design) | 文档规则变更后离线复核原反例、四档映射、缺答、邻近阈值与覆盖规则 | 按[总手册](../../testing-manual.md)的卡片审阅流程，用本版合同的静态答卷 fixture 逐步复算并核对模板引用；无需启动游戏 | 同修订规则、fixture 输入、精确计算结果与条件标签 | 不证明实际试玩、已部署聚合器或历史卡片通过 |
+| [评分复算合同](prd.md#feedback-score-product-contract) | [计算与回流](#feedback-score-calculation-design) | 改规则或引用后离线复核唯一计算与附加规则 | 本候选的[卡片合同](playability_test_card.md#feedback-score-contract)：逐步复算原反例、四档、Q14、Q7、缺答、3.2/4.2邻近值、附加规则最严格优先；用精确分数，不启动游戏 | 同修订合同、静态输入与未舍入结果/建议标签 | 不证明已部署评分器、历史卡通过或发布准备度 |
+| Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1；[评分证据层级](prd.md#feedback-score-evidence-level) | [评分证据隔离](#feedback-score-evidence-boundary) | 高分、未评审、低层来源与独立阻断分别保留 | 本候选[卡片合同](playability_test_card.md#feedback-score-contract)及本地条款静态负例审阅：AI高分无L5、未评审满分、unknown但已有block；核对来源/尝试、未知与独立裁决，不生成强claim | 当前 PR 的反例与逐项解释 | 不证明 runtime RunResult 或全部 claim 消费者执行拒绝 |
+| Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07；[比较单位边界](prd.md#feedback-score-comparison-scope) | [评分比较边界](#feedback-score-comparison-boundary) | 评分描述均值不补缺证、不跨单位抵消阻断 | 按本候选[卡片合同](playability_test_card.md#feedback-score-contract)静态对照同评分组但不同证据窗口/条件化环境，以及不同候选/来源卡片；核对均值仅描述、排除数及逐卡阻断保留、产品比较条件另审 | 当前 PR 的分组输入与边界审阅记录 | 不证明全部 go/watch/hold/block 消费者的实际执行 |
