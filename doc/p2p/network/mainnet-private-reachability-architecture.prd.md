@@ -20,6 +20,8 @@
   - SC-8: mixed-topology 验证必须使用显式 path-behavior taxonomy，至少区分 `exact / proxy / manual_lab / real_env / unsupported` evidence class、`must_direct / may_direct_must_recover / must_relay / must_not_publish_public_direct / manual_lab_required / unsupported` expectation，以及 `public_direct / home_nat / cgnat / relay_only / sentry_loss / relay_exhaustion / degraded_latency_loss` 等 NAT/degradation labels。
   - SC-9: reachability/status observability 必须挂接到现有 `/v1/chain/status.observability` 或 triad summary，不新增第二套 net health truth；字段必须保持 bounded cardinality，并明确 byte/status scope，禁止把当前 wire/control-plane 统计解释成 NIC-level transport overhead 真值。
 
+<a id="reachability-user-experience"></a>
+<a id="2-user-experience-functionality"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - `producer_system_designer`: 需要一套不退回 MVP、直接对标公共主链的网络目标态。
