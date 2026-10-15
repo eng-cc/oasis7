@@ -36,8 +36,8 @@
     - SC-3A: `release-gate-web` 在 `renderMode=viewer` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent；`renderMode=software_safe` 仅作为兼容 alias 覆盖。
     - SC-3B: 正式 gameplay evidence packet 必须显式区分 `player leverage` 与 `ambient world activity`，并回答“玩家做了什么、世界因此变了什么、这是否打开下一步决策”。
     - SC-3C: `viewer` 与 `pure_api` 这两个 formal 玩家 surface 必须能用同一份 `snapshot.player_gameplay` 事实源回答同一组核心问题：当前阶段、当前目标、进度、阻塞、下一步建议，以及最近一次关键世界变化；其中 `software_safe` 只作为 `viewer` 兼容 alias，`pure_api` 的 `parity_verified` 只适用于 active LLM access，no-LLM 只能记为 blocked/observer-debug。
-  - SC-4: 测试任务 100% 映射 PRD-TESTING-ID。
-  - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / PR、实际 CI 与评审记录（Issue 按需） 命名。
+  - SC-4: 测试范围可追溯到实际适用需求与专业验收；PRD-TESTING-ID 保留作本模块定位，不要求每次变更新建任务身份。
+  - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.design.md` / `*.manual.md` 的文档职责；执行状态由实际 PR、CI 与评审记录承接，Issue 按需。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
   - SC-7: 主链 Token 创世前具备一份 QA 审计清单，覆盖分配比例、custody/treasury 语义、个人上限、创世流通与首年释放上限，避免带着错误经济配置进入执行。
   - SC-8: testing root authorities define the `L1/L2/L3/L4A/L4B/L5` evidence boundaries and forbid writing an automation pass as proof that the game is fun.
@@ -85,7 +85,7 @@
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
   3. Flow-TST-003: `线上问题复盘 -> 回填触发矩阵 -> 增加回归用例 -> 验证闭环`
-  4. Flow-TST-004: `逐篇阅读 legacy 专题文档 -> 按 strict schema 人工重写 -> 改名为 .prd/.project -> 回归校验`
+  4. Flow-TST-004: `逐篇阅读 legacy 专题文档 -> 按 strict schema 人工重写 -> 按需求/设计/手册职责命名 -> 回归校验`
   5. Flow-TST-005: `触发 wasm hash 校验 -> 跨 runner 对账 -> required check 放行/阻断 -> 发布链路收口`
   6. Flow-TST-006: `识别工业引导体验改动 -> 运行自动化前置 -> 执行 playability 卡组 -> 回写 QA 阻断结论`
   7. Flow-TST-007: `读取 token 创世参数表 -> 逐项核对比例/recipient/vesting/流通边界 -> 输出 QA verdict -> 回流 producer 决策`
@@ -216,7 +216,7 @@ PWT-001 remains the documented bounded local provider-backed UI case. PWT-003/00
 The receiver includes the GWSC `MIG-01` specimen with structurally valid declared `PositiveU64` fields and `from_schema_version=to_schema_version="1"`. Shape validation is expected to accept this input shape. The semantic receiver must reject it before authoritative mutation, preserve the prior version/state/artifact bytes, and produce no partial charge, event, or world effect, following the existing [GWSC migration oracle](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator). This is a planned expected result, not a test execution or a schema rule; no runtime/WASM/schema implementation or proof is claimed here.
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
-  - AC-2: testing project 文档维护分层测试演进任务。
+  - AC-2: 分层测试的稳定策略由本 PRD 和配套设计维护，演进任务的动态状态由实际 PR、CI 与评审记录承接（Issue 按需）。
   - AC-3: 与 `testing-manual.md` 保持一致且互相引用。
   - AC-4: 新增测试流程需标注 `test_tier_required` 或 `test_tier_full`。
   - AC-5: 每个迁移批次必须提供“原文约束点 -> 新章节映射”并通过文档治理检查。
@@ -231,7 +231,7 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - AC-10: `release-gate-runtime` 必须允许将 `ci-tests.sh full` 拆为至少两个并行 shard，并与 builtin wasm sync 检查独立聚合，保证放行语义不变。
   - AC-11: runtime shard 划分必须按关键路径持续重平衡；`oasis7 --lib --bins` 等中重量级套件不应长期挤占最重 shard。
   - AC-12: `doc/testing/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` / `oasis7 Runtime` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
-  - AC-13: `token-genesis-allocation-audit-checklist` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
+  - AC-13: `token-genesis-allocation-audit-checklist` 专题文档与执行模板落盘，保留 `TASK-TESTING-062` 为原始专题来源，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
   - AC-14B: 仓库必须维护 Playwright 实跑测试系列入口，记录 `PWT-###` 用例矩阵、真实本地栈/真实 provider/真实 UI 输入的覆盖边界、mock 禁用规则、证据产物要求和新增用例规则；首个用例为 `PWT-001 Real Agent Chat`，后续玩家操作流程必须从该入口扩展。
@@ -306,7 +306,7 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - NFR-TST-3: 关键链路缺陷逃逸率持续下降（按月跟踪）。
   - NFR-TST-4: 测试手册与脚本口径冲突数为 0。
   - NFR-TST-5: 测试执行结果可在 30 分钟内完成追溯定位。
-  - NFR-TST-6: 文档迁移批次在不降低治理质量的前提下保持可审阅粒度（每任务对应单文档或单专题）。
+  - NFR-TST-6: 文档迁移批次在不降低治理质量的前提下保持可审阅粒度（按独立目的和可审阅范围组织，不强制每篇文档单独建任务）。
   - NFR-TST-7: builtin wasm hash 校验在多 runner 下可复现且差异可定位到模块与平台维度。
   - NFR-TST-8: Token 创世 QA 审计模板字段完整率必须为 `100%`，缺任何一项关键字段都不能给 `pass`。
   - NFR-TST-9: 正式 gameplay evidence 审查者必须能在 30 秒内看出“玩家是否真的改变了世界”，无需从长日志里二次拼装。
@@ -330,6 +330,8 @@ The receiver includes the GWSC `MIG-01` specimen with structurally valid declare
   - 风险-6: runtime shard 若长期失衡，即使已并行化，也会因为最长 shard 过重而回吐大部分收益。
 
 ## 6. Validation & Decision Record
+
+下表 `TASK-TESTING-*`、旧里程碑与迁移编号保留历史来源和专业定位，不代表这些任务仍开放，也不要求恢复旧 Project、另建任务身份或通用回执。当前改动仍须追溯实际适用条款并完成相应验证；历史 ID 与旧绿色结果不能代替本轮 requirement Trace 或执行证据。当前任务组织遵循[开发流程规范](../engineering/workflow/source-of-truth.md)。
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |

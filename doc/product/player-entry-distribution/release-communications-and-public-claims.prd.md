@@ -16,9 +16,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 是公开 claim 的证据与审核生命周期合同；其 authority 在发行与 LiveOps 专业文档，独立 design 不增加玩家交互设计。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家和社区应能明确区分内部候选状态、待审核文案和已经发布的公开事实。任何渠道说明都必须忠实反映同一候选、primary mode 与当前证据范围，并在事实变化时及时纠正，而不能把内部 `go`、QA green 或已批准草稿包装成已经发布或更高阶段。
@@ -98,12 +99,14 @@ Trace ID: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff
 
 - 功能点：[REQ-ENTRY-CLAIM-001](#req-entry-claim-001)；验收 [AC-ENTRY-CLAIM-001](#ac-entry-claim-001)。
 - 适用范围：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账；沿用本条原有阶段和前置条件。
-- 系统设计状态：未核实
-- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：runtime_capture 绑定版本/场景/证据窗口与可公开来源；来源不足不背书运行事实；同 Trace 五列承接与六列验证限定网站子范围。
 - 实现状态：部分实现
 - 实现与验证依据：官网 release-candidate 快照将版本和下载资产绑定同一 tag，缺 checksum/platform 时阻断推荐；首页 claim 检查保留公开 preview 边界。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/site/assets/release-candidate.js)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-release-candidate.test.cjs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-homepage-claim-check.sh)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。 网站交付及原候选局部检查见[PR #4697](https://github.com/eng-cc/oasis7/pull/4697)，不延伸为全部渠道验收。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，该实现仅网站版本/资产及静态文案子范围；所有公开 claim 的 primary mode、专业事实、QA窗口与LiveOps审核记录仍未核清。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：全渠道专业事实、QA verdict 和 LiveOps 审核闭包仍外部。不改变本卡固定源码与已取得实现范围。
 
 <a id="ac-entry-claim-001"></a>
 ### AC-ENTRY-CLAIM-001：局部 green 不会升级公开状态
@@ -123,12 +126,14 @@ Trace ID: O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c
 
 - 功能点：[REQ-ENTRY-CLAIM-002](#req-entry-claim-002)；验收 [AC-ENTRY-CLAIM-002](#ac-entry-claim-002)。
 - 适用范围：所有活跃公开 surface 的事实漂移纠正、降级与撤回；沿用本条原有阶段和前置条件。
-- 系统设计状态：未核实
-- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-publishing)已承接：同 URL 纠正/撤回同步 CN/EN、详情/摘要/RSS，回滚不复活错误正文；同 Trace 五列承接与六列验证限定网站子范围。
 - 实现状态：部分实现
 - 实现与验证依据：官网发布检查把撤回正文、列表/首页/RSS 派生、稳定ID和双语言状态一起核对；对应回归包含单语言撤回拒绝与双语纠正。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-discovery-check.py)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-discovery-check.test.py)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。 网站交付及原候选局部检查见[PR #4697](https://github.com/eng-cc/oasis7/pull/4697)，不延伸为全部渠道验收。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅覆盖网站观察/开发日志静态内容；所有 active public surfaces 的漂移检测、实际纠正/撤回同步和发布验证未核清。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：其他 active public surfaces、自动漂移检测与第三方缓存收回不在本设计。不改变本卡固定源码与已取得实现范围。
 
 <a id="ac-entry-claim-002"></a>
 ### AC-ENTRY-CLAIM-002：撤回只改变 claim 状态
@@ -149,11 +154,13 @@ Trace ID: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
 - 功能点：[REQ-ENTRY-CLAIM-003](#req-entry-claim-003)；验收 [AC-ENTRY-CLAIM-003](#ac-entry-claim-003)。
 - 适用范围：每个拟发布 claim 的事实、目标、假设、证据边界与可发布条件；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[认领经济公开口径边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)承接认领经济规则的四层区分与发布限制。
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：concept/illustrative/runtime_capture 与小说类型分离，目标/概念不冒充真实运行来源；同 Trace 五列承接与六列验证限定网站子范围。 [认领经济四层边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)原接收保留。
 - 实现状态：未核实
 - 实现与验证依据：按 AC 审核四层字段与可发布条件；专业认领边界仅为一项输入，待取得完整公开 claim 审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：该条款仅覆盖认领经济输入，其他专业领域、全渠道发布与审核的组合承接未核清；实现：未取得同证据窗口的全量文案审核及发布记录。
+- 剩余范围：设计：已核对认领经济及官网来源子范围，其他专业领域、全渠道发布与审核的组合承接未核清；实现：未取得同证据窗口的全量文案审核及发布记录。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：其他专业领域、非官网渠道及全部公开审核仍外部。不改变本卡固定源码与已取得实现范围。
 
 <a id="ac-entry-claim-003"></a>
 ### AC-ENTRY-CLAIM-003：目标或假设不会伪装成当前事实

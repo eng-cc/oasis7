@@ -158,6 +158,187 @@ SC-8 / SC-10 的平台预检、状态清点、首写边界与三类恢复结论�
 继续拥有最终资产身份/新鲜度与成功后的版本保留；原状态格式/代际及世界恢复仍由 runtime 主责。
 这些链接补齐实施与验证责任，不改变 SC-8 / SC-10 的产品结果，也不表示预检、迁移或平台验收已完成。
 
+### 5.3 根成功标准的逐项状态与语义身份
+
+SC-1～SC-7 复用叶子要求的 Trace refs，只作为组合验收，不重复声明要求。SC-8/SC-9/SC-10 仅为下述根独立义务声明身份，不替代相交叶子或专业 authority。原 §5.1 六列、原 SC 文本与测试层级保持不变。
+
+以下为 2026-10-15 对 `dffd797f` 文档候选的关系复核；实现参照各叶子已注明的固定源码基线。根组合均未取得覆盖全部条件的同候选运行记录，未执行新安装、浏览器、部署或真人验收。官网六叶子既有“已覆盖 / 已实现待验证”不因根组合未知而降级。
+
+
+<a id="sc-entry-001"></a>
+#### SC-1：成功标准与状态
+
+- Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff, O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385。
+- 引用定位与组合边界：O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff（[REQ-ENTRY-CLAIM-001](release-communications-and-public-claims.prd.md#req-entry-claim-001)）; O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385（[REQ-ENTRY-CLAIM-003](release-communications-and-public-claims.prd.md#req-entry-claim-003)）。
+- 适用范围：§5 的 SC-1 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-1
+
+- Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff, O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385。
+- 引用定位与组合边界：O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff（[REQ-ENTRY-CLAIM-001](release-communications-and-public-claims.prd.md#req-entry-claim-001)）; O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385（[REQ-ENTRY-CLAIM-003](release-communications-and-public-claims.prd.md#req-entry-claim-003)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[官网来源标识](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)承接网站来源子范围；认领经济四层模型见叶子卡。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：其他公开渠道、完整当前事实审核与 README/QA/LiveOps 同窗口闭包未核实。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-002"></a>
+#### SC-2：成功标准与状态
+
+- Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3。
+- 引用定位与组合边界：O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264（[REQ-ENTRY-MODE-001](access-modes-and-release-readiness.prd.md#req-entry-mode-001)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。
+- 适用范围：§5 的 SC-2 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-2
+
+- Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3。
+- 引用定位与组合边界：O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264（[REQ-ENTRY-MODE-001](access-modes-and-release-readiness.prd.md#req-entry-mode-001)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[下载同候选展示](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)与叶子首次注册/返回设计承接相应入口。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：所有公开入口的 primary mode/版本/平台和独立验证路径未全核清，不能以官网一条链代签。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-003"></a>
+#### SC-3：成功标准与状态
+
+- Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3。
+- 引用定位与组合边界：O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1（[REQ-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)）; O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270（[REQ-ENTRY-MODE-002](access-modes-and-release-readiness.prd.md#req-entry-mode-002)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。
+- 适用范围：§5 的 SC-3 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-3
+
+- Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3。
+- 引用定位与组合边界：O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1（[REQ-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)）; O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270（[REQ-ENTRY-MODE-002](access-modes-and-release-readiness.prd.md#req-entry-mode-002)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[Launcher 重新验证](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)与[下载状态](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)已区分本地探测、最后已知候选和真实结果。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：Web/native 全部模式后端与回退表达未核清；Launcher 配置/凭据及当前尝试诊断实现缺口仍按叶子卡保留。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-004"></a>
+#### SC-4：成功标准与状态
+
+- Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff, O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c。
+- 引用定位与组合边界：O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff（[REQ-ENTRY-CLAIM-001](release-communications-and-public-claims.prd.md#req-entry-claim-001)）; O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c（[REQ-ENTRY-CLAIM-002](release-communications-and-public-claims.prd.md#req-entry-claim-002)）。
+- 适用范围：§5 的 SC-4 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-4
+
+- Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff, O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c。
+- 引用定位与组合边界：O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff（[REQ-ENTRY-CLAIM-001](release-communications-and-public-claims.prd.md#req-entry-claim-001)）; O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c（[REQ-ENTRY-CLAIM-002](release-communications-and-public-claims.prd.md#req-entry-claim-002)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[官网编辑/发布/纠正](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-publishing)明确事实核对、同步与部署分离。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：全渠道专业 PRD-ID、QA verdict、发布授权和 LiveOps 同步的组合技术/操作承接未核实。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-005"></a>
+#### SC-5：成功标准与状态
+
+- Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270, O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b。
+- 引用定位与组合边界：O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264（[REQ-ENTRY-MODE-001](access-modes-and-release-readiness.prd.md#req-entry-mode-001)）; O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270（[REQ-ENTRY-MODE-002](access-modes-and-release-readiness.prd.md#req-entry-mode-002)）; O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b（[REQ-ENTRY-CANDIDATE-001](access-modes-and-release-readiness.prd.md#req-entry-candidate-001)）。
+- 适用范围：§5 的 SC-5 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-5
+
+- Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270, O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b。
+- 引用定位与组合边界：O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264（[REQ-ENTRY-MODE-001](access-modes-and-release-readiness.prd.md#req-entry-mode-001)）; O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270（[REQ-ENTRY-MODE-002](access-modes-and-release-readiness.prd.md#req-entry-mode-002)）; O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b（[REQ-ENTRY-CANDIDATE-001](access-modes-and-release-readiness.prd.md#req-entry-candidate-001)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：模式与失败恢复已有叶子所列首次绑定/返回子范围；[官网下载](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)只消费模式事实，不定义新模式。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：viewer/pure_api 独立可玩性、parity 与 observer/blocked 分类的完整专业组合未核实；不得互相代签。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-006"></a>
+#### SC-6：成功标准与状态
+
+- Trace refs: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b, O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3, O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f。
+- 引用定位与组合边界：O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b（[REQ-ENTRY-CANDIDATE-001](access-modes-and-release-readiness.prd.md#req-entry-candidate-001)）; O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1（[REQ-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)）; O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676（[REQ-ENTRY-LAUNCH-002](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。；O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f（[SC-8 首写独立义务](#sc-entry-008)）。
+- 适用范围：§5 的 SC-6 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-6
+
+- Trace refs: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b, O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676, O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3, O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f。
+- 引用定位与组合边界：O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b（[REQ-ENTRY-CANDIDATE-001](access-modes-and-release-readiness.prd.md#req-entry-candidate-001)）; O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1（[REQ-ENTRY-LAUNCH-001](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)）; O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676（[REQ-ENTRY-LAUNCH-002](local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002)）; O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3（[REQ-SITE-DISCOVERY-004](public-site-discovery-and-showcase.prd.md#req-site-discovery-004)）。；O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f（[SC-8 首写独立义务](#sc-entry-008)）。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[下载候选](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)、[Launcher 重验](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)及[升级首写](../../site/design.md#manual-upgrade-first-write)分别承接各自阶段。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：端到端跨阶段候选/平台/primary mode 关联及全部受支持入口仍未核实；局部阶段设计不关闭本 SC 的 full 发行链。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-007"></a>
+#### SC-7：成功标准与状态
+
+- Trace refs: O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898, O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e, O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5, O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385。
+- 引用定位与组合边界：O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898（[REQ-ENTRY-FREE-001](free-entry-world-progression-and-recognition.prd.md#req-entry-free-001)）; O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e（[REQ-ENTRY-FREE-002](free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)）; O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5（[REQ-ENTRY-PART-001](participation-and-recognition-boundaries.prd.md#req-entry-part-001)）; O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385（[REQ-ENTRY-CLAIM-003](release-communications-and-public-claims.prd.md#req-entry-claim-003)）。
+- 适用范围：§5 的 SC-7 全部组合条件，不能用一项叶子结果代签。
+##### 功能状态卡：SC-7
+
+- Trace refs: O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898, O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e, O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5, O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385。
+- 引用定位与组合边界：O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898（[REQ-ENTRY-FREE-001](free-entry-world-progression-and-recognition.prd.md#req-entry-free-001)）; O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e（[REQ-ENTRY-FREE-002](free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)）; O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5（[REQ-ENTRY-PART-001](participation-and-recognition-boundaries.prd.md#req-entry-part-001)）; O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385（[REQ-ENTRY-CLAIM-003](release-communications-and-public-claims.prd.md#req-entry-claim-003)）。
+- 系统设计状态：未核实
+- 系统设计依据：世界内认可/机会主责与入口负边界见 FREE-002；贡献操作状态见 PART-001；尚未确认免费基础路径、可选服务和世界规则的完整系统设计组合。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：可选服务中断/取消及非权力隔离、跨入口认可与长期/current claim 组合仍未核实；不因纯沟通部分而把技术义务标不适用。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-008"></a>
+#### SC-8：成功标准与状态
+
+- Trace ID: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f
+- 声明范围：仅声明原状态首次不可逆写入前的兼容三分判定，以及未改写证明/未知写入下安全回退的独立安装义务；不重新声明 LAUNCH-001/002 的本地会话重验。
+##### 功能状态卡：SC-8
+
+- Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 唯一声明](#sc-entry-008)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[首写预检与三类结果](../../site/design.md#manual-upgrade-first-write)、逐平台验证矩阵已明确原状态清点、写入方静止、备份关联、未知首写禁止降级及权威非回退。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：各实际安装/Launcher/runtime 入口的接线、候选兼容描述与每种旧格式转换尚未核实；平台实际执行、身份/会话与原请求回查须分别证明。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-009"></a>
+#### SC-9：成功标准与状态
+
+- Trace ID: O7-REQ-a15a1b8e-8b7f-4c6a-9cb5-2f949730496c
+- 声明范围：仅声明玩家会话、当前读取资格及 Agent 委托与原已接受请求结果正交、重新认证后按原请求核对且不隐式重提的入口组合义务；P2P/runtime 原决定、pending、receipt 和 lineage 继续消费其既有 Trace 与专业合同。
+##### 功能状态卡：SC-9
+
+- Trace refs: O7-REQ-a15a1b8e-8b7f-4c6a-9cb5-2f949730496c；[SC-9 唯一声明](#sc-entry-009)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[runtime 原决定接收](../../world-runtime/design.md#runtime-controlled-candidate-recovery-receiver)与 [P2P 原 candidate 恢复](../../p2p/design.md#des-p2p-original-candidate-recovery-v1)区分 pending 重审、固定原决定续接和未知结果；SC-9-U1～U5 保留玩家组合判据。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：会话/读取权限/Agent 授权与原请求结果的跨入口状态 DTO、玩家可见下一步及实际查询权限接线未全核清；既有恢复目标不代签全部 hosted 与两模式样例。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
+<a id="sc-entry-010"></a>
+#### SC-10：成功标准与状态
+
+- Trace ID: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5
+- 声明范围：仅声明推荐资产在安装/覆盖既有状态前的真实完整性失败阻断和重新取得后的独立重验义务；SITE-DISCOVERY-004 仍独占页面版本/资产展示，不由本条重发身份。
+##### 功能状态卡：SC-10
+
+- Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 唯一声明](#sc-entry-010)。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[资产校验至使用及首写合同](../../site/design.md#manual-upgrade-first-write)、逐平台完整性负例矩阵已规定缺失/不可验/不匹配停止，以及对象替换重验。
+- 实现状态：未核实
+- 实现与验证依据：叶子或专业局部实现只保持其各自证据范围，未取得本 SC 全部条件的同候选组合证明；§5.1 为验证要求，不是通过记录。
+- 剩余范围：每个实际受支持平台的入口防护/资产校验到使用接线尚未核实；页面 checksum 显示不证明本地字节核对或安装前阻断。
+- 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
+
+
 ## 6. Non-Goals
 
 - 不宣布任何未由当前根 README 与发布证据支持的玩家可用性。

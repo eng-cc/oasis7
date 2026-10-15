@@ -15,9 +15,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 以入口能力、证据边界和失败恢复为单一产品合同；它不新增独立的信息架构或交互状态编排。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家能够选择一个被明确支持的入口，理解该入口当前是可玩、仅观察还是被阻塞，并在同一版本和模式下完成发现、进入、核验、失败恢复与继续游玩。团队只有在同一候选版本的入口、运行恢复、QA 和公开沟通证据共同成立后，才能评估扩大阶段或对外 claim。
@@ -80,12 +81,14 @@ Trace ID: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b
 
 - 功能点：[REQ-ENTRY-CANDIDATE-001](#req-entry-candidate-001)；验收 [AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001)。
 - 适用范围：同候选的两种 primary mode、runtime/P2P 恢复、经济、发行资产及公开口径组合门禁；沿用本条原有阶段和前置条件。
-- 系统设计状态：未核实
-- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)已承接：版本、日期、Release 说明、实际资产与 checksum 以同一候选快照原子更新；失败不混版；同 Trace 五列承接与六列验证限定网站子范围。
 - 实现状态：部分实现
 - 实现与验证依据：候选 bundle 已固定 git commit、runtime/world/governance/evidence refs 并校验文件/目录 hash；release gate 分步骤保留 skipped/dry-run 的 claim 边界。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-candidate-bundle.sh)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-candidate-bundle-smoke.sh)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/release-gate.sh)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，两种 primary mode、恢复、长期经济、全部发行资产和公开 claim 的同候选/同窗口语义 join 尚未核清；bundle存在不是完整发行门禁通过。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：两 primary mode、跨域 QA/经济/恢复及完整 release gate 不由网站下载片段覆盖。不改变本卡固定源码与已取得实现范围。
 
 <a id="ac-entry-candidate-001"></a>
 ### AC-ENTRY-CANDIDATE-001：局部或跨候选证据不能代签整体验收

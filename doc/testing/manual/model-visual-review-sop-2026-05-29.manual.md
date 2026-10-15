@@ -153,7 +153,7 @@
 - 当前 task：回写 PR、实际 CI 与评审记录（Issue 按需）。
 - PR：在 PR 描述或评论里附 screenshot path、review card 摘要和 residual risk。
 - 长期规则：回写 `doc/testing/**`、`doc/world-simulator/**` 或对应模块 PRD/project。
-- 只保留短期样本：可写入 `doc/ui_review_result/**`，但必须在结论稳定后迁回正式模块文档。
+- 一次评审的原始截图、review card 和结论保留原窗口、候选与 verdict，可存于 `doc/ui_review_result/**` 并由实际 PR 引用；后续整改追加新记录，不覆盖原失败。只有可复用的规则、判据或接口变化才回写正式模块文档，不把每次运行摘要迁入长期规范。
 
 ## 最小完成定义
 - 至少一组截图已采集并可打开。

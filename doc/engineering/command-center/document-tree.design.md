@@ -26,9 +26,9 @@
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 三种层级、确定关系与来源 | [DES-CC-TREE-001](#DES-CC-TREE-001) | 文档 owner；产品 README、专业入口及显式配对 | 不推断语义主责或设计完成率 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 版本、覆盖、局部失败和只读边界 | [DES-CC-TREE-002](#DES-CC-TREE-002) | Git / Rust adapter、既有索引 | 不扫描私有库，不访问任意远端 |
-| [AC-CC-016](command-center.prd.md#AC-CC-016) | 定位、往返、恢复与可访问操作 | [DES-CC-TREE-003](#DES-CC-TREE-003) | Solid UI / Tauri 宿主 / QA | 设计交付不证明真实桌面通过 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 三种层级、确定关系与来源；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=三种层级、确定关系与来源 | [DES-CC-TREE-001](#DES-CC-TREE-001) | 文档 owner；产品 README、专业入口及显式配对 | 不推断语义主责或设计完成率 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 版本、覆盖、局部失败和只读边界；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=版本、覆盖、局部失败和只读边界 | [DES-CC-TREE-002](#DES-CC-TREE-002) | Git / Rust adapter、既有索引 | 不扫描私有库，不访问任意远端 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | AC-CC-016：定位、往返、恢复与可访问操作；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=定位、往返、恢复与可访问操作 | [DES-CC-TREE-003](#DES-CC-TREE-003) | Solid UI / Tauri 宿主 / QA | 设计交付不证明真实桌面通过 |
 
 <a id="DES-CC-TREE-001"></a>
 
@@ -126,7 +126,7 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 | --- | --- | --- | --- | --- | --- |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 生命周期基础已有程序回归；树关系反例待实现 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 章节索引并发反例已有程序回归；独立树快照、迁移与完整 corpus 性能未验证 |
-| [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | AC-CC-016：搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
 
 生命周期解析基础已由 [lifecycle_metadata.rs](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs) 和现有来源详情承接：原始声明与规范化类别分开，新增可选字段兼容旧阅读记录；[生命周期回归](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)覆盖附注、全角分隔符、未知原值和错误声明。这不提供文件级树、筛选或真实桌面验收。
 

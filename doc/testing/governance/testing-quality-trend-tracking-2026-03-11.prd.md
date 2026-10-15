@@ -5,6 +5,8 @@
 
 审计轮次: 4
 
+本文维护指标与采样方法。`TASK-TESTING-*`、TQT 编号和首份 baseline 仅定位原始专题及样本，不恢复历史任务或强制所有变更补交趋势材料。一次窗口的原始结果保留其身份与结论，后续报告不覆盖旧窗口；当前执行安排由实际 PR/Task 承载。
+
 ## 1. Executive Summary
 - Problem Statement: `TASK-TESTING-002/003` 已经定义了“该跑什么、证据怎么存”，但 testing 模块仍缺一个长期趋势入口来回答“质量是在变好还是变差”。如果没有趋势维度，发布评审只能看单次结果，无法识别首次通过率下滑、缺陷在阶段内后移或修复速度变慢。
 - Proposed Solution: 建立 testing 质量趋势专题，统一定义 `首次通过率`、`阶段内逃逸率`、`修复时长` 的口径、采集源、红黄绿阈值与基线记录方式，并沉淀首份 baseline。
@@ -20,7 +22,7 @@
   - `producer_system_designer`：需要快速看懂当前质量是“单次通过”还是“靠返工收口”。
   - 模块 owner：需要知道自己的任务是首次通过不足，还是问题逃逸偏高，还是修复过慢。
 - User Scenarios & Frequency:
-  - 模块任务收口后：追加一条样本到趋势台账。
+  - 形成趋势报告时：按明确的统计窗口和采样范围读取已收口任务的实际证据。
   - 阶段收口前：读取近一轮 baseline 判断是否需要补 QA 或降级结论。
   - 缺陷复盘时：按逃逸样本回查问题发现阶段与修复时长。
 - User Stories:
@@ -34,7 +36,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| trend sample 归档 | `sample_id`、模块、任务、证据入口、首次结论、最终结论、发现日期、关闭日期 | 每个收口任务回写一行样本 | `identified -> measured -> baselined` | 按关闭日期倒序 | `qa_engineer` 写，其他角色只读 |
+| trend sample 归档 | `sample_id`、模块、任务、证据入口、首次结论、最终结论、发现日期、关闭日期 | 对选入统计窗口的样本保留一行记录 | `identified -> measured -> baselined` | 按关闭日期倒序 | `qa_engineer` 写，其他角色只读 |
 | 首次通过率 | `first_pass_count / total_samples` | 统计窗口内自动按样本计数 | `unknown -> green/yellow/red` | 仅把 `首次结论=pass` 计为通过 | `qa_engineer` 维护阈值 |
 | 阶段内逃逸率 | `escaped_samples / total_samples` | 统计“问题是否在下游 QA/可用性/复验阶段才被发现” | `unknown -> green/yellow/red` | 样本带 `escape_stage` 即计入逃逸 | `qa_engineer` 与 `producer_system_designer` 联审语义 |
 | 修复时长 | `closed_at - detected_at` | 记录并计算均值/中位数 | `unknown -> green/yellow/red` | 以自然日计，same-day 记为 `0d` | `qa_engineer` 维护 |
@@ -43,7 +45,7 @@
   - AC-1: 新专题文档明确三项指标定义、阈值与采集源。
   - AC-2: `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md` 给出首份 baseline，至少 3 个样本。
 - AC-3: 每个样本都能回溯到已有 evidence 文档、PR、实际 CI 与评审记录（Issue 按需） 或 git history。
-- AC-4: `TASK-TESTING-004` 的完成状态与专题链接记录在 PR、实际 CI 与评审记录（Issue 按需）。
+- AC-4: 保留 `TASK-TESTING-004` 与专题链接作为原始交付来源；后续统计记录在实际 PR、CI 与评审中（Issue 按需），不要求恢复原任务。
 - Non-Goals:
   - 不在本轮实现自动采集脚本或可视化面板。
   - 不把“阶段内逃逸率”直接等同于线上生产逃逸率。
@@ -76,7 +78,7 @@
 - Phased Rollout:
   - MVP (`TQT-1`): 建立专题 PRD / Design / Project 与指标口径。
   - v1.1 (`TQT-2`): 生成首份 baseline，冻结样本字段与阈值。
-  - v2.0 (`TQT-3`): 按周追加样本，形成趋势序列并接入阶段评审。
+  - v2.0 (`TQT-3`): 按选定窗口生成可比较趋势报告，供阶段评审使用；实际频率和安排由当前任务承载。
 - Technical Risks:
   - 风险-1: 当前样本数偏少，指标更适合做 baseline 而非长期统计结论。
   - 风险-2: 不同 evidence 文档对“首次失败”的记法不一致，初期仍依赖 QA 人工判定。

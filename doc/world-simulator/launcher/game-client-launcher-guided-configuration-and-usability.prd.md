@@ -32,6 +32,8 @@
 <a id="launcher-config-draft-truth"></a>
 ### 配置草稿、最近成功画像与恢复
 
+Trace refs: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1, O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676；产品上游为 [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) 的配置阶段/本地成功不得代签世界结果，以及 [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) 的旧上下文不直接复用、恢复后重新验证。本节只接收草稿、确认配置和成功画像子义务，不承担全部会话、凭据注入或世界恢复。
+
 既有 Restore Config 的本地画像是配置输入，不是已运行状态。本节承接 [#4406](https://github.com/eng-cc/oasis7/issues/4406)
 C1/C2 与 L5，细化[本地启动产品要求](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#23-设置与结果边界)，不新增画像系统或自动续跑。
 

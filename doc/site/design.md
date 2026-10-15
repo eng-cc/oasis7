@@ -198,6 +198,16 @@ phase / result / reason / permitted_next_action`。
 [成功提交后的 retention 合同](../engineering/workflow/package-source-security.md#release-upgrade-retention)，
 不能为了腾空间提前删除唯一恢复资产或备份。本节不重复定义 SOURCEPLAN、新鲜度、安装布局或 retention。
 
+
+### 2.1 需求承接与分配表
+
+下表只为既有首写/完整性合同补齐身份与反链，不新增安装机制或平台承诺。页面展示、会话重验与世界恢复仍由原 owner 独立负责。
+
+| 上游 requirement / acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
+| Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
+
 <a id="manual-upgrade-validation"></a>
 ### SC-8 / SC-10 的平台验证映射
 
@@ -218,6 +228,14 @@ phase / result / reason / permitted_next_action`。
 首写边界前后结果；受控本地记录可保留状态摘要，公开结论只保留脱敏关联。QA 逐条记录 pass/fail/blocked/not_run
 及剩余缺口，不从某平台绿色结果外推其他平台。签名/notarization、公开 claim 升阶与真实世界恢复仍消费各自
 专业证据；本节的目标合同不能作为这些能力已交付的证明。
+
+
+### 11.1 验证映射表
+
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | [首写与完整性](#manual-upgrade-first-write) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：compatible / unchanged failure / uncertain write / retrieval and retry；原 test_tier_full，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
+| Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | [首写与完整性](#manual-upgrade-first-write) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：missing / unverifiable / mismatch / replaced candidate / retrieval and retry；原 test_tier_required，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
 
 ## 设计目标
 - 提供 `site` 模块的总体设计入口。

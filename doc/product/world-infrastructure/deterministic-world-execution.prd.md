@@ -25,6 +25,7 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
 - 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。

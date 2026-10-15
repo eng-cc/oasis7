@@ -15,9 +15,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 直接表达贡献信号、审核、失效和补救边界；独立 design 会重复该资格与 claim 分离合同。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 有限预览中的参与者可以通过反馈、测试、建设、文档或其他可验证的协作行为，形成可由团队审核的贡献信号。玩家应能理解：参与和贡献可以被认真对待，但产品不会把进入、游玩、互动或贡献本身表述为自动取得任何权益。
@@ -67,7 +68,7 @@ Trace ID: O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5
 - 功能点：[REQ-ENTRY-PART-001](#req-entry-part-001)；验收 [AC-ENTRY-PART-001](#ac-entry-part-001)。
 - 适用范围：贡献信号从收到、核验到记录/关闭与批准/执行的独立状态；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
-- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 系统设计依据：已核对 [reward pack 的 intake 状态](../../readme/governance/readme-limited-preview-contributor-reward-pack.md#32-scripted-import)和 [ledger 的批准/执行分离](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary)。这些是既有操作合同，不能替代所有玩家入口的状态映射、证据可用性和反馈技术设计；该完整技术范围仍未核实。
 - 实现状态：未核实
 - 实现与验证依据：按 AC 抽样 intake、核验、记录、批准及执行，逐项对账适用治理状态；待取得审核和玩家反馈记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
@@ -92,7 +93,7 @@ Trace ID: O7-REQ-ff67822b-5943-4728-ad4c-795c94fca95a
 - 功能点：[REQ-ENTRY-PART-002](#req-entry-part-002)；验收 [AC-ENTRY-PART-002](#ac-entry-part-002)。
 - 适用范围：重复、跨渠道、重试、撤回、失效及窗口关闭时的来源、去重和处置；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
-- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 系统设计依据：已核对 [ledger 来源/去重字段](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#2-ledger)与[有界 round 导入](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#32-merged-pr-round-scan)。字段存在不证明跨渠道去重、不可变 trace、撤回/失效证据与窗口关闭的完整技术处置；该完整技术范围仍未核实。
 - 实现状态：未核实
 - 实现与验证依据：按 AC 核对跨渠道重复、撤回、失效及窗口关闭负例，检查不可变来源和处置；待取得实际去重/审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。

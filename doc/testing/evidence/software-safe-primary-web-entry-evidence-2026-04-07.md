@@ -1,5 +1,9 @@
 # software_safe 主 Web 入口与 formal gameplay 证据（2026-04-07）
 
+历史记录边界：以下判定、命令、角色交接及“当前/下一步”均属于文中明确的采集窗口；保留原始失败、通过、未执行范围和审计定位，不作为当前规范、进度或持续跟踪义务。当前行动与验收回到[测试入口](../README.md)及对应专业 authority，使用新的候选和证据窗口；后续通过、合入或任务关闭不改写本次运行事实。
+
+2026-04-07 的 blocked、2026-04-08 的 pass 及 2026-06 命名说明保持各自窗口；README/release claim 同步是原任务后续建议，当前 Web 入口以[Viewer 兼容要求](../../world-simulator/viewer/viewer-web-entry-compatibility.prd.md)为准。
+
 审计轮次: 1
 
 ## Meta
