@@ -890,3 +890,7 @@ pub(super) fn retry_private<T>(
 
 #[path = "world_service_task_native_runner_conformance.rs"]
 mod native_runner_conformance;
+
+#[cfg(unix)]
+#[path = "world_service_task_agc02_conformance.rs"]
+mod agc02_conformance;
