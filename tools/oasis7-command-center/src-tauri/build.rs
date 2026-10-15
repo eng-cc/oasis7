@@ -33,6 +33,7 @@ fn main() {
         "open_project",
         "query_view",
         "search_rules",
+        "query_document_inventory",
         "save_decision_draft",
         "save_preference",
         "read_source",

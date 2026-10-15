@@ -152,10 +152,11 @@ Trace refs: O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6；唯一要求声明：[
 - Trace ID: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc
 - 适用范围：本条要求及对应 AC-DWE-004，保留原文入口、前置条件及测试层级。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-version-design)；选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对。
+- 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-version-design)；选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对。 补充局部依据：[builtin 工件身份](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)、[identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)；仅可验证工件子范围，不能替代 canonical block activation 或历史 replay。
 - 实现状态：未核实
 - 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
 - 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
 - 剩余范围：设计方面，选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 intent 的 governing version 必须由其首次进入已 committed、finality-verified 的 canonical execution block 与 manifest activation boundary 决定；客户端 compatibility declaration、提交时间、本地版本或 candidate block 不能选择世界规则。已确认历史按原 block 的 manifest replay，激活证据缺失或冲突时 fail closed。

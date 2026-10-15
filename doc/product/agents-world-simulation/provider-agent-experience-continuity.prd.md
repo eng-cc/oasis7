@@ -65,12 +65,12 @@
 Trace ID: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6
 
 - 功能点：[REQ-AGENT-PARITY-001](#req-agent-parity-001)；适用范围沿本条原条件与 [AC-AGENT-PARITY-001](#ac-agent-parity-001)，不扩大入口或阶段。
-- 系统设计状态：未核实
-- 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“已声明provider组合的证据范围与受限表面”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[声明场景与证据身份](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-scope-evidence)及[受限结论与扩面边界](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-rollout-boundary)承接组合身份、证据不足不扩面和明确下一步。剩余：各入口玩家可读受限/退化呈现及真实组合全范围验证，不能由局部parity设计代签。
 - 实现状态：未核实
 - 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清已声明provider组合的证据范围与受限表面的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 核对日期与基线：2026-10-15；需求审读基线 `4e94163a3dff9ba69f6959b406ca3fcedf8aa097`，局部设计关系为本次文档候选；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 剩余范围：设计：继续核清各入口玩家可读受限/退化表面的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
 
 - 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
 - 验收：AC-AGENT-PARITY-001

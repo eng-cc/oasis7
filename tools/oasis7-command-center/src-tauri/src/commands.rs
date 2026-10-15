@@ -291,3 +291,12 @@ pub async fn open_source_target(host: State<'_, Host>, target: String) -> Result
     })
     .await
 }
+
+#[tauri::command]
+pub async fn query_document_inventory(
+    host: State<'_, Host>,
+    query: oasis7_command_center_core::document_inventory::DocumentInventoryQuery,
+) -> Result<oasis7_command_center_core::document_inventory::DocumentInventoryPage, String> {
+    host.run(move |app| app.core.document_inventory(query).map_err(error))
+        .await
+}

@@ -13,6 +13,8 @@
 - Problem Statement: 保留早期 `ObserverClient` 可配置同步源策略的历史合同，同时防止 Git history 中的实现被误读成当前恢复能力。
 - Proposed Solution: 将网络、DHT 与路径索引回退保留为重新激活时必须满足的历史合同；当前入口以 crate facade 和现行调用链为准。
 - Success Criteria:
+
+### SC-1
   - SC-1: 当前文档不宣称 `PathIndexOnly`、`NetworkThenPathIndex` 或 DHT 组合模式已由 `oasis7_net` 对外暴露；未来重新激活时必须保持错误上下文和一致性边界。
 
 ## 2. User Experience & Functionality
@@ -25,13 +27,29 @@
 | --- | --- | --- | --- | --- | --- |
 | 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
 - Acceptance Criteria:
+
+### AC-1
   - AC-1: 若未来重新激活，定义 `HeadSyncSourceMode` 策略枚举（非 DHT 链路）。
+
+### AC-2
   - AC-2: 若未来重新激活，在 `ObserverClient` 暴露 `sync_heads_with_mode` 与对应报告/结果/循环接口，并由 `oasis7_net` facade 明确导出。
+
+### AC-3
   - AC-3: 历史目标模式：
+
+### AC-4
   - AC-4: `NetworkOnly`
+
+### AC-5
   - AC-5: `PathIndexOnly`
+
+### AC-6
   - AC-6: `NetworkThenPathIndex`
+
+### AC-7
   - AC-7: DHT 组合模式提供 `NetworkWithDhtOnly`、`PathIndexOnly` 与 `NetworkWithDhtThenPathIndex`。
+
+### AC-8
   - AC-8: 只有网络+DHT 链路报错时才允许回退路径索引；若回退也失败，必须保留两个错误的可诊断上下文。
 - Non-Goals:
   - 全局配置中心或动态热更新配置。

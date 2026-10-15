@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "67253c67dfb5df18e655173ac161b972d38bb7449b807df7023c1a81bfdd4872",
+    "content_sha256": "8e8f08265b96061a04c68905e277339726cbb5dc7b0ca79f410688a9da8431a1",
     "current_authority": "doc/readme/prd.md",
     "decision_owner": "liveops_community",
     "disposition": "retain_current_authority",
