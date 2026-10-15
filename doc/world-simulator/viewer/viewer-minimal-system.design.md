@@ -28,3 +28,42 @@
 - 先实现 demo 数据生成 API。
 - 再补 CLI 与持久化测试。
 - 最后把最小运行步骤写进文档入口。
+
+
+## 6. 目标、上游与当前边界
+
+Owner：viewer_engineer；消费者为 demo CLI、离线 Viewer server 与运行手册。本文解决开发者获取可重复回放输入的问题，不承接正式玩家 live、原生客户端或发布验收。原第 5 节是历史演进顺序，不表示当前实现完成状态。
+
+当前代码入口为 `crates/oasis7/src/viewer/demo.rs::generate_viewer_demo`：初始化场景、计划动作、执行队列、调用 `save_to_dir`，再返回 actions/events 摘要。CLI 由 `crates/oasis7/src/bin/oasis7_viewer_demo.rs` 消费；参数缺值、未知场景及生成错误以非零退出反馈。源码存在不是端到端运行通过证据。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Demo 输入与输出](viewer-minimal-system.prd.md#in-scope) | 在有可用 Agent 的演示场景生成确定性快照/事件文件，供离线回放消费；产品适用性：N/A；reason=开发者离线数据生成辅助不定义正式玩家功能承诺；scope=demo CLI 与本地回放数据 | [生成流程](viewer-minimal-system.design.md#demo-flow) | simulator 场景初始化与 persistence；viewer_engineer 维护 CLI | 不覆盖 live streaming、UI 构建及正式发布 |
+
+<a id="demo-flow"></a>
+## 7. 关键流程、状态与持久化
+
+1. 选择场景和输出目录，按最低 Agent ID 计划动作；多地点尝试供电与移动，单地点退化为 transfer。
+2. kernel 执行动作并产生 journal；拒绝事件也是可观察事件，不可写成移动成功。
+3. 持久化由 kernel `save_to_dir` 负责，CLI 只在返回成功后打印摘要。失败时不能由已有单个文件推导完整保存，也不承诺两个文件跨文件原子提交。
+4. 消费者用同一生成目录启动离线 server，确认快照和事件可加载；复跑应使用独立目录保留失败现场。
+
+无 Agent 时 planner 返回空动作；因此“至少一个事件”须以支持的演示场景实际输出验证，不能扩展到任意自定义空场景。持久化格式/回放顺序由 simulator 的快照和 journal 合同拥有，demo 不创建第二套 authority。
+
+## 8. 部署、容量与兼容约束
+
+在本地工作目录运行，输出路径由调用者选择；不自动覆盖他人的运行证据。小规模离线样例不证明高密度世界容量。参数与 `snapshot.json`/`journal.json` 名称保持原合同；场景或持久化 schema 改变时同时复核 server 加载，回滚使用完整原数据对而非混用新旧文件。
+
+## 11. 验证设计
+
+### 11.1 验证映射表
+
+| 上游 requirement | 本设计条款 | 独立 obligation 与适用条件 | 验证方法 / source / scenario / candidate | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Demo 输入与输出](viewer-minimal-system.prd.md#in-scope) | [生成流程](viewer-minimal-system.design.md#demo-flow) | 支持的有Agent演示场景按确定性策略生成可加载的快照/journal；拒绝事件不冒充移动成功 | [测试手册](../../../testing-manual.md)；执行 `cargo test -p oasis7 plan_demo_actions`，再生成默认场景并由 server 读取同目录文件；L1 动作计划及本地离线加载；记录实际 source、scenario、输出目录与 server/UI 构建；使用 Cargo canonical wrapper 约定 | 实际PR/验证记录：planner测试命令/退出码、scenario与生成文件摘要、事件数、server加载日志；声称UI打开时附真实界面证据 | planner单测仅覆盖多地点/单地点分支；不证明空Agent场景事件保证、跨文件原子提交、live或UI发布 |
+
+## 12. 决策、风险与未决范围
+
+保持确定性小样例，而不是引入复杂脚本语言。资源不足可能产生拒绝事件；空 Agent 场景不能套用“至少一个事件”保证。当前文档规范化不重跑 demo、Rust 或 UI，历史 task evidence 保持原验证候选与范围，不由本表升级为已验收。
