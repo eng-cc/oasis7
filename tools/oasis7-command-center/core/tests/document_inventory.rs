@@ -463,3 +463,29 @@ fn multiline_pairing_declarations_are_never_reported_as_complete() {
     assert_eq!(pairs.targets.len(), 1);
     assert!(pairs.issue.as_deref().unwrap().contains("multiline"));
 }
+
+#[test]
+fn pairing_uses_first_field_delimiter_even_when_link_labels_contain_colons() {
+    let (tmp, mut core, query) = fixture();
+    fs::write(tmp.path().join("repo/doc/prd.md"), "# Product\n\n- 配对系统设计: [设计：详情](empty.md)\n- 配对系统设计：[design: details](empty.md)\n").unwrap();
+    core.refresh().unwrap();
+    let page = core.document_inventory(query).unwrap();
+    let pairs = page
+        .files
+        .iter()
+        .find(|f| f.path == "doc/prd.md")
+        .unwrap()
+        .pairings
+        .as_ref()
+        .unwrap();
+    assert_eq!(pairs.targets.len(), 2);
+    assert!(pairs.issue.is_none());
+    assert!(
+        pairs
+            .targets
+            .iter()
+            .all(|edge| edge.resolution == "resolved")
+    );
+    assert_eq!(pairs.targets[0].declaration_line, 3);
+    assert_eq!(pairs.targets[1].declaration_line, 4);
+}

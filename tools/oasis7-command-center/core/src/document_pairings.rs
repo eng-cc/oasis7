@@ -23,8 +23,7 @@ pub(super) fn parse(path: &str, content: &str) -> DocumentPairings {
                     .trim_start()
                     .trim_start_matches("- ")
                     .trim_start_matches("* ");
-                let Some((key, value)) = field.split_once('：').or_else(|| field.split_once(':'))
-                else {
+                let Some((key, value)) = field.split_once(['：', ':']) else {
                     continue;
                 };
                 if ["示例", "例如", "Example", "Examples", "以下是示例", "举例"]
