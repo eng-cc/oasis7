@@ -1431,6 +1431,16 @@
     });
   }
 
+  const previewDetails = document.querySelector("[data-preview-details]");
+  if (previewDetails) {
+    const openPreviewFromHash = () => { if (window.location.hash === "#download") previewDetails.open = true; };
+    openPreviewFromHash();
+    window.addEventListener("hashchange", openPreviewFromHash);
+    document.querySelectorAll('a[href="#download"]').forEach((link) => {
+      link.addEventListener("click", () => { previewDetails.open = true; });
+    });
+  }
+
   bindSectionReveal();
   bindHeroCanvas();
   bindCounters();

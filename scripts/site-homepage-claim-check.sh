@@ -105,7 +105,7 @@ ZH_PATTERNS=(
   "<link rel=\"alternate\" hreflang=\"en\" href=\"https://oasis7.tech/en/\" />"
   "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://oasis7.tech/\" />"
   "data-homepage-claim=\"preview-status\""
-  "状态：limited playable technical preview"
+  "状态：受限可玩技术预览"
   "不是正式玩家发布或公开网页加入"
   "data-homepage-claim=\"indirect-agency\""
   "你可以影响文明，但不能替 Agent 决定每一步。"

@@ -3741,7 +3741,7 @@ body.discovery-page:not(.content-page)::before { display:none; }
 .discovery-page .landing-hero .hero-visual { position:absolute; inset:-18px -20px -18px 22%; width:auto; margin:0; z-index:-1; }
 .discovery-page .landing-hero .hero-visual::before { display:none; }
 .discovery-page .landing-hero .hero-key-art { width:100%; height:100%; min-height:0; margin:0; border:0; border-radius:0; background:none; box-shadow:none; overflow:visible; }
-.discovery-page .landing-hero .hero-key-art img { width:100%; height:100%; min-height:0; object-fit:cover; object-position:65% center; opacity:.94; mask-image:linear-gradient(90deg,transparent,#000 34%),linear-gradient(0deg,transparent,#000 13%,#000 90%,transparent); mask-composite:intersect; }
+.discovery-page .landing-hero .hero-key-art img { width:100%; height:100%; min-height:0; object-fit:cover; object-position:75% center; opacity:.94; mask-image:linear-gradient(90deg,transparent,#000 34%),linear-gradient(0deg,transparent,#000 13%,#000 90%,transparent); mask-composite:intersect; }
 .discovery-page .landing-hero .hero-key-art::after { display:block; position:absolute; inset:0; content:""; background:linear-gradient(90deg,#06110fed,transparent 62%); border:0; }
 .discovery-page .hero h1, html[lang="zh-CN"] .discovery-page .hero h1 { margin:8px 0 12px; font-size:clamp(2rem,3.4vw,3rem); line-height:1.16; text-shadow:0 2px 24px #06110f; }
 .discovery-page .hero .subtitle { font-size:1.02rem; line-height:1.5; margin:8px 0; }
@@ -3864,4 +3864,101 @@ body.discovery-page:not(.content-page)::before { display:none; }
  .discovery-page .hero-entry-note { margin-top:5px; }
  .decision-source { margin-top:4px; }
  .decision-walkthrough { padding-bottom:4px; }
+}
+
+.preview-installation > summary { cursor:pointer; width:fit-content; padding:10px 16px; min-height:44px; border:1px solid #527461; border-radius:3px; color:#c8efda; font-size:.86rem; }
+.preview-installation > summary:focus-visible { outline:2px solid #b4efd2; outline-offset:3px; }
+.preview-installation[open] > summary { margin-bottom:16px; }
+.preview-installation-body { padding-top:8px; }
+.discovery-page .landing-download { padding-block:18px; }
+.discovery-page .landing-download h2 { margin:0 0 6px; font-size:1.25rem; }
+.discovery-page .landing-download .section-intro { margin:4px 0 12px; }
+
+/* Match the board's restrained wordmark, right-aligned navigation and line icons. */
+.discovery-page:not(.content-page) > .topbar .brand { margin-right:auto; font-style:italic; font-weight:500; letter-spacing:-.06em; font-size:1.35rem; }
+.discovery-page:not(.content-page) > .topbar .brand-mark { display:none; }
+.discovery-page:not(.content-page) > .topbar .nav { margin-left:auto; }
+.discovery-page:not(.content-page) > .topbar .nav a { padding:6px 9px; border:0; border-radius:0; background:none; font-size:.76rem; }
+.discovery-page:not(.content-page) > .topbar .nav a.active { color:#c4efda; box-shadow:inset 0 -1px #a1d9ba; }
+.decision-number svg { width:20px; height:20px; }
+.discovery-page .decision-number span { border:0; }
+@media(max-width:760px) {
+ .discovery-page:not(.content-page) > .topbar .nav { margin-left:0; }
+}
+
+.discovery-page .discovery-editorial-grid .section { min-height:0; padding-block:14px; }
+.discovery-editorial-grid .section > .eyebrow { display:none; }
+.discovery-editorial-grid .editorial-synopsis { font-size:.72rem; color:#afc9b9; }
+.discovery-editorial-grid .editorial-synopsis summary { cursor:pointer; padding-block:5px; }
+.discovery-editorial-grid .section > .text-link, .discovery-editorial-grid .empty-records > .text-link, .discovery-editorial-grid .editorial-row > .text-link { background:#b4efd2; color:#10291e; padding:8px 12px; width:fit-content; border-radius:2px; font-size:.76rem; text-decoration:none; }
+.discovery-page .lore-entry, .discovery-page #world-laws, .discovery-page #contribute { display:inline-block; vertical-align:top; width:32%; margin:0; padding:0; border:0; }
+.discovery-page .lore-entry::before, .discovery-page #world-laws::before, .discovery-page #contribute::before { display:none; }
+.discovery-page .lore-entry > details, .discovery-page #world-laws > details, .discovery-page #contribute > details { padding:0; }
+.discovery-page .lore-entry:has(> details[open]), .discovery-page #world-laws:has(> details[open]), .discovery-page #contribute:has(> details[open]) { display:block; width:100%; }
+.discovery-page:not(.content-page) main { padding-bottom:12px; }
+.discovery-page:not(.content-page) .footer { display:flex; align-items:center; justify-content:space-between; gap:20px; padding-block:12px; border-top:1px solid #30483d; font-size:.7rem; }
+.discovery-page:not(.content-page) .footer-links { flex-shrink:0; gap:16px; margin:0; }
+@media(max-width:760px) {
+ .discovery-page .lore-entry, .discovery-page #world-laws, .discovery-page #contribute { display:block; width:100%; }
+ .discovery-page:not(.content-page) .footer { display:block; }
+ .discovery-editorial-grid .editorial-synopsis { font-size:.7rem; }
+}
+
+.discovery-editorial-grid .landing-download { margin:0; padding:14px 0; border:0; }
+.discovery-editorial-grid .landing-download h2 { font-size:1.02rem; margin:0 0 6px; }
+.discovery-editorial-grid .landing-download .section-intro { font-size:.76rem; line-height:1.6; margin:4px 0; }
+.discovery-editorial-grid .preview-installation { order:3; }
+.discovery-editorial-grid .preview-installation > summary { background:#b4efd2; border:0; color:#10291e; width:fit-content; font-size:.76rem; padding:8px 12px; border-radius:2px; }
+.discovery-editorial-grid .landing-download:has([data-preview-details][open]) { grid-column:1 / -1; }
+.discovery-editorial-grid .landing-download:has([data-preview-details][open])::before { display:none; }
+@media(max-width:760px) {
+ .discovery-editorial-grid .landing-download { padding:14px 118px 14px 0; }
+ .discovery-editorial-grid .landing-download:has([data-preview-details][open]) { padding-right:0; }
+}
+@media(min-width:1100px) {
+ .decision-walkthrough { position:relative; }
+ .decision-walkthrough > .eyebrow { position:absolute; top:16px; right:0; margin:0; }
+ .decision-panels .decision-number { position:absolute; top:4px; left:0; }
+ .decision-panels article h4 { margin:0 0 2px 68px; }
+ .decision-panels h4 button { min-height:38px; }
+}
+
+/* Fidelity details measured against the adopted desktop and mobile panels. */
+.discovery-page .hero-direction { color:#b9e8d9; }
+.discovery-page:not(.content-page) main { padding-inline:32px; }
+.discovery-page:not(.content-page) > .topbar { padding-inline:32px; }
+.discovery-page:not(.content-page) > .topbar .brand { font-size:1.65rem; }
+.decision-step-index { display:none; }
+.discovery-editorial-grid .section::before { height:auto; aspect-ratio:2.5 / 1; }
+.discovery-editorial-grid .record-art-label { order:2; z-index:1; margin:-28px 0 12px; padding:4px 6px; background:#05100fe8; color:#c4d8cb; font-size:.65rem; }
+@media(max-width:760px) {
+ .discovery-page:not(.content-page) main, .discovery-page:not(.content-page) > .topbar { padding-inline:25px; }
+ .discovery-page .hero .cta-row { flex-direction:column; align-items:flex-start; gap:7px; }
+ .discovery-page .hero .button.primary { width:58%; min-width:190px; justify-content:center; }
+ .decision-step-index { display:inline; margin-right:7px; font-size:.7rem; font-weight:400; color:#a8c7b5; }
+ .discovery-page .discovery-editorial-grid .section { padding:16px 0; min-height:0; }
+ .discovery-editorial-grid .section::before { position:relative; inset:auto; width:100%; height:auto; aspect-ratio:2.5 / 1; margin:10px 0; }
+ .discovery-editorial-grid .record-art-label { position:relative; margin-top:-36px; min-height:26px; }
+ .discovery-page .discovery-editorial-grid .landing-download:has([data-preview-details][open]) { padding:16px 0; }
+}
+@media(max-width:760px) {
+ .discovery-page .discovery-editorial-grid .section { display:flex; flex-direction:column; }
+ .discovery-page .landing-hero .hero-visual { right:-25px; }
+}
+
+.discovery-page .landing-hero .hero-key-art img { object-position:75% 20%; }
+.discovery-page .hero .button.primary { width:236px; }
+.discovery-page:not(.content-page) .lang-icon-button { width:auto; min-width:56px; border:0; border-radius:0; background:none; padding:8px; font-size:.72rem; color:#c8d9d0; }
+.discovery-page:not(.content-page) > .topbar .nav a { font-size:.82rem; }
+.discovery-editorial-grid .landing-progress::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-civilization-crisis-image2-20260719.webp"); background-position:75% center; }
+.discovery-editorial-grid .portal-preview::before { background-image:linear-gradient(0deg,#06110f00,#06110f33),url("images/hero/asteroid-settlement-planet-20261015.webp"); background-position:95% center; }
+@media(max-width:760px) {
+ .discovery-page .landing-hero .hero-key-art img { object-position:100% 20%; }
+ .discovery-page .hero .button.primary { width:58%; }
+ .discovery-page .landing-hero { padding-bottom:40px; }
+ .discovery-page .hero-telemetry-label { bottom:-18px; max-width:235px; font-size:.45rem; line-height:1.3; white-space:normal; text-align:right; }
+}
+@media(max-width:760px) {
+ .discovery-page .hero-telemetry-label { bottom:-8px; }
+ html[lang="en"] .discovery-page .hero .button.primary { width:70%; min-width:220px; max-width:100%; white-space:nowrap; }
 }
