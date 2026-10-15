@@ -134,7 +134,7 @@ ZH_PATTERNS=(
   "Windows 尚未补齐代码签名，macOS 尚未完成 notarization"
   "checksums 仅用于辅助校验，不替代平台信任链。"
   "data-homepage-claim=\"default-web-entry\""
-  "默认网页验证入口：viewer"
+  "本站不能直接进入游戏，需要先配置本地预览"
   "data-homepage-claim=\"future-platform-boundary\""
   "当前还不是 creator-facing 的 mod / 模块平台。"
   "data-homepage-claim=\"download-boundary\""
@@ -184,7 +184,7 @@ EN_PATTERNS=(
   "Windows is not code-signed yet, macOS is not notarized yet"
   "checksums are only an extra check, not a platform trust chain."
   "data-homepage-claim=\"default-web-entry\""
-  "Default web verification entry: viewer"
+  "This site cannot launch the game; a local preview must be configured"
   "data-homepage-claim=\"future-platform-boundary\""
   "not a creator-facing mod / modules platform yet."
   "data-homepage-claim=\"download-boundary\""
@@ -381,7 +381,10 @@ def check_page(path: Path, language: str, site_root: Path) -> tuple[dict[str, tu
             if landing:
                 landing_sections[node.attrs["id"]] = landing
 
-    required_landing_ids = {"hero", "proof", "world-laws", "world", "download"}
+    archive = [n for n in parser.nodes if n.attrs.get("id") == "world"]
+    if len(archive) != 1 or archive[0].tag != "a" or archive[0].attrs.get("href") != "observations/" or not any(n.tag == "footer" for n in archive[0].ancestors):
+        errors.append(f"{path}: world archive must retain its footer link and legacy anchor")
+    required_landing_ids = {"hero", "proof", "world-laws", "download"}
     missing_landing = sorted(required_landing_ids - landing_sections.keys())
     if missing_landing:
         errors.append(f"{path}: missing landing section classes for: {', '.join(missing_landing)}")
