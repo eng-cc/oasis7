@@ -20,7 +20,7 @@
 - 项目级 PRD 入口: `doc/core/prd.md`
 - 可变项目管理真值: PR、实际 CI 与评审记录（Issue 按需）
 - 文件级索引: `doc/core/prd.index.md`
-- 追踪主键: `PRD-CORE-xxx`
+- core 局部条目标识: `PRD-CORE-xxx`；新增或实质修改的跨层要求按[要求追踪规范](../engineering/doc-governance/cross-layer-requirements-traceability.design.md)复用同一全局 Trace ID，局部标识继续保留。
 - 模块入口总览: `doc/README.md`
 - 测试与发布参考: `testing-manual.md`
 
@@ -86,7 +86,7 @@
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
 | 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 按条款内容与 scope 回到对应 authority；core 词典只汇总 | 相关专业 owner 裁定本域语义，core 同步跨模块引用 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并记录在实际 PR 或按需 Issue | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
-| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 PR、实际 CI 与评审记录（Issue 按需） / role review evidence，接收方确认责任边界，owner 回写正式 PRD 与实际 PR/CI/评审记录（Issue 按需） | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
+| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方在当前 PR/Task 记录实际交接与 CI/评审证据，接收方确认责任边界；owner 仅将受影响的长期要求、验收边界及有来源的状态摘要同步到正式 PRD，详细过程留在 PR/Task | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 记录实际负责人及对应专业职责；需要独立评审时遵循 workflow，不要求额外固定角色卡或文件链 |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
 | 玩家访问模式与跨模块验收 | 产品模式 REQ/AC 引用、PRD-ID、对应模块 owner、模式适用 evidence | 评审时引用[玩家访问模式产品要求](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001)及其[验收](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#ac-entry-mode-001)，再核对相关产品/专业 authority 的输入与 core 验收映射 | `unclassified -> authority-mapped -> evidenced -> reviewed` | 按产品 REQ/AC 确定 primary mode 与产品边界；provider、execution lane 和其他专业约束按各自 authority 核验；core 不维护第二份模式 taxonomy | `producer_system_designer` 负责跨模块验收与追踪，产品/专业 owner 维护各自规则并参与联审 |
@@ -184,7 +184,8 @@
 - 系统性测试手册: `testing-manual.md`
 
 ### 全局术语（Glossary）
-- PRD-ID: 需求追踪主键，连接 PRD、任务、测试与发布证据。
+- PRD-ID: 文档或模块内的既有条目标识，保留其需求、验收与证据定位职责；不替代跨层要求的全局 Trace ID。
+- Trace ID: 同一稳定要求跨产品或专业声明、适用设计与 Task 共用的全局键；只在要求原文声明一次，其他位置引用，具体格式及增量范围以[要求追踪规范](../engineering/doc-governance/cross-layer-requirements-traceability.design.md)为准。关联不表示设计、实现或验收完成。
 - 统一持久大世界 / unified persistent world: oasis7 默认玩家和产品世界模型；环境、network tier 与 `world_id` 是研发/运行时维度，不得被包装成多个玩家世界。
 - required/full: 分层测试的两级核心门禁。
 - Web-first 闭环: 默认 UI 验证路径（agent-browser 优先）。
@@ -217,7 +218,7 @@
   - NFR-CORE-5: core 文档长度仅作编辑参考；按语义与维护成本决定是否拆分，不因超过 1000 行阻断或要求长度豁免。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
-  - NFR-CORE-8: 跨角色证据交接在 PRD / PR、实际 CI 与评审记录（Issue 按需） / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
+  - NFR-CORE-8: 明确开展的跨模块阶段/发布工作，其适用证据交接须可完整追溯到真实要求、实际负责人、候选版本和 PR/Task 中的 CI/评审与原始证据；PRD 保留长期要求及有来源的状态摘要，不复制交接过程，不要求独立 pre-PR role review 文件链。`doc/devlog` 仅作为历史归档入口。
   - NFR-CORE-9: 一轮模块主项目全部收口后 1 个工作日内必须形成下一轮优先级清单。
 - Security & Privacy: core 仅维护结构与治理口径；涉及密钥、签名、隐私数据的要求由对应模块 PRD 细化并执行。
   发布收口文档仅记录工程与玩法证据，不引入额外敏感数据；若引用线上/远程环境信息，需与对应模块 owner 联审后落档。
@@ -260,7 +261,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-CORE-001 | 将 core 固化为项目全局唯一总览入口 | 各模块独立维护无全局入口 | 降低跨模块认知成本并提升评审效率。 |
-| DEC-CORE-002 | 使用 PRD-ID 作为跨文档追踪主键 | 使用任务编号作为唯一主键 | PRD-ID 可跨任务周期稳定复用并支持审计。 |
+| DEC-CORE-002 | 保留既有 PRD-ID 的局部条目与历史追溯职责；新增或实质修改的跨层要求共用规范定义的全局 Trace ID | 使用任务编号作为唯一要求主键，或用局部 PRD-ID 代替全局 Trace ID | 保留原决定中要求身份独立于任务周期的理由；全局声明、引用及增量迁移边界以要求追踪规范为准，不为未触达存量重新发号。 |
 | DEC-CORE-003 | core 文档治理任务默认绑定 `test_tier_required`；跨模块发布结论引用 testing 定义的 required/full 证据 | core 任务直接强制 required/full | 区分治理层与专项回归层，保持口径一致且可执行。 |
 | DEC-CORE-004 | 在 ROUND-006 正式台账落档前，统一将脱离台账的高位 `审计轮次` 回写到 5 | 保留局部 `审计轮次: 6` 作为“专题修订痕迹” | `审计轮次` 的定义是“最近完成的正式审计轮次”，局部修订应通过 `最近更新` 和 devlog 追踪，而不是抬高正式轮次字段。 |
 | DEC-CORE-005 | 将“阶段收口优先级”纳入 core 主 PRD 统一管理，而不是散落在多个模块 project 的状态说明里 | 仅在各模块 project 中维护各自优先级 | 阶段优先级本质是跨模块发布策略，需要由 `producer_system_designer` 在 core 层统一裁剪与仲裁。 |

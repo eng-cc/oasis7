@@ -12,7 +12,7 @@
 - Success Criteria:
   - SC-1: 季度审查节奏明确 `谁/何时/检查什么/如何回写`。
   - SC-2: 至少包含季度审查模板与修复记录模板。
-  - SC-3: `doc/readme/prd.md` 可以据此关闭 `TASK-README-004`。
+  - SC-3: 审查与修复结论可从实际 PR 或已有 Task 追溯；模块 PRD 不维护任务完成态。
   - SC-4: 后续 readme 模块可按该节奏持续执行，而不再临时约定。
 
 ## 2. User Experience & Functionality
@@ -30,7 +30,7 @@
   - PRD-README-CYCLE-003: As a 文档维护者, I want a remediation template, so that drift findings become actionable tasks.
 - Critical User Flows:
   1. `进入季度窗口 -> 执行人工清单 + 自动链接脚本 -> 记录问题`
-  2. `发现问题 -> 生成修复项 -> 回写模块 project / devlog -> 跟踪关闭`
+  2. `发现问题 -> 在实际 PR 或已有 Task 记录修复项 -> 跟踪关闭`
   3. `季度结束 -> 复盘修复结果 -> 形成下季度风险输入`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -42,7 +42,7 @@
   - AC-1: 新专题明确季度节奏、触发条件与角色分工。
   - AC-2: 至少产出一份季度审查模板与一份修复记录模板。
   - AC-3: 模板内置人工巡检项并引用 `scripts/readme-link-check.sh`。
-  - AC-4: `doc/readme/prd.md` 回写完成态与下一任务状态。
+  - AC-4: 实际 PR 或已有 Task 记录本轮结论、修复项与关闭证据；长期文档只同步受影响的规则和入口。
 - Non-Goals:
   - 不在本轮执行真实季度审查。
   - 不引入新的自动化服务。
@@ -69,6 +69,8 @@
 - Security & Privacy: 模板不记录敏感凭据，仅记录路径、问题和结论。
 
 ## 5. Risks & Roadmap
+以下阶段与第 6 节的 `TASK-README-004` / `RQ-1` 标识只保留原建档来源，不恢复排期或据此认定完成；当前执行遵循[开发流程规范](../../engineering/workflow/source-of-truth.md#information-record-placement)。
+
 - Phased Rollout:
   - MVP (`RQ-1`): 建立季度节奏与模板。
   - v1.1 (`RQ-2`): 首轮真实季度审查执行。
@@ -83,7 +85,7 @@
 | --- | --- | --- | --- | --- |
 | PRD-README-CYCLE-001 | `TASK-README-004` / `RQ-1` | `test_tier_required` | 检查季度节奏字段与角色分工 | readme 治理节奏稳定性 |
 | PRD-README-CYCLE-002 | `TASK-README-004` / `RQ-1` | `test_tier_required` | 检查审查模板与输入项引用 | QA / 文档协作一致性 |
-| PRD-README-CYCLE-003 | `TASK-README-004` / `RQ-1` | `test_tier_required` | 检查修复模板字段与 project 回写 | 问题闭环能力 |
+| PRD-README-CYCLE-003 | `TASK-README-004` / `RQ-1` | `test_tier_required` | 检查修复模板字段与实际 PR/已有 Task 的关闭证据 | 问题闭环能力 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
