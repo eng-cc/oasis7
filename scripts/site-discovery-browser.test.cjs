@@ -36,6 +36,10 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
    assert.equal(await p.locator('[data-decision-step]').count(),4);
    assert.equal(await p.locator('button[data-decision-step]').count(),0);
    assert.equal(await p.locator('.editorial-synopsis:visible').count(),2);
+   const entryArt=await p.locator('.discovery-editorial-grid .entry-art').evaluateAll(images=>images.map(img=>{const section=img.closest('section');const art=img.getBoundingClientRect();const heading=section.querySelector('h2').getBoundingClientRect();const copy=section.querySelector('.section-intro, .editorial-row, p:not(.eyebrow)')?.getBoundingClientRect();return {top:art.top,bottom:art.bottom,height:art.height,headingBottom:heading.bottom,copyTop:copy?.top};}));
+   assert.equal(entryArt.length,3);for(const a of entryArt){assert.ok(a.top>=a.headingBottom);assert.ok(a.copyTop>=a.bottom,JSON.stringify(a));}
+   if(width>=1100){assert.ok(Math.max(...entryArt.map(a=>a.top))-Math.min(...entryArt.map(a=>a.top))<1,JSON.stringify(entryArt));assert.ok(Math.max(...entryArt.map(a=>a.height))-Math.min(...entryArt.map(a=>a.height))<1,JSON.stringify(entryArt));}
+
    assert.equal(await p.locator('.discovery-editorial-grid #world').count(),0);
    if(width===390){
     const sizes=await p.evaluate(()=>Object.fromEntries(['.decision-panels article > p:not(.decision-number)','.preview-badge','.hero-entry-note','.hero-telemetry-label'].map(s=>[s,parseFloat(getComputedStyle(document.querySelector(s)).fontSize)])));
@@ -135,7 +139,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   await p.locator('#case-conditions > summary').click();await p.locator('.case-source a[href="#case-conditions"]').click();assert.equal(await p.locator('#case-conditions').getAttribute('open'),'');
   await p.locator('.hero-overview-link').click();await p.locator('.preview-paths a[href="#package-download"]').click();await p.waitForTimeout(700);
   assert.ok(await p.locator('[data-download-platform-button="windows"]').isVisible());const top=await p.locator('#package-download').evaluate(e=>e.getBoundingClientRect().top);assert.ok(top>=-1&&top<250,String(top));
-  assert.equal(await p.locator('meta[name="oasis7-site-build"]').getAttribute('content'),'20261015-visible-results');await c.close();record(locale+' result, separate setup paths and direct mobile platform access');
+  assert.equal(await p.locator('meta[name="oasis7-site-build"]').getAttribute('content'),'20261015-entry-alignment');await c.close();record(locale+' result, separate setup paths and direct mobile platform access');
  }
  {
   const c=await context({viewport:{width:390,height:844}});const p=await c.newPage();await p.goto(origin+'/story/');await p.waitForFunction(()=>document.querySelector('[data-story-reader]').dataset.readerState==='ready');
