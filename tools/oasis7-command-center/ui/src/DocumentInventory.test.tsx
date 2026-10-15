@@ -9,7 +9,7 @@ vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => Stri
 const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
 const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
   fileKey: path, path, title: path === section.path ? '设计文档' : path,
-  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, upstream: null, ...extra,
+  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, upstream: null, identity: null, ...extra,
 });
 const snapshot = (id = 'project', generation = '1'): Snapshot => ({
   project: { id, path: '/repo', head: 'head', branch: 'main', gitCommonDir: '/repo/.git', environment: 'local' },
@@ -176,4 +176,32 @@ it('distinguishes legacy upstream coverage from an empty parsed design header', 
   expect(screen.getByText('本次文件头范围未发现显式上游链接。')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'doc/partial.design.md'}));
   expect(screen.getByText('上游解析不完整：声明中没有可识别的 Markdown 链接')).toBeInTheDocument();
+});
+
+it('shows declared ID collisions without merging files and submits ID search unchanged', async () => {
+  const identity = { raw:'`DUP-123`', declaredId:'DUP-123', declarationLine:3, issue:null, duplicateFiles:1, duplicatePaths:['doc/other.md'] };
+  api.documentInventory.mockResolvedValue(page([file(undefined, {identity}), file('doc/other.md', {identity:{...identity,duplicatePaths:['doc/design.md']}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  expect(screen.getByRole('button', {name:'doc/other.md'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'设计文档'}));
+  expect(screen.getByText(/重复文档 ID：相同 ID 另有 1/)).toBeInTheDocument();
+  expect(screen.getByText(/第 3 行 · 原声明样本/)).toHaveTextContent('`DUP-123`');
+  fireEvent.input(screen.getByRole('textbox', {name:'筛选文档文件'}), {target:{value:'dup-123'}});
+  fireEvent.click(screen.getByRole('button', {name:'应用筛选'}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenLastCalledWith(expect.objectContaining({query:'dup-123',cursor:null})));
+});
+it('distinguishes unparsed, absent, invalid and unread document identities', async () => {
+  const empty = {raw:null,declaredId:null,declarationLine:null,issue:null,duplicateFiles:0,duplicatePaths:[]};
+  api.documentInventory.mockResolvedValue(page([file(),file('doc/absent.md',{identity:empty}),file('doc/invalid.md',{identity:{...empty,raw:'bad id',declarationLine:2,issue:'invalid document ID declaration'}}),file('doc/unread.md',{state:'skipped'})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  fireEvent.click(screen.getByRole('button', {name:'设计文档'}));
+  expect(screen.getByText('旧清单尚未解析文档 ID，请刷新本地事实。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/absent.md'}));
+  expect(screen.getByText('本次文件头范围未发现文档 ID 声明。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/invalid.md'}));
+  expect(screen.getByText(/ID 为空或格式不支持/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/unread.md'}));
+  expect(screen.queryByRole('region', {name:'文档身份声明'})).not.toBeInTheDocument();
 });

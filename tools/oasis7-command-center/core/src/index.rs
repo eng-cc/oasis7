@@ -2,6 +2,8 @@
 mod coverage;
 #[path = "document_fragments.rs"]
 mod document_fragments;
+#[path = "document_identity.rs"]
+mod document_identity;
 #[path = "document_pairings.rs"]
 mod document_pairings;
 #[path = "document_read.rs"]
@@ -171,6 +173,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
             .map_or_else(|| name.to_owned(), |section| section.title.clone());
         file.revision = Some(revision);
         file.bytes = Some(content.len());
+        file.identity = Some(document_identity::parse(&content));
         file.pairings = Some(document_pairings::parse(name, &content, "配对系统设计"));
         if file.kind == "design" {
             file.upstream = Some(document_pairings::parse(name, &content, "上游"));
@@ -184,6 +187,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
     for value in metadata.values_mut().flatten() {
         lifecycle_metadata::validate_indexed(value, &indexed);
     }
+    document_identity::duplicates(&mut inventory_files);
     document_pairings::resolve(&mut inventory_files, &sections, &pairing_contents);
     for file in &mut inventory_files {
         file.lifecycle = metadata.get(&file.path).cloned().flatten();
