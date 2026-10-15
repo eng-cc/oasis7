@@ -29,6 +29,48 @@ fn rejects_content_changes_even_when_head_and_dirty_status_do_not_change() {
         "must not publish content captured before the edit"
     );
 }
+
+#[test]
+fn navigation_entries_survive_body_documents_exhausting_the_byte_budget() {
+    let (tmp, _) = fixture();
+    let root = tmp.path();
+    let entries = [
+        "AGENTS.md",
+        "doc/README.md",
+        "doc/product/README.md",
+        "doc/engineering/README.md",
+        "doc/engineering/command-center/README.md",
+        "skills/oasis7-command-center/references/project-map.md",
+    ];
+    for entry in entries {
+        std::fs::create_dir_all(root.join(entry).parent().unwrap()).unwrap();
+        std::fs::write(root.join(entry), "# Navigation entry\n").unwrap();
+    }
+    // Product bodies used to precede professional README/project-map entries.
+    let body = format!("# Body\n{}", "x".repeat(1024 * 1024 - 7));
+    for index in 0..15 {
+        std::fs::write(root.join(format!("doc/product/body-{index:02}.md")), &body).unwrap();
+    }
+    // Fill the remaining bytes after the previously preferred small sources.
+    let preferred_bytes = "# Product\nOriginal\n".len() + 2 * "# Navigation entry\n".len();
+    std::fs::write(
+        root.join("doc/product/zz-tail.md"),
+        &body[..body.len() - preferred_bytes],
+    )
+    .unwrap();
+    git(root, &["add", "."]).unwrap();
+    git(root, &["commit", "-m", "budget fixture"]).unwrap();
+    let project = super::project(root).unwrap();
+    let (sections, _, coverage, partial) = read(&project).unwrap();
+    assert!(partial);
+    assert!(coverage.contains("total_budget"), "{coverage}");
+    for entry in entries {
+        assert!(
+            sections.iter().any(|section| section.path == entry),
+            "missing {entry}: {coverage}"
+        );
+    }
+}
 #[test]
 fn rejects_tracked_candidate_list_changes_without_a_new_commit() {
     let (tmp, project) = fixture();
