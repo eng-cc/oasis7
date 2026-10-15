@@ -17,13 +17,17 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 已表达区域能力选择、授权漂移和退出的产品合同；独立 design 不增加新的产品信息层级。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
-## 1. 产品承诺
+<a id="1-产品承诺"></a>
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
+## 1. 产品目标与承诺
 
 在完成基础能力后，玩家可以针对可读的区域压力评估并投入有限资源，获得有明确作用域、收益、维护或耗尽边界以及可追溯结果的区域能力。设施不是默认必点税、第一轮教学动作、自由建造或全局治理权。
 
 世界可以在授权创作者和治理流程下扩展新的工业能力；扩展从提案到可用结果始终受同一权威世界、审计和恢复边界约束，不能覆盖既有事实、绕过治理或把技术提交伪装成默认玩家能力。
 
-## 2. 玩家边界与组合关系
+<a id="2-玩家边界与组合关系"></a>
+## 2. 玩家体验边界与组合关系
 
 - 区域设施经历 `发现压力 -> 报价与取舍 -> 明确提交 -> 有限服务 -> 维护、耗尽、恢复或退役` 的可读生命周期；每一阶段说明成本、约束、预期价值、失败和下一步。
 - 设施应在玩家已经理解基础控制权、资源压力和区域 blocker 后提供有限区域 leverage；低价值或不合适的选择必须仍可解释，而不被呈现为必选 buff。
@@ -65,12 +69,23 @@
 <a id="req-wr-gr-001"></a>
 ### REQ-WR-GR-001：区域设施必须形成有界的玩家选择循环
 
+Trace ID: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8
+
+- 系统设计状态：部分覆盖
+- 实现状态：部分实现
+- 系统设计依据：[micro_depot 有限库存生命周期](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md#micro-depot-measured-lifecycle)承接该设施的无预留报价、有限服务、耗尽与回收边界；承接表和验证映射反向关联本要求与 AC-WR-GR-001，不代表全部区域设施已覆盖。
+- 实现与验证依据：已交付 micro_depot v2 的单次 commissioning、有限库存服务、耗尽后 upkeep 拒绝和 destructive reclaim；属于消耗型设施切片。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/simulator/kernel/micro_depot.rs#L485-L612)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/simulator/kernel/micro_depot.rs#L667-L920)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/simulator/kernel/micro_depot.rs#L922-L1013)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/simulator/tests/micro_depot_measured_supply.rs#L90-L151)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：仅 micro_depot single-commission 消耗型设施有本轮代码核对；区域压力仍是 opaque reference，正式压力认证、其他设施与长期补货/epoch 周期不在已证明范围。
+
 - 要求：设施从区域压力发现到报价、明确提交、有限服务、维护/耗尽、恢复或退役，每一步都要让玩家看到成本、取舍、失败边界和下一步；报价不预留资源、容量、资格或排队顺位。
 - 专业权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-GR-001](#ac-wr-gr-001)
 
 <a id="ac-wr-gr-001"></a>
 ### AC-WR-GR-001：设施提交按当前事实接受或原子拒绝
+
+Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8；声明：[REQ-WR-GR-001](#req-wr-gr-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-001
 - 给定：玩家针对一个区域 blocker 查看设施报价，报价包含作用域、资源投入、预期价值、维护和恢复边界。
@@ -80,12 +95,23 @@
 <a id="req-wr-gr-002"></a>
 ### REQ-WR-GR-002：治理扩展的发布与激活必须逐次重验授权
 
+Trace ID: O7-REQ-ce8c31b1-5294-4acd-a65f-2012bcbef911
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清扩展从批准到每次发布/激活的当前授权、capability scope 和世界前置重验，不能以 build/module registry 成功替代。
+
 - 要求：扩展批准只提供受限准入资格；每次发布或激活都必须按当前授权、能力范围和世界前置重新校验，不能以技术构建成功、旧 receipt 或本地缓存替代权威生效。
 - 专业权威：[`player-published-entities.prd.md`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-002](#ac-wr-gr-002)
 
 <a id="ac-wr-gr-002"></a>
 ### AC-WR-GR-002：扩展授权漂移时不静默发布
+
+Trace refs: O7-REQ-ce8c31b1-5294-4acd-a65f-2012bcbef911；声明：[REQ-WR-GR-002](#req-wr-gr-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-002
 - 给定：一个已经获批但尚未完成发布/激活的扩展，随后授权到期、撤销、收缩或能力范围不再匹配。
@@ -95,12 +121,23 @@
 <a id="req-wr-gr-003"></a>
 ### REQ-WR-GR-003：已生效扩展的限制或退出必须保持历史与单一授权
 
+Trace ID: O7-REQ-ac12295b-63a5-4440-9924-deaedafd7965
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清扩展撤销/到期/收缩/替代期间重叠 scope 单一执行权、最小安全动作与历史 receipt 连续性。
+
 - 要求：撤销、到期、收缩或替代必须声明对既有能力的后续结果；历史 receipt 保留，同一重叠范围最多一个可执行授权，限制/退出期间只允许声明范围内的最小安全、价值保全或既有义务动作。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-003](#ac-wr-gr-003)
 
 <a id="ac-wr-gr-003"></a>
 ### AC-WR-GR-003：替代授权原子交接且不重放旧能力
+
+Trace refs: O7-REQ-ac12295b-63a5-4440-9924-deaedafd7965；声明：[REQ-WR-GR-003](#req-wr-gr-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-003
 - 给定：一个已生效扩展进入限制或受控退出，并有新授权覆盖相同范围。
@@ -110,12 +147,23 @@
 <a id="req-wr-gr-004"></a>
 ### REQ-WR-GR-004：区域成立或调整须有能力与边界证据及分层审查
 
+Trace ID: O7-REQ-7de05591-35c1-4d8a-94b2-f64fce61976e
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清空间边界、设施物流服务能力、需求交付、bond 证据及本地/邻区/全局三层审查到成立的原子流程。
+
 - 要求：提案人提供空间锚定边界、持续设施/物流/服务能力、需求/交付、Agent/资源、边界理由及 bond；本地审查、邻区异议和全局宪制/反圈地复核各守其作用范围。批准不预留权力，当前条件失效时不得部分成立。
 - 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-01)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-004](#ac-wr-gr-004)
 
 <a id="ac-wr-gr-004"></a>
 ### AC-WR-GR-004：区域提案不靠自报边界或资本取得生效结果
+
+Trace refs: O7-REQ-7de05591-35c1-4d8a-94b2-f64fce61976e；声明：[REQ-WR-GR-004](#req-wr-gr-004)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-004
 - 给定：成立、合并或调整提案具有完整能力、需求、边界及 bond 证据，另有缺项、自报范围、邻区通行异议或执行前条件漂移的对照样例。
@@ -125,12 +173,23 @@
 <a id="req-wr-gr-005"></a>
 ### REQ-WR-GR-005：成熟区域须双资格约束且权限不外溢
 
+Trace ID: O7-REQ-ee810b69-8c6a-4aca-86e8-ac387c8f8fcb
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清 charter 决策双资格、持续本地贡献与实际控制人上限的组合，及基本通行/独立恢复和宪制保护负例。
+
 - 要求：受限 OC/委托/控制人资格和持续本地贡献共同约束 charter 日常决策；任何一侧都不能凭短时资本、到访或头衔独揽控制，基本通行与独立恢复不受任意排他。受保护事项遵守独立宪制轨道。
 - 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-02)、[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-005](#ac-wr-gr-005)
 
 <a id="ac-wr-gr-005"></a>
 ### AC-WR-GR-005：本地权限不能成为封锁或全局控制
+
+Trace refs: O7-REQ-ee810b69-8c6a-4aca-86e8-ac387c8f8fcb；声明：[REQ-WR-GR-005](#req-wr-gr-005)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-005
 - 给定：成熟区域的本地服务/许可事项，及资本集中、可撤回委托、贡献中断、受保护权利和容量稀缺样例。
@@ -140,12 +199,23 @@
 <a id="req-wr-gr-006"></a>
 ### REQ-WR-GR-006：区域退化分阶段恢复且保留资产历史
 
+Trace ID: O7-REQ-46939a8f-c2a9-4ab6-818c-6bfa4bc83c5c
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清观察→恢复→高影响暂停→解散的分阶段执行，以及 bond/设施/Agent/tenure/合同处理与申诉；不能从单次停机推断。
+
 - 要求：持续退化先观察与恢复、再暂停高影响权限，无法恢复才解散回归未成熟；bond、设施、Agent、tenure、身份、合同和 receipt 依已公开规则处理，提供触发、限制、恢复、异议/申诉和下一步，不因短时失败或技术停机静默清除。
 - 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-03)、[`组织连续性`](organization-continuity-dissolution-and-dormancy-protection.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-006](#ac-wr-gr-006)
 
 <a id="ac-wr-gr-006"></a>
 ### AC-WR-GR-006：暂停、解散与恢复均有可审计下一步
+
+Trace refs: O7-REQ-46939a8f-c2a9-4ab6-818c-6bfa4bc83c5c；声明：[REQ-WR-GR-006](#req-wr-gr-006)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-006
 - 给定：短时服务失败、持续退化、恢复成功与无法恢复四种区域样例。
@@ -155,12 +225,23 @@
 <a id="req-wr-gr-007"></a>
 ### REQ-WR-GR-007：地点 tenure 是可收回的建设权而非主权
 
+Trace ID: O7-REQ-14aa9ab5-d30d-4be2-8c24-610bdc1d1186
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清 tenure 取得/续期/转让/收回的通知、理由、申诉与迁移/回收/补偿合同及资产身份保全。
+
 - 要求：tenure 支持建设、服务和可读的长期规划；取得、维护续期、规则化转让和限定触发的收回均可审计，规划不构成资源/收益保证或永久主权；到期、长期闲置、违约或预定义公共必要性下的收回须通知、理由、申诉及适用迁移/回收/补偿，公共通行和既有资产身份合同不能静默取消。
 - 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-04)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-007](#ac-wr-gr-007)
 
 <a id="ac-wr-gr-007"></a>
 ### AC-WR-GR-007：tenure 转让及收回不没收或封路
+
+Trace refs: O7-REQ-14aa9ab5-d30d-4be2-8c24-610bdc1d1186；声明：[REQ-WR-GR-007](#req-wr-gr-007)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-007
 - 给定：正常取得/续期/转让、建设/服务的长期规划与维护取舍、到期或违约收回、区域退化、竞争和公共必要性样例。
@@ -170,12 +251,23 @@
 <a id="req-wr-gr-008"></a>
 ### REQ-WR-GR-008：服务费与公共 levy 必须区分并有界
 
+Trace ID: O7-REQ-17536c7e-c59a-464a-90e8-c36f0330c8f7
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清服务费与 public levy 的独立授权、目的/上限/期限/公开账目和失效无扣减/无欠费/无通行限制。
+
 - 要求：可排他服务以透明使用/维护费或自愿合同为主；不可排他公共品 levy 仅在 charter 预授权、目的与受益范围、上限、期限、公开账目和复核均有效时成立；无效征费不得扣减、产生欠费或限制资格/通行。
 - 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-05)、[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-008](#ac-wr-gr-008)
 
 <a id="ac-wr-gr-008"></a>
 ### AC-WR-GR-008：失效或越界的 levy 无世界效果
+
+Trace refs: O7-REQ-17536c7e-c59a-464a-90e8-c36f0330c8f7；声明：[REQ-WR-GR-008](#req-wr-gr-008)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-008
 - 给定：可排他服务与不可排他公共品、有效 levy 和未授权/过期/超范围/无账目或审计的征费样例。
@@ -185,12 +277,23 @@
 <a id="req-wr-gr-009"></a>
 ### REQ-WR-GR-009：工业能力必须经过提案、模拟、试点与治理准入
 
+Trace ID: O7-REQ-3d713ab7-87c2-41df-9c89-827859c23313
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清工业提案、同 authority 确定性模拟、有限试点及治理准入四阶段独立状态与失败边界；模块编译不证明准入。
+
 - 要求：玩家或 Agent 提出的配方、材料、设施、模块或等价工业能力，必须依次经过可审计提案、同一权威输入下的确定性模拟、明确 scope/期限/资源上限/退出条件的原型或受限试点，以及有范围的治理准入。任何单一阶段都不取得世界写入权、默认全局可用性、永久许可或治理资格。
 - 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-01)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-009](#ac-wr-gr-009)
 
 <a id="ac-wr-gr-009"></a>
 ### AC-WR-GR-009：提案阶段可区分且失败可恢复
+
+Trace refs: O7-REQ-3d713ab7-87c2-41df-9c89-827859c23313；声明：[REQ-WR-GR-009](#req-wr-gr-009)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-009
 - 给定：一项新工业能力及可审计来源、假设、预期影响、风险、证据缺口和退出条件，另有模拟不一致、试点超出 scope/资源、准入拒绝或授权漂移的对照样例。
@@ -200,12 +303,23 @@
 <a id="req-wr-gr-010"></a>
 ### REQ-WR-GR-010：创作者许可与开放必须有范围、期限和公共边界
 
+Trace ID: O7-REQ-0ec3d72f-51d1-4d64-9824-ebd9365f2d47
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清许可/版税收益的用途/区域/期限/维护、审计争议及到期开放执行，也未核清公共安全和独立资产保护负例。
+
 - 要求：获准工业能力的许可/版税/收益权必须声明适用能力、用途、区域、期限、维护责任、审计/争议和到期或开放条件；超出范围须重新准入，到期或公开条件达成后按规则开放。许可不能永久封锁、覆盖公共安全、玩家独立资产/身份或其他受保护权利。
 - 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-02)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-010](#ac-wr-gr-010)
 
 <a id="ac-wr-gr-010"></a>
 ### AC-WR-GR-010：许可到期或开放不形成永久垄断
+
+Trace refs: O7-REQ-0ec3d72f-51d1-4d64-9824-ebd9365f2d47；声明：[REQ-WR-GR-010](#req-wr-gr-010)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-010
 - 给定：一项具备用途/区域、期限、版税/收益、维护、撤销/争议和开放条件的许可，以及到期、开放条件满足、撤销、scope 收缩或收益/使用事实尚未确认的样例。
@@ -215,12 +329,23 @@
 <a id="req-wr-gr-011"></a>
 ### REQ-WR-GR-011：OC 链上转让与世界资格保持双向隔离
 
+Trace ID: O7-REQ-d27a209c-a703-4443-92d9-acadb9820ed2
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清链上 OC 转让与世界资格双向隔离的跨域消费者矩阵；现有 fee/bridge 不证明 fee execution、世界资格或赎回。
+
 - 要求：OC 的链上转让依链上资产规则处理，不因世界资格额外施加世界内转让限制；这不表示免手续费、免链上结算成本或宣称当前具备完整 fee execution，费用语义由 p2p/执行专业权威决定。锁定 OC、可撤回委托和实际控制人快照只能作为声明范围内的治理输入之一，仅当已声明的区域 charter/地方治理规则要求时，才与持续运营、维护或交付形成的本地贡献共同评估；工业提案/准入、普通市场合同和紧急保供不自动继承该双资格门槛，各依其 active 要求判断。OC 持有/转让不得自动取得世界资源、服务信用、库存、合同、市场信誉、工业作者身份、准入、区域 charter、tenure、levy、竞争、治理或紧急保供资格；反向地，世界内资源、信用、合同和资格也不自动成为 OC、可链上转让资产或可赎回外部价值。
 - 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-011](#ac-wr-gr-011)
 
 <a id="ac-wr-gr-011"></a>
 ### AC-WR-GR-011：OC 转让成功不旁路世界资格
+
+Trace refs: O7-REQ-d27a209c-a703-4443-92d9-acadb9820ed2；声明：[REQ-WR-GR-011](#req-wr-gr-011)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GR-011
 - 给定：OC 链上转让、世界资源/信用/合同、工业准入或区域资格的任一组合，以及一侧成功而另一侧条件不足、重连或重复提交的样例。
@@ -295,3 +420,9 @@
 | [REQ-WR-GR-009](#req-wr-gr-009) / [AC-WR-GR-009](#ac-wr-gr-009) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-01)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 提案→确定性模拟→受限试点→治理准入的阶段差异、成本/权限/失败恢复、无旁路及 exactly-once 负例 | `test_tier_full` |
 | [REQ-WR-GR-010](#req-wr-gr-010) / [AC-WR-GR-010](#ac-wr-gr-010) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-02)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 许可/版税范围、期限、维护、争议、开放/撤销、到期与旧请求不延长/不复制的组合证据 | `test_tier_full` |
 | [REQ-WR-GR-011](#req-wr-gr-011) / [AC-WR-GR-011](#ac-wr-gr-011) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | OC 链上转让与世界资格/记录双向隔离、治理输入与本地贡献边界、单侧失败及重复效果负例 | `test_tier_full` |
+
+## 未决问题与证据边界
+
+区域资格、tenure、levy、扩展准入和许可的专业实现及验证范围尚需逐项核对；本文不自行确定专业数值、治理门槛或运行状态字段，也不以历史设计豁免推出技术覆盖。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

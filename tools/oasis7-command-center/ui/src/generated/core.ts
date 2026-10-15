@@ -22,7 +22,15 @@ export type PrivateInputRef = { bindingId: string, bindingVersion: number, entry
 export type PrivateInputPreview = { source: PrivateInputRef, text: string, attachmentBytes: number, maxInputBytes: number, };
 export type Project = { id: string, path: string, gitCommonDir: string, branch: string | null, head: string, environment: string, };
 export type SourceStatus = { kind: string, state: string, lastAttempt: string | null, lastSuccess: string | null, sourceRevision: string | null, generation: string, coverage: string, error: string | null, };
-export type DocumentLifecycle = { status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
+export type DocumentLifecycle = {
+/**
+ * Original declaration, including code delimiters and notes.
+ */
+rawStatus?: string, category?: string,
+/**
+ * Compatibility projection used by older clients; not a normalized category.
+ */
+status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };

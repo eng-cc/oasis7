@@ -1,5 +1,9 @@
 # Public Testnet Local Observer Contract Sync (2026-05-22)
 
+证据窗口边界：本文的 `current`、`live`、`fresh`、lane verdict 和后续建议仅指文中记录的采集窗口，不证明当前端点可用、节点健康、发布 readiness 或持续任务义务。当前部署/恢复以[governed bootstrap runbook](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md)为准，当前 readiness 以[formal network runbook](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)及新采集的同窗证据裁决；保留本次失败、通过与未验证范围，不以较晚结果覆盖。
+
+以下 `seed-from-remote`、目录复制和 reset 是 2026-05 的原操作记录，不是当前恢复方法。现行 runbook 禁止直接复制运行中 validator 目录，要求受验证的 signed V2 checkpoint recovery；本页保留原失败与进展供审计。
+
 审计轮次: 2
 
 ## Summary

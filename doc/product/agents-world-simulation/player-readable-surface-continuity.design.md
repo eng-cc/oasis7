@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：稳定锚点和连接状态共同表达阅读与恢复体验；范围：响应式、文本和行动反馈表面；风险：表现恢复不能代签权限或世界结果；映射：[目标与设计命题](#1-稳定阅读锚点)、[代表性体验流程](#4-连接状态)
+
 - 配对产品 PRD：[`doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md`](player-readable-surface-continuity.prd.md)
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
@@ -73,7 +75,7 @@
 1. 玩家在当前身份和目标上查看检查结果；检查无法确认权威条件时，停在不可确认或阻塞状态。
 2. 检查结果说明当前共享资格条件、主要成本和缺项；玩家可修正、等待或选择提交。显示“当前条件允许提交”不表示已接受或成功，也不保留未来权限与资源。
 3. 真实提交重新使用当前权威条件判断；检查后身份绑定、权限或世界条件变化时，解释新的拒绝或重新检查路径，不能静默沿用旧资格。
-4. 已受理但结果尚未确认时继续显示待决；只有对应权威结果确认后显示执行或结算结果。断连和重新检查不覆盖原请求结果。
+4. 已受理且适用权威状态确认尚未提交时显示已确认未生效的待决；无法确认是否已提交时显示结果未知、待核对，不能因缺少回执显示确定未生效。先恢复当前读取资格并查询原请求，查询受阻保持未知；只有对应权威结果确认后显示执行或结算结果。断连和重新检查不覆盖原请求结果。
 
 这一顺序减少无效提交，同时保留世界持续变化带来的风险。具体检查范围与资格机制由[专业系统设计](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#collect-data-preflight-consistency)决定；产品层不冻结协议、nonce、错误码或查询频率。
 
@@ -96,8 +98,8 @@ This design delegates product requirements and acceptance semantics to its paire
 
 | PRD requirement | PRD acceptance |
 | --- | --- |
-| [REQ-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#req-agent-surface-001) | [AC-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#ac-agent-surface-001) |
-| [REQ-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#req-agent-surface-002) | [AC-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#ac-agent-surface-002) |
-| [REQ-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#req-agent-surface-003) | [AC-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#ac-agent-surface-003) |
-| [REQ-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#req-agent-surface-004) | [AC-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#ac-agent-surface-004) |
-| [REQ-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#req-agent-surface-005) | [AC-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#ac-agent-surface-005) |
+| Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；[REQ-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#req-agent-surface-001) | [AC-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#ac-agent-surface-001) |
+| Trace refs: O7-REQ-d7081137-94a9-4524-b08a-fc3fbfcb9f64；[REQ-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#req-agent-surface-002) | [AC-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#ac-agent-surface-002) |
+| Trace refs: O7-REQ-41b03765-cccf-4a1f-814c-7b498dc975f6；[REQ-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#req-agent-surface-003) | [AC-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#ac-agent-surface-003) |
+| Trace refs: O7-REQ-e3a70494-b3f3-4220-a654-6c9f07cdb8a4；[REQ-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#req-agent-surface-004) | [AC-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#ac-agent-surface-004) |
+| Trace refs: O7-REQ-e393156d-2326-4d75-a0cb-ffba6ed74e5d；[REQ-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#req-agent-surface-005) | [AC-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#ac-agent-surface-005) |

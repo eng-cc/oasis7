@@ -132,12 +132,24 @@
 <a id="req-agc-entry-001"></a>
 #### REQ-AGC-ENTRY-001：同世界逐账号首次控制身份与恢复
 
+- 产品承接范围：[REQ-ENTRY-MODE-001](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001) 的逐 primary-mode 入口/证据区分，以及 [REQ-ENTRY-MODE-002](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-002) 的身份/会话失败分类与真实恢复路径。
+
+Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270
+
+本条只承接首次注册、已绑定账号返回及其 blocked/未知情境；逐账号注册与绑定的具体义务仍由本专业要求定义，不由产品模式要求推导所有账号均可准入。
+
 - 性质与范围：后继目标；承接 PRD-GAME-011F / AC-13 及[首次绑定与经济认领的区分](#player-session-first-agent-entry)，不表示当前入口已支持多账号。
 - 要求：上述三种情境均有明确的合法路径或实际 blocker；新账号无需借用已有 claimer 完成自身注册，原账号不能以重连重新获得首次资格。注册不创建经济 claim，不替代 OC 领取或 owner/control grant。
 - 验收：[AC-AGC-ENTRY-001](#ac-agc-entry-001)；系统承接：[DES-CLAIM-ENTRY-001](gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)。
 
 <a id="ac-agc-entry-001"></a>
 #### AC-AGC-ENTRY-001：第二位玩家进入与原账号返回
+
+- 产品承接范围：[REQ-ENTRY-MODE-001](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001) 的逐 primary-mode 入口/证据区分，以及 [REQ-ENTRY-MODE-002](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-002) 的身份/会话失败分类与真实恢复路径。
+
+Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264, O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270
+
+本条只承接首次注册、已绑定账号返回及其 blocked/未知情境；逐账号注册与绑定的具体义务仍由本专业要求定义，不由产品模式要求推导所有账号均可准入。
 
 - 给定：固定候选与同一已合法创建世界，账号 A 已有绑定与成果，账号 B 已认证且获准进入但没有 claimer；另保留空世界首账号场景。
 - 当：B 通过正式入口显式注册/绑定，A 断线后返回；分别重复原请求、丢失 ACK、重启恢复，以及尝试使用对方 Agent 或不匹配身份。

@@ -8,4 +8,4 @@ The user explicitly approved at most ten client calls and 240 seconds. The guard
 
 Canonical Stop at height 62 and delegation revocation at 63 succeeded. The host exited and its owned realm, keys, private goals and operation cache were removed. Raw context/quote outputs remain excluded from this public record and were removed locally after hash collection. Model fees are unknown; no paid external Runtime or production deployment was used.
 
-At the tested source, required-gate, Rust baseline/required tests, all three document platforms and m1/m4/m5 WASM determinism passed. Subsequent evidence/document changes require their own current-head CI. Source/build/Skill hashes and trace response hashes preserve the actual tested identity; no new runtime claim is derived from a documentation commit.
+Delivery, ordinary test failures/repairs, integration and CI history are archived in [the original delivery PR](https://github.com/eng-cc/oasis7/pull/4650#issuecomment-6162408442). They do not change this run's actual source/build/Skill, verdict, budget, oracle or cleanup facts. No current delivery obligation is maintained in this historical run report.

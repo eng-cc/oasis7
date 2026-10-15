@@ -17,6 +17,8 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义普通治理、宪制轨道、拒绝和可读结果的制度边界；投票与流程交互仍由专业 authority 决定。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
 ## 1. 产品目标
 
 玩家和组织可以在同一个持续、可审计的世界中共同决定有限的运行事项，而不能把持有、付费、组织章程、普通投票、局部多数或历史声望扩展为无界世界主权。
@@ -109,12 +111,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-001"></a>
 ### REQ-WR-GCB-001：普通治理只处理白名单事项
 
+Trace ID: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[gameplay-war-politics-mvp-baseline.design / des-war-politics-002](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002)。已承接：普通治理白名单内的参数与提案/投票预览。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：既有玩法设计只承接普通提案白名单部分；组合提案、紧急/升级旁路的原子拒绝或路由与当前授权执行链未完整核验。
+
 - 要求：普通提案必须在提交时声明类别、目标、范围和授权来源；不匹配白名单或触及保护边界的事项必须原子拒绝或明确路由，不得以紧急、技术升级、复合提案或先行实现产生部分效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GCB-001](#ac-wr-gcb-001)
 
 <a id="ac-wr-gcb-001"></a>
 ### AC-WR-GCB-001：越界事项拒绝且不占用世界资源
+
+Trace refs: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b；声明：[REQ-WR-GCB-001](#req-wr-gcb-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-001
 - 给定：一个普通治理提交，分别覆盖白名单内政策/财库/既有 charter 日常事项和触及独立资产、安全 finality 或治理自身边界的事项。
@@ -124,12 +137,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-002"></a>
 ### REQ-WR-GCB-002：宪制变更必须满足独立条件才生效
 
+Trace ID: O7-REQ-79b6687e-3b8c-42a3-a266-df4d191fec06
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清独立宪制变更的影响说明、延迟复核、独立确认、审计/申诉全部条件及缺项拒绝；普通 proposal 不代替。
+
 - 要求：改变非保护性宪制规则的事项必须同时具备影响说明、延迟/复核窗口、适用的独立确认、审计、申诉和连续 receipt；缺少任一条件时保持待决或拒绝。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GCB-002](#ac-wr-gcb-002)
 
 <a id="ac-wr-gcb-002"></a>
 ### AC-WR-GCB-002：条件缺失不产生部分宪制效果
+
+Trace refs: O7-REQ-79b6687e-3b8c-42a3-a266-df4d191fec06；声明：[REQ-WR-GCB-002](#req-wr-gcb-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-002
 - 给定：一项会改变宪制规则但不直接改写保护底线的提案。
@@ -139,12 +163,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-003"></a>
 ### REQ-WR-GCB-003：已通过事项执行时必须重新校验并只生效一次
 
+Trace ID: O7-REQ-4f6597ff-8e34-4d12-bb60-060df0e09595
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清已通过事项在执行点的当前授权/范围/前置重验及跨重试单次世界效果；治理数据类型不证明所有执行路径。
+
 - 要求：普通事项通过只取得有限执行资格；执行时必须重新校验当前授权、范围、前置条件和反滥用边界，同一事项最多产生一个 receipt 支持的世界效果。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GCB-003](#ac-wr-gcb-003)
 
 <a id="ac-wr-gcb-003"></a>
 ### AC-WR-GCB-003：授权漂移与重试不能扩大或重复执行
+
+Trace refs: O7-REQ-4f6597ff-8e34-4d12-bb60-060df0e09595；声明：[REQ-WR-GCB-003](#req-wr-gcb-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-003
 - 给定：一项已通过但尚未执行的普通事项，随后发生授权撤销/收缩、范围变化、并发提交或重连重试。
@@ -154,12 +189,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-004"></a>
 ### REQ-WR-GCB-004：治理主体聚合与控制权公平必须可审计
 
+Trace ID: O7-REQ-b584b2ab-bc38-43a1-a8fd-1b89dc3d20cd
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清 authenticated account、managed signer、external wallet 的主体聚合、控制人上限、challenge→merge/revocation→计票纠正→appeal 完整链。
+
 - 要求：经验证游戏账户聚合其已批准的玩家身份、managed signer 与 external wallet bindings 作为一个治理主体；线性锁定 OC、明确范围内可撤销委托与按实际控制人聚合后的影响上限共同防止账户/组织拆分、重复绑定或循环转移放大普通治理影响。普通假名得到保留，公开审计只暴露必要的委托关系、最终计票/结果与纠错因果；重复主体 challenge 必须有 review、merge 或 revocation、计票 correction 与 appeal，并保留原历史 receipt。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GCB-004](#ac-wr-gcb-004)
 
 <a id="ac-wr-gcb-004"></a>
 ### AC-WR-GCB-004：重复主体不得扩大影响且纠错保留历史
+
+Trace refs: O7-REQ-b584b2ab-bc38-43a1-a8fd-1b89dc3d20cd；声明：[REQ-WR-GCB-004](#req-wr-gcb-004)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-004
 - 给定：一个账户同时声明多个已批准绑定，或多个账户/组织通过拆分、委托、循环转移形成同一实际控制关系，并出现重复主体 challenge。
@@ -169,12 +215,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-005"></a>
 ### REQ-WR-GCB-005：外部 OC 转让不得旁路游戏内治理权边界
 
+Trace ID: O7-REQ-4b64b7c5-9819-4932-a1ad-3cdb09fa82e5
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清 OC 锁定/snapshot/解绑与链上转让并发、截止后不能改票/双投；quota bridge 的存在不证明治理资格隔离。
+
 - 要求：外部 OC 可转让，但持有、转入或转出不自动取得或保留游戏内普通治理权、高影响资格、区域权利、世界资产或行动结果；游戏内治理权只来自事项范围内可审计的锁定、snapshot 与退出/解除绑定。有效窗口后的转让或解除绑定不得追溯改票、双投或同时行使同一权利；既有 operator-managed 单向 `OC -> LetAI Run quota` 桥保持非治理、非赎回，额度、`token_key` 与服务消费不得影响治理资格。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GCB-005](#ac-wr-gcb-005)
 
 <a id="ac-wr-gcb-005"></a>
 ### AC-WR-GCB-005：OC 转让、治理快照与额度桥保持隔离
+
+Trace refs: O7-REQ-4b64b7c5-9819-4932-a1ad-3cdb09fa82e5；声明：[REQ-WR-GCB-005](#req-wr-gcb-005)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-005
 - 给定：一次 OC 外部转让、一个已进入有效窗口的事项，以及一条额度桥绑定或服务消费记录。
@@ -184,12 +241,23 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 <a id="req-wr-gcb-006"></a>
 ### REQ-WR-GCB-006：高影响保护动作必须有界、可审计且可复核
 
+Trace ID: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：未核清冻结/否决/降权/惩罚逐类动作的授权证据、期限、重复效果、恢复复核/申诉和失败结果；局部 emergency veto 不代签全部。
+
 - 要求：冻结、否决、降权、惩罚或其他高影响保护动作只能在专业合同声明的授权、理由、证据、作用范围和有效期限内发生，并且必须保留可审计 receipt、恢复/复核/申诉路径与明确的失败结果。紧急动作不得扩大普通治理白名单、改写已确认历史或取消申诉；同一证据或请求至多产生一个世界效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GCB-006](#ac-wr-gcb-006)
 
 <a id="ac-wr-gcb-006"></a>
 ### AC-WR-GCB-006：紧急高影响动作不绕过治理且保留唯一复核路径
+
+Trace refs: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8；声明：[REQ-WR-GCB-006](#req-wr-gcb-006)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-GCB-006
 - 给定：一项有范围和期限的高影响保护动作，以及一项证据不足、越权、重复请求或需要复核/申诉的对照样例。
@@ -251,3 +319,9 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 | [REQ-WR-GCB-004](#req-wr-gcb-004) / [AC-WR-GCB-004](#ac-wr-gcb-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 治理主体聚合、锁定/委托/控制人影响上限、最小数据公开审计、重复主体 review/merge/revocation/correction/appeal 与历史 receipt 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GCB-005](#req-wr-gcb-005) / [AC-WR-GCB-005](#ac-wr-gcb-005) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | OC 外部转让与游戏内治理权的锁定/snapshot/退出隔离、不可追溯/不可双投与单向非治理 quota bridge 负例的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GCB-006](#req-wr-gcb-006) / [AC-WR-GCB-006](#ac-wr-gcb-006) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 高影响保护动作的授权、理由、证据、范围、期限、唯一 receipt、恢复/复核/申诉与紧急防绕过产品边界；参数、状态机和执行证据仍由专业 authority 拥有 | `test_tier_full` |
+
+## 未决问题与证据边界
+
+普通事项执行、宪制独立轨道与紧急保护的适用专业合同及同候选组合证据须分别核对；迁移 crosswalk 仅保留语义去向，不能替代治理权限或发行验收。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

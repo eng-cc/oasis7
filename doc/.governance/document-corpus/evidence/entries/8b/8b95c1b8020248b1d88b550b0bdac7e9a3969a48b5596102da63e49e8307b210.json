@@ -3,7 +3,7 @@
     "authority": "doc/p2p/node/node-triad-operations-observability.prd.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_provenance_only_not_current_finality_security_network_health_ux_or_readiness",
-    "content_sha256": "6ceaa532f7de081f6ad8eae6cb1df4772a6a686ad04165d5f19f0322fd34ec8e",
+    "content_sha256": "92b13269460a36a8c55a669180be454cea8c2d691f1711267a80b8a565b455ff",
     "disposition": "retain",
     "domain_owner": "blockchain_ops_engineer",
     "evidence_window": "2026-04-to-2026-07-p2p-transition",

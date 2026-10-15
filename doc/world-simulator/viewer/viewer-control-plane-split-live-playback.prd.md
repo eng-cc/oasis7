@@ -170,6 +170,15 @@ operation_digest = h_v1(
 <a id="viewer-infrastructure-readback-contract"></a>
 ### Infrastructure result readback receiver
 
+本 receiver 只承接以下产品义务的 Viewer 授权读投影，不取得 runtime、共识或玩法裁定权：
+
+- Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405；[REQ-DWE-002](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-002)：区分尚无效果待决与已提交结果，恢复后仅呈现真实处置；不以 ACK、重连或本地样本代替世界效果。
+- Trace refs: O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b；[REQ-DCS-005](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005)：呈现服务等级、受影响操作、最后可信边界、blocker 与真实下一步；不由 Viewer 自行开放写入。
+- Trace refs: O7-REQ-4792541c-aaa4-4ac1-9a2d-374df44eba6a；[SC-9](../../product/world-infrastructure/prd.md#sc-infra-009)：按既有八格与 specimens 投影同源结果；读取故障不改变世界效果、W 或历史，玩法 W/window 仍由原 authority 裁定。
+- Trace refs: O7-REQ-2b7cfef9-d917-46ea-a3a9-e3a4fb96d730；[SC-10](../../product/world-infrastructure/prd.md#sc-infra-010)：读面保持目标世界及 intent/receipt/result 的身份边界，不把 local 结果表述为 global；不替代 runtime 身份校验。
+
+这些精确产品关系不证明任一要求已完整设计、实现或验证；完整同候选的专业与消费者证据仍按下述 receiver 合同独立判定。
+
 - 基础设施结果由既有 authority 提供；Viewer 只消费同 candidate、world identity、root/revision、child/direct-parent receipt 与 disposition 的授权只读投影。按 [QA source/scene method](../../testing/prd.md#qa-infrastructure-source-scene-method) 和 [Harness consumer matrix](../llm/continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix) 核对，连接成功、ACK、queued/accepted、本地 snapshot 或 debug 样本不能替代 finality、completion 或世界效果。
 - freshness 必须关联同证据窗口的权威 logical position/source/readback；browser polling、`logicalTime`/`eventSeq` 单独不能证明 fresh result。pending、read outage、rejected、stale、timeout/expiry 保持 no-new-effect；错误与恢复入口仅呈现已授权 disposition，不暴露私有 prompt/trace。fresh recovery、retry/replay 须与原 history/receipt 关联，不能隐藏重提交或增加第二次 effect。
 - SC9 投影须消费 [QA scene families](../../testing/prd.md#qa-infrastructure-scene-families) 的全部八格及 authority 格内 root-absent pre-finality/root-present post-root-pre-child 两个 specimens；quantities/buckets/window/lease/W/progression/next_action/next_recheck 与 Runtime/API/Agent 的同源 oracle 一致。read outage 只改变观察，不能重置 W/history；canonical gameplay interruption 才按其规则改变它们。

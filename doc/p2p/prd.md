@@ -7,6 +7,13 @@ Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 so
 <a id="p2p-authority-profiles"></a>
 ### 版本化提交权威与同世界连续性（目标）
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[REQ-DCS-001](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-001)：仅合法 profile 的证明与持久条件产生权威历史。
+- Trace refs: O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46；[REQ-DCS-004](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-004)：BFT profile 的证书与验证者集合边界。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 正式世界按创世或已提交升级规则合法激活的 authority profile 验证提交证明，不能把兼容单签、threshold-1 或 stake-threshold prototype 原地改名为正式权威。
 
 | Profile | 提交决定与信任边界 | 激活与验收 |
@@ -18,6 +25,14 @@ Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 so
 
 <a id="p2p-single-authority-durable-commit"></a>
 ### 单权威正式提交与恢复闸门（目标）
+
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[REQ-DCS-001](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-001)：正式提交前的唯一追加权、证明与持久条件。
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：同世界恢复链及已确认结果连续性。
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)：共同提交与失败不产生部分世界效果。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
 
 - **唯一追加权**：最终日志/存储原子校验合法 writer epoch、预期 parent/head 与追加顺序；signer 仅对合法 epoch 且达到提交条件的记录签发证明；完整 prepare 必须先持久确认，正式决定/证明生成后还须跨故障域持久确认才成为可对外认可的 committed 证明。本机进程锁与 `SingleWriterReplicationGuard` 的单调校验不足以隔离旧写者。恢复/人工切换先隔离旧 signer 与旧存储追加权，再从合法 head 推进授权 epoch；隔离无法证明时保持停写。
 - **持久性先于 committed 回应**：初期故障模型为单主机或单存储故障域失效后已确认提交不丢失。回应前本机及独立故障域持久保存同一完整提交记录、正式提交决定/证明、head/epoch、重放输入与结果、幂等身份和引用版本/工件。独立副本未确认时暂停 committed 确认，异步快照不能替代此条件；多个独立故障域同时毁损不在该保证内。
@@ -41,6 +56,13 @@ epoch 并激活唯一后继；恢复 issuer 不获任意业务或 BFT 回退权�
 <a id="p2p-authority-handoff"></a>
 ### 单权威到 BFT 的 H/H+1 交接（目标）
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[REQ-DCS-001](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-001)：同世界合法 profile 的唯一历史与不可双写。
+- Trace refs: O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46；[REQ-DCS-004](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-004)：交接后的 BFT 证明条件；不由交接计划代替证书。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 先接入验证固定身份、历史 profile、重执行和 state root 的只读节点；它们尚无写权/投票权。BFT 完成独立验证者重执行、持久证书、round/锁定/超时、重启、分区和集合转换后，通过计划停写窗口交接：
 
 1. 排空在途提交并保留 pending 原请求身份；新集合接受 H−1 的 checkpoint/状态根并持久保存切换材料。
@@ -54,12 +76,25 @@ H 正式提交前可以取消计划；H 一旦按旧 profile 正式提交，接�
 <a id="p2p-ordered-execution"></a>
 ### 有序动作与执行绑定
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)：同一有序输入、父状态与版本的执行绑定及错误原子拒绝。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 admission 身份/认证、非零 identity、payload/queue 上限；同一确定有序序列贯穿 action_root、proposal/commit、execution context；下一 committed height 才可执行；decode/root/journal/proof mismatch 阻断并显式失败或 requeue。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
 <a id="p2p-receipt-finality-boundary"></a>
 ### 执行 receipt 与最终性
+
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)：活动验证者重执行与结果绑定。
+- Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；[REQ-DCS-001](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-001)：receipt 不替代适用正式提交证明。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
 
 receipt 不是 authority commit proof；`bft` 下活动 validator 在投票前按同一 parent/manifest/动作重执行并核对 action/execution/event/state roots。工件/fault/root 错误拒绝；旧 threshold-1 TickCertificate 仅兼容诊断，不能推进 committed/replication/checkpoint/light-final。
 
@@ -68,12 +103,24 @@ receipt 不是 authority commit proof；`bft` 下活动 validator 在投票前�
 <a id="p2p-replication-recovery"></a>
 ### 复制和权威恢复
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：同世界恢复中 head、checkpoint、journal 与 root 连续，失败保持隔离；有界存储取回仅供应材料，不提升权威。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 同 world 单调 head；writer epoch/sequence 单调且切换从1开始；鉴权/hash/写入失败不污染 guard；权威恢复 root/journal/checkpoint/proof 不匹配停止。严格 DHT fetch 与 root storage-challenge 的有界 availability fallback 是不同调用合同。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
 <a id="p2p-target-bft"></a>
 ### 目标 BFT 证书闸门
+
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46；[REQ-DCS-004](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-004)：活动验证者、阈值、round 与证书失败边界。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
 
 目标 Propose→Prevote→Precommit→verified >2/3 active stake certificate；world/height/round/phase/roots/set 与去重签名绑定；锁定/解锁、anti-double-sign、timeout/new-round、set transition、partition/heal/restart 都须验证。当前 prototype 缺 QC/round/复验，不是当前能力。
 
@@ -82,6 +129,13 @@ receipt 不是 authority commit proof；`bft` 下活动 validator 在投票前�
 <a id="p2p-target-recovery-trust-chain"></a>
 ### 目标同世界恢复链
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)：逐环验证同世界恢复材料，不以可读材料代替恢复。
+- Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3；[REQ-DCS-003](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)：pruning 前的可重建及冗余 archive 条件。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 固定 world/chain/genesis 身份→各高度合法 profile/epoch/manifest 激活链→verified committed checkpoint/header+authority transition→hash-bound snapshot→canonical committed replay→verified state root→serve/vote；任何 identity/signature/continuity/hash/replay/root mismatch 阻断；prune 前证明可重建及冗余 archive。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
@@ -89,12 +143,25 @@ receipt 不是 authority commit proof；`bft` 下活动 validator 在投票前�
 <a id="p2p-target-role-isolation"></a>
 ### 目标角色与权威隔离
 
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3；[REQ-DCS-003](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)：验证者与公开服务权限隔离；服务材料不授予共识权威。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
+
 world-state registry 的有效 membership/stake/signer 是 validator 投票真值；受保护 validator 与公开 sentry/relay/full/state-sync/archive/RPC/proof 服务隔离；服务只供应可验证材料。公网 IP 不是通用参与前提；validator 治理准入与服务本地 role/reachability policy 分开。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
 <a id="p2p-service-gate"></a>
 ### 目标恢复与重新服务
+
+本专业条款承接以下产品义务的适用部分，保留原文技术责任与未证明范围：
+
+- Trace refs: O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b；[REQ-DCS-005](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005)：只读、可服务、陈旧及隔离转换的追加闸门。
+- Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405；[REQ-DWE-002](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-002)：已知无效果待决在恢复后按当前条件重审；消费者字段仍由外部 authority 拥有。
+
+上述关系不表示产品全部义务已覆盖、实现或验收；本条工程前置、目标协议及外部依赖仍按原文区分。
 
 历史链验证只允许只读；同世界材料、当前追加/finality、版本化 manifest compatibility、单调 head 全成立才可服务。陈旧/追赶/只读/隔离新 intent 无效果，committed receipt 为0；恢复按当前条件重审 pending，不继承期限/优先级，不改已确认 receipt。消费者反馈/lineage/manifest schema 由外部 authority 拥有，未闭合。
 
@@ -352,7 +419,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
   - AC-38: `hosted-public-join-managed-identity-custody` 专题文档必须落盘并映射任务链 `hosted-managed-identity-doc-freeze (PRD-P2P-029)`，明确 hosted account、邮箱登录、`signer_ref`、device session、step-up auth、托管退出与“默认不让玩家管理裸私钥”的正式产品边界。
   - AC-38A: 稳定权威 `mainchain-token-ideal-transaction` 承接 `ideal-transaction-model-doc-freeze (PRD-P2P-028A)` 与 `PRD-P2P-ITX-001/002/003`：明确 signed metadata 字段、完整 JSON、签名域、回执与 Phase 1 最小升级集；fee quote 仍是 metadata-only，真实 fee/auth execution 属于独立 Phase 2+，不得误称当前实现真值。
   - AC-39: `public_testnet` 必须具备 repo-owned readiness review 入口，至少能基于 manifest + lane evidence 输出 `specified_skeleton_only|partial|block|ready_for_live_candidate`；这些是判定枚举，placeholder endpoint / 缺失 candidate bundle / 缺 lane evidence 必须保持阻断。
-  - AC-40: `formal-network-tiers-testnet-mechanism.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以 runbook/project 当前 verdict 约束 public claims。
+  - AC-40: `formal-network-tiers-testnet-mechanism.runbook.md` 必须作为 companion runbook 落盘并映射任务链 `formal-public-testnet-live-candidate-checklist (PRD-P2P-028)`，至少冻结当前 11 条 required lanes 的 owner/evidence/check 命令/claim boundary，并以同候选、同窗口 readiness review 的实际 verdict 约束 public claims；历史验收见 [Task #2059](https://github.com/eng-cc/oasis7/issues/2059#issuecomment-4890065749)，不以历史 PASS 或 Task 状态代签当前 readiness。
   - AC-41: `p2p-network-runtime-hardening` 必须让 `libp2p` gossip `publish()` 在路由或连接不可用时向调用方同步返回失败，且失败 publish 不得继续记入 `published` 事件或成功流量统计；同时 replication request 的 retry/fallback/cooldown 判定必须收敛到共享 availability classifier 与稳定 reason prefix，不再在 `oasis7_net`/`oasis7_node` 多处重复猜测自由文本错误串。
   - AC-42: `subscribe-ack-udp-gossip-hardening` 必须让 `libp2p` `subscribe()` 只有在底层 gossipsub 真正订阅成功后才向调用方返回 `NetworkSubscription`；若后端拒绝订阅，调用方必须同步收到失败而不是拿到 dead subscription。与此同时，UDP gossip 路径必须显式拒绝超出 datagram 上限的 replication 消息、把接收缓冲提升到覆盖完整 UDP payload、并在 fan-out 遇到单点 `send_to` 失败时继续尝试其余 peer 后返回汇总错误，而不是靠 4KB 截断或“第一个错误即提前退出”的旧语义。
   - AC-43: `testing-manual.md` 必须明确“链上大世界状态底座”自闭环分层，并把 `module_required/module_full/integration_required/release_full` 的命令、最小指标、阻断签名、禁止 claim 与 real-env/public-testnet 边界写清，避免把底座自测误报为链上大世界或公开网络整体 ready。

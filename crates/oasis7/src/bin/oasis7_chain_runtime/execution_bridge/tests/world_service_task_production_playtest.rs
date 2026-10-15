@@ -236,6 +236,7 @@ fn private_task_production_prepared_world_live_service() {
 }
 #[test]
 fn private_task_production_signed_quote_first_product_and_restart() {
+    let _probe_slot = super::prepared_world_probe_slot();
     use oasis7::world_service::private_task_context::*;
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-production-test-ready-{}-{}.json",

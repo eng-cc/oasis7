@@ -24,6 +24,10 @@
 
 玩家通过受支持的本地 Launcher 进入已声明的 `viewer` 或 `pure_api` 路径时，能够理解当前会话是在准备、可用、阻塞、停止还是恢复中；发生中断、陈旧状态或配置问题时，能够采取真实的恢复下一步，而不是把已启动进程、旧本地状态、浏览器页面或设置编辑误认为当前世界已经健康、已连接或可玩。
 
+## 1.1 体验决策
+
+玩家根据当前模式、会话可信状态、配置阶段和 blocker，选择启动、修复输入、重试、等待或停止。各动作的阅读顺序和失败恢复见[配对产品设计](local-launch-session-continuity-and-recovery.design.md#21-状态动作结果恢复决策)；不得用局部成功替代当前 authority 确认。
+
 ## 2. 产品承诺
 
 ### 2.1 可理解的本地会话生命周期
@@ -54,8 +58,22 @@
 <a id="req-entry-launch-001"></a>
 ### REQ-ENTRY-LAUNCH-001：本地 session 可用不得代签世界结果
 
+Trace ID: O7-REQ-728f73a0-995a-4995-a2be-ae525a08dab1
+
 - 要求：Launcher 必须把入口、primary mode、本地 session、配置和当前 authority 的可用性与 Agent/world 行动结果分开表达；进程存在、页面可见、本地保存或请求受理不能单独证明可玩或世界行动成功。
 - 验收：AC-ENTRY-LAUNCH-001
+
+
+- 功能点：[REQ-ENTRY-LAUNCH-001](#req-entry-launch-001)；验收 [AC-ENTRY-LAUNCH-001](#ac-entry-launch-001)。
+- 适用范围：受支持 native/Web Launcher 的 session、配置、primary mode 与世界结果区分；沿用本条原有阶段和前置条件。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[会话重新验证](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)已承接当前进程探测、失效快照撤销、停止/失败后重验及响应代次隔离；[配置草稿/确认](../../world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.design.md#launcher-config-draft-design)承接 Restore 与已接受配置的区分；[Reload 结果](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md#action-result-continuity)承接 native/Web 读回失败保草稿与成功后更新。后二者不证明 provider 鉴权、凭据注入或全部配置已应用。
+- 实现状态：部分实现
+- 实现与验证依据：控制面 clear_chain_session_evidence 与客户端 invalidate_chain_session_evidence/clear_chain_session_evidence 清除 identity/P2P/observability/replication；spawn 只进 Starting，状态探测后才 Ready。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_client_launcher/src/main_chain_status.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane/chain_status_probe.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，primary mode、配置应用/凭据、world authority 与行为结果的全部 native/Web 组合尚未核清；局部 Ready 仅为探测成功，测试定义未在本轮执行。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；上述三份专业设计的五/六列表只接收各自子义务，未闭合跨模式/world authority 与凭据接线。
 
 <a id="ac-entry-launch-001"></a>
 ### AC-ENTRY-LAUNCH-001：启动子步骤成功仍保持结果边界
@@ -67,8 +85,22 @@
 <a id="req-entry-launch-002"></a>
 ### REQ-ENTRY-LAUNCH-002：停止、陈旧和失败恢复必须重新验证
 
+Trace ID: O7-REQ-1d9a996e-dd9d-4d59-9b3b-b79191f17676
+
 - 要求：停止、重启、清理、陈旧状态或启动失败后的重新进入必须重新验证当前 authority、session、配置和 primary mode，不得静默复用旧上下文、权限或待决行动。
 - 验收：AC-ENTRY-LAUNCH-002
+
+
+- 功能点：[REQ-ENTRY-LAUNCH-002](#req-entry-launch-002)；验收 [AC-ENTRY-LAUNCH-002](#ac-entry-launch-002)。
+- 适用范围：本地停止、重启、清理、陈旧及失败后 authority/session/配置/模式的重新验证；沿用本条原有阶段和前置条件。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[会话重新验证](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)已承接当前进程探测、失效快照撤销、停止/失败后重验及响应代次隔离；[配置草稿/确认](../../world-simulator/launcher/game-client-launcher-guided-configuration-and-usability.design.md#launcher-config-draft-design)承接 Restore 与已接受配置的区分；[Reload 结果](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.design.md#action-result-continuity)承接 native/Web 读回失败保草稿与成功后更新。后二者不证明 provider 鉴权、凭据注入或全部配置已应用。
+- 实现状态：部分实现
+- 实现与验证依据：停止、失败启动、缺进程、退出清空证据，并有 session_* 回归；客户端代次拒绝 late poll/queued action 恢复旧快照。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_client_launcher/src/main_chain_status.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，当前分类器仍混用共享日志最后 64 行与本轮日志，未实现当前尝试隔离；全部设置/凭据/权限重验、真实 Web 浏览器和世界恢复续跑未验证。
+
+- 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；上述三份专业设计的五/六列表只接收各自子义务，未闭合跨模式/world authority 与凭据接线。
 
 <a id="ac-entry-launch-002"></a>
 ### AC-ENTRY-LAUNCH-002：没有安全路径时保持 blocked
@@ -131,5 +163,5 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-LAUNCH-001](#req-entry-launch-001) / [AC-ENTRY-LAUNCH-001](#ac-entry-launch-001) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-LAUNCH-002](#req-entry-launch-002) / [AC-ENTRY-LAUNCH-002](#ac-entry-launch-002) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[`Launcher 子域入口`](../../world-simulator/launcher/README.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-LAUNCH-001](#req-entry-launch-001) / [AC-ENTRY-LAUNCH-001](#ac-entry-launch-001) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[会话重新验证](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)及其[验证映射](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#111-验证映射表)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按专业设计 §11.1 的 session 单元回归与 AC 对账；设置结果、世界结果及 Web 表现另取同候选证据，尚未执行；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-LAUNCH-002](#req-entry-launch-002) / [AC-ENTRY-LAUNCH-002](#ac-entry-launch-002) | `producer_system_designer` | [`doc/world-simulator/prd.md`](../../world-simulator/prd.md#目标)、[会话重新验证](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)及其[验证映射](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#111-验证映射表)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按专业设计 §11.1 的停止/失败/退出/陈旧回归与 AC 对账；配置、授权、Web 恢复与世界结果另取证，尚未执行；导航关系不等于通过证据 | `test_tier_required` |

@@ -1,7 +1,7 @@
 # Model Visual Review Card Template
 
 ## Review Metadata
-- task_uid:
+- task_uid:（仅引用已有任务身份；没有时写 not_applicable 并用下方 PR 定位，不要求新建）
 - PR / branch:
 - commit:
 - reviewer_model:

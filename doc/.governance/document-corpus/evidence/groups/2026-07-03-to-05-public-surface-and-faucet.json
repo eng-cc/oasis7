@@ -5,7 +5,7 @@
         "authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
         "backlink": "doc/testing/evidence/README.md",
         "claim_boundary": "bounded_window_only_not_current_endpoint_fleet_readiness_recovery_or_release",
-        "content_sha256": "cb7ecf6b50618b3e74ee3654d4ded2f3f8e9e3c4706f175f3f64eb8e80f295a2",
+        "content_sha256": "45b76d9dec1342e09519049f968bc2fcd73822f45693d22cf686ba30507297cd",
         "disposition": "retain",
         "domain_owner": "blockchain_ops_engineer",
         "lifecycle": "WINDOW_OBSERVATION",
@@ -27,7 +27,7 @@
         "authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
         "backlink": "doc/testing/evidence/README.md",
         "claim_boundary": "bounded_window_only_not_current_endpoint_fleet_readiness_recovery_or_release",
-        "content_sha256": "e9e61cf020451d01d1420f0b9addc65840dd6f157a7cef7d0d8d07080fc386e3",
+        "content_sha256": "f3664ec769af8d43f7636b157b32493e86c8dc50c42aa1c72d7a4954f202744b",
         "disposition": "retain",
         "domain_owner": "blockchain_ops_engineer",
         "lifecycle": "WINDOW_OBSERVATION",
@@ -71,7 +71,7 @@
         "authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
         "backlink": "doc/testing/evidence/README.md",
         "claim_boundary": "bounded_window_only_not_current_endpoint_fleet_readiness_recovery_or_release",
-        "content_sha256": "6afd4076d951e1da7f7879f466a83cbb0425a4a5006a4c0d938c01a449b66851",
+        "content_sha256": "c2b5e190099cf9b923f12032bdddb68c4901227be46e15f08d0a916f883a5f25",
         "disposition": "retain",
         "domain_owner": "blockchain_ops_engineer",
         "lifecycle": "WINDOW_OBSERVATION",
@@ -90,7 +90,7 @@
         "semantic_role": "public_testnet_observation"
       }
     ],
-    "group_sha256": "556e8a640d69613119a5c0278ac370bd37010f0a322ac232d8b6c747f49c5a94",
+    "group_sha256": "bf0e782fde04a39e9cc5daa0681b778097e284af5d79eb18dd2095d9ceedbb4c",
     "id": "2026-07-03-to-05-public-surface-and-faucet"
   },
   "schema": "oasis7.document-evidence-group/v1"

@@ -7,8 +7,14 @@
 - 审读日期：2026-09-30。
 - 审读基线：`0bcb10dfa6874884c5879800e6c8836e7430f8fe`；这是本次代码观察的快照，不是要求后续任务永远绑定的 policy commit，也不要求每次 main 前进修改本文。
 - 当前入口：[doc-governance README](README.md)。写作约束：[系统设计写作规范](system-design-writing-standard.design.md)。权限、任务及启用权威：[workflow source of truth](../workflow/source-of-truth.md)。
-- 产品 AC：本次不改变玩家承诺、产品范围或游戏规则；实施任务使用 `professional_acceptance`，并按现行 traceability 合同填写 product requirement 的显式 N/A。不得同时把专业上游和产品上游都省略。
+- 产品 AC：本次不改变玩家承诺、产品范围或游戏规则；引用实际专业上游并说明产品层不适用，不要求 `professional_acceptance` 或 typed applicability 字段。
 - 新命令、schema、模块及测试场景均为本设计新增接口；除明确标注为现有的命令外，不得当作当前仓库已经支持的功能。
+
+## 当前阅读边界
+
+本文的 proposed 状态、§3 差距和实施计划描述上述 2026-09-30 审读快照，不据此断言当前仓库仍未实现 v3。现有存储、semantic/evidence SHA、组完整性、trusted loader 与实际启用的检查继续按实现和技术合同验证，本次文档澄清不撤销这些约束。§8.3、§10 及对应测试中保留的 loop、write_scope、same-PR migration 和 activation 是原基线准入适配背景，不是现行普通任务的身份、拆分或审批要求；不得据此恢复已退出的通用流程。当前普通修改可以在同一 PR 维护源文档与准确附属分片，范围、必要 CI 和独立评审按[开发流程规范](../workflow/source-of-truth.md)执行；是否启用或改变某个实际技术检查，须核对其实现、调用入口和适用保护设置，不能仅改本文解除。
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本文适用的跨层引用遵循[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)。§6.1 的 path-key 是 corpus 存储地址，不是要求身份；源路径移动可能改变分片 key，但同一要求的 Trace ID 不变，真实链接、源 SHA 与历史复核绑定仍分别维护。
 
 ## 1. 问题、目标与非目标
 
@@ -366,7 +372,7 @@ Evidence 的基本必填字段为 `path/lifecycle/semantic_role/retention_owner/
 ### 8.3 Loop 与 write_scope 的附属分片规则
 
 <a id="DCI-10"></a>
-必须先在 workflow source of truth 增补窄范围的“document corpus sidecar”合同，再实现相同规则。现有 `doc/.governance/** → code` 不能简单改成全部 system；否则产品文档仍受阻，而且会把真正的治理控制交给普通文档任务。
+以下保留原审读基线的窄范围“document corpus sidecar”准入设计，不要求在现行 workflow 恢复 loop。该基线中的 `doc/.governance/** → code` 不能简单改成全部 system；否则产品文档仍受阻，而且会把真正的治理控制交给普通文档任务。
 
 | 路径/变更 | 生效后的归属 | 准入条件 |
 | --- | --- | --- |
@@ -385,7 +391,7 @@ Evidence 的基本必填字段为 `path/lifecycle/semantic_role/retention_owner/
 
 object 内容、组成员或来源集合变化均触发重新核对；普通任务不能以 `--all` 为由修改其他文档分片。纯 semantic 复核不要求伪造源文本变化，但必须有明确复核义务和批准范围。
 
-原子迁移 PR 同时触达代码、系统文档和历史元数据时，采用 source of truth 已定义的、显式用户授权的 legacy/same-PR migration 包装。设计请求本身不代表已有执行授权；执行任务必须回读授权和冻结精确集合。候选 loop policy 不能给该迁移 PR 自我准入，合并后经实际 readback 才能按既有流程启用新规则。
+原审读基线曾为同时触达代码、系统文档和历史元数据的原子迁移 PR 定义 legacy/same-PR migration 包装；该包装仅作历史适配背景。设计请求本身不代表已有执行授权；执行任务必须回读授权和冻结精确集合。候选 loop policy 不能给该迁移 PR 自我准入，合并后经实际 readback 才能按既有流程启用新规则。
 
 ### 8.4 CI 及本地入口
 
@@ -425,28 +431,22 @@ object 内容、组成员或来源集合变化均触发重新核对；普通任�
 
 ## 10. 兼容、迁移与回滚
 
-### 10.1 交付组织
+<a id="101-交付组织"></a>
+### 10.1 原子迁移与消费者合同
 
-推荐一项已明确授权的原子格式迁移任务、一份最终合入 PR。PR 内可以有独立 review 的规范提交、实现提交、机械数据提交，但最终启用不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+当次 PR 包装、工作包和逐文件执行清单见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610)。持续维护仍按 [workflow source of truth](../workflow/source-of-truth.md)；本文不要求普通改动先建 Task 或按旧 loop/packet 包装。
 
-已有 workflow 支持显式授权的同 PR source＋implementation 包装；必须先冻结并独立审读规范修订。授权未建立时，不执行混合写入，也不为了满足“一 PR”伪装成普通 code loop；按现行规范发布/实现流程包装同一格式切换。本文不扩大例外权限。
+同一交付目的的格式切换可包含规范、实现、数据和测试，按现行 workflow 核对授权范围及必要独立评审，不要求额外 loop 包装。本文不扩大实际操作权限，也不免除无损迁移和存储检查。
 
-### 10.2 逐文件改动清单
+- 格式切换必须原子启用，不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+- 规范变化接受适用独立评审；数据转换、checker、入口、trusted-root 保护、CI 路由、测试和文档必须与真实消费者一致。
+- 在实际 base/head 搜索旧路径、glob、动态加载、发布和测试消费者；修齐调用链后才退役旧入口，不以旧逐文件表代替搜索。
+- legacy fixtures 继续保留字段全集、冻结 cohort 和 golden 等价结果，不进入活跃 corpus，也不作为批准证据。精确忽略报告，不扩大 ignore 范围，不重写历史源 bytes。
 
-| 文件/集合 | 实施动作 | 验收重点 |
-| --- | --- | --- |
-| 本设计、doc-governance README、engineering `prd.index.md` | 新增设计与导航；长期规则只维护本设计 | 十二段、需求与验证映射可解析；无任务台账 |
-| `doc/engineering/workflow/source-of-truth.md` | 增补窄 sidecar 所有权、scope、trusted loader、启用边界和启用后的 corpus baseline obligation | 保留现有 gate、full fallback 和三 loop/可选 Issue 规则；候选策略不激活 |
-| `documentation-governance.manual.md` | 替换旧整表刷新步骤为 locate/sync/propose/check | 不鼓励 blanket regenerate 或自动续签 |
-| 新公共库、evidence policy、管理 CLI | 提供读取、严格模型、局部写入、转换与三方导入 | 单一算法、无 shell 注入、幂等 |
-| 两个现有 checker 及其测试 | 使用公共模型，保留专用语义检查，退役旧生成输出 | 现有负例语义不丢失 |
-| 两个入口与新分片集合 | 静态化、无损拆分、删除旧 semantic 表 | 无动态父级摘要 |
-| CI scope、runner、capability inventory、调用链测试 | 接入实际检查与按需回归 | source/merge 检查都执行，未引入 accidental full |
-| `.gitignore`、`.gitattributes` | 精确忽略报告目录；约束新增元数据换行 | 不大范围忽略 doc，不改变历史源 bytes |
-| `scripts/fixtures/document-corpus-v3/legacy/` | 保留旧结构、字段全集、冻结 cohort、golden 等价结果 | fixture 不进入活跃 corpus、不当作批准证据 |
-| 旧路径实际消费者 | `git grep` 完整查找后修复，包括 testing/templates、playability 入口等 | 只留明确历史或迁移专用引用 |
+<a id="102-逐文件改动清单"></a>
+### 10.2 历史执行清单入口
 
-实施必须建立 base/head 下的精确消费者清单，不以本表代替仓库搜索。新增模块位置若调整，需同步 trusted-root 保护、CI 路由、测试与文档，不能只改 import。
+[历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610) 保留原文件/动作/验收表；迁移算法、精确保护范围和失败/恢复含义继续由下节持有。
 
 ### 10.3 迁移算法与命令
 

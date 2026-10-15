@@ -84,7 +84,7 @@
 
 每个 `doc/product/` 外候选文件按段落分成四类：产品承诺、专业合同、历史过程、未迁移语义。
 
-每个跨文件消费条款必须记录 canonical repository `eng-cc/oasis7`、repository-relative path 和实际条款的 stable fragment，并在接收文档中匹配该身份。裸 token、可变 URL、本地摘要或未带 fragment 的泛化路径不能替代 consumed-clause identity。
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)。新增或实质修改的跨层要求以主责原文的稳定 Trace ID 关联设计和任务；canonical repository `eng-cc/oasis7`、repository-relative path 与实际条款的 stable fragment 继续负责准确定位，固定证据另保留提交版本。路径或锚点迁移不改变同一要求的 Trace ID；裸 token、本地摘要或无 fragment 的泛化路径不能替代真实条款链接。不要求重写未触达存量或历史证据，也不新增 typed refs、任务身份或传递回执。
 
 - 产品承诺迁入对应模块根 PRD 或稳定专题，并建立旧条款到新 REQ/SC 的映射。
 - 专业合同留在原专业域；产品文档只说明它支持或限制的产品结果并链接准确 fragment。
@@ -114,6 +114,8 @@ python3 scripts/product-doc-content-check.py --repo-root <canonical-worktree> --
 ```
 
 `--full-corpus` 与 `--base`、`--head`、`--worktree` 互斥；它读取所选 canonical worktree 的全部 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md`，按 repository-relative path 排序。成功输出稳定的 mode、checked 数量和零 error 结果并返回 0；内容缺口逐行输出稳定 error code、路径与 detail 并返回 1；参数或身份错误返回 2。checker 回归必须覆盖选择互斥、文件排序、生命周期合同、空树、失败码和诊断稳定性。
+
+上述直接调用 `product-doc-content-check.py --full-corpus` 保留产品全量严格判定：内容缺口返回非零。聚合入口 `doc-governance-check.sh --full-corpus` 则先执行变更范围严格检查，再以独立 `--warn-only` 历史调用报告产品及专业内容缺口；聚合退出 0 不等于历史零缺口或全量治理完成。读取、安全、参数和执行错误仍失败。若需证明产品全量机械内容合同零缺口，仍须查看上述 standalone 严格结果及诊断，并独立核对适用语义与残余风险。
 
 现有 changed-range 路径及其 trusted base/head、merge-base 和 worktree overlay 语义保持不变。全量治理使用 `doc-governance-check.sh --full-corpus`；治理合入后，仓库的持续验证必须保留全量回归，不能退回只验证一次性基线或用 full-corpus 替换作者变更范围身份。
 

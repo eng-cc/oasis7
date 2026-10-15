@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-12
+- Last reviewed：2026-10-14
 - 专业域权威：[`gameplay 工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough)、[`gameplay 首产物结算合同`](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md#3-五阶段结算表)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications)、[`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record)
 
 本文说明玩家怎样理解并继续一条首局工业因果链。配对 PRD 拥有产品要求和验收；专业 authority 拥有玩法顺序、结算、状态、receipt、接口和测试实现。本设计不把目标态写成当前实现或发行承诺。
@@ -20,6 +20,34 @@
 核心决策是：在 feasibility card 与当前事实支持的范围内，选择等待、补足、改源、改配方、改道、延期或继续推进哪一条路径。选择必须有可读的机会成本；预览和推荐只提供比较信息，不产生世界效果。
 
 设计假设是先建立一条可归因的因果链，再展开持续能力分支，能帮助玩家判断是否继续。该假设需要对应入口的体验证据验证，结构检查或局部自动化不能替代玩家体验结论。
+
+<a id="des-first-concrete-sample"></a>
+### 1.1 当前 Smelter 样本：先做成一笔可解释的生产
+
+本样本承接 [PRD 具体样本与决策边界](first-session-and-continuation.prd.md#first-session-concrete-sample)，是当前 canonical 链的首读路径；后文通用节点只按 profile 的真实依赖展开，不反过来增加当前门槛。
+
+**处境与用途。** 玩家进入可控制世界后，先确认自己实际可用的地点、控制/授权、材料与电力。目标是用合法 Smelter 生产第一笔铁锭，为评估 Assembler 建设准备材料。缺少合法输入或控制权时从真实 blocker 开始，不假定拥有免费启动资源，不替换成 debug 世界。已有合法 Smelter 可直接核对，不要求重复建厂。
+
+| 片段 | 玩家真正决定什么 | 执行与默认反馈 | 完成后发生什么 |
+| --- | --- | --- | --- |
+| 采用目标 | 是否把当前可用资源投入首笔铁锭；也可保留资源、暂缓或选择真实可用的其他目标 | 展示目标用途、可用对象、主要投入/缺口与首产物边界；接受目标不扣料 | 进入同一对象的生产方案，而非另一套任务清单 |
+| 工厂就绪 | 工厂尚未建成时，是否承担本次建厂的实际成本 | 按现有 BuildFactory 能力与授权提交，读取真实建设结果；建厂未接入 Agent 授权路径时由玩家入口执行，不伪称自动委托已可用 | 使用实际建成或已有且合法的 Smelter，不能把“选中了工厂”当就绪 |
+| 准备与排产 | 是否采用这份明确的固定方案；真实缺口出现时选择补足、暂缓或其他受支持动作 | 同一 factory/recipe/batches 的权威预览说明实际 input ledger、材料、电力与预计产出。补料只走受支持的显式转移；实际到账后重查，禁止拿世界总库存代替工厂可用量 | 按玩家确认的同一参数提交，不在提交时暗换批量、工厂、配方或消费账本 |
+| 授权内代办 | 确认目标、资源/时间等实际支持的授权边界；出现需要新判断的变化时再选择 | Agent 只代办当前能力与有效授权同时覆盖的补料/排产等步骤，说明已接受、执行、阻塞或未知。没有对应接线时保留玩家操作基线并标明能力缺口 | 不把每个内部检查变成确认按钮；新的成本、越界或不可逆承诺才交还决策 |
+| 第一笔成果 | 是否继续利用已得材料，或在此结束本次会话 | 先显示实际投入和所得，再按精确因果解释玩家贡献；matching production receipt、owner-bound 正量铁锭与持久里程碑一致时明确庆祝首产物完成 | Assembler 是后继候选，不是已经建成；稳定能力、交付与需求满足独立判断 |
+| 下一次选择 | 继续补齐 Assembler 的真实建设条件、选择其他当前支持的用途，或暂缓 | 展示已满足条件、逐项真实缺口和可执行的补足动作；只能查看候选时使用查看/比较入口，不提供虚假的建设提交 | 离场保留成果摘要、待决请求和有效委托的事实；回来先核对当前条件，再执行合法下一步 |
+
+这里选择**固定方案、准确预览、明确提交**作为操作基线。固定参数取自同一规范动作来源，不在产品层另抄一组常量；独立可编辑查询必须标为查询，不能被误认成已配置正式动作。只有预览、提交、结算和后继预算已共同验证时才开放可编辑批量。
+
+经营分支与 Agent 主体感分别验证。小批/大批必须证明所保留资源的实际替代用途、另一方案不可被等成本续批替代的优势，以及后续两次决策的价值差异；成本线性且可以等成本续批时，只算参数选择，不命名为“效率路线”。当前无可证明分支时如实保留固定基线，不凭新增奖励、时限或强制事故制造取舍。等成本比较同时核对实际时长、占槽和时机，不能只凭材料/电力线性判定拆批等价。Agent 主体感则要求玩家能指出哪个目标/约束改变了后续行为；更多解释、确认次数或单次生产成功均不能替代它。
+
+### 1.2 成果、后继与自然离场
+
+成果首读分为三个层次：**实际付出/所得**来自领域结算；**玩家贡献**仅在原意图、实际 action/job 与该结算关联成立时显示；**后继用途**来自当前规则和可达条件。只匹配 owner、最近一次结果或同名材料时，可展示归属成果，不能称为当前决定的功劳。没有精确归因不压掉已被证明的真实成果，也不使用 Agent 叙事补齐因果。
+
+成果卡引用已有单一 Action Receipt，不再颁发第二份回执。重连、回放或重新挂载恢复摘要，不把旧成果再次当成新成功播报。首笔生产完成可以是自然停点：离场说明已保留结果、仍待决请求、当前有效委托及回来后的第一件可做之事；关闭界面不取消请求，不承诺尚未验证的离线收益。回访分别重建成果事实、当前目标和待决状态，旧授权不因回来而复活。
+
+0–30 分钟是体验观察窗口，不是按时触发剧情或事故的脚本；首次持续能力仍按玩法总纲的独立窗口评价，不要求首产物完成者当场继续。失败恢复与单约束理解迁移可在对应验证场景观察，不强迫所有新玩家经历事故。
 
 ## 2. 代表性片段与阶段信息
 
@@ -56,7 +84,7 @@
 
 首次持续能力必须表现为可继续运转、可恢复并能打开新选择的能力。扩张增加覆盖或产出并引入吞吐压力；稳定/恢复保住能力并放弃一部分即时扩张；专业化/服务把能力转成对本地需求或协作的用途。每个方向都要说明即时收益、后续两个 beat、风险或锁定和下次会话第一动作；适用时还要说明回退窗口、代价、保留和失去的价值。
 
-当主目标是本地或区域专业化时，分支详情继续解释生产能力服务什么需求。模块、工厂核心与合金可以是合法下一步；它们的收益和风险不能突然宣称玩家已进入治理或冲突阶段。当前不可执行的候选不作为推荐，信息不完整时返回可读的不可用原因。
+当主目标是本地或区域专业化时，分支详情继续解释生产能力服务什么需求。模块、工厂核心与合金可以是合法下一步；它们的收益和风险不能突然宣称玩家已进入治理或冲突阶段。当前不可执行的动作不作为可立即提交的推荐；后继目标仍可展示其用途、已满足条件、真实缺口与受支持的补足路径。查看/比较候选与执行建设必须区别，信息不完整时返回可读的不可用原因，不用未知条件宣称可达。
 
 回退是有期限的选择。窗口关闭时，玩家应立即看到原因、已保留的结果和义务，以及仍可执行的修复、重排或换向；后续恢复成功不会重新打开旧窗口。各条路线按自身权威条件判断，展示样例的阶段只解释样例，不代替真实世界的回退能力。首产物完成继续按既定 profile 判断，不能为延长回退窗口暗中加入交付条件。
 
@@ -64,7 +92,7 @@
 
 玩家意图只表达目标和授权范围，不能直接保证 Agent 行动或世界事件成功。入口展示的 accepted、执行、阻塞、生产和交付状态必须来自同一权威事实；推荐、缓存、叙事或计数不能替代 receipt。
 
-目标换向按 [PRD 的三阶段边界](first-session-and-continuation.prd.md#goal-redirection-pending-and-settled-boundary)表达：预览只用于比较；已接受的承诺 / 待决请求按专业合同保留其有限 hold、排队或未决义务，尚无 committed receipt 时仍为待决且未生效；只有权威 receipt 支持且实际生效的后果才显示为已结算结果。已结算范围不能因换向被抹除或再次执行，未结算范围也不能被同一目标的部分 receipt 提前标成完成。新主目标可以取得前景位置，旧请求的待决状态和合法取消、过期、重评或恢复路径仍须可读；receipt 的具体含义与结果范围由原专业合同决定。
+目标换向按 [PRD 的三阶段边界](first-session-and-continuation.prd.md#goal-redirection-pending-and-settled-boundary)表达：预览只用于比较；已接受的承诺 / 待决请求按专业合同保留其有限 hold、排队或未决义务，尚未取得适用于原请求及相应结果范围的权威证据时显示“结果尚未确认”，既不证明已成功，也不证明未生效；只有权威拒绝或其他明确无效果的结果才显示该范围未生效；只有权威 receipt 支持且实际生效的后果才显示为已结算结果。已结算范围不能因换向被抹除或再次执行，未结算范围也不能被同一目标的部分 receipt 提前标成完成。新主目标可以取得前景位置，旧请求的待决状态和合法取消、过期、重评或恢复路径仍须可读；关闭界面、停止后续委托、重新定目标与取消已提交动作分别处理。恢复沿原请求身份核对，刷新到新快照不等于核对了该请求；receipt 的具体含义与结果范围由原专业合同决定。
 
 报价或展示后发生事实漂移时，系统只能重新评估、无副作用拒绝或进入专业合同明确的有界 pending。重连、重复、乱序、Agent retry、snapshot restore 和 replay 只能重读原 disposition，不得复制材料、资格、receipt、进度、奖励或目的地后果。Viewer 与 pure API 的布局可以不同，但动作、主 blocker、完成边界、下一步和复查点必须同义。
 
@@ -100,9 +128,24 @@ Viewer 与 pure API 共享权威事实和玩家语义；每个入口分别证明
 
 `test_tier_full` 按选定范围覆盖跨窗口、争用、适用损耗/终端故障、持久化恢复及多入口 parity。记录固定候选、profile/revision、实际依赖、证据层级和未覆盖项；文档、自动化或合成/Agent 样例只证明其实际范围，不能宣称当前 runtime、Viewer、Agent、真人留存、可玩性或发行就绪。
 
-目标换向的 [FS-13](first-session-and-continuation.prd.md#fs-13) 验收保留三类对照：已接受但无 committed receipt 的请求不能显示为已结算；权威 receipt 支持的已结算结果不因换向、重连或重试消失或重复；部分已结算与仍待决范围分别可读。该语义核对不代表本次已执行真实 runtime/Agent 换向或跨入口游玩验收。
+目标换向的 [FS-13](first-session-and-continuation.prd.md#fs-13) 验收保留四类对照：原请求已生效但响应丢失时不显示未生效或诱导重提；原请求结果仍未知时不冒充成功或确定失败；部分已结算与仍待决范围分别可读；换向后旧结果迟到仍归原请求，不覆盖新目标。权威 receipt 支持的已结算结果不因换向、重连或重试消失或重复。该语义核对不代表本次已执行真实 runtime/Agent 换向或跨入口游玩验收。
 
 分支比较承接 [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001) / [AC-FIRST-BRANCH-001](first-session-and-continuation.prd.md#ac-first-branch-001)：比较主指引和每个推荐的完整承诺，并保留有效的工业用途。回退承接 [REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002) / [AC-FIRST-BRANCH-002](first-session-and-continuation.prd.md#ac-first-branch-002)：分别观察截止前、截止时和恢复后的选择与后果。具体投影、样例边界及回归方法由 [Viewer 专业设计](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency) 承接；结构正反例不能代签玩家实玩。
+
+<a id="val-first-decision-sample"></a>
+### 9.1 当前样本的分项验证
+
+本节复用现有 AC、FS 与 testing 层级，不新增评分系统或全仓库门禁。具体候选、环境、提示介入和观察结果写入关联 Task/PR，不进入长期设计正文。
+
+| 独立问题 | 上游条款 | 验证与接收方 | 不可替代的边界 |
+| --- | --- | --- | --- |
+| 操作是否正确 | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001)、[003](first-session-and-continuation.prd.md#ac-first-industrial-003) | Runtime/M4/Viewer：同参数 quote→submit→实际 ledger/receipt；输入变化、旧响应迟到、在途失效、权限变化、重试与部分结算对照 | 静态合同、mock 与固定操作脚本不证明真实入口已经通过 |
+| 玩家是否理解 | FS-16 / [单约束迁移](first-session-and-continuation.prd.md#first-decision-transfer) | gameplay/QA：完成基线后只改变一个受支持约束；记录玩家能否解释目标、实际所得、成本与下一条件 | 给目标和必要情境，不给按钮名称或点击路径；提示前后分开，不将代操作计作自主发现 |
+| 经营选择是否有价值 | FS-10 / [首次分支](first-session-and-continuation.prd.md#31-首次分支承诺) | gameplay/Runtime：同初始状态分叉，核对资源替代用途、两步后果与机会成本；再取得适用入口观察 | 只有一条合法路径就记录未形成该分支；参数或按钮数量不是经营分支证据 |
+| Agent 是否带来控制感 | FS-12 / [间接控制设计](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-007) | Agent/Runtime/QA：明确玩家决定、支持的代办步骤，以及约束/纠正与后续结果的精确关联 | 生产完成、Agent 活动量或解释篇幅不证明主体感；未接入授权的动作不冒称可代办 |
+| 是否愿意继续或回来 | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004)、FS-8 | gameplay/Viewer/QA：无额外催促的后继选择与理由；自然离场、重入后第一动作和提示介入分别记录 | 内容量、理解、继续点击、Agent 自报不代签真人续玩意愿或真实留存 |
+
+系统接点分别由 [Viewer 当前方案交互](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)、[M4 报价到提交](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)、[Runtime 未知结果与恢复](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation) 承接；这些是实现与验证义务，不是本次已运行游戏的声明。
 
 ## 10. 相邻权威与未决边界
 
@@ -113,13 +156,13 @@ This design delegates product requirements and acceptance semantics to its paire
 
 | PRD requirement | PRD acceptance |
 | --- | --- |
-| [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001) | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
-| [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002) | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) |
-| [REQ-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#req-first-industrial-003) | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
-| [REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004) | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#ac-first-industrial-005) |
-| [REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005) | [AC-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#ac-first-industrial-003) |
-| [REQ-FIRST-INDUSTRIAL-006](first-session-and-continuation.prd.md#req-first-industrial-006) | [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
-| [REQ-FIRST-INDUSTRIAL-007](first-session-and-continuation.prd.md#req-first-industrial-007) | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
-| [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008) | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
-| [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001) | [AC-FIRST-BRANCH-001](first-session-and-continuation.prd.md#ac-first-branch-001) |
-| [REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002) | [AC-FIRST-BRANCH-002](first-session-and-continuation.prd.md#ac-first-branch-002) |
+| [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001) Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502 | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
+| [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002) Trace refs: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95 | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) |
+| [REQ-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#req-first-industrial-003) Trace refs: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51 | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
+| [REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004) Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2 | [AC-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#ac-first-industrial-001) / [AC-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#ac-first-industrial-005) |
+| [REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005) Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48 | [AC-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#ac-first-industrial-003) |
+| [REQ-FIRST-INDUSTRIAL-006](first-session-and-continuation.prd.md#req-first-industrial-006) Trace refs: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3 | [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
+| [REQ-FIRST-INDUSTRIAL-007](first-session-and-continuation.prd.md#req-first-industrial-007) Trace refs: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812 | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
+| [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008) Trace refs: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3 | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
+| [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001) Trace refs: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1 | [AC-FIRST-BRANCH-001](first-session-and-continuation.prd.md#ac-first-branch-001) |
+| [REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002) Trace refs: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3 | [AC-FIRST-BRANCH-002](first-session-and-continuation.prd.md#ac-first-branch-002) |

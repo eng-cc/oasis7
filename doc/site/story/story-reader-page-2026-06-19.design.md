@@ -6,9 +6,7 @@
 - Owner module: `site + story`
 - Image2 desktop target: `doc/site/story/assets/story-reader-page-desktop-image2-2026-06-19.png`
 - Image2 mobile target: `doc/site/story/assets/story-reader-page-mobile-image2-2026-06-19.png`
-- Related task: GitHub issue #1484
-  (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
-  live in `.pm/github-project-sync/task-archive.jsonl`)
+- Historical task and archived process: [Task #1484](https://github.com/eng-cc/oasis7/issues/1484#issuecomment-6162411651) (`task_e02c8fe08ebb4f51887b116675f676c1`); no ignored local archive is required to follow this source.
 
 ## Purpose
 
@@ -89,3 +87,15 @@ Implementation review should compare:
 The Image2 targets define visual direction and comparison expectations only.
 They do not replace real browser screenshots, responsive checks, interaction
 smoke, accessibility review, QA evidence, or PR review.
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement | 承接义务 | 本设计条款 | 权威职责 | 边界 |
+| --- | --- | --- | --- | --- |
+| [Site 入口合同](../prd.md#story-entry-and-state-contract) | 故事入口、当前章节状态与失败/空白边界 | [页面目标](story-reader-page-2026-06-19.design.md#required-states) | 页面比较目标；现行系统 authority 仍在 Site 主设计 | Image2 不是浏览器、a11y 或发布证据 |
+
+### 11.1 验证映射表
+
+| 上游 requirement | 本设计条款 | 独立 obligation | 验证方法 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Site 入口合同](../prd.md#story-entry-and-state-contract) | [页面目标](story-reader-page-2026-06-19.design.md#required-states) | 故事入口、当前章节状态与失败/空白边界 | N/A: reason=本次只修历史来源和归因且页面代码/资产未改; scope=原 Image2 target 不提供当前浏览器或视觉 QA; owner_role=game_visual_interaction_designer; evidence_ref=https://github.com/eng-cc/oasis7/issues/1484#issuecomment-6162411651; re-evaluate=修改实际页面时按当前 Site 合同执行对应 headed/导航/状态测试 | 页面实施 PR 的同候选截图与真实操作结果 | 不表示新 visual-designer signoff或当前发布验收通过 |

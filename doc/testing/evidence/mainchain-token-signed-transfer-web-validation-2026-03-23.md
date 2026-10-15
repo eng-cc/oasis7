@@ -1,5 +1,7 @@
 # 主链 Token Web 签名转账验证证据（2026-03-23）
 
+脱敏说明：历史命令中的具体私钥值已替换为 `<REDACTED_PRIVATE_KEY>`；该命令因此不再是逐字原件。候选、公开身份、运行结果和失败边界保持原记录。Git 历史仍可能包含原值，本次脱敏不表示密钥已撤销、已轮换或已安全；不得将此历史命令当作当前凭据配置示例。
+
 审计轮次: 1
 
 ## Meta
@@ -27,7 +29,7 @@
   - `env -u NO_COLOR trunk build --dist /tmp/oasis7-strauth3b-web-launcher-4`
 - Web launcher:
   - 带 signer bootstrap 成功路径:
-    - `env OASIS7_VIEWER_AUTH_PUBLIC_KEY=fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3 OASIS7_VIEWER_AUTH_PRIVATE_KEY=c7a149783d4d97d4b36f6f97ae43eb71af7fe595b7f717d329c96be3e58fdc29 target/debug/oasis7_web_launcher --listen-bind 127.0.0.1:5410 --console-static-dir /tmp/oasis7-strauth3b-web-launcher-4 --chain-node-id qa-strauth-3b-hook --chain-status-bind 127.0.0.1:5121 --no-open-browser`
+    - `env OASIS7_VIEWER_AUTH_PUBLIC_KEY=fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3 OASIS7_VIEWER_AUTH_PRIVATE_KEY=<REDACTED_PRIVATE_KEY> target/debug/oasis7_web_launcher --listen-bind 127.0.0.1:5410 --console-static-dir /tmp/oasis7-strauth3b-web-launcher-4 --chain-node-id qa-strauth-3b-hook --chain-status-bind 127.0.0.1:5121 --no-open-browser`
   - 无 env 复验:
     - `target/debug/oasis7_web_launcher --listen-bind 127.0.0.1:5410 --console-static-dir /tmp/oasis7-strauth3b-web-launcher-4 --chain-node-id qa-strauth-3b-noauth --chain-status-bind 127.0.0.1:5121 --no-open-browser`
 - 页面侧自动化:

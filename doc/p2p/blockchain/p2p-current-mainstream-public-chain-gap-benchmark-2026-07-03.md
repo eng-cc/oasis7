@@ -124,47 +124,11 @@ Forbidden:
 - `full state/receipt index completeness`
 - `multi-client consensus equivalence`
 
-## Integrated Professional Findings
+<a id="integrated-professional-findings"></a>
+<a id="recommended-execution-order"></a>
+## 历史角色回报与执行建议来源
 
-`runtime_engineer`:
-
-- The proof posture improved materially after Gap 3.
-- The verifier path now covers sampled proof, contiguous proof-window evidence, bounded state/resource/receipt proof contract evidence, and bounded validator-set finality/fork-misbehavior evidence semantics.
-- It still lacks live arbitrary proof emission, DA sampling, and multi-client equivalence.
-- The next technical steps are live state/resource/receipt proof emission and sampling, independent spec/replay parity, and property/fuzz pressure over trusted-governance-anchor transition evidence.
-
-`blockchain_ops_engineer`:
-
-- Formal network-tier 11-lane readiness is currently all-pass for controlled live-candidate evidence.
-- Existing governed-bootstrap/live evidence satisfies the current 11 required lanes, as verified by `network-tier-public-testnet-readiness.sh`.
-- Ops residual risks remain: manifest `status="rehearsal"`, bundle `git_worktree_dirty=true`, guarded faucet cooldown/plain-HTTP limits, and no public launch/mainnet/validator-admission claim.
-- `light_client_continuity_window_ready`, `state_resource_receipt_proof_ready`, and `validator_finality_proof_ready` are valid optional evidence lanes but must remain non-promotional until the required lanes and stronger light-client/runtime emission semantics are complete.
-- The next ops step is to keep live-candidate evidence fresh through release-train drills and avoid treating optional proof lanes as promotion gates.
-
-`producer_system_designer`:
-
-- Product positioning can be raised to auditability-enhanced preview.
-- It cannot be raised to mainstream public-chain readiness.
-- Public network product closure has higher priority than expanding claims around the sampled proof lane.
-
-`qa_engineer`:
-
-- Verification maturity is stronger and the current required-lane packet is all-pass.
-- Sampled proof, proof-window verifier, bounded state/resource/receipt proof, and bounded validator/finality proof lanes are optional ignored lanes and cannot promote readiness.
-- API/viewer same-window projection and same-world hosted entry are closed for the current packet, but must be re-sampled before public launch/release-train promotion.
-
-`liveops_community`:
-
-- Operator/community risk is misreading reachable endpoint/faucet evidence as an opened public testnet.
-- Any external wording must keep `controlled live-candidate`, `resettable`, `guarded faucet`, `non-mainnet`, `not validator-open`, and `not live public launch` visible.
-
-## Recommended Execution Order
-
-1. Keep the current all-pass formal `public_testnet` 11-lane packet fresh during any release-train or public launch decision.
-2. Re-sample public RPC / explorer / guarded faucet / runtime status / hosted/API/viewer evidence immediately before external claims.
-3. Run the optional external verifier lanes on real sampled, contiguous-window, state/resource/receipt, and validator/finality `WorldHeadProofV1`-anchored evidence; keep them non-promotional.
-4. Continue the light-client-lite upgrade: live state/resource/receipt proof emission and sampling, independent spec/replay parity, and property/fuzz pressure over trusted-governance-anchor transition evidence.
-5. Run `public-testnet-release-train-drill.sh` with immutable operator artifacts and explicit `public_testnet_rehearsal` lane evidence before any live candidate window, then add real rollback/restore evidence writeback and fuzz/property targets now that the 11-lane public-testnet blocker is closed for controlled live-candidate readiness.
+当次角色回报与执行顺序见 [Task #1842 历史记录](https://github.com/eng-cc/oasis7/issues/1842#issuecomment-6162414656)。本文研究方法、固定窗口结论和 gap 矩阵继续保留；不将旧 all-pass 改写为当前 readiness。实际对外判断须重取同候选公开入口、runtime、hosted/API/Viewer 与 readiness evidence，optional proof lanes 不作为 promotion gates。
 
 ## External References
 

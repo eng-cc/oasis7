@@ -12,13 +12,13 @@ Design comprehensive, production-grade Product Requirements Documents (PRDs) tha
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; the planning/domain conclusion must be owned by the appropriate professional slice.
+In oasis7, this skill is a specialist planning surface governed by [the development workflow](../../doc/engineering/workflow/source-of-truth.md). The responsible owner may perform the work directly and use TPM or professional roles as needed; a fixed role chain, task Issue, or worktree registration is not a planning prerequisite.
 
 - Write PRD outputs to repo-owned docs such as `doc/<module>/prd.md` or `doc/**/**.prd.md`.
-- Record the PRD route, TODOs, and downstream handoff in GitHub task issue evidence comments.
-- Do not treat PRD-only output as implementation-ready unless the workflow router has also confirmed project/task execution truth and verification entry.
-- Check existing GitHub-backed task truth, module `prd.md`, GitHub task issue evidence comments, handoff, and source-of-truth docs before asking the user for more information. If those sources already answer discovery questions, cite or summarize them instead of re-asking.
-- Ask the user only for unresolved product decisions or acceptance gaps that cannot be answered from repo truth and would materially change the PRD.
+- Record execution scope, handoff and actual evidence in the existing Task/PR; an Issue is optional. A read-only analysis or draft does not require a remote evidence comment.
+- PRD-only output is not proof of implementation readiness or delivery. Check the actual acceptance gaps, applicable system-design obligations and verification entry.
+- Check existing requirements, design, PR/Issue evidence and handoff before asking the user for more information. Ask only about unresolved product decisions or acceptance gaps that would materially change the PRD.
+- Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6. Follow [the global requirements-trace contract](../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace): for new or substantively changed stable requirements, reuse one globally declared Trace ID across the requirement, applicable system design and Task (which may be the PR). Preserve local PRD/REQ/AC IDs and exact clause links; explain genuinely inapplicable or not-yet-formed layers. Do not bulk-backfill untouched content or add a workflow gate. The [read-only trace CLI](../../scripts/requirement-trace.README.md) provides bounded queries and rebuildable indexes; full-text search and manual link following remain useful. Its diagnostics are not completeness or completion proofs. For each new or substantively changed product feature, follow the [independent design/implementation status contract](../../doc/engineering/doc-governance/product-documentation-standard.design.md#feature-design-implementation-status): preserve exact design and Task/evidence links, remaining scope, and review baseline/environment/acceptance scope. Recheck statuses when requirements change; keep detailed execution history in Task and preserve existing trace-table columns.
 
 ## When to Use
 
@@ -36,7 +36,7 @@ Use this skill when:
 
 ### Phase 1: Discovery (Repo Truth First)
 
-Before writing or changing PRD content, inspect the bound task and relevant repo
+Before writing or changing PRD content, inspect the existing work context and relevant repo
 truth to fill known context. Do not assume missing product intent, but do not
 re-ask questions already answered by GitHub-backed task truth, PRD, project, handoff, or
 source-of-truth evidence.
@@ -86,7 +86,7 @@ You MUST explicitly cover:
 - **Functional Spec Depth**: interaction flow, field definitions, button behavior, state transitions, sorting/computation rules, permission logic.
 - **Edge Cases**: network failure, empty data, permission denied, timeout, concurrency conflict, data corruption fallback.
 - **NFR with Targets**: performance, compatibility, security, expected data scale, extensibility constraints.
-- **Testability**: acceptance criteria, done definition, validation method, regression impact scope, and PRD-ID -> Task -> Test traceability.
+- **Testability**: acceptance criteria, done definition, validation method, regression impact scope, and requirement -> applicable system design -> Task traceability with actual test evidence; retain local PRD/REQ/AC IDs alongside the shared Trace ID.
 - **Decision Record**: chosen approach, rejected alternatives, and evidence/rationale.
 
 ### Game Design Bible Completeness (Oasis7)
@@ -96,7 +96,7 @@ express all game details, use
 `doc/engineering/workflow/source-of-truth.md`.
 
 Do not turn the root PRD into a catch-all manual. Keep root `doc/game/prd.md`
-as the active gameplay baseline and route details into topic triplets.
+as the active gameplay baseline and route details into topic PRD/design documents.
 
 Each detailed gameplay PRD or promoted topic must cover:
 
@@ -123,15 +123,17 @@ Use the following split and avoid duplicate definitions:
 | Doc | Focus | Must Not Include |
 | --- | --- | --- |
 | PRD (`doc/<module>/prd.md`, `doc/**/**.prd.md`) | `Why/What/Done` (scope, behavior, acceptance, NFR, risks, decisions) | task breakdown, daily progress |
-| Project (GitHub task issue evidence comments) | `How/When/Who` (tasks, dependency, owner, status, execution plan) | rewriting target-state requirements |
+| Existing Task/PR (optional Issue or Project view) | `How/When/Who` (tasks, dependency, owner, status, execution plan) | rewriting target-state requirements |
 | Devlog (`doc/devlog/YYYY-MM-DD.md`) | immutable daily record (timestamp, done, pending, blockers) | requirement definitions |
 
 Guardrails:
+- Product feature design/implementation status summaries are allowed next to their requirements; retain evidence links and baseline, and keep detailed execution history in Task/PR. They are not a second progress ledger.
+- oasis7 content-check findings follow the [incremental CI boundary](../../doc/engineering/doc-governance/product-documentation-standard.design.md#advisory-content-checks); findings in new or substantively changed PR documents block CI, while untouched legacy content remains advisory. Input/execution errors and existing integrity checks remain blocking. Do not treat warnings as semantic acceptance.
 - `Critical User Flows` describe system/user/operator runtime behavior, not "rewrite/migrate docs" steps.
 - `Acceptance Criteria` describe verifiable outcomes (behavior/invariants/metrics/tests), not file existence.
 - `Roadmap/Milestones` describe shipped capability phases (MVP/v1.1/v2.0), not daily to-do updates.
-- Detailed game design belongs in topic PRD/design/project triplets and indexed
-  supplements. Root docs should route and summarize current truth, not absorb
+- Detailed game design belongs in topic PRD/design documents and indexed
+  supplements; execution stays in the existing Task/PR. Root docs should route and summarize current truth, not absorb
   all topic matrices.
 
 Quick contrast:
@@ -158,7 +160,7 @@ You **MUST** follow this exact structure for the output:
 - **User Scenarios & Frequency**: When and how often each persona uses this feature.
 - **User Stories**: `As a [user], I want to [action] so that [benefit].`
 - **Critical User Flows**: Step-by-step flow for key paths.
-- **Functional Specification Matrix**: fields, button actions, state transitions, sorting/computation rules, and permission behavior.
+- **Functional Specification Matrix**: fields, button actions, state transitions, sorting/computation rules, and permission behavior. In oasis7 product documents, keep each touched feature’s independent design/implementation status card adjacent to its feature/requirement; do not add columns to existing fixed trace tables.
 - **Acceptance Criteria**: Bulleted list of "Done" definitions for each story.
 - **Non-Goals**: What are we NOT building?
 
@@ -182,7 +184,7 @@ You **MUST** follow this exact structure for the output:
 
 ### 6. Validation & Decision Record
 
-- **Test Plan & Traceability**: PRD-ID -> Task -> `test_tier_required` / `test_tier_full` mapping.
+- **Test Plan & Traceability**: requirement Trace ID -> applicable system-design clause -> existing Task/PR, with actual `test_tier_required` / `test_tier_full` evidence where applicable. Explain missing or inapplicable layers; a shared ID alone does not prove completion.
 - **Decision Log**: selected option, rejected options, and rationale/evidence.
 
 ---

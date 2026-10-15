@@ -262,11 +262,12 @@ security-boundary routes in the current task branch. It is not a release claim:
 World Feed has no inferred receipt links, and production Director success remains
 blocked until a trusted issuer is available.
 
-1. Fresh load/reload/new tab/session starts in Player. Read the stage, compact
-   Objective/Next Move/Player Leverage HUD, then use the quiet `World / Targets /
-   Command` route. In fullscreen desktop the three HUD cards share one compact row;
-   on mobile Objective and Player Leverage share the first row and Next Move occupies
-   the second row. `More / Diagnostics` remains reachable as a secondary route.
+1. Fresh load/reload/new tab/session starts in Player. Read the world-first stage,
+   the single `Next Move` primary action and subordinate `Objective / Player Leverage`
+   context, then use the quiet `World / Targets / Command` route. On narrow screens,
+   the primary action occupies the first row and supporting context the second.
+   The [shell PRD](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
+   owns this layout; `More / Diagnostics` remains a reachable secondary route.
 2. Search remains inside Targets and only filters the authoritative visible list.
    Selecting a target recenters/highlights and opens context; it never executes.
    Quote is reached from contextual Command, not a peer rail item.
@@ -363,8 +364,10 @@ turn those tests into issuer-backed production access or a release claim.
 历史 Standard-3D / egui 表面曾提供 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板；该表面及这些操作均已退役，不能作为当前 canonical `viewer` Web 页面的使用说明或能力声明。当前支持边界仍以实时观察、当前选中对象、prompt/chat、`window.__AW_TEST__` 以及本手册列出的三条回归脚本为准。
 
 ## 证据边界
-- 当前 formal gameplay PASS 证据以 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 为准。
-  - 该证据包含 2026-04-08 的 LLM-enabled follow-up PASS，结论是当前 Web 主入口已具备 release-grade formal gameplay 样本。
+- `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 是固定历史样本；其中 2026-04-08 的 LLM-enabled follow-up PASS 仅代表原候选、环境和场景，不是今天默认生效的 formal gameplay 或 release-grade PASS。
+- 当前结论先回到 [证据入口](../../testing/evidence/README.md) 与 [总测试手册](../../../testing-manual.md)：核对适用 source/build、实际测试树、环境、入口、场景、范围和 gate，再引用相匹配的真实结果。
+  - 缺少当前适用证据时写 unknown；所选验证缺前置时写 blocked/inconclusive。这不表示当前玩法已失败，也不授权把旧证据改日期、换 hash 或重命名后作为新候选通过。
+  - 历史样本的失败、输出、来源与原结论保持不变；页面观察、截图、S6 和自主玩法验收不能互相代签。
 - `doc/world-runtime/evidence/formal-release-fixed-genesis-default-viewer-2026-05-16.md` 只证明 formal-release 技术启动状态在 `--no-llm` 观察链路下可加载、可连接、可选中实体。
   - 这份截图证据属于 observer/debug，不替代 formal gameplay 证明。
 
@@ -477,7 +480,7 @@ agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-we
 - `agent-browser` 失败：先运行 `agent-browser --version`、`agent-browser doctor --offline --quick --json` 与 `agent-browser --session <owned-session> session info --json`；若是 daemon/IPC 读取失败，只重建本轮 session，不重放非幂等动作，也不影响其他任务 session。
 - 有状态但不推进：优先跑 `viewer-software-safe-step-regression.sh`，确认是正常推进还是显式 blocker。
 - `test_api=1` 下停在 `connecting` 且 `logicalTime=0`：立即检查 `getState().lastError` / `errorCount` 并归档 state、console、screenshot。已知 WebGL/SwiftShader fatal 最多自动 reload 一次；再次失败是 S6 环境/图形 blocker，不得当作 gameplay 证据。只有确认 Web 图形阻塞后，native 才可作为诊断 fallback。
-- 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；回到 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 看 LLM-enabled follow-up 结论。
+- 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；按本手册[证据边界](#证据边界)查找与实际候选、环境和场景匹配的 LLM-enabled 结果。Apr07/08 follow-up 仅为历史示例，不能替代当前结论。
 
 ## 已移除能力
 - 退役的第二 Viewer 启动路径

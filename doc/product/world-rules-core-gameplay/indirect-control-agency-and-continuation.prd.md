@@ -19,6 +19,8 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 已直接承载产品承诺与 REQ/AC；独立 design 不增加新的信息分层、交互状态编排或策略取舍，专业文档只保留其各自的玩法和技术合同。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
 ## 1. 产品承诺
 
 玩家通过目标与 Agent 间接推动持续世界时，始终能理解自己正在追求什么、系统是否接受并如何推进、当前后果或阻塞为何发生，以及现在可以如何继续、改道或恢复；离开后返回仍可从这一决策链继续，而不是旁观不可解释的自动行为。
@@ -75,6 +77,15 @@
 <a id="req-wr-ia-001"></a>
 ### REQ-WR-IA-001：间接控制必须区分意图接受与世界生效
 
+Trace ID: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185
+
+- 系统设计状态：部分覆盖
+- 实现状态：部分实现
+- 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-001](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-001)；[gameplay-indirect-control-agency-contract.design / 1-intent-legibility-beforeat-commit](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#1-intent-legibility-beforeat-commit)；[gameplay-indirect-control-agency-contract.design / 2-execution-acknowledgement-with-causality](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#2-execution-acknowledgement-with-causality)；[gameplay-indirect-control-agency-contract.design / agency-interruption-hooks](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)；[gameplay-indirect-control-agency-contract.design / 4-bounded-consequence-readability](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#4-bounded-consequence-readability)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
+- 实现与验证依据：已交付 exact intent/digest 重试和 accepted→completed 边界；completion 要求完整 authority tuple、effect intent 与先前已提交匹配 receipt。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/world/agent_intent.rs#L222-L261)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/world/agent_intent_terminal.rs#L289-L381)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/tests/agent_intent_v2.rs#L615-L711)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已核对 canonical intent accepted、exact retry 与 matching committed receipt completion；所有意图类型、领域结算、真实 provider 和各正式入口仍需独立证据。
+
 - 性质：`目标要求`
 - 适用条件：玩家通过 Agent 提交目标、行动、step、社交、治理或冲突意图。
 - 要求：产品必须让玩家分别看到意图被接受/拒绝、当前推进或阻塞、权威世界后果和下一步；接受或排队不得被表达为行动已发生或结果已结算。
@@ -85,6 +96,15 @@
 
 <a id="req-wr-ia-002"></a>
 ### REQ-WR-IA-002：阻塞、离开与回流必须保留下一次决策
+
+Trace ID: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63
+
+- 系统设计状态：部分覆盖
+- 实现状态：部分实现
+- 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-003](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-003)；[indirect-control-agency-execution-and-continuation.design / des-wr-ia-006](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-006)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
+- 实现与验证依据：已交付 pending feedback 的不安全等待说明、enabled action 过滤、修复/改道比较及无可用路径时返回 goal selection 的投影。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L6-L31)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L42-L76)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L123-L182)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L188-L224)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已有失效等待/修复/改道投影及无安全路径返还决策；跨版本恢复、真实可执行领域动作、全部重连入口与当前权限变化仍未闭合。
 
 - 性质：`目标要求`
 - 适用条件：路线不可行、被改道、玩家暂时离开或重新连接。
@@ -97,6 +117,15 @@
 <a id="req-wr-ia-003"></a>
 ### REQ-WR-IA-003：关键间接决策必须保留可读因果与纠正结果
 
+Trace ID: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-007](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-007)。已承接：本条的意图接受、阻塞恢复或因果纠正及结果投影合同。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已有专业因果 receipt 合同；本轮未完整核对 memory reason/evidence、stakes、alternative、correction earliest-effect 到结果的所有实际 producer 与真实 provider 证据。
+
 - 性质：`目标要求`
 - 适用条件：记忆驱动、社交、治理或冲突等会改变玩家取舍的 Agent 决策。
 - 要求：产品必须让玩家沿同一因果链理解被接受的意图、Agent 理由/证据、stakes、预期后果、替代方向、打断/纠正点及纠正后的结果；提案接受不得被表达为权威规则已应用。
@@ -108,6 +137,8 @@
 <a id="ac-wr-ia-001"></a>
 ### AC-WR-IA-001：接受、推进、后果和下一步保持可区分
 
+Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185；声明：[REQ-WR-IA-001](#req-wr-ia-001)；适用范围沿用本 AC 原覆盖条件。
+
 - 覆盖要求：REQ-WR-IA-001。
 - 给定：一个玩家提交的目标或 step 意图。
 - 当：请求被接受、排队、处理、产生空结果或被阻塞。
@@ -116,6 +147,8 @@
 <a id="ac-wr-ia-002"></a>
 ### AC-WR-IA-002：阻塞和回流保留有效恢复动作
 
+Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63；声明：[REQ-WR-IA-002](#req-wr-ia-002)；适用范围沿用本 AC 原覆盖条件。
+
 - 覆盖要求：REQ-WR-IA-002。
 - 给定：玩家离开后路线失效、被替换、改道或当前目标受到阻塞。
 - 当：玩家返回、重连或主动查看当前意图。
@@ -123,6 +156,8 @@
 
 <a id="ac-wr-ia-003"></a>
 ### AC-WR-IA-003：因果解释和纠正结果可追溯
+
+Trace refs: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376；声明：[REQ-WR-IA-003](#req-wr-ia-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-IA-003。
 - 给定：一次记忆驱动、社交、治理或冲突决策及其替代方向。
