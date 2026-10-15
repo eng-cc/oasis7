@@ -4,6 +4,8 @@ use oasis7::runtime::*;
 use oasis7::world_service::private_task_context::*;
 use oasis7::world_service::task_factory_quote::*;
 use oasis7::world_service::task_recipe_quote::*;
+#[path = "world_service_task_starter_chain_expiry_recovery.rs"]
+mod expiry_recovery;
 #[path = "world_service_task_starter_chain_factory_quote_retry.rs"]
 mod factory_quote_retry;
 const SITE: &str = "starter-site";
@@ -303,7 +305,24 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
                     &delegate,
                 )
                 .unwrap();
-                let mut captured = retry_private(|| client.read_task_context(&get), deadline);
+                let current_base = || pin().world.current_cognition_base_binding().unwrap();
+                let current_tick = || current_base().base_tick;
+                let mut captured =
+                    match read_context_until_expiry(&client, &get, deadline, &current_tick) {
+                        ContextRead::Captured(captured) => *captured,
+                        ContextRead::Expired => {
+                            let _ = settle_expired_context(
+                                &client,
+                                &delegate,
+                                &world,
+                                &prepared.identity,
+                                &current_base,
+                                deadline,
+                                &mut categories,
+                            );
+                            continue;
+                        }
+                    };
                 let action = match stage {
                     0 => build_action(
                         &client,
@@ -314,8 +333,9 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
                         metadata["endpoint"].as_str().unwrap(),
                         &root,
                         &world,
+                        &current_tick,
                     ),
-                    1 | 2 => Action::TransferMaterial {
+                    1 | 2 => Some(Action::TransferMaterial {
                         requester_agent_id: "agent-a".into(),
                         from_ledger: MaterialLedgerId::agent("agent-a"),
                         to_ledger: MaterialLedgerId::site(SITE),
@@ -331,9 +351,28 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
                         route_id: None,
                         route_ids: vec![],
                         auto_reroute: false,
-                    },
-                    3 => recipe_action(&client, &delegate, &get, &mut captured, deadline),
+                    }),
+                    3 => recipe_action(
+                        &client,
+                        &delegate,
+                        &get,
+                        &mut captured,
+                        deadline,
+                        &current_tick,
+                    ),
                     _ => unreachable!(),
+                };
+                let Some(action) = action else {
+                    let _ = settle_expired_context(
+                        &client,
+                        &delegate,
+                        &world,
+                        &prepared.identity,
+                        &current_base,
+                        deadline,
+                        &mut categories,
+                    );
+                    continue;
                 };
                 let original = request(
                     &world,
@@ -654,6 +693,101 @@ fn assert_terminal(
     );
 }
 
+enum ContextRead {
+    Captured(Box<CapturedTaskContextV1>),
+    Expired,
+}
+
+fn context_expired_conflict(
+    error: &oasis7::world_service::client::WorldServiceClientError,
+    canonical_tick: u64,
+    valid_until_tick: u64,
+) -> bool {
+    matches!(
+        error,
+        oasis7::world_service::client::WorldServiceClientError::Rejected { status: 409, .. }
+    ) && canonical_tick > valid_until_tick
+}
+
+fn read_context_until_expiry<F: Fn() -> u64>(
+    client: &RemoteWorldServiceClient,
+    get: &SignedReadRequest<TaskContextGetV1>,
+    deadline: Instant,
+    canonical_tick: &F,
+) -> ContextRead {
+    let valid_until_tick = get.request.context.valid_until_tick.0;
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "starter chain deadline exhausted during context read"
+        );
+        if canonical_tick() > valid_until_tick {
+            return ContextRead::Expired;
+        }
+        match client.read_task_context(get) {
+            Ok(captured) => return ContextRead::Captured(Box::new(captured)),
+            Err(error) if context_expired_conflict(&error, canonical_tick(), valid_until_tick) => {
+                return ContextRead::Expired;
+            }
+            Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
+                status,
+                ..
+            }) => panic!("starter task context read rejected while still live (HTTP {status})"),
+            Err(
+                oasis7::world_service::client::WorldServiceClientError::Transport(_)
+                | oasis7::world_service::client::WorldServiceClientError::Cooldown { .. },
+            ) => {
+                let pause = Duration::from_millis(100)
+                    .min(deadline.saturating_duration_since(Instant::now()));
+                if !pause.is_zero() {
+                    std::thread::sleep(pause);
+                }
+            }
+            Err(_) => panic!("starter task context read failed"),
+        }
+    }
+}
+
+fn settle_expired_context<F: Fn() -> oasis7::runtime::RuntimeCognitionBaseBindingV1>(
+    client: &RemoteWorldServiceClient,
+    delegate: &str,
+    world: &WorldIdentity,
+    identity: &oasis7_agent_api::game::TaskContextIdentityV1,
+    current_base: &F,
+    deadline: Instant,
+    categories: &mut CleanupCategories,
+) -> SubmitIntentRequest<WorldServicePayloadV1> {
+    for abort_attempt in 0..8 {
+        assert!(
+            Instant::now() < deadline,
+            "starter chain deadline exhausted during expired-context cleanup"
+        );
+        let base = current_base();
+        assert!(
+            base.base_tick > identity.valid_until_tick.0,
+            "expired-context cleanup requires a canonical tick past the captured lease"
+        );
+        let mut outcome = public_outcome_intent(identity, base, "context_expired")
+            .expect("expired-context cleanup must match the public task identity");
+        outcome.request_id = format!(
+            "{}:expired-context:{abort_attempt}",
+            identity.decision_request_id
+        );
+        let abort = request(
+            world,
+            WorldServicePayloadV1::Scheduler(
+                sign_read_request("scheduler", outcome, delegate).unwrap(),
+            ),
+        );
+        match settle_cleanup_original(client, &abort, deadline, categories) {
+            Ok(_) => return abort,
+            Err("canonical cleanup rejected") => assert_terminal(client, &abort),
+            Err(error) => panic!("unresolved expired-context cleanup: {error}"),
+        }
+    }
+    panic!("bounded expired-context cleanup attempts exhausted");
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Real service quote and canonical pin security probe"
@@ -667,8 +801,12 @@ fn build_action(
     endpoint: &str,
     root: &Path,
     world: &WorldIdentity,
-) -> Action {
+    canonical_tick: &impl Fn() -> u64,
+) -> Option<Action> {
     while Instant::now() < deadline {
+        if canonical_tick() > get.request.context.valid_until_tick.0 {
+            return None;
+        }
         let proof = sign_read_request(
             TASK_FACTORY_QUOTE_PATH,
             TaskFactoryQuoteRequestV1 {
@@ -703,7 +841,10 @@ fn build_action(
             }
         };
         let Some(quote) = quote else {
-            *captured = retry_private(|| client.read_task_context(get), deadline);
+            match read_context_until_expiry(client, get, deadline, canonical_tick) {
+                ContextRead::Captured(refreshed) => *captured = *refreshed,
+                ContextRead::Expired => return None,
+            }
             continue;
         };
         assert!(quote.quote.rejection.is_none());
@@ -857,7 +998,7 @@ fn build_action(
             )
         );
         captured.current_public_context = quote.current_public_context;
-        return quote.quote.action;
+        return Some(quote.quote.action);
     }
     panic!("starter chain deadline exhausted during factory quote refresh");
 }
@@ -867,8 +1008,12 @@ fn recipe_action(
     get: &SignedReadRequest<TaskContextGetV1>,
     captured: &mut CapturedTaskContextV1,
     deadline: Instant,
-) -> Action {
+    canonical_tick: &impl Fn() -> u64,
+) -> Option<Action> {
     while Instant::now() < deadline {
+        if canonical_tick() > get.request.context.valid_until_tick.0 {
+            return None;
+        }
         let proof = sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -891,7 +1036,7 @@ fn recipe_action(
                     assert!(quote.quote.rejection.is_none());
                     assert_eq!(quote.quote.authorization.cost_units, 8);
                     captured.current_public_context = quote.current_public_context;
-                    return quote.quote.action;
+                    return Some(quote.quote.action);
                 }
                 Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
                     status: 409,
@@ -907,7 +1052,10 @@ fn recipe_action(
                 Err(e) => panic!("recipe quote rejected: {e}"),
             }
         }
-        *captured = retry_private(|| client.read_task_context(get), deadline);
+        match read_context_until_expiry(client, get, deadline, canonical_tick) {
+            ContextRead::Captured(refreshed) => *captured = *refreshed,
+            ContextRead::Expired => return None,
+        }
     }
     panic!("starter chain deadline exhausted during recipe quote refresh");
 }

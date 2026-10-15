@@ -332,6 +332,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
         let mut categories = CleanupCategories::default();
         let mut attempts = Vec::new();
         let mut forced_action_rejection = false;
+        let mut first_cognition_original_seen = false;
         let mut committed = None;
         for attempt in 0..8 {
             assert!(
@@ -429,22 +430,37 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                     sign_read_request("cognition", intent, &delegate).unwrap(),
                 ),
             );
+            let expects_one_shot_503 = !first_cognition_original_seen;
+            first_cognition_original_seen = true;
             let cleanup_before_original = categories;
             match settle_cleanup_original(&client, &original, deadline, &mut categories) {
                 Ok(first) => {
+                    assert_eq!(
+                        categories.submit_http_503 - cleanup_before_original.submit_http_503,
+                        if expects_one_shot_503 { 1 } else { 0 },
+                        "one-shot cognition 503 count must match this original"
+                    );
+                    if expects_one_shot_503 {
+                        assert!(
+                            categories.lookup_unknown > cleanup_before_original.lookup_unknown,
+                            "the exact original must be looked up after the unsigned 503"
+                        );
+                    }
                     committed = Some((captured, original, first, quote_proof, quoted));
                     break;
                 }
                 Err("canonical cleanup rejected") => {
                     assert_eq!(
                         categories.submit_http_503 - cleanup_before_original.submit_http_503,
-                        1,
-                        "the exact stale cognition original must exercise one HTTP 503"
+                        if expects_one_shot_503 { 1 } else { 0 },
+                        "one-shot cognition 503 count must match this original"
                     );
-                    assert!(
-                        categories.lookup_unknown > cleanup_before_original.lookup_unknown,
-                        "the exact original must be looked up after the unsigned 503"
-                    );
+                    if expects_one_shot_503 {
+                        assert!(
+                            categories.lookup_unknown > cleanup_before_original.lookup_unknown,
+                            "the exact original must be looked up after the unsigned 503"
+                        );
+                    }
                     retain_terminal_original(&client, &original, "action", &root, &mut attempts);
                     forced_action_rejection = true;
                     assert_eq!(
