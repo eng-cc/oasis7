@@ -1144,8 +1144,87 @@ def scenario_plain_navigation_is_not_a_requirement_chain() -> None:
     assert ids == {identifier} and has_product
 
 
+def scenario_validation_source_filename_tokens() -> None:
+    module = load_checker()
+    design = Path("doc/system/sample.design.md")
+    accepted = (
+        "transfer_submit_api_tests.rs", "transfer_submit_api_explorer_tests.rs",
+        "main_tests.rs", "explorer_tests.rs", "tests.rs", "specs.rs",
+        "tests_sample.rs", "sample.tests.rs", "sample-tests.rs",
+        "sample_specs.rs", "sample.specs.ts", "sample-specs.py",
+        "SAMPLE_TESTS.RS", "sample_test.rs", "sample.spec.ts",
+    )
+    rejected = (
+        "transfer_auth.rs", "main.rs", "contest.rs", "latest.rs",
+        "sample_teststuff.rs", "sample_testsuite.rs", "mytests.rs",
+        "sample_specsification.rs", "aspects.rs", "specsheet.rs",
+        "sample_tests2.rs", "sample_2tests.rs", "sample_tests.design.md",
+        "sample_specs.design.md", "source.unknown",
+    )
+    for name in accepted:
+        assert module.is_test_or_manual_source(Path("crates/sample/src") / name, design), name
+    for name in rejected:
+        assert not module.is_test_or_manual_source(Path("crates/sample/src") / name, design), name
+    assert not module.is_test_or_manual_source(design, design)
+
+
+def scenario_plural_sources_preserve_reference_guards() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo()
+    source = root / "crates/sample/src/transfer_submit_api_tests.rs"
+    source.parent.mkdir(parents=True)
+    source.write_text("#[test]\nfn rejects_invalid_request() {}\n", encoding="utf-8")
+    original = "[sample test](../tests/sample.test.py)"
+    method = "[request tests](../../crates/sample/src/transfer_submit_api_tests.rs)"
+    try:
+        (root / DESIGN).write_text(DESIGN_HEADER.replace(original, method), encoding="utf-8")
+        assert_no_errors(module, root / DESIGN)
+        source.unlink()
+        assert_code(module, root / DESIGN, "trace-validation-missing")
+        source.write_text("#[test]\nfn rejects_invalid_request() {}\n", encoding="utf-8")
+        for invalid_method, code in (
+            (method + " " + original, "trace-validation-source-invalid"),
+            (method.replace(".rs)", ".rs#missing)"), "trace-ref-unresolved"),
+            ("[escape](../../../outside_tests.rs)", "trace-validation-missing"),
+        ):
+            (root / DESIGN).write_text(DESIGN_HEADER.replace(original, invalid_method), encoding="utf-8")
+            assert_code(module, root / DESIGN, code)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_plain_source_content_cannot_impersonate_test_path() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo()
+    source = root / "crates/sample/src/transfer_auth.rs"
+    source.parent.mkdir(parents=True)
+    method = "[source](../../crates/sample/src/transfer_auth.rs)"
+    (root / DESIGN).write_text(
+        DESIGN_HEADER.replace("[sample test](../tests/sample.test.py)", method), encoding="utf-8"
+    )
+    try:
+        for text in (
+            "fn test_request() {}\n",
+            "// #[test] fn fake() {}\n",
+            "/* #[test] fn fake() {} */\n",
+            'const S: &str = "#[test] fn fake() {}";\n',
+            'const S: &str = r###"#[test] fn fake() {}"###;\n',
+            "#[cfg(test)] mod tests {}\n",
+            "#[test_case] fn fake() {}\n",
+            # Inline Rust test parsing is deliberately outside this path-only fix.
+            "#[cfg(test)] mod tests { #[test] fn actual() {} }\n",
+        ):
+            source.write_text(text, encoding="utf-8")
+            assert_code(module, root / DESIGN, "trace-validation-source-invalid")
+    finally:
+        shutil.rmtree(root)
+
+
 def main() -> None:
     scenarios = (
+        scenario_validation_source_filename_tokens,
+        scenario_plural_sources_preserve_reference_guards,
+        scenario_plain_source_content_cannot_impersonate_test_path,
         scenario_plain_navigation_is_not_a_requirement_chain,
         scenario_clause_graph_diamonds_are_parsed_once_per_call,
         scenario_clause_graph_preserves_depth_cycle_and_ref_contexts,
