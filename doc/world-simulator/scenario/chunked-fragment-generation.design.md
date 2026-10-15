@@ -70,12 +70,16 @@
 <a id="fragment-center-budget-design"></a>
 ### 中心坐标与预算归属
 
+Trace refs: [O7-REQ-218aeae3-6a52-423a-9b69-9570975edc3c](../../product/world-rules-core-gameplay/prd.md#source-location-quantity-truth)
+
 初始化与补种共享同一厘米坐标落位约束：候选转换为整数 cm 后、进入 spacing/接纳与预算落账前，必须校验 `chunk_coord_of(center) == generating_chunk`。内部块采用半开边界，不能让 round 到内部上边界的中心留在原 chunk 预算；若采用确定性归一或拒绝候选，须受现有有界尝试与有效配置约束，并在相同 seed/config/trigger order 下可复现。世界最外沿沿用现有 clamp，碎片半径跨界仍合法。
 
 接纳后的 `Location.pos`、fragment 索引和初始化/补种预算必须使用同一个最终中心；后续消费按该中心定位同一预算。不能仅修预算或仅修显示坐标，也不能在 replay 重新随机生成。此设计对应 [#4497](https://github.com/eng-cc/oasis7/issues/4497) 的边界取整缺口；实际归一策略、生成版本兼容与 fixture 由实现 PR 验证，本文不宣称现有生成器已修。
 
 <a id="legacy-simulator-refining-design"></a>
 ### 4.1 旧精炼账本解释
+
+Trace refs: [O7-REQ-1c30e45e-99f4-4353-8f80-380f23243cbe](../../product/world-rules-core-gameplay/prd.md#source-current-goal-impact)
 
 旧 Simulator 动作中的 compound 输入与 hardware 输出都落在同一 owner 的 `ResourceKind::Data`。预览应从动作提交前余额 `D` 读取 before，以真实扣入加出后的 `D - M + H` 读取 after，再按同一目标 `B` 比较净缺口；不得将 `D - M` 称作 before，或仅因 `H > 0` 显示 `partial_progress`。当前报价实现尚使用预扣投入的 before，纠正它需要独立实现和回归，本次只补齐消费者合同。
 
@@ -88,6 +92,8 @@ M4 的 `MaterialStack.kind` 标签和独立材料账本遵循 [PRD 的领域边�
 
 <a id="des-frfr-capability"></a>
 ### 5.1 实际后端能力
+
+Trace refs: [O7-REQ-ff33b61a-c81c-46f8-8e34-928af72858ef](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)
 
 产品消费者仅为[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)；本节仅覆盖当前声明的后端与状态，不扩到全部 source profile。
 
@@ -126,6 +132,8 @@ world-service 即使偶然保留了含 chunk budget 的 `seed_model`，也不能
 
 <a id="des-frfr-readonly"></a>
 ### 5.5 只读、失效和实际结果
+
+Trace refs: [O7-REQ-dcbc5b97-bbfb-4345-b411-926bd9dff3d9](../../product/world-rules-core-gameplay/prd.md#source-replenishment-effect-recheck)
 
 产品消费者仅为[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-replenishment-effect-recheck)；本节仅覆盖当前声明的后端与状态，不扩到全部 source profile。
 
@@ -175,6 +183,8 @@ Web 补充验证使用候选版本的 [fragment_refill_preview_card.test.jsx](..
 
 <a id="chunk-generation-existing-obligations"></a>
 ## 13. 既有生成义务的有限承接
+
+Trace refs: [O7-REQ-b4be4414-7def-4831-8302-f9523e82f944](../../product/world-rules-core-gameplay/prd.md#generation-physical-truth)
 
 本节只补齐既有合同身份、适用入口和验证导航，不改变前述生成、预算、FRFR、中心归属或精炼义务。合同采用与实现验收分开：未修实现或未执行测试仍保留为未核实，不要求重新选择已采用合同。全篇尚有[回放规范冲突](#chunk-replay-conflict-register)，本次不宣称完整闭合。
 
