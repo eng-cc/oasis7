@@ -37,10 +37,14 @@ fn bytes<T: Serialize>(domain: &str, value: &T) -> Result<Vec<u8>, ProtocolError
 pub(super) fn hash<T: Serialize>(domain: &str, value: &T) -> Result<String, ProtocolError> {
     Ok(blake3::hash(&bytes(domain, value)?).to_hex().to_string())
 }
-fn sign<T: Serialize>(domain: &str, value: &T, key: &SigningKey) -> Result<String, ProtocolError> {
+pub(super) fn sign<T: Serialize>(
+    domain: &str,
+    value: &T,
+    key: &SigningKey,
+) -> Result<String, ProtocolError> {
     Ok(hex::encode(key.sign(&bytes(domain, value)?).to_bytes()))
 }
-fn verify<T: Serialize>(
+pub(super) fn verify<T: Serialize>(
     domain: &str,
     value: &T,
     signature: &str,
@@ -142,10 +146,18 @@ pub(super) fn verify_proposal(
 ) -> Result<String, ProtocolError> {
     trust.validate()?;
     let b = &p.body;
-    if b.schema_version != 1 || b.scope != EVIDENCE_SCOPE || &b.trust != trust || b.position == 0 {
+    if !((b.schema_version == 1 && b.frozen_input_digest.is_none())
+        || (b.schema_version == 2 && b.frozen_input_digest.is_some()))
+        || b.scope != EVIDENCE_SCOPE
+        || &b.trust != trust
+        || b.position == 0
+    {
         return Err(invalid("proposal identity/schema/scope"));
     }
     hash_hex(&b.parent_hash)?;
+    if let Some(digest) = &b.frozen_input_digest {
+        hash_hex(digest)?;
+    }
     b.request.validate().map_err(|e| invalid(e.to_string()))?;
     if [
         &b.request.verified_subject,
@@ -220,6 +232,12 @@ pub fn verify_evidence(
     parent: &HeadAnchor,
 ) -> Result<HeadAnchor, ProtocolError> {
     let digest = verify_proposal(&e.proposal, trust)?;
+    match (&e.proposal.body.frozen_input_digest, &e.frozen_certificate) {
+        (None, None) => {}
+        (Some(_), Some(certificate)) => certificate.verify_candidate(&e.proposal)?,
+        _ => return Err(invalid("evidence frozen certificate requirement mismatch")),
+    }
+
     if parent.position == 0 && parent != &trust.genesis_anchor()? {
         return Err(invalid("false external genesis anchor"));
     }

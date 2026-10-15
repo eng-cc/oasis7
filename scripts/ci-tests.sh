@@ -91,7 +91,7 @@ prepare_local_cargo_target() {
 run_cargo() {
   prepare_local_cargo_target
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
-    run env -u RUSTC_WRAPPER cargo "$@" --verbose
+    run env -u RUSTC_WRAPPER cargo --verbose "$@"
   else
     run env -u RUSTC_WRAPPER cargo "$@"
   fi
@@ -134,6 +134,9 @@ PY_VIEWER
 )"
   rm -f "$viewer_manifest"
   PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features test_tier_required
+  case "$(uname -s)" in
+    Linux|Darwin) run ./scripts/formal-live-local-tests.sh "$repo_root" ;;
+  esac
 }
 
 run_scenario_regression_tests() {
@@ -157,11 +160,12 @@ run_oasis7_consensus_clippy() {
 }
 
 run_oasis7_distfs_tests() {
-  run_cargo test -p oasis7_distfs --lib
+  # Keep independent RPC deadline fixtures from contending with other storage fixtures.
+  run_cargo test -p oasis7_distfs --lib --bin oasis7_durability_endpoint -- --test-threads=1
 }
 
 run_oasis7_distfs_clippy() {
-  run_cargo_clippy -p oasis7_distfs --lib
+  run_cargo_clippy -p oasis7_distfs --lib --bin oasis7_durability_endpoint
 }
 
 run_oasis7_node_tests() {
@@ -198,8 +202,10 @@ run_oasis7_net_libp2p_clippy() {
 run_oasis7_workspace_support_crate_tests() {
   run_cargo_clippy -p oasis7_agent_api --all-targets
   run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo_clippy -p oasis7_game_client --all-targets
   run_cargo test -p oasis7_agent_api
   run_cargo test -p oasis7_agent_harness --lib
+  run_cargo test -p oasis7_game_client --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \
@@ -244,8 +250,6 @@ if raw.startswith('plan:'):
         raise SystemExit('unknown support profile plan version')
     else:
         profiles = plan.get('workspace_support_profiles')
-        if plan.get('scope') == 'full' and set(profiles or []) != set(module.SUPPORT_PROFILES):
-            raise SystemExit('full plan omitted support profiles')
 else:
     profiles = json.loads(raw)
 if (not isinstance(profiles, list) or not profiles or
@@ -253,6 +257,11 @@ if (not isinstance(profiles, list) or not profiles or
         len(set(profiles)) != len(profiles) or
         not set(profiles).issubset(module.SUPPORT_PROFILES)):
     raise SystemExit('invalid or missing workspace support profiles')
+# A trusted base planner cannot name newly extracted packages. Full scope
+# always expands to the candidate inventory after validating its known input,
+# so an additive profile never narrows or breaks the full support job.
+if raw.startswith('plan:') and plan.get('scope') == 'full':
+    profiles = list(module.SUPPORT_PROFILES)
 print('\n'.join(sorted(profiles)))
 PY
   ) || return 2
@@ -260,7 +269,7 @@ PY
     echo "+ support profile: $profile"
     case "$profile" in
       oasis7_agent_api) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" ;;
-      oasis7_agent_harness) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
+      oasis7_agent_harness|oasis7_game_client) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
       oasis7_wasm_executor) run_cargo test -p "$profile" --features wasmtime --lib ;;
       oasis7_secure_envelope|oasis7_context) run_cargo test -p "$profile" --all-targets --locked ;;
       oasis7_local_signer) run_cargo test -p "$profile" --lib; run_cargo test -p "$profile" --test context_cli --locked ;;
@@ -389,6 +398,7 @@ run_operational_node_contract_tests() {
   run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
   run bash ./scripts/p2p-public-testnet-service-readback.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
+  run bash ./scripts/p2p-public-testnet-package-node-operation-transaction.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-order.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh

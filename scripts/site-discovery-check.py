@@ -63,7 +63,17 @@ def check(root=ROOT):
         need([a['data-decision-panel'] for _, a in steps] == ['0', '1', '2', '3'], f'{prefix}: four static reading steps required')
         need(all('hidden' not in a for _, a in steps), f'{prefix}: steps must remain readable without JS')
         walkthrough = home.with_attr('data-decision-walkthrough')
-        need(len(walkthrough) == 1 and walkthrough[0][1].get('data-provenance') == 'illustrative', f'{prefix}: evidence type required')
+        need(len(walkthrough) == 1 and walkthrough[0][1].get('data-provenance') == 'runtime_capture', f'{prefix}: evidence type required')
+        if len(walkthrough) == 1:
+            attrs = walkthrough[0][1]
+            for field in ['data-source-build', 'data-runtime-profile', 'data-source-scenario', 'data-source-window']:
+                need(attrs.get(field, '').strip().lower() not in {'', 'unknown', 'n/a', 'none'}, f'{prefix}: incomplete case runtime provenance: {field}')
+            provenance = home.with_attr('data-evidence-provenance')
+            need(len(provenance) == 1 and provenance[0][1].get('data-evidence-provenance') == 'runtime_capture', f'{prefix}: runtime capture disclosure required')
+            if len(provenance) == 1:
+                need(provenance[0][1].get('data-evidence-source') == attrs.get('data-evidence-source'), f'{prefix}: runtime capture source disclosure mismatch')
+            need(bool(re.fullmatch(r'[0-9a-f]{40}', attrs.get('data-source-version', ''))), f'{prefix}: fixed case version required')
+            need(bool(re.fullmatch(r'https://github\.com/eng-cc/oasis7/blob/[0-9a-f]{40}/doc/testing/evidence/[^?#]+', attrs.get('data-evidence-source', ''))), f'{prefix}: immutable case report required')
         articles = []
         identities = set()
         for family, kind in families.items():

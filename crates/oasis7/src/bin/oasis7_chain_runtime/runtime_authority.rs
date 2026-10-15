@@ -345,9 +345,31 @@ fn authority_world_has_persisted_state(execution_world_dir: &Path) -> bool {
 fn load_authority_world_from_isolated_copy(
     execution_world_dir: &Path,
 ) -> Result<RuntimeWorld, String> {
+    load_world_from_isolated_copy(execution_world_dir, false)
+}
+
+/// Migration compares the persisted snapshot before applying any new release
+/// policy. Loading occurs in a disposable copy so recovery cannot change source.
+pub(super) fn load_persisted_world_exact(
+    execution_world_dir: &Path,
+) -> Result<RuntimeWorld, String> {
+    load_world_from_isolated_copy(execution_world_dir, true)
+}
+
+fn load_world_from_isolated_copy(
+    execution_world_dir: &Path,
+    exact: bool,
+) -> Result<RuntimeWorld, String> {
     let isolated_dir = create_authority_preflight_dir()?;
     let load_result = copy_authority_world_tree(execution_world_dir, isolated_dir.as_path())
-        .and_then(|()| super::execution_bridge::load_execution_world(isolated_dir.as_path()));
+        .and_then(|()| {
+            if exact {
+                RuntimeWorld::load_from_dir(isolated_dir.as_path())
+                    .map_err(|error| format!("load original persisted world: {error:?}"))
+            } else {
+                super::execution_bridge::load_execution_world(isolated_dir.as_path())
+            }
+        });
     let cleanup_result = fs::remove_dir_all(isolated_dir.as_path()).map_err(|err| {
         format!(
             "remove isolated authority world copy {} failed: {err}",
@@ -375,7 +397,13 @@ fn create_authority_preflight_dir() -> Result<PathBuf, String> {
         let path = std::env::temp_dir().join(format!(
             "oasis7-runtime-authority-preflight-{process_id}-{timestamp}-{sequence}"
         ));
-        match fs::create_dir(path.as_path()) {
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(path.as_path()) {
             Ok(()) => return Ok(path),
             Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
             Err(error) => {
@@ -682,7 +710,7 @@ fn validate_inventory_against_manifest(
 /// percentage.  The authority contract canonicalizes only that exact derived
 /// value; a non-default explicit percentage remains distinct and is rejected
 /// by the inventory binding.
-fn canonicalize_registry_for_authority(
+pub(super) fn canonicalize_registry_for_authority(
     mut registry: GovernanceFinalitySignerRegistry,
 ) -> GovernanceFinalitySignerRegistry {
     let derived_threshold_bps =
@@ -753,7 +781,9 @@ fn required_value_string(
         .ok_or_else(|| format!("deployment inventory node {scope}.{key} is missing"))
 }
 
-fn semantic_registry_sha256(registry: &GovernanceFinalitySignerRegistry) -> Result<String, String> {
+pub(super) fn semantic_registry_sha256(
+    registry: &GovernanceFinalitySignerRegistry,
+) -> Result<String, String> {
     let mut canonical = BTreeMap::new();
     canonical.insert(
         "signer_bindings",

@@ -201,11 +201,11 @@ Trace ID: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616
 
 - 功能点：[REQ-AGENT-STAGE-001](#req-agent-stage-001)；适用范围沿本条原条件与 [AC-AGENT-STAGE-001](#ac-agent-stage-001)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-scene)已承接四层架构与数据来源分层；同文件需求承接/验证表反链本条AC。剩余：目的/下一步、密度变化可读性及继续纠正中断恢复尚无完整逐条承接；view-scene已覆盖四层架构和来源分层。 不代表实现或发布。
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-scene)保留四层架构与数据来源分层；[品牌阅读顺序](../../world-simulator/viewer/viewer-brand-system-2026-06-05.design.md#23-terminal-shell-brand-summary)与[视觉 HUD 层级](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#83-hud-dock-and-contextual-console-hierarchy)局部承接当前目的、blocker、下一步的主次顺序；[玩家因果与环境活动](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#62-player-leverage-before-ambient-activity)及[回执解释](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#113-receipt)局部承接结果解释与环境活动不代签因果。各设计承接/验证表反链本要求；这些局部依据不证明完整 AC、实现或发布。
 - 实现状态：未核实
 - 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：目的/下一步、密度变化可读性及继续纠正中断恢复尚无完整逐条承接；view-scene已覆盖四层架构和来源分层。；实现/验证：完整适用入口与验收尚未闭合。
+- 核对日期与基线：2026-10-15；本轮文档与静态布局核对基线 `edf61e801e4888087c2e65a402011088bd1c50b2`；入口仅为上述局部条款，未执行真实 Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：目的/blocker/下一步已有局部阅读顺序、结果已有局部解释合同，但相关 Agent/地点/路线的完整承接、密度变化后的可读性、完整继续/纠正/中断/恢复路径及各正式 surface 的组合 AC 仍未闭合；token/CSS 数值和完整品牌状态字典不是本条要求。实现/验证：局部静态接线不证明完整适用入口、权威因果与真实体验验收，保持未核实。
 
 - 要求：正式玩家 surface 必须优先呈现当前目的、相关 Agent/地点/路线、关键 blocker、下一步和已接受行动的主要结果；环境装饰与诊断不能代替玩家因果。
 - 验收：AC-AGENT-STAGE-001

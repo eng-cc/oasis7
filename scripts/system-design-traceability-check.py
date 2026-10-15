@@ -1012,7 +1012,7 @@ def validate_reference(
 
 
 def is_test_or_manual_source(path: Path, design: Path) -> bool:
-    """Accept only repository-owned test or manual source paths."""
+    """Classify test/manual paths; source contents (including inline tests) are not parsed."""
     if path.resolve() == design.resolve() or path.name.casefold().endswith(".design.md"):
         return False
     parts = {part.casefold() for part in path.parts[:-1]}
@@ -1021,7 +1021,7 @@ def is_test_or_manual_source(path: Path, design: Path) -> bool:
         return True
     if name in {"testing-manual.md", "manual.md"} or name.endswith(".manual.md"):
         return True
-    return bool(re.search(r"(?:^|[._-])(test|spec)(?:[._-]|$)", name))
+    return bool(re.search(r"(?:^|[._-])(tests?|specs?)(?:[._-]|$)", name))
 
 
 def first_valid_link(

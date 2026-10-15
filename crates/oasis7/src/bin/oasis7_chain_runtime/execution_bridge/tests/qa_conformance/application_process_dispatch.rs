@@ -49,6 +49,7 @@ fn run_inner() {
     }
     println!("PRE2_APPLICATION_OS_DENIAL_PROBE_PASSED");
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: env("PRE2_APP_ENDPOINT"),
         trusted_service_public_key: env("PRE2_APP_TRUST"),
         expected_world: serde_json::from_str(&env("PRE2_APP_WORLD")).unwrap(),
@@ -218,6 +219,8 @@ fn run_inner() {
     };
     let view = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: "public".into(),
@@ -239,6 +242,8 @@ fn run_inner() {
     let protected = RemoteWorldServiceClient::new(protected_config).unwrap();
     let baseline = protected
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: protected.config().expected_world.clone(),
             scope_id: protected.config().scope_id.clone(),
@@ -303,6 +308,8 @@ fn run_inner() {
     };
     let gameplay_view = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: "public".into(),
@@ -380,6 +387,8 @@ fn run_inner() {
     );
     protected
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: protected.config().expected_world.clone(),
             scope_id: protected.config().scope_id.clone(),

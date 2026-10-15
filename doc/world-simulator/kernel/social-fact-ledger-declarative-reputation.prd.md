@@ -153,11 +153,36 @@
 | Confirmed 且保留历史 challenge | 拒绝重复挑战 | 拒绝新的重复裁决，不新增成功裁决事件或再次结算 |
 | Retracted / Revoked / Expired | 拒绝，资源不变 | 拒绝，即使保留历史 challenge 也不能复活 |
 
+<a id="social-ac-1"></a>
+#### SOCIAL-AC-1 局部验收
+
 - SOCIAL-AC-1：quote/apply 共享当前资格和生命周期规则；quote 始终只读且不预留，apply 在执行时重新校验。旧 quote 或历史 challenge 不产生当前裁决资格。
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；主责：Simulator social 维护者 / qa_engineer；局部承接 [REQ-WR-CR-003](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)及[产品验收](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)的只读预览与 lifecycle 支撑边界；专业实现与验证见 [SOCIAL-AC-1 设计](social-fact-ledger-declarative-reputation.design.md#social-obligation-1)。不覆盖 R&D charter、份额/credential 不转移、机会组合或整个产品验收。
+<a id="social-ac-2"></a>
+#### SOCIAL-AC-2 局部验收
+
 - SOCIAL-AC-2：Challenge 在扣 stake 前完成 owner、reason、stake、事实存在、生命周期、已有 challenge 及资源条件检查；普通拒绝后库存、stake pool、事实和关系边均不变。正常时间/拒绝事件 ID 推进独立断言，不要求整个世界逐字不变。
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；主责：Simulator social 维护者 / qa_engineer；局部承接 [REQ-WR-CR-003](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)及[产品验收](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)的只读预览与 lifecycle 支撑边界；专业实现与验证见 [SOCIAL-AC-2 设计](social-fact-ledger-declarative-reputation.design.md#social-obligation-2)。不覆盖 R&D charter、份额/credential 不转移、机会组合或整个产品验收。
+<a id="social-ac-3"></a>
+#### SOCIAL-AC-3 局部验收
+
 - SOCIAL-AC-3：Publish→Challenge→Revoke→Confirm 的最后一步拒绝，事实仍 Revoked；以其新建 backing 边也拒绝。Retract→Confirm、Challenged→Expired→裁决和重复裁决分别覆盖；保留 challenge 审计信息，不用清空历史掩盖状态机问题。
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；主责：Simulator social 维护者 / qa_engineer；局部承接 [REQ-WR-CR-003](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)及[产品验收](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)的只读预览与 lifecycle 支撑边界；专业实现与验证见 [SOCIAL-AC-3 设计](social-fact-ledger-declarative-reputation.design.md#social-obligation-3)。不覆盖 R&D charter、份额/credential 不转移、机会组合或整个产品验收。
+<a id="social-ac-4"></a>
+#### SOCIAL-AC-4 局部验收
+
 - SOCIAL-AC-4：合法首次挑战只扣一次并记录同额 stake，正常裁决、撤销、过期及结算保持；新动作的重复裁决拒绝不改变上层已有请求幂等返回原结果的合同。
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；主责：Simulator social 维护者 / qa_engineer；局部承接 [REQ-WR-CR-003](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)及[产品验收](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)的只读预览与 lifecycle 支撑边界；专业实现与验证见 [SOCIAL-AC-4 设计](social-fact-ledger-declarative-reputation.design.md#social-obligation-4)。不覆盖 R&D charter、份额/credential 不转移、机会组合或整个产品验收。
+<a id="social-ac-5"></a>
+#### SOCIAL-AC-5 局部验收
+
 - SOCIAL-AC-5：新拒绝序列的动作前 snapshot+journal replay 与 live 资源/社会状态一致。收紧新动作资格不无说明改变历史事件重放；旧记录版本、兼容读取和不可恢复的历史缺证需明确处置，不能伪造事件补余额。
+
+Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；主责：Simulator social 维护者 / qa_engineer；局部承接 [REQ-WR-CR-003](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)及[产品验收](../../product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)的只读预览与 lifecycle 支撑边界；专业实现与验证见 [SOCIAL-AC-5 设计](social-fact-ledger-declarative-reputation.design.md#social-obligation-5)。不覆盖 R&D charter、份额/credential 不转移、机会组合或整个产品验收。
 
 未开放社会动作的首局候选不因本节新增社会玩法前置；开放了该能力的候选不能以“不在工业主路径”为由把缺陷记为通过。
 文档修订只固定目标语义，行为修复与各场景结果仍须由实际候选证明。

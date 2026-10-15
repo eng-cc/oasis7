@@ -19,6 +19,9 @@ hex = "0.4"
 ed25519-dalek = "3"
 zstd = { version = "0.13", default-features = false }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 sync-builtin-wasm-identity = ["dep:oasis7_wasm_build"]
 

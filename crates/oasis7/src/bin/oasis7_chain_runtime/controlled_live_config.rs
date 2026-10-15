@@ -11,6 +11,14 @@ use oasis7_distfs::controlled_authority::{
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GuardedRemoteEndpoints {
+    pub primary: std::net::SocketAddr,
+    pub replica: std::net::SocketAddr,
+    pub timeout_ms: u64,
+}
+
 pub(crate) const ENGINEERING_SCOPE: &str = "guarded_local_execution_prerequisite";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,12 +32,18 @@ pub(crate) struct GuardedConfiguration {
     pub node_tick_ms: u64,
     pub trusted_bootstrap_config: PathBuf,
     pub activation_evidence: PathBuf,
+    #[serde(default)]
     pub primary_directory: PathBuf,
+    #[serde(default)]
     pub replica_directory: PathBuf,
     pub writer_key_file: PathBuf,
+    #[serde(default)]
     pub primary_key_file: PathBuf,
+    #[serde(default)]
     pub replica_key_file: PathBuf,
     pub minimum_runtime_head: HeadAnchor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_endpoints: Option<GuardedRemoteEndpoints>,
 }
 pub(crate) struct GuardedAuthority {
     pub config: GuardedConfiguration,
@@ -37,13 +51,15 @@ pub(crate) struct GuardedAuthority {
     pub policy: InitialActivationPolicy,
     pub release_policy: ReleaseSecurityPolicy,
     pub configuration_digest: String,
+    pub frozen_execution_digest: String,
+    pub execution_policy: super::controlled_execution_policy::GuardedExecutionPolicy,
 }
 impl GuardedAuthority {
     pub(crate) fn load(path: &Path) -> Result<Self, String> {
         let bytes = super::controlled_history_cli::read_bounded(path, 64 * 1024)?;
         let mut config: GuardedConfiguration =
             serde_json::from_slice(&bytes).map_err(|e| format!("guarded configuration: {e}"))?;
-        if config.schema_version != 1
+        if !matches!(config.schema_version, 1 | 2)
             || config.scope != ENGINEERING_SCOPE
             || config.node_id.trim().is_empty()
             || !config.status_bind.ip().is_loopback()
@@ -54,21 +70,47 @@ impl GuardedAuthority {
         let parent = path
             .parent()
             .ok_or("guarded configuration parent unavailable")?;
-        for p in [
+        let remote = config.remote_endpoints.as_ref();
+        if let Some(remote) = remote
+            && (config.schema_version != 2
+                || !remote.primary.ip().is_loopback()
+                || !remote.replica.ip().is_loopback()
+                || remote.primary == remote.replica
+                || !(1..=60_000).contains(&remote.timeout_ms)
+                || [
+                    &config.primary_directory,
+                    &config.replica_directory,
+                    &config.primary_key_file,
+                    &config.replica_key_file,
+                ]
+                .iter()
+                .any(|p| !p.as_os_str().is_empty()))
+        {
+            return Err("remote guarded endpoints require v2, distinct loopback tunnels and no local endpoint paths/keys".into());
+        }
+        let mut paths = vec![
             &mut config.node_keypair_directory,
             &mut config.records_directory,
             &mut config.trusted_bootstrap_config,
             &mut config.activation_evidence,
-            &mut config.primary_directory,
-            &mut config.replica_directory,
             &mut config.writer_key_file,
-            &mut config.primary_key_file,
-            &mut config.replica_key_file,
-        ] {
+        ];
+        if remote.is_none() {
+            paths.extend([
+                &mut config.primary_directory,
+                &mut config.replica_directory,
+                &mut config.primary_key_file,
+                &mut config.replica_key_file,
+            ]);
+        }
+        for p in paths {
+            if p.as_os_str().is_empty() {
+                return Err("empty guarded path".into());
+            }
             if !p.is_absolute() {
                 *p = parent.join(&*p);
             }
-            if p.as_os_str().is_empty() || p.to_string_lossy().len() > 4096 {
+            if p.to_string_lossy().len() > 4096 {
                 return Err("invalid guarded path".into());
             }
         }
@@ -86,20 +128,52 @@ impl GuardedAuthority {
                 "guarded minimum head precedes or conflicts with original activation".into(),
             );
         }
-        let configuration_digest = blake3_hex(
-            &serde_json::to_vec(&(
-                &config,
-                anchor.activation().envelope_digest(),
-                &release_policy,
-            ))
-            .map_err(|e| e.to_string())?,
-        );
+        let execution_policy =
+            super::controlled_execution_policy::GuardedExecutionPolicy::current();
+        let configuration_digest = if config.schema_version == 1 {
+            // Preserve already persisted v1 continuation identities exactly.
+            blake3_hex(
+                &serde_json::to_vec(&(
+                    &config,
+                    anchor.activation().envelope_digest(),
+                    &release_policy,
+                ))
+                .map_err(|e| e.to_string())?,
+            )
+        } else {
+            blake3_hex(
+                &serde_json::to_vec(&(
+                    "oasis7.guarded_execution_binding.v2",
+                    &config.scope,
+                    &config.node_id,
+                    config.node_tick_ms,
+                    anchor.activation().envelope_digest(),
+                    &release_policy,
+                    &execution_policy,
+                ))
+                .map_err(|e| e.to_string())?,
+            )
+        };
+        let frozen_execution_digest = if config.schema_version == 2 {
+            blake3_hex(
+                &serde_json::to_vec(&(
+                    &configuration_digest,
+                    super::controlled_execution_policy::executable_digest()?,
+                    &execution_policy,
+                ))
+                .map_err(|e| e.to_string())?,
+            )
+        } else {
+            configuration_digest.clone()
+        };
         Ok(Self {
             config,
             anchor,
             policy,
             release_policy,
             configuration_digest,
+            frozen_execution_digest,
+            execution_policy,
         })
     }
 }

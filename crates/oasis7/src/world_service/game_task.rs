@@ -193,18 +193,39 @@ fn collect<'a>(
     world: &World,
     staged: impl IntoIterator<Item = &'a CanonicalIntentResultV1>,
 ) -> Result<Vec<CanonicalIntentResultV1>, String> {
+    let mut retained = super::retained_queries::hot_results(world)?;
+    let canonical_empty = crate::runtime::FormalRetainedHistoryRootV1::from_index_root(
+        oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexRootV1::empty()?,
+    )?;
+    // Exact canonical empty commitment proves there are no cold task results.
+    // Nonempty or malformed descriptors still require authenticated CAS access.
+    if world
+        .state()
+        .retained_history_root
+        .as_ref()
+        .is_some_and(|root| root != &canonical_empty)
+    {
+        for agent in world.capability_revocation_state().agent_identities.keys() {
+            for (key, result) in super::retained_queries::game_task_results(world, agent)? {
+                if let Some(previous) = retained.get(&key) {
+                    if previous != &result {
+                        return Err("ambiguous retained canonical task result".into());
+                    }
+                } else {
+                    retained.insert(key, result);
+                }
+            }
+        }
+    }
     let mut results = BTreeMap::new();
-    for (key, value) in &world.capability_revocation_state().world_service_results {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 =
-            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+    for (key, result) in retained {
         if matches!(
             result.request.signed_payload,
             WorldServicePayloadV1::GameTaskCreate(_)
                 | WorldServicePayloadV1::GameGoalPublish(_)
                 | WorldServicePayloadV1::GameExecutorControl(_)
         ) {
-            results.insert(key.clone(), result);
+            results.insert(key, result);
         }
     }
     for result in staged {

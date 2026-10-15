@@ -153,7 +153,7 @@ Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可�
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
-以 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的源码和入口核对为依据，[REQ-CC-016](command-center.prd.md#REQ-CC-016)补齐产品/系统设计树、目录查漏、显式配对与覆盖反馈；[专题设计](document-tree.design.md)规定文件级快照、关系及真实桌面验证。生命周期读取基础已补原始声明/规范化类别分离，来源详情可显示类别；核对来源为 [解析实现](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs)和[专题设计实施顺序](document-tree.design.md#111-验证映射表)。2026-10-14 核对的本地候选已在现有章节索引补[实际覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)：读取/遗漏数量、原因计数及有界路径样本，范围见[专题设计实施顺序](document-tree.design.md#111-验证映射表)。树 UI、文件级快照投影、筛选和桌面验收尚待实施；本地候选不代表能力上线或已合入。
+2026-10-15 候选源码核对：[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的工作树文件清单与逐项覆盖已有 [Core 查询](../../../tools/oasis7-command-center/core/src/document_inventory.rs)及[规范视图](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx)承接，可按标题/路径和读取结果筛选、分页，查看空文件/遗漏并进入同版本章节。清单与章节/搜索同事务发布，旧缓存缺失或损坏不删除个人数据；能力边界见[专题设计](document-tree.design.md#111-验证映射表)。详情已展示文件头“配对系统设计”链接、声明行和文件级读取诊断，跨行/超预算字段标记解析不完整，旧缓存提示刷新；带锚点目标区分唯一、缺失和歧义，可打开同摘要目标章节并返回原配对按钮。这不提供三种树投影、固定提交基线或独立树快照。真实桌面的实际候选、环境、验收范围和合入事实由实现 PR 承载，未据此刷新其他项目/部署事实；完整 AC-CC-016 仍待验收。
 
 <a id="cc-status-attention"></a>
 
@@ -164,6 +164,8 @@ Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可�
 在本轮已读取的范围内，没有发现新增且已核实的即时待批准事项；当前 CI 等待和普通修复继续由原负责人推进。
 后续若改变阶段目标、正式开放范围或部署安排，应回到对应主责条款和已有操作入口形成具体决定。
 这里记录真实问题，不把正常 CI、文档刷新或已有授权工作包装成新的许可请求。来源：[开发流程边界](../workflow/source-of-truth.md#1-适用范围与规则边界)、[#4363 历史安排](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+
+持久世界部署优化的代码候选见 [PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 和[架构索引](architecture/README.md#cc-architecture-authority)，2026-10-15 核对为待合入。当前授权范围为代码与本机验证；小遗留按[实施文档 TODO](../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)跟踪，真实部署、完整产品及自主试玩验收仍未完成。
 
 ### 待补事实
 

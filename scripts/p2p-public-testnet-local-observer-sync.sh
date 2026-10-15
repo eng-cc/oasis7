@@ -101,6 +101,21 @@ required_value() {
   printf '%s' "$value"
 }
 
+replication_fetch_requesters_value() {
+  local path=$1 current legacy
+  current=$(optional_value "$path" REPLICATION_FETCH_REQUESTERS_CSV)
+  legacy=$(optional_value "$path" REPLICATION_REMOTE_WRITERS_CSV)
+  if raw_value "$path" REPLICATION_REMOTE_WRITERS_CSV >/dev/null 2>&1; then
+    if raw_value "$path" REPLICATION_FETCH_REQUESTERS_CSV >/dev/null 2>&1 && [[ "$current" != "$legacy" ]]; then
+      die "conflicting replication fetch requester names in $path"
+    fi
+    echo "deprecated REPLICATION_REMOTE_WRITERS_CSV in $path: use REPLICATION_FETCH_REQUESTERS_CSV (fetch permission only)" >&2
+    printf '%s' "${current:-$legacy}"
+  else
+    required_value "$path" REPLICATION_FETCH_REQUESTERS_CSV
+  fi
+}
+
 optional_value() {
   local path=$1
   local key=$2
@@ -446,16 +461,17 @@ render_env() {
   [[ "$seq_role" == "sequencer" ]] || die "sequencer env must declare NODE_ROLE=sequencer"
   [[ "$storage_role" == "storage" ]] || die "storage env must declare NODE_ROLE=storage"
 
-  local gossip_peers replication_peers replication_remote_writers
+  local gossip_peers replication_peers replication_fetch_requesters
   gossip_peers=$(join_unique_csv \
     "$(required_value "$storage_env" NODE_GOSSIP_PEERS_CSV)" \
     "$(required_value "$sequencer_env" NODE_GOSSIP_PEERS_CSV)")
   replication_peers=$(join_unique_csv \
     "$(required_value "$storage_env" REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV)" \
     "$(required_value "$sequencer_env" REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV)")
-  replication_remote_writers=$(join_unique_csv \
-    "$(required_value "$storage_env" REPLICATION_REMOTE_WRITERS_CSV)" \
-    "$(required_value "$sequencer_env" REPLICATION_REMOTE_WRITERS_CSV)")
+  local storage_fetch_requesters sequencer_fetch_requesters
+  storage_fetch_requesters=$(replication_fetch_requesters_value "$storage_env") || return 1
+  sequencer_fetch_requesters=$(replication_fetch_requesters_value "$sequencer_env") || return 1
+  replication_fetch_requesters=$(join_unique_csv "$storage_fetch_requesters" "$sequencer_fetch_requesters")
 
   local pos_slot_clock_genesis
   pos_slot_clock_genesis=$(required_value "$sequencer_env" POS_SLOT_CLOCK_GENESIS_UNIX_MS)
@@ -506,7 +522,7 @@ $(append_if_present "RUNTIME_ROOT" "$local_runtime_root")
 $(append_if_present "REPLICATION_ROOT" "$local_replication_root")
 REPLICATION_NETWORK_LISTEN_ADDRS_CSV=$(required_value "$local_env" REPLICATION_NETWORK_LISTEN_ADDRS_CSV)
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=$replication_peers
-REPLICATION_REMOTE_WRITERS_CSV=$replication_remote_writers
+REPLICATION_FETCH_REQUESTERS_CSV=$replication_fetch_requesters
 TRAFFIC_MONITOR_ENABLE=$(required_value "$local_env" TRAFFIC_MONITOR_ENABLE)
 TRAFFIC_MONITOR_INTERVAL_SECS=$(required_value "$local_env" TRAFFIC_MONITOR_INTERVAL_SECS)
 TRAFFIC_MONITOR_WINDOW_MINUTES=$(required_value "$local_env" TRAFFIC_MONITOR_WINDOW_MINUTES)

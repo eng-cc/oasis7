@@ -170,6 +170,9 @@
     "oasis7_client_api": [
       "workspace_support"
     ],
+    "oasis7_game_client": [
+      "workspace_support"
+    ],
     "oasis7_local_signer": [
       "workspace_support"
     ],
@@ -196,6 +199,18 @@
       ],
       "groups": [],
       "reason": "documents"
+    },
+    {
+      "match": [
+        "scripts/formal-live-local-tests.sh",
+        "scripts/local-node-lifecycle.test.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "distfs",
+        "node"
+      ],
+      "reason": "formal_runtime_and_native_node_composition"
     },
     {
       "match": [

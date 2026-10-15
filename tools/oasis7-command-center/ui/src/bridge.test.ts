@@ -36,3 +36,10 @@ it('bounds Chinese search and refreshes without an execution command', async () 
   expect(mock.invoke).toHaveBeenLastCalledWith('refresh_source',{});
   expect(mock.invoke.mock.calls.some(([name]) => /start|input|interrupt/.test(name))).toBe(false);
 });
+
+it('binds file inventory paging to an explicit schema, project, snapshot and filter', async () => {
+  mock.invoke.mockResolvedValue(undefined);
+  const query = {schemaVersion:1,projectId:'project',snapshotId:'snapshot',query:'设计',readFilter:'omitted',cursor:'cursor'};
+  await bridge.documentInventory(query);
+  expect(mock.invoke).toHaveBeenLastCalledWith('query_document_inventory', {query});
+});

@@ -10,22 +10,36 @@ mod controlled_live_history;
 mod controlled_live_package;
 mod driver_startup_recovery;
 mod execution_hash;
+mod formal_business_package;
+#[cfg(all(test, unix))]
+pub(crate) mod formal_crash_test_boundary;
+#[cfg(unix)]
+pub(crate) mod formal_durable_set_arm;
+mod formal_execution_timing;
+#[cfg(unix)]
+mod formal_executor;
+pub(crate) mod formal_initial;
+#[cfg(unix)]
+pub(crate) mod formal_node_hook;
+pub(crate) mod formal_package;
+#[cfg(unix)]
+pub(crate) mod formal_writer;
 mod product_validation_intent;
 mod provider_bootstrap;
 mod world_service_execution;
 pub(crate) mod world_service_read;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ExecutionBridgeState {
+pub(crate) struct ExecutionBridgeState {
     pub last_applied_committed_height: u64,
     pub last_execution_block_hash: Option<String>,
     pub last_execution_state_root: Option<String>,
     pub last_node_block_hash: Option<String>,
 }
 
-pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V1: u32 = 1;
-pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V2: u32 = 2;
-pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V3: u32 = 3;
+pub(crate) const EXECUTION_BRIDGE_RECORD_SCHEMA_V1: u32 = 1;
+pub(crate) const EXECUTION_BRIDGE_RECORD_SCHEMA_V2: u32 = 2;
+pub(crate) const EXECUTION_BRIDGE_RECORD_SCHEMA_V3: u32 = 3;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST: usize = 4;
@@ -249,7 +263,7 @@ impl WorldHeadProofV1 {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "ExecutionBridgeRecordWire")]
-pub(super) struct ExecutionBridgeRecord {
+pub(crate) struct ExecutionBridgeRecord {
     pub schema_version: u32,
     pub world_id: String,
     pub height: u64,
@@ -623,8 +637,8 @@ pub(super) fn persist_world_head_proof_for_record(
     Ok(())
 }
 
-pub(super) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1: u32 = 1;
-pub(super) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2: u32 = 2;
+pub(crate) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1: u32 = 1;
+pub(crate) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2: u32 = 2;
 
 fn execution_checkpoint_manifest_schema_v1() -> u32 {
     EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1
@@ -782,7 +796,7 @@ pub(super) struct ExecutionBridgePinSet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ExecutionSimulatorMirrorRecord {
+pub(crate) struct ExecutionSimulatorMirrorRecord {
     pub action_count: usize,
     pub rejected_action_count: usize,
     pub journal_len: usize,
@@ -832,8 +846,10 @@ mod simulator_mirror;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) use self::driver::ExecutionResourceIdentity;
 #[allow(unused_imports)]
-pub(super) use self::driver::NodeRuntimeExecutionDriver;
+pub(crate) use self::driver::NodeRuntimeExecutionDriver;
 #[cfg(not(test))]
 pub(super) use self::driver::derive_local_execution_bootstrap;
 #[allow(unused_imports)]
@@ -848,8 +864,12 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
+pub(crate) use self::execution_hash::legacy_migration_execution_hash;
+#[cfg(test)]
+pub(crate) use self::local_bootstrap::derive_local_execution_bootstrap;
 #[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
+pub(crate) use self::simulator_mirror::simulator_world_dir_from_execution_world_dir;
 
 #[cfg(not(test))]
 pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;

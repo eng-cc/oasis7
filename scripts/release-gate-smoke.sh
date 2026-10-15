@@ -58,7 +58,7 @@ ensure_file_contains "$pass_summary" "- Candidate bundle: \`$candidate_bundle\`"
 ensure_file_contains "$pass_summary" "- candidate_bundle: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "- web_strict: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "- s9: passed \\(dry_run\\)"
-ensure_file_contains "$pass_summary" "--node-auto-attest-all"
+ensure_file_contains "$pass_summary" "--engineering-auto-attest-all"
 ensure_file_contains "$pass_summary" "- s10: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "./scripts/release-gate-web-strict.sh --out-dir"
 if rg -q -- "--scenario llm_bootstrap" "$pass_summary"; then
@@ -82,7 +82,7 @@ run ./scripts/p2p-longrun-soak.sh \
   --profile soak_release \
   --topologies triad_distributed \
   --duration-secs 30 \
-  --node-auto-attest-all \
+  --engineering-auto-attest-all \
   --dry-run \
   --out-dir "$p2p_dry_root"
 p2p_run_dir=$(find "$p2p_dry_root" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)

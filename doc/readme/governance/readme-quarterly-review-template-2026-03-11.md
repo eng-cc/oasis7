@@ -22,7 +22,7 @@
 - [ ] README 与 site 不出现超出当前 evidence 的“已上线 / public launch”等状态宣称；变化时同步复核中英文入口
 - [ ] 世界规则、玩家权能、WASM、runtime 与 viewer 只保留导航级摘要，具体规则链接到产品或专业权威
 - [ ] README / `doc/README.md` 指向产品树、`testing-manual.md` 和专业主 PRD 的链接可用
-- [ ] site、产品 PRD、专业主 PRD或公开状态文案变化时，触发本模板并在对应 project / PR 与实际验证记录 回写
+- [ ] site、产品 PRD、专业主 PRD或公开状态文案变化时，触发本模板并将本轮结论和修复项记录在实际 PR 或已有 Task；长期文档只同步受影响的规则和入口
 - [ ] README 不重复定义详细行为或实现；发现重复时迁移语义、修复引用并删除被完整吸收的源内容
 - [ ] 将问题写入修复记录模板
 
@@ -34,4 +34,4 @@
 ## Result
 - 总结论: `pass` / `fix_required`
 - 需要升级的事项:
-- 回写文件:
+- 本轮 PR / 已有 Task 与验证记录:

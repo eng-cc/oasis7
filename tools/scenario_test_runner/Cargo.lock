@@ -124,9 +124,9 @@ dependencies = [
 
 [[package]]
 name = "async-openai"
-version = "0.42.1"
+version = "0.42.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63077bf55857e6963effefb5f28134c40cc2ee68bc176cc601bbdeb070017fba"
+checksum = "174e979f1e2ffe94b88d584740c11fd071f6d829c29120b1ba88bcaeb3374063"
 dependencies = [
  "async-openai-macros",
  "base64 0.22.1",
@@ -1875,6 +1875,7 @@ dependencies = [
  "oasis7_agent_harness",
  "oasis7_client_api",
  "oasis7_distfs",
+ "oasis7_game_client",
  "oasis7_launcher_ui",
  "oasis7_node",
  "oasis7_proto",
@@ -1931,10 +1932,14 @@ dependencies = [
 name = "oasis7_client_api"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "ed25519-dalek",
  "hex",
+ "oasis7_agent_api",
+ "oasis7_wasm_abi",
  "serde",
  "serde_json",
+ "zeroize",
 ]
 
 [[package]]
@@ -1960,12 +1965,36 @@ dependencies = [
  "blake3",
  "ed25519-dalek",
  "hex",
+ "libc",
  "oasis7_proto",
  "serde",
  "serde_cbor",
  "serde_json",
  "sha2 0.11.0",
  "zstd",
+]
+
+[[package]]
+name = "oasis7_game_client"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "cap-fs-ext",
+ "cap-std",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "oasis7_agent_api",
+ "oasis7_client_api",
+ "oasis7_wasm_abi",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_cbor",
+ "serde_ignored",
+ "serde_json",
+ "zeroize",
 ]
 
 [[package]]
@@ -2860,9 +2889,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.151"
+version = "1.0.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
+checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
 dependencies = [
  "itoa",
  "memchr",
@@ -3106,7 +3135,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

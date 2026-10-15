@@ -4,12 +4,23 @@ pub mod agent_chat;
 pub mod authority;
 pub mod client;
 pub mod correlation;
+mod formal_governance;
+pub mod formal_projection;
+mod formal_projection_header;
+pub mod formal_read;
+#[cfg(test)]
+pub(crate) mod formal_read_fixtures;
+pub mod formal_read_service;
+pub mod formal_recovery_lineage;
+pub mod formal_result;
 pub mod game_task;
 pub mod gameplay;
+pub mod membership;
 pub mod private_goal_prepare;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod private_goal_store;
 pub mod projection;
+mod retained_queries;
 pub mod verified_view;
 pub mod wire;
 pub use authority::*;

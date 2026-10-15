@@ -70,7 +70,7 @@
 - Non-Functional Requirements:
   - NFR-TREND-1: 每个样本必须可追溯到仓内可打开的文档路径。
   - NFR-TREND-2: 指标公式必须用一句话复算，不依赖隐式上下文。
-  - NFR-TREND-3: baseline 单文件不超过 1000 行，且可由 `doc-governance-check` 通过。
+  - NFR-TREND-3: baseline 文档长度仅作编辑参考，按统计窗口、语义与维护成本决定是否拆分；不因超过 1000 行阻断或要求长度豁免，不压成长行规避提示。适用文档结构与引用检查仍须通过。
   - NFR-TREND-4: 阈值一旦调整，必须在 baseline 中显式记录。
 - Security & Privacy: 仅使用仓内测试证据与任务文档，不新增敏感数据。
 

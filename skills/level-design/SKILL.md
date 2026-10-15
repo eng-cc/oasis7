@@ -58,7 +58,7 @@ Do not use this skill when:
 
 - `.agents/roles/game_visual_interaction_designer.md`
 - `.agents/roles/gameplay_designer.md`
-- GitHub Project task status and issue evidence comments
+- Git, PR, actual CI and review records; an existing Task/Project may be used when needed under `doc/engineering/workflow/source-of-truth.md`
 - visual/playtest evidence for level-flow changes
 
 ## Known Failure Modes

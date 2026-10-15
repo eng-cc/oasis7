@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Channel: `小红书`
-- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + 互动引导 + 信号回流 + GitHub task issue evidence 回写`
+- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + 互动引导 + 信号回流 + 实际 PR 或已有 Task 的证据回写`
 - Source Docs:
   - `site/social/xiaohongshu/intro/intro-post-pack-2026-03-22.md`
   - `site/social/xiaohongshu/team-roster/team-roster-post-pack-2026-03-22.md`
@@ -89,7 +89,7 @@ site/social/xiaohongshu/<post-slug>/
    - 介绍队友
    - 抛一个讨论问题
 6. 确认评论区准备好一句互动引导，而不是发布后临时想。
-7. 记录发帖时间、标题与素材路径，便于后续复盘和 GitHub task issue evidence 回写。
+7. 记录发帖时间、标题与素材路径，便于后续复盘和实际 PR 或已有 Task 的证据回写。
 
 ## 4. 发帖后 24 小时巡检
 前 24 小时是判断“这条内容有没有把人带进来”的主要窗口。建议最少按以下节奏检查：

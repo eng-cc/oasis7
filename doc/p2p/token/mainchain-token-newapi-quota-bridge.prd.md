@@ -10,9 +10,9 @@
 - Proposed Solution: 把桥接能力收口为一条 operator-managed 的 `OC -> LetAI Run OpenAPI quota` bridge。bridge-service 在确认 `OC` 入账后，按 LetAI Run OpenAPI 的真实链路执行 `创建/获取平台用户 -> 创建/获取项目并返回 token_key -> 给平台用户充值额度 -> 查询额度/日志做验证`，并持久化 `platform_user_id/platform_project_id/token_key/external_order_id` 等审计字段。
 - Success Criteria:
   - SC-1: 自动 bridge 必须明确支持 `parent channel(platform key)` + 动态创建的 per-user project + per-project `token_key`；不得继续停留在单一 generic credit POST 语义。
-  - SC-2: 每一笔成功 topup 都必须可追溯到 `bridge_deposit_id -> chain tx -> platform_user_id -> platform_project_id -> token_key -> external_order_id -> LetAI topup / query receipt`，幂等对账完整率 `100%`。
+  - <a id="tbridge-sc-2"></a> SC-2: 每一笔成功 topup 都必须可追溯到 `bridge_deposit_id -> chain tx -> platform_user_id -> platform_project_id -> token_key -> external_order_id -> LetAI topup / query receipt`，幂等对账完整率 `100%`。
   - SC-3: 模型调用语义必须冻结为“项目 `token_key` 用于实际调用模型接口，平台 Key 只用于开放管理接口”，不得混用。
-  - SC-4: 同一平台用户下可存在多个项目；bridge 默认必须为每个 bridge user 动态创建或复用一个独立 project，并把该 project 的 `token_key` 持久化为唯一真值。
+  - <a id="tbridge-sc-4"></a> SC-4: 同一平台用户下可存在多个项目；bridge 默认必须为每个 bridge user 动态创建或复用一个独立 project，并把该 project 的 `token_key` 持久化为唯一真值。
   - SC-5: 对外 claim 必须继续明确为 `limited preview operator-managed service-credit bridge`；不支持 `OC <- quota/token_key` 兑回，不承诺公开兑换所、AMM、浏览器热钱包充值或自动提现。
   - SC-6: 收款策略必须冻结为“每个 newapi 接入方维护一组受控 OC 收款账号，route 负责把单次充值映射到该账号池内的某个可用账号”；当前默认推荐小池化（例如 5 个账号）而不是全平台单账号或每单现生地址。
 
@@ -31,15 +31,15 @@
   - pricing / audit review：每次调整 `OC -> quota` 定价表、补贴策略或审计口径时触发。
 - User Stories:
   - PRD-P2P-TBRIDGE-001: As a `producer_system_designer`, I want one canonical one-way bridge boundary, so that `OC` 的服务额度充值不会被误解成公开交易所或双向兑回承诺。
-  - PRD-P2P-TBRIDGE-002: As a bridge operator, I want every confirmed deposit to drive a stable LetAI OpenAPI lifecycle, so that同一笔 `OC` 入账总能唯一映射到一个平台用户、一个项目、一个 `token_key` 和一个 topup order。
+  - <a id="tbridge-002"></a> PRD-P2P-TBRIDGE-002: As a bridge operator, I want every confirmed deposit to drive a stable LetAI OpenAPI lifecycle, so that同一笔 `OC` 入账总能唯一映射到一个平台用户、一个项目、一个 `token_key` 和一个 topup order。 局部恢复设计：[首次绑定恢复](mainchain-token-newapi-quota-bridge.design.md#bridge-identity-recovery)、[扫描完整性](mainchain-token-newapi-quota-bridge.design.md#bridge-scan-completeness)、[有效处理权](mainchain-token-newapi-quota-bridge.design.md#bridge-reconcile-ownership)；仍为目标合同，非已交付证明。
   - PRD-P2P-TBRIDGE-003: As a LetAI Run operator, I want the bridge to call official OpenAPI endpoints for user/project/token/topup/query, so that repo truth matches actual product semantics instead of a generic adapter placeholder.
-  - PRD-P2P-TBRIDGE-004: As a `qa_engineer`, I want stable anomaly states and verification snapshots, so that user/project create drift、topup retry、query mismatch 和 `token_key` 缺失都不会静默变成错误额度。
+  - <a id="tbridge-004"></a> PRD-P2P-TBRIDGE-004: As a `qa_engineer`, I want stable anomaly states and verification snapshots, so that user/project create drift、topup retry、query mismatch 和 `token_key` 缺失都不会静默变成错误额度。 局部恢复设计：[持久业务阶段](mainchain-token-newapi-quota-bridge.design.md#bridge-recovery-state)；仍为目标合同，非已交付证明。
 - Critical User Flows:
   1. Flow-TBRIDGE-001: `用户先绑定 bridge user -> operator 已提供 parent channel / platform key 与接入方收款账号池 -> bridge-service 分配唯一 deposit route -> route 选择池内一个可用收款账号 -> 用户向该账号转入 OC`
   2. Flow-TBRIDGE-002: `chain watcher 观察到 confirmed deposit -> bridge_ledger 命中定价表 -> bridge-service 通过 POST /api/platform/open/users/upsert 确保平台用户存在`
   3. Flow-TBRIDGE-003: `bridge-service 根据 bridge user 动态创建或复用用户专属 project -> 获取该 project 的 token_key -> 持久化 platform_project_id/token_key`
   4. Flow-TBRIDGE-004: `bridge-service 调用 POST /api/platform/open/users/:platform_user_id/topups，写入 external_order_id/quota/amount/currency -> 使用额度概览和日志接口做验证 -> ledger 转为 reconciled`
-  5. Flow-TBRIDGE-005: `若 user/project/token/topup/query 任一步失败或返回不一致 -> 保留同一 external_order_id / idempotency key -> 重试或转 manual_review`
+  5. <a id="tbridge-flow-005"></a> Flow-TBRIDGE-005: `若 user/project/token/topup/query 任一步失败或返回不一致 -> 保留同一 external_order_id / idempotency key -> 重试或转 manual_review`
   6. Flow-TBRIDGE-006: `外部提出“既然有 token_key，是否等于用户直接买到资产并可兑回” -> 对照 PRD 检查 one-way service-credit 边界 -> 直接驳回`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
@@ -57,9 +57,9 @@
   - AC-1: 专题必须明确本轮目标态是 `one-way OC -> LetAI Run OpenAPI quota`，并把 `OC <- quota/token_key` 兑回、自动提现、AMM、公开交易所全部列为 non-goal。
   - AC-2: bridge-service 必须按 LetAI OpenAPI 真实对象模型定义 `platform user -> project -> token_key -> topup -> query`，不得继续把“generic HTTP credit adapter”写成当前真值。
   - AC-3: 专题必须冻结“parent channel/platform key 由 operator 提供；每个用户的 project 和 token_key 动态创建”这一业务前提。
-  - AC-4: `bridge_ledger` 必须补齐 `platform_user_id/platform_project_id/token_key/external_order_id/query snapshots` 等最小审计字段，覆盖 user/project/topup/query 全链路。
+  - <a id="tbridge-ac-4"></a> AC-4: `bridge_ledger` 必须补齐 `platform_user_id/platform_project_id/token_key/external_order_id/query snapshots` 等最小审计字段，覆盖 user/project/topup/query 全链路。
   - AC-5: 专题必须明确 `token_key` 只用于模型实际调用，平台 Key 只用于开放管理接口，不得混用。
-  - AC-6: topup 成功判定必须至少包含一次验证查询回写；不得把单次 HTTP `2xx` 直接当成 reconciled。
+  - <a id="tbridge-ac-6"></a> AC-6: topup 成功判定必须至少包含一次验证查询回写；不得把单次 HTTP `2xx` 直接当成 reconciled。
   - AC-7: 对外文案必须继续明确这是 `limited preview operator-managed service-credit bridge`；“公开兑换所”“浏览器热钱包充值”“自动提现回 OC”仍在 denylist。
   - AC-8: 专题必须给出 LetAI OpenAPI-specific implementation 任务拆解、验证层级与 owner role，而不是停留在概念讨论。
   - AC-9: 收款账号策略必须明确区分三层边界：`provider-level receiving account pool`、`route-level beneficiary/pricing truth`、`optional transfer message/memo token`；不得把“账号池”误写成“无需 route 真值”。

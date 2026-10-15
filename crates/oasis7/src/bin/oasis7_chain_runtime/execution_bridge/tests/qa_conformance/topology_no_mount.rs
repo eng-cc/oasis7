@@ -202,6 +202,7 @@ fn no_mount_service_entry() {
 
 fn client() -> RemoteWorldServiceClient {
     RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: std::env::var("OASIS7_WORLD_SERVICE_ENDPOINT").unwrap(),
         trusted_service_public_key: sign_read_request("service", (), &hex::encode([9u8; 32]))
             .unwrap()
@@ -222,6 +223,8 @@ fn view_request(
     min_commit: Option<CommitRef>,
 ) -> ReadWorldViewRequest {
     ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: client.config().expected_world.clone(),
         scope_id: client.config().scope_id.clone(),

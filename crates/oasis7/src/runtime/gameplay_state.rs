@@ -243,14 +243,7 @@ pub enum EconomicContractStatus {
     Expired,
 }
 
-/// Settlement semantics for a persisted economic contract.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum EconomicContractFulfillmentKind {
-    #[default]
-    AtomicExchange,
-    Service,
-}
+pub use oasis7_agent_api::world_action::EconomicContractFulfillmentKind;
 
 /// Persisted economic contract state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

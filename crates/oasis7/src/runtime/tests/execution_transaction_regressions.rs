@@ -583,6 +583,9 @@ fn public_ingest_receipt_post_prepare_failure_is_fully_unpublished_and_retry_reu
     let root_before = world.capability_authorization_root().to_string();
     let backpressure_before = world.runtime_backpressure_stats().clone();
     let receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: intent_id.clone(),
         status: "ok".to_string(),
         payload: serde_json::json!({"status": 200}),

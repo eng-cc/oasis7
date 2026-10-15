@@ -376,6 +376,7 @@ impl World {
     // ---------------------------------------------------------------------
 
     pub fn step(&mut self) -> Result<(), WorldError> {
+        self.reject_ordinary_step_during_formal_execution()?;
         let mut staged = self.clone();
         staged.step_inner()?;
         *self = staged;
@@ -413,6 +414,7 @@ impl World {
     }
 
     pub fn step_with_modules(&mut self, sandbox: &mut dyn ModuleSandbox) -> Result<(), WorldError> {
+        self.reject_ordinary_step_during_formal_execution()?;
         let mut staged = self.clone();
         let mut no_product_validation_checkpoint = |_world: &World| Ok(());
         staged.step_with_modules_inner(sandbox, &mut no_product_validation_checkpoint)?;
@@ -512,7 +514,17 @@ impl World {
         product_validation_checkpoint: &mut dyn FnMut(&World) -> Result<(), WorldError>,
     ) -> Result<(), WorldError> {
         let committed_height = context.height;
-        if (!resume_after_product_validation_intent && committed_height <= self.state.time)
+        let formal_started = self.formal_execution_tick.as_ref() == Some(&(context.clone(), false));
+        if self.formal_execution_tick.is_some()
+            && (!formal_started || resume_after_product_validation_intent)
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "formal successor Tick context/prologue mismatch".into(),
+            });
+        }
+        if (!resume_after_product_validation_intent
+            && !formal_started
+            && committed_height <= self.state.time)
             || (resume_after_product_validation_intent && committed_height != self.state.time)
         {
             return Err(WorldError::DistributedValidationFailed {
@@ -536,7 +548,11 @@ impl World {
             Some(context),
             resume_after_product_validation_intent,
             product_validation_checkpoint,
-        )
+        )?;
+        if formal_started {
+            self.formal_execution_tick = Some((context.clone(), true));
+        }
+        Ok(())
     }
 
     fn run_modules_for_current_tick(

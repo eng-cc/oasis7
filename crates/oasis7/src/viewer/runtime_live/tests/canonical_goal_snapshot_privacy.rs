@@ -209,6 +209,7 @@ fn canonical_goal_outbound_filter_preserves_non_chat_and_filters_effect_inputs()
     snapshot_privacy::omit_private_canonical_chat(&mut snapshot);
     assert_eq!(serde_json::to_value(&snapshot).unwrap(), preserved);
     let effect = crate::runtime::EffectIntent {
+        birth_era: None,
         intent_id: "chat-effect".into(),
         kind: "world_service".into(),
         params: serde_json::json!({"input": request}),
@@ -266,6 +267,8 @@ fn canonical_goal_owner_browser_read_forwards_original_proof_and_isolates_sessio
         state_root_ref: "fixture".into(),
     };
     let request = ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: identity.clone(),
         scope_id: "agent:owner-agent".into(),
@@ -276,6 +279,8 @@ fn canonical_goal_owner_browser_read_forwards_original_proof_and_isolates_sessio
     let mut projection = projection::WorldServiceProjection::from_world(&world, None).unwrap();
     projection.runtime_binding = None;
     let response = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: None,
         contract_version: 1,
         version: ProjectionVersion {
@@ -354,6 +359,7 @@ fn canonical_goal_owner_browser_read_forwards_original_proof_and_isolates_sessio
             .unwrap();
     server.world = world;
     server.config.world_service = Some(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key: authority::sign_read_request(
             "fixture",

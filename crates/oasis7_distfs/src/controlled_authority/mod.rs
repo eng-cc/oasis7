@@ -9,6 +9,9 @@
 //! processes with the same filesystem permissions replacing that inode or directory.
 
 pub mod activation;
+#[path = "formal/fencing.rs"]
+pub mod fencing;
+pub mod formal;
 mod journal;
 mod proof;
 pub mod replicated_protocol;

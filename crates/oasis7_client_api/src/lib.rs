@@ -9,6 +9,7 @@ pub mod config;
 pub mod provider;
 pub mod signing;
 pub mod world_service;
+pub mod world_service_full_sync;
 
 pub use bootstrap::{
     BootstrapConfig, ChainBootstrapConfig, ClientBootstrapConfig, DEFAULT_CHAIN_NETWORK_TIER,
@@ -42,3 +43,6 @@ pub use signing::{
     main_token_transfer_signing_payload, sign_main_token_transfer,
     sign_main_token_transfer_request, sign_transfer, verify_main_token_transfer_signature,
 };
+
+pub mod world_service_correlation;
+pub mod world_service_wire;

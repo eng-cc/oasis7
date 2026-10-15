@@ -14,24 +14,29 @@ pub(super) fn describe(
     }
     let pinned = service.pin(None)?;
     let version = version(&pinned, "public", &json!(null))?;
+    let mut capabilities = vec![
+        Capability::StableLookup,
+        Capability::IdempotentRetry,
+        Capability::CommittedView,
+        Capability::MinimumCommit,
+        Capability::FixedHistoricalView,
+        Capability::BoundedChanges,
+    ];
+    if service.guarded.is_some() {
+        capabilities.push(Capability::GovernanceMembership);
+    }
     service.signed(
         DESCRIBE_PATH,
         &request,
         DescribeWorldResponse {
+            formal_profile: None,
             execution_evidence_scope: service.guarded.map(|_| {
                 oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
             }),
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: service.identity.clone(),
             binding: pinned.commit.binding.clone(),
-            capabilities: vec![
-                Capability::StableLookup,
-                Capability::IdempotentRetry,
-                Capability::CommittedView,
-                Capability::MinimumCommit,
-                Capability::FixedHistoricalView,
-                Capability::BoundedChanges,
-            ],
+            capabilities,
             availability: WorldAvailability {
                 readable: true,
                 writable: true,
@@ -147,6 +152,7 @@ pub(super) fn submit(
         SUBMIT_PATH,
         &request,
         IntentResponse {
+            formal_profile: None,
             execution_evidence_scope: service.guarded.map(|_| {
                 oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
             }),
@@ -174,6 +180,7 @@ pub(super) fn lookup(service: &Service<'_>, request: AuthenticatedLookup) -> Res
         LOOKUP_PATH,
         &request,
         IntentResponse {
+            formal_profile: None,
             execution_evidence_scope: service.guarded.map(|_| {
                 oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
             }),
@@ -223,7 +230,29 @@ pub(super) fn view(
     service: &Service<'_>,
     request: SignedReadRequest<ReadWorldViewRequest>,
 ) -> Result<Value, String> {
-    verify_read_request(VIEW_PATH, &request)?;
+    view_profile(service, request, VIEW_PATH, false)
+}
+
+/// Explicit JSON projection codec; authorization and pinning share the typed read.
+pub(super) fn view_json(
+    service: &Service<'_>,
+    request: SignedReadRequest<ReadWorldViewRequest>,
+) -> Result<Value, String> {
+    view_profile(
+        service,
+        request,
+        oasis7_client_api::world_service::VIEW_JSON_PATH,
+        true,
+    )
+}
+
+fn view_profile(
+    service: &Service<'_>,
+    request: SignedReadRequest<ReadWorldViewRequest>,
+    path: &str,
+    json_projection: bool,
+) -> Result<Value, String> {
+    verify_read_request(path, &request)?;
     request.request.validate().map_err(|e| e.to_string())?;
     if request.request.world != service.identity {
         return Err("view world mismatch".into());
@@ -242,56 +271,14 @@ pub(super) fn view(
         &request.request.scope_id,
         &request.subject_public_key,
     )?;
-    let mut projection = projection::WorldServiceProjection::from_authenticated_world(
+    let projection = projection::WorldServiceProjection::from_committed_world(
         &pinned.world,
         agent.as_deref(),
         &request.subject_public_key,
     )?;
-    if let Some(agent) = agent.as_deref() {
-        projection.agent_context = Some(
-            oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
-                &pinned.world,
-                agent,
-            )?,
-        );
-        projection.cognition_leases = pinned
-            .world
-            .cognition_economy()
-            .map_err(|e| format!("{e:?}"))?
-            .leases
-            .into_values()
-            .filter(|lease| lease.agent_id == agent)
-            .collect();
-        projection.continuations =
-            serde_json::from_value::<Vec<oasis7::runtime::AgentContinuation>>(
-                pinned.world.cognition_continuations(),
-            )
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .filter(|continuation| continuation.agent_id == agent)
-            .collect();
-        projection.scheduler_wakes = pinned
-            .world
-            .cognition_in_flight_wakes()
-            .map_err(|e| format!("{e:?}"))?
-            .into_iter()
-            .filter(|wake| wake.agent_id == agent)
-            .collect();
-        for continuation in &projection.continuations {
-            if let Some(context) = pinned
-                .world
-                .service_continuation_context(&continuation.continuation_id)
-            {
-                projection.continuation_contexts.insert(
-                    continuation.continuation_id.clone(),
-                    serde_json::from_value(context).map_err(|e| e.to_string())?,
-                );
-            }
-        }
-    }
-    let events = scoped_events(&pinned, agent.as_deref());
-    projection.events = events.iter().map(|event| (*event).clone()).collect();
     let response = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: service.guarded.map(|_| {
             oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
         }),
@@ -301,14 +288,22 @@ pub(super) fn view(
         continuation: cursor(
             &pinned,
             &request.request.scope_id,
-            events.last().map_or(0, |event| event.id),
+            projection.events.last().map_or(0, |event| event.id),
         ),
         view: projection,
     };
     response
         .validate(&request.request)
         .map_err(|e| e.to_string())?;
-    service.signed(VIEW_PATH, &request, response)
+    if json_projection {
+        // Normalize before signing, never reinterpret a typed-CBOR signature as JSON.
+        let response: ReadWorldViewResponse<Value> =
+            serde_json::from_value(serde_json::to_value(response).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        service.signed(path, &request, response)
+    } else {
+        service.signed(path, &request, response)
+    }
 }
 
 pub(super) fn changes(
@@ -351,6 +346,7 @@ pub(super) fn changes(
         return Err("cursor beyond pinned history".into());
     }
     let mut response = ReadWorldChangesResponse {
+        formal_profile: None,
         execution_evidence_scope: service.guarded.map(|_| {
             oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
         }),

@@ -58,7 +58,7 @@ Options:
   --reward-runtime-epoch-duration-secs <n>
                                    reward runtime epoch duration seconds (default: 60)
   --reward-points-per-credit <n>   reward points per credit (default: 100)
-  --node-auto-attest-all           enable local auto-attesting all validators on all nodes
+  --engineering-auto-attest-all    synthetic dev counting on all nodes; not independent validator signatures
   --node-no-auto-attest-all        disable local auto-attesting all validators on all nodes
   --node-auto-attest-sequencer-only
                                    enable auto-attest only on sequencer (default)
@@ -446,7 +446,7 @@ while [[ $# -gt 0 ]]; do
       reward_points_per_credit=${2:-}
       shift 2
       ;;
-    --node-auto-attest-all)
+    --engineering-auto-attest-all|--node-auto-attest-all)
       node_auto_attest_mode=2
       shift
       ;;
@@ -2137,7 +2137,11 @@ run_topology() {
       local node_dir="$topology_dir/nodes/$label"
       local cmd_txt="$node_dir/command.txt"
       run mkdir -p "$node_dir"
-      printf '%q ' "${cmd[@]}" > "$cmd_txt"
+      local dev_config="$topology_dir/nodes/$label/development-node.json"
+      printf '%q ' "$chain_bin" dev prepare-config --output "$dev_config" -- "${cmd[@]:1}" > "$cmd_txt"
+      printf '\n' >> "$cmd_txt"
+      cmd=("$chain_bin" dev node --config "$dev_config")
+      printf '%q ' "${cmd[@]}" >> "$cmd_txt"
       printf '\n' >> "$cmd_txt"
       echo "+ dry-run command[$topology/$label]: ${cmd[*]}"
     done
@@ -2254,6 +2258,9 @@ run_topology() {
       cmd+=(--replication-network-peer "${node_replication_listens[$peer_idx]}")
     done
 
+    local dev_config="$topology_dir/${label}-development-node.json"
+    "$chain_bin" dev prepare-config --output "$dev_config" -- "${cmd[@]:1}" > "$dev_config.prepare.log"
+    cmd=("$chain_bin" dev node --config "$dev_config")
     launch_node "$topology_dir" "$label" "$status_url" "$balances_url" "$runtime_id" "${cmd[@]}"
   done
 

@@ -15,6 +15,8 @@ fn owner_context_and_response_reject_foreign_stale_and_changed_authority() {
     let view = agent_chat::owner_view(&world, "agent-0").unwrap().unwrap();
     let key = view.public_key.clone();
     let request = ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: identity,
         scope_id: "agent:agent-0".into(),

@@ -79,11 +79,20 @@ impl WorldPreparedBaseHead {
                 &world.builtin_release_manifest,
                 &world.release_security_policy,
             ))?,
-            consensus: hash_json(&(
-                &world.tick_consensus_records,
-                &world.tick_consensus_authority_source,
-                &world.tick_consensus_rejection_audit_events,
-            ))?,
+            consensus: if world.formal_archived_tick_consensus_count == 0 {
+                hash_json(&(
+                    &world.tick_consensus_records,
+                    &world.tick_consensus_authority_source,
+                    &world.tick_consensus_rejection_audit_events,
+                ))?
+            } else {
+                hash_json(&(
+                    world.formal_archived_tick_consensus_count,
+                    &world.tick_consensus_records,
+                    &world.tick_consensus_authority_source,
+                    &world.tick_consensus_rejection_audit_events,
+                ))?
+            },
             governance: hash_json(&(
                 &world.governance_execution_policy,
                 &world.governance_finality_epoch_snapshots,

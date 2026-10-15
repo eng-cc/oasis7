@@ -2,11 +2,15 @@
 use crate::runtime::{World, WorldEvent, WorldState};
 use crate::simulator::RuntimeBindingV1;
 use serde::{Deserialize, Serialize};
+mod committed;
 mod feedback_history;
 pub use feedback_history::{WorldServiceFeedbackHistory, WorldServiceFeedbackReplayRecord};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldServiceProjection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_commit_header:
+        Option<oasis7_client_api::world_service::FormalProjectionCommitHeaderV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_agent_owner: Option<oasis7_proto::viewer::CanonicalAgentOwnerFenceV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,17 +43,7 @@ pub struct WorldServiceContinuationContext {
     pub precondition_digest: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorldServiceAgentContext {
-    pub agent_id: String,
-    pub capability_authorization_root: String,
-    pub capability_snapshot_hash: String,
-    pub authority_context_hash: String,
-    pub capability_catalog: oasis7_wasm_abi::CapabilityCatalogSnapshot,
-    pub capability_invocation_context:
-        crate::capability_invocation_context::CapabilityInvocationContext,
-    pub payer_binding: serde_json::Value,
-}
+pub use oasis7_agent_api::world_context::WorldServiceAgentContext;
 
 impl WorldServiceProjection {
     /// Called after scope authentication. Owner chat metadata has a stricter
@@ -168,6 +162,7 @@ impl WorldServiceProjection {
                 .transpose()?,
             state,
             events: Vec::new(),
+            formal_commit_header: None,
             runtime_binding: world.current_cognition_runtime_binding().ok(),
             agent_context: None,
             scheduler_wakes: Vec::new(),

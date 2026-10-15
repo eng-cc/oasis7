@@ -84,6 +84,16 @@
 
 AC-1 的复算验收包括：原反例五维 `5/5/5/3/3` 得到 `4.2`；四档题中间答案能唯一映射；缺计分题保持未知；`3.2/4.2` 及邻近值按未舍入总分无空隙判档；多卡保留来源、完整性与独立阻断。数值标签只构成评审输入，既有低理解度/控制感、`world_activity_only`、玩家杠杆、L5 与发布治理要求仍适用。
 
+<a id="feedback-score-evidence-level"></a>
+#### 评分证据的层级承接
+
+Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1；局部承接[REQ-WR-PE-002](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002)及其[AC](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#ac-wr-pe-002)。评分卡保留当前尝试、原始回答与人类/AI 来源及评审归属；数值标签不升级为产品 go、L5 或公开发布结论。该子义务由[评分证据隔离](design.md#feedback-score-evidence-boundary)承接；不覆盖所有 claim 消费者或实际试玩证据。
+
+<a id="feedback-score-comparison-scope"></a>
+#### 评分汇总与产品比较单位
+
+Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07；局部承接[REQ-WR-PE-003](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003)及其[AC](../product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md#ac-wr-pe-003)。卡片合同定义的同组均值仅是描述性数值汇总；产品建议仍独立核对体验目标、formal 入口、候选/变更、证据窗口及影响解释的适用环境。同评分组不证明该比较单位相同，其他组的正向均值不得抵消当前阻断。该子义务由[评分比较边界](design.md#feedback-score-comparison-boundary)承接；不新增评分字段、重分组算法或产品 go 判定器。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 可玩性卡片模板、结果聚合脚本、手动长玩记录流程。
 - Evaluation Strategy: 以问题检出率、重复缺陷比例、闭环时长、版本体验评分变化，以及 `world_activity_only` 误报被提前拦截的比例评估。

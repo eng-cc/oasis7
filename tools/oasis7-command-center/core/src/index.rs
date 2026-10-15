@@ -1,10 +1,19 @@
 #[path = "index_coverage.rs"]
 mod coverage;
+#[path = "document_fragments.rs"]
+mod document_fragments;
+#[path = "document_pairings.rs"]
+mod document_pairings;
 #[path = "document_read.rs"]
 mod document_read;
 #[path = "lifecycle_metadata.rs"]
 mod lifecycle_metadata;
-use crate::{Error, Result, domain::*, process::run};
+use crate::{
+    Error, Result,
+    document_inventory::{IndexedDocument, Inventory, sections_digest},
+    domain::*,
+    process::run,
+};
 use coverage::Coverage;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -59,18 +68,41 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     }
     Ok(path)
 }
+#[cfg(test)]
 pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
     read_candidate(project, || {})
 }
+pub(crate) struct IndexCandidate {
+    pub sections: Vec<DocumentSection>,
+    pub git: GitSnapshot,
+    pub coverage: String,
+    pub omitted: bool,
+    pub inventory: Inventory,
+}
+pub(crate) fn read_with_inventory(project: &Project) -> Result<IndexCandidate> {
+    scan(project, || {})
+}
+#[cfg(test)]
 fn read_candidate(
     project: &Project,
     after_read: impl FnOnce(),
 ) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
+    let candidate = scan(project, after_read)?;
+    Ok((
+        candidate.sections,
+        candidate.git,
+        candidate.coverage,
+        candidate.omitted,
+    ))
+}
+fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> {
     let root = Path::new(&project.path);
     let files = document_list(root)?;
     let changed = dirty_paths(root)?;
     let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
     let mut sections = Vec::new();
+    let mut inventory_files = Vec::new();
+    let mut pairing_contents = std::collections::HashMap::new();
     let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
     let mut observed = Vec::new();
@@ -79,19 +111,25 @@ fn read_candidate(
         .split(|b| *b == 0)
         .filter(|b| b.ends_with(b".md"))
         .collect();
+    names.sort_unstable();
+    names.dedup();
     names.sort_by_key(|name| {
         let name = String::from_utf8_lossy(name);
         let priority = if name == "doc/core/prd.md" {
             0
         } else if name == "doc/engineering/workflow/source-of-truth.md" {
             1
-        } else if name.starts_with("doc/product/")
-            || name.ends_with("/prd.md")
-            || name == "AGENTS.md"
+        } else if name == "AGENTS.md"
+            || name == "skills/oasis7-command-center/references/project-map.md"
+            || (name.starts_with("doc/") && name.ends_with("/README.md"))
         {
+            // Keep structural navigation available when body documents exhaust
+            // either the path count or total byte budget.
             2
-        } else {
+        } else if name.starts_with("doc/product/") || name.ends_with("/prd.md") {
             3
+        } else {
+            4
         };
         (priority, name.into_owned())
     });
@@ -102,7 +140,10 @@ fn read_candidate(
         if !name.ends_with(".md") {
             continue;
         }
+        let mut file = IndexedDocument::new(&project.id, name, changed.contains(name.as_bytes()));
         if position >= 3000 {
+            file.omit("file_count_budget");
+            inventory_files.push(file);
             coverage.omit(name, "file_count_budget");
             continue;
         }
@@ -110,6 +151,8 @@ fn read_candidate(
         let content = match read_source(root, name, remaining) {
             Ok(content) => content,
             Err(reason) => {
+                file.omit(reason);
+                inventory_files.push(file);
                 coverage.omit(name, reason);
                 omissions.push((name.to_owned(), reason, remaining));
                 continue;
@@ -121,12 +164,26 @@ fn read_candidate(
         let revision = digest(content.as_bytes());
         observed.push((name.to_owned(), revision.clone()));
         metadata.insert(name.to_owned(), lifecycle_metadata::parse(name, &content));
-        sections.extend(document_sections(name, &content, &revision, dirty, project));
+        let parsed = document_sections(name, &content, &revision, dirty, project);
+        file.title = parsed
+            .iter()
+            .find(|section| section.title != name)
+            .map_or_else(|| name.to_owned(), |section| section.title.clone());
+        file.revision = Some(revision);
+        file.bytes = Some(content.len());
+        file.pairings = Some(document_pairings::parse(name, &content));
+        inventory_files.push(file);
+        sections.extend(parsed);
+        pairing_contents.insert(name.to_owned(), content);
     }
     let indexed: std::collections::HashSet<String> =
         sections.iter().map(|s| s.path.clone()).collect();
     for value in metadata.values_mut().flatten() {
         lifecycle_metadata::validate_indexed(value, &indexed);
+    }
+    document_pairings::resolve(&mut inventory_files, &sections, &pairing_contents);
+    for file in &mut inventory_files {
+        file.lifecycle = metadata.get(&file.path).cloned().flatten();
     }
     for section in &mut sections {
         section.lifecycle = metadata.get(&section.path).cloned().flatten();
@@ -177,12 +234,29 @@ fn read_candidate(
             "HEAD changed during indexing; refresh again".into(),
         ));
     }
-    Ok((
+    inventory_files.sort_by(|a, b| a.path.cmp(&b.path));
+    let snapshot_id = digest(&serde_json::to_vec(&(
+        &project.id,
+        &project.head,
+        &inventory_files,
+    ))?);
+    let inventory = Inventory {
+        schema_version: 1,
+        project_id: project.id.clone(),
+        baseline_oid: project.head.clone(),
+        snapshot_id,
+        generated_at: crate::now(),
+        source_generation: String::new(),
+        sections_digest: sections_digest(&sections),
+        files: inventory_files,
+    };
+    Ok(IndexCandidate {
         sections,
-        snapshot,
-        coverage.summary(total),
-        coverage.has_omissions(),
-    ))
+        git: snapshot,
+        coverage: coverage.summary(total),
+        omitted: coverage.has_omissions(),
+        inventory,
+    })
 }
 fn read_source(
     root: &Path,

@@ -23,9 +23,13 @@ def copy_fixture(root):
   tree.write(p,encoding="unicode")
 
 cases=[
+ *[('index.html', field + '=', 'missing-' + field + '=') for field in ['data-source-build', 'data-runtime-profile', 'data-source-scenario', 'data-source-window']],
+ ('index.html','data-evidence-provenance="runtime_capture"','data-evidence-provenance="illustrative"'),
  ('index.html','data-decision-panel="3"','data-decision-panel="0"'),
  ('index.html','id="decision-2"','id="decision-2" hidden'),
- ('en/index.html','data-provenance="illustrative"','data-provenance="runtime_capture"'),
+ ('en/index.html','data-provenance="runtime_capture"','data-provenance="illustrative"'),
+ ('index.html','data-evidence-source=','missing-evidence-source='),
+ ('index.html','data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b"','data-source-version="unknown"'),
  ('devlog/discovery-first/index.html','data-content-status="published"','data-content-status="draft"'),
  ('devlog/discovery-first/index.html','data-content-status="published"','data-content-status="withdrawn"'),
  ('devlog/discovery-first/index.html','data-content-id="discovery-first"','data-content-id="different"'),
@@ -44,6 +48,12 @@ with tempfile.TemporaryDirectory() as tmp:
   target=root/file;source=target.read_text();assert old in source,(file,old)
   target.write_text(source.replace(old,new,1))
   assert module.check(root),(file,old,new)
+  target.write_text(source)
+ for field in ['data-source-build', 'data-runtime-profile', 'data-source-scenario', 'data-source-window']:
+  target=root/'index.html';source=target.read_text()
+  for value in ['', '   ', 'unknown']:
+   target.write_text(module.re.sub(field + r'="[^"]*"', field + '="' + value + '"', source, count=1))
+   assert any('incomplete case runtime provenance: ' + field in e for e in module.check(root)), (field, value)
   target.write_text(source)
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
@@ -114,7 +124,7 @@ with tempfile.TemporaryDirectory() as tmp:
   text=source.read_text().replace('discovery-first','energy-example').replace('data-content-kind="devlog"','data-content-kind="observation"').replace('data-content-status="published"','data-content-status="published" data-provenance="illustrative"').replace('<article data-content-body>','<p data-content-provenance-label>'+label+'</p><article data-content-body>')
   p.write_text(text)
   home=root/prefix/'index.html';row=re.search(r'<article[^>]*data-content-summary="discovery-first".*?</article>',home.read_text(),re.S).group().replace('discovery-first','energy-example').replace('devlog/energy-example/','observations/energy-example/')
-  home_text=home.read_text();at=home_text.index('</section>',home_text.index('<section id="world"'));home.write_text(home_text[:at]+row+home_text[at:])
+  home_text=home.read_text();at=home_text.index('<section id="progress"');home.write_text(home_text[:at]+row+home_text[at:])
   listing=root/prefix/'observations/index.html';listing.write_text(listing.read_text().replace('</main>',row+'</main>'))
   feed=root/prefix/'feed.xml';tree=module.ET.parse(feed);channel=tree.getroot().find('channel');item=copy.deepcopy(channel.find('item'))
   for field in ['guid','link']:item.find(field).text=item.find(field).text.replace('devlog/discovery-first','observations/energy-example')

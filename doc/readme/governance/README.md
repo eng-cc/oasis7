@@ -134,8 +134,8 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
-- 旧 2026-03-11 一次性 role handoff briefs 已退役删除；当前从正式专题、根 `../../../README.md`、release communication surfaces、`../prd.index.md` 与 `.pm` evidence 追溯。
-- 旧 `TASK-README-014/015` Moltbook role handoff briefs 已退役删除；当前从 Moltbook promotion / post drafts / liveops runbook 的正式 PRD/project/runbook、`../prd.index.md` 与 `.pm` evidence 追溯。
+- 旧 2026-03-11 一次性 role handoff briefs 已退役删除；现行规则从正式专题、根 `../../../README.md`、release communication surfaces 与 `../prd.index.md` 进入；原过程从 Git history 与实际 PR/已有 Task 追溯，不依赖退役 `.pm`。
+- 旧 `TASK-README-014/015` Moltbook role handoff briefs 已退役删除；当前渠道方法与素材从 `readme-moltbook-liveops-runbook.md`、`readme-moltbook-post-pack.md` 和 `../prd.index.md` 进入；旧 promotion 与 handoff 仅从 Git history 与实际 PR/已有 Task 追溯。
 - execution_log、轮播包与其它 supporting doc 继续保留可检索性，但不应重新成为默认首读入口。
 - 如果某个主题未来形成新的主文档，应优先进入主文档，而不是继续把增量素材包维持为默认入口。
 

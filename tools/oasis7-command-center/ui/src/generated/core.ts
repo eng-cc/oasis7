@@ -32,6 +32,23 @@ rawStatus?: string, category?: string,
  */
 status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
+export type DocumentPairing = { declarationLine: number, destination: string, target: string | null,
+/**
+ * resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
+ */
+resolution: string, targetSection: string | null, targetRevision: string | null, };
+export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
+export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
+/**
+ * None in pre-pairing caches; refresh is required before claiming absence.
+ */
+pairings: DocumentPairings | null, };
+export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
+/**
+ * all / read / omitted
+ */
+readFilter: string, cursor: string | null, };
+export type DocumentInventoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, candidates: number, read: number, omitted: number, readBytes: number, totalMatches: number, partial: boolean, stale: boolean, error: string | null, files: Array<IndexedDocument>, nextCursor: string | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };

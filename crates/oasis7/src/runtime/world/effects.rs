@@ -33,9 +33,12 @@ impl World {
             self.record_inflight_effect_dispatch_blocked();
             return None;
         }
+        let key = self.pending_effects.front()?.identity_key();
+        if self.inflight_effects.contains_key(&key) {
+            return None;
+        }
         let intent = self.pending_effects.pop_front()?;
-        self.inflight_effects
-            .insert(intent.intent_id.clone(), intent.clone());
+        self.inflight_effects.insert(key, intent.clone());
         Some(intent)
     }
 
@@ -95,6 +98,7 @@ impl World {
             Self::preview_next_intent_seq(self.next_intent_id, self.next_intent_id_era);
         let intent_id = format!("intent-{allocated_intent_seq}");
         let intent = EffectIntent {
+            birth_era: self.effect_birth_era_for(self.next_intent_id_era),
             intent_id,
             kind,
             params,
@@ -115,9 +119,11 @@ impl World {
     ) -> Result<EffectIntent, WorldError> {
         let kind = kind.into();
         let cap_ref = cap_ref.into();
+        let birth_era = self.effect_birth_era_for(self.next_intent_id_era);
         let intent_id = format!("intent-{}", self.allocate_next_intent_seq());
 
         let intent = EffectIntent {
+            birth_era,
             intent_id: intent_id.clone(),
             kind: kind.clone(),
             params,
@@ -163,29 +169,20 @@ impl World {
                 reason: "injected append_event failure after publication preparation".to_string(),
             });
         }
-        Ok(self.install_prepared_receipt_ingestion(prepared))
+        self.install_prepared_receipt_ingestion(prepared)
     }
 
     fn prepare_receipt_ingestion(
         &self,
         mut receipt: EffectReceipt,
     ) -> Result<PreparedReceiptIngestion, WorldError> {
-        let known = self.inflight_effects.contains_key(&receipt.intent_id)
-            || self
-                .pending_effects
-                .iter()
-                .any(|intent| intent.intent_id == receipt.intent_id);
-        if !known {
-            return Err(WorldError::ReceiptUnknownIntent {
-                intent_id: receipt.intent_id,
-            });
-        }
+        let identity_key = self.effect_receipt_key(&receipt)?;
 
         let mut authorization_receipt_update = None;
         let mut authorization_link_removed = None;
         let mut capability_authorization_root = None;
         let closure_body = if let Some(link) =
-            self.capability_effect_receipt_links.get(&receipt.intent_id)
+            self.capability_effect_receipt_links.get(&identity_key)
         {
             let authorization_receipt_id = link.authorization_receipt_id.clone();
             if authorization_receipt_id.trim().is_empty() {
@@ -202,24 +199,24 @@ impl World {
                 })?;
             let mut audit_after = audit.clone();
             if audit_after.committed_effect_receipt_id.is_none() {
-                audit_after.committed_effect_receipt_id = Some(receipt.intent_id.clone());
+                audit_after.committed_effect_receipt_id = Some(identity_key.clone());
             }
             audit_after
                 .committed_effect_receipt_ids
-                .insert(receipt.intent_id.clone());
+                .insert(identity_key.clone());
             capability_authorization_root = Some(
                 self.compute_capability_authorization_root_with_effect_receipt_commit(
                     &audit_after,
-                    receipt.intent_id.as_str(),
+                    identity_key.as_str(),
                 )?,
             );
             authorization_receipt_update = Some(audit_after);
-            authorization_link_removed = Some(receipt.intent_id.clone());
+            authorization_link_removed = Some(identity_key.clone());
             Some(WorldEventBody::CapabilityAuthorization(
                 CapabilityAuthorizationEvent::EffectReceiptCommitted {
-                    intent_id: receipt.intent_id.clone(),
+                    intent_id: identity_key.clone(),
                     authorization_receipt_id,
-                    effect_receipt_id: receipt.intent_id.clone(),
+                    effect_receipt_id: identity_key.clone(),
                 },
             ))
         } else {
@@ -228,8 +225,8 @@ impl World {
 
         let mut pending_effects = self.pending_effects.clone();
         let mut inflight_effects = self.inflight_effects.clone();
-        let _ = inflight_effects.remove(&receipt.intent_id);
-        pending_effects.retain(|intent| intent.intent_id != receipt.intent_id);
+        let _ = inflight_effects.remove(&identity_key);
+        pending_effects.retain(|intent| intent.identity_key() != identity_key);
 
         let mut events = Vec::with_capacity(2);
         let mut next_event_id = self.next_event_id;
@@ -244,7 +241,7 @@ impl World {
                 id: event_id,
                 time: self.state.time,
                 caused_by: Some(CausedBy::Effect {
-                    intent_id: receipt.intent_id.clone(),
+                    intent_id: identity_key.clone(),
                 }),
                 body,
             };
@@ -270,7 +267,7 @@ impl World {
             id: event_id,
             time: self.state.time,
             caused_by: Some(CausedBy::Effect {
-                intent_id: receipt.intent_id.clone(),
+                intent_id: identity_key.clone(),
             }),
             body: WorldEventBody::ReceiptAppended(receipt.clone()),
         };
@@ -368,7 +365,8 @@ impl World {
     fn install_prepared_receipt_ingestion(
         &mut self,
         prepared: PreparedReceiptIngestion,
-    ) -> WorldEventId {
+    ) -> Result<WorldEventId, WorldError> {
+        self.install_prepared_tick_consensus_record(prepared.consensus_record)?;
         if let Some(audit) = prepared.authorization_receipt_update {
             self.capability_authorization_receipts
                 .insert(audit.receipt_id.clone(), audit);
@@ -388,12 +386,12 @@ impl World {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(prepared.journal_events_evicted);
-        self.install_prepared_tick_consensus_record(prepared.consensus_record);
-        prepared
+
+        Ok(prepared
             .events
             .last()
             .map(|event| event.id)
-            .expect("prepared receipt ingestion contains an event")
+            .expect("prepared receipt ingestion contains an event"))
     }
 }
 
@@ -403,6 +401,19 @@ fn advance_receipts_root(previous_root: &str, consensus_height: u64, leaf_hash: 
 }
 
 fn receipt_leaf_hash(receipt: &EffectReceipt) -> Result<String, WorldError> {
+    if let Some(era) = receipt.birth_era {
+        let bytes = serde_json::to_vec(&(
+            "oasis7.world.effect.receipt-leaf.v2",
+            &receipt.world,
+            era,
+            &receipt.intent_id,
+            &receipt.intent_payload_digest,
+            &receipt.status,
+            &receipt.payload,
+            receipt.cost_cents,
+        ))?;
+        return Ok(sha256_hex(&bytes));
+    }
     #[derive(serde::Serialize)]
     struct ReceiptLeaf<'a> {
         intent_id: &'a str,

@@ -127,6 +127,7 @@ fn runtime_fragment_refill_preview_does_not_classify_unknown_service_projection_
         scope_id: "public".into(),
         read_private_key_hex: private_key.clone(),
         timeout: Duration::from_secs(1),
+        formal_read_trust: None,
         max_response_bytes: 4096,
     });
     let request = signed_fragment_refill_preview_request(

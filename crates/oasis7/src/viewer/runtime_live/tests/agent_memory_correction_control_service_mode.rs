@@ -160,6 +160,7 @@ fn signed_runtime_agency_controls_fail_closed_in_service_mode_and_preserve_offli
             if service_configured {
                 server.config.world_service =
                     Some(crate::world_service::client::WorldServiceClientConfig {
+                        formal_read_trust: None,
                         endpoint: "http://127.0.0.1:1".into(),
                         trusted_service_public_key: public_key.clone(),
                         expected_world: oasis7_client_api::world_service::WorldIdentity {
