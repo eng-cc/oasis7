@@ -1675,7 +1675,7 @@ function renderAccountEmailRecovery(root, { state, account, credentials, capabil
 	}
 	if (!account && capabilities.email?.available) button("使用邮箱登录", () => mode("login_address"));
 	if (account && capabilities.email?.available) button("绑定或替换恢复邮箱", () => mode("binding_address"));
-	if (account && !credentials.some((key) => key.state === "active" && key.type === "webauthn")) button("验证邮箱并添加首个通行密钥", async () => {
+	if (account && !credentials.some((key) => key.state === "active" && key.type === "passkey")) button("验证邮箱并添加首个通行密钥", async () => {
 		state.otp = await client.upgradeEmailOptions();
 		mode("upgrade_code");
 	});
@@ -2317,7 +2317,7 @@ function mountPasskeyAccount(root, { client = createPasskeyAccountClient(), onAu
 			row.append(button("移除", () => credential.type === "email" ? client.unbindEmail(credential) : client.revokeCredential(credential)));
 			root.append(row);
 		}
-		if (credentialList.some((key) => key.state === "active" && key.type === "webauthn")) root.append(button("添加备用通行密钥", () => client.addCredential()));
+		if (credentialList.some((key) => key.state === "active" && key.type === "passkey")) root.append(button("添加备用通行密钥", () => client.addCredential()));
 		renderAccountEmailRecovery(root, {
 			state: emailRecoveryState,
 			account,
