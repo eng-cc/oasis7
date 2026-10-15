@@ -27,7 +27,7 @@
 
 ### BUILD-03 专业接受条件
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[生产 release policy 接收器](wasm-deterministic-build-pipeline.design.md#build-release-policy-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 
 输入：node-side missing/forged proof、production host compile、materializer fallback。断言：独立policy/trust receiver拒绝；不以source compile-off代fallback proof。目标字段、算法和恢复条件由 [BUILD-03精确设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接；跨域 proof/publication obligation 由 [BUILD-03外部接收器](../module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
 
@@ -115,13 +115,13 @@
 
   - SC-7: 生产 runtime / node 入口必须默认关闭 builtin manifest fallback、本地 identity hash 签名、本地 finality signing 与 runtime source compile，保证 binary-only policy 是生产默认行为而不是测试显式开关。
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[生产 release policy 接收器](wasm-deterministic-build-pipeline.design.md#build-release-policy-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 <a id="sr2-obligation-sc-8"></a>
 ### SC-8 原条款
 
   - SC-8: 跨宿主 Docker release evidence 必须可被包装成 node-side attestation proof payload，并进入 `ModuleReleaseSubmitAttestation.proof_cid`；仅存在于 CI artifact 的 report 不能单独视为生产 closure。
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅提供发布节点可核对的构建证据材料，不把 CI/report 视为已激活或最终化工件；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅提供发布节点可核对的构建证据材料，不把 CI/report 视为已激活或最终化工件；由[node-side proof assembly 接收器](wasm-deterministic-build-pipeline.design.md#build-node-proof-contract)与 [release proof / trust 接收器](../module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 <a id="sr2-obligation-sc-9"></a>
 ### SC-9 原条款
 
@@ -239,13 +239,13 @@
 
   - AC-10 (PRD-WORLD_RUNTIME-022): production 运行入口必须提供 release security policy 绑定证据，证明 fallback / 本地签名 / runtime source compile 默认关闭；仅在测试里调用 `enable_production_release_policy()` 不足以视为完成。
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[生产 release policy 接收器](wasm-deterministic-build-pipeline.design.md#build-release-policy-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 <a id="sr2-obligation-ac-11"></a>
 ### AC-11 原条款
 
   - AC-11 (PRD-WORLD_RUNTIME-021/022): release evidence 除了 CI/report 汇总外，还必须存在 node-side proof payload 打包与 attestation submit 入口，使 `builder_image_digest/container_platform/canonicalizer_version` 可作为发布节点提交的正式证明字段进入共识链路。
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅提供发布节点可核对的构建证据材料，不把 CI/report 视为已激活或最终化工件；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅提供发布节点可核对的构建证据材料，不把 CI/report 视为已激活或最终化工件；由[node-side proof assembly 接收器](wasm-deterministic-build-pipeline.design.md#build-node-proof-contract)与 [release proof / trust 接收器](../module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 <a id="sr2-obligation-ac-12"></a>
 ### AC-12 原条款
 
@@ -342,7 +342,7 @@
 
   - NFR-WDBP-7: 生产入口 hardened release policy 的默认值必须可由自动化验证，不允许依赖人工约定或测试专用辅助调用。
 
-关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[builtin 工件身份接收器](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)与 [identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
+关系说明（不改变本条原文）：Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。本条仅约束工件接收所依赖的生产 release policy；effective policy 仍需实际入口验证，不证明 activation/finality；由[生产 release policy 接收器](wasm-deterministic-build-pipeline.design.md#build-release-policy-contract)消费。完整产品验收层级、历史 replay 与同候选组合仍按产品/QA 原合同，本说明不是实现或运行证明。
 - Security & Privacy:
   - 工件信任锚点升级为 `builder_image_digest + wasm_hash + artifact identity`，而不是开发机环境。
   - Docker socket 权限只应出现在受控 builder 节点或本地开发机，不应进入普通 runtime 节点的默认生产权限面。

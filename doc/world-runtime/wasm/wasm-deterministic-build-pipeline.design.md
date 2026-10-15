@@ -106,12 +106,16 @@
 <a id="build-receipt-contract"></a>
 ### Receipt、源码闭包与工件摘要
 
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
+
 具体流程、字段和原约束见 [原详细设计](#build-suite-detail)。仅构建身份子范围；receipt 的 recipe digest 不独立证明执行镜像字节恒等。
 
 源码摘要复用共享算法，覆盖模块本地 path dependency closure 和适用 Cargo.lock；build manifest 绑定 profile/target/tooling/canonicalizer/recipe 等输入；wasm_hash_sha256 只取 canonical packaged bytes。`dry_run` 的 source/hash/receipt 输出为 None，不是构建证据。
 
 <a id="build-publish-hash-contract"></a>
 ### 单 canonical 发布 hash
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
 
 具体流程、字段和原约束见 [原详细设计](#build-manifest-detail)。不证明治理激活、签名或历史工件长期可用。
 
@@ -120,12 +124,16 @@
 <a id="build-cross-host-contract"></a>
 ### 跨宿主 summary 与候选证据
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
+
 具体流程、字段和原约束见 [原详细设计](#build-cross-host-detail)。跨宿主工件一致性只是确定性执行输入子范围，不代签验证者重执行、finality 或 replay。
 
 同 source/image/tooling 的实际 Linux 与 Docker-capable Darwin 结果按原 100% 一致目标核对；receipt_evidence_consistent 只证明输入报告的一致性，不补足独立镜像字节证明。历史 run 28297899706 只属于其原候选，不能填当前缺失的 Darwin 证据。
 
 <a id="build-source-policy-contract"></a>
 ### 生产 source compile 边界
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
 
 具体流程、字段和原约束见 [原详细设计](#build-source-detail)。未逐入口运行拒绝验证；source compile-off 不覆盖 builtin materializer fallback。
 
@@ -134,12 +142,16 @@
 <a id="build-release-policy-contract"></a>
 ### 生产 release policy 与授权
 
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
+
 具体流程、字段和原约束见 [原详细设计](#build-policy-detail)。未重新核实全部生产入口、签名/最终性或发布状态。
 
 原 production 四项 false 与入口自动绑定、status/evidence 输出的要求全部保留；不要把 ReleaseSecurityPolicy::default() 误写为 hardened。必须核真实入口有效配置和拒绝行为，source compile-off 不等于 materializer compile fallback-off。
 
 <a id="build-node-proof-contract"></a>
 ### Node-side proof assembly
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
 
 具体流程、字段和原约束见 [原详细设计](#build-proof-detail)。仅验证设计；本次没有运行 proof assembly、签名、提交或共识验证。
 
@@ -156,6 +168,8 @@ CI summaries/report 仅作为输入材料；node canonicalize 去掉时间、路
 
 <a id="build-materialization-contract"></a>
 ### Builtin materialization 与 binary 消费
+
+Trace refs: O7-REQ-229af15b-05ad-4a1b-85f4-f7baf15f10bc；[REQ-DWE-004](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)。仅承接本节下述局部范围，完整产品义务与未证明边界不变。
 
 具体流程、字段和原约束见 [原详细设计](#build-materialization-detail)。hash 校验不等于 release authorization；本地 fallback 与缓存不能选择 governing version。
 
