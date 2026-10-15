@@ -11,8 +11,9 @@ user-invocable: false
 In oasis7, this skill is a content-format and copywriting aid, not the owner of
 player promises, incident communication, release positioning, or community
 strategy. When the content is external-facing, `liveops_community` must own or
-verify the professional conclusion, and TPM must keep the work bound to the
-same GitHub-backed task/worktree/PR chain.
+verify the professional conclusion. Execution and review records belong in the
+actual PR or existing Task under `doc/engineering/workflow/source-of-truth.md`;
+this skill adds no TPM, Issue, Project or worktree prerequisite.
 
 Use this skill to shape the artifact after the task has a clear audience,
 channel, factual basis, and approval boundary. Do not use it to invent product

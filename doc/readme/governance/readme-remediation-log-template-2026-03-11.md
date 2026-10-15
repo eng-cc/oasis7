@@ -22,4 +22,4 @@
 ## Closure
 - 状态: `open` / `fixing` / `closed`
 - 验证命令:
-- 回写文件:
+- 本轮 PR / 已有 Task 与关闭证据:
