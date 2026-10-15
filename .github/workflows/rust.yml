@@ -308,7 +308,7 @@ jobs:
     timeout-minutes: ${{ matrix.suite == 'world-history' && 45 || 90 }}
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 5
       matrix:
         suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]
     runs-on: ubuntu-24.04

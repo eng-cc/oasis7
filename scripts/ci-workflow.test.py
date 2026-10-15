@@ -53,7 +53,7 @@ class Workflow(unittest.TestCase):
         self.assertIn('needs: [select, oasis7-test-build]', matrix)
         self.assertNotIn('needs: oasis7-required', matrix)
         self.assertIn('fail-fast: false', matrix)
-        self.assertIn('max-parallel: 3', matrix)
+        self.assertIn('max-parallel: 5', matrix)
         self.assertIn('suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]', matrix)
         self.assertIn('actions/download-artifact@', matrix)
         self.assertNotIn('cargo build', matrix)

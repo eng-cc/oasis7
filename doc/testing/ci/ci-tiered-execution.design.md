@@ -246,7 +246,7 @@ Trace refs: O7-REQ-d9292810-5229-417f-9fc8-262ee04759c7
 | oasis7 lib / runtime bin required-feature 的非 ignored formal | runtime-protocol，保留原二进制环境 |
 | distfs default-feature lib 的非 ignored formal | storage-recovery，保留原二进制环境 |
 
-后三类原 formal 命令未证明与普通环境等价，继续执行；snapshot_progress 与 legacy fields 回填仍使用原 default features。独立 ignored 验收按 `--exact --ignored --test-threads=1 --nocapture` 串行运行，矩阵 `fail-fast: false`、`max-parallel: 3`。world-history job 上限 45 分钟，其他分片初始保护上限 90 分钟；每次子命令绝对上限 40 分钟，均为防挂保护而非性能目标，后续按真实基线调整。
+后三类原 formal 命令未证明与普通环境等价，继续执行；snapshot_progress 与 legacy fields 回填仍使用原 default features。独立 ignored 验收按 `--exact --ignored --test-threads=1 --nocapture` 串行运行，矩阵 `fail-fast: false`、`max-parallel: 5`。world-history job 上限 45 分钟，其他分片初始保护上限 90 分钟；每次子命令绝对上限 40 分钟，均为防挂保护而非性能目标，后续按真实基线调整。
 
 `formal-process` 使用 always 汇总：选中时构建和矩阵均须 success；未选中时矩阵须 skipped，明确输出 not_selected。required-gate 只新增此固定依赖。可信 base 尚无 formal_process 时，仅保守扩大：full 或相关 Rust 组选择全部分片；不修改旧计划使旧结果校验器接受未知组。新 base 通过原 Cargo 反向图映射选择 formal_process。schedule/manual-full 明确选全部重型分片，普通 full-standard 不重复执行重型链路；专用 package dispatch 保持原行为。
 
