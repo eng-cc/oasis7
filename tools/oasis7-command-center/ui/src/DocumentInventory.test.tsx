@@ -84,3 +84,24 @@ it('distinguishes cache failure from empty results and keeps stale coverage visi
   await screen.findByText(/当前筛选没有匹配文件/);
   expect(screen.getByText(/清单已过期/)).toBeInTheDocument();
 });
+
+it('preserves filters, page and file selection when only personal snapshot data changes', async () => {
+  api.documentInventory.mockResolvedValue(page([file()], {nextCursor:'next'}));
+  const [state, setState] = createSignal(snapshot());
+  render(() => <DocumentInventory snapshot={state()} showSource={vi.fn()} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  const input = screen.getByRole('textbox', {name:'筛选文档文件'});
+  fireEvent.input(input, {target:{value:'设计'}});
+  fireEvent.click(screen.getByRole('button', {name:'应用筛选'}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole('button', {name:/下一页/})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', {name:/下一页/}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(3));
+  fireEvent.click(await screen.findByRole('button', {name:'设计文档'}));
+  expect(screen.getByRole('region', {name:'文件读取详情'})).toBeInTheDocument();
+  setState({...snapshot(), preferences:{...snapshot().preferences, query:'个人偏好更新'}});
+  await Promise.resolve();
+  expect(api.documentInventory).toHaveBeenCalledTimes(3);
+  expect(input).toHaveValue('设计');
+  expect(screen.getByRole('region', {name:'文件读取详情'})).toBeInTheDocument();
+});

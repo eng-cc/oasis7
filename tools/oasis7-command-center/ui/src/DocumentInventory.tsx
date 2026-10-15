@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, on, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { bridge, errorMessage, observedTime } from './bridge';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
@@ -55,8 +55,11 @@ export default function DocumentInventory(props: {
       if (request === generation) setError(errorMessage(failure));
     } finally { if (request === generation) setBusy(false); }
   }
+  const sourceIdentity = createMemo(() => JSON.stringify([
+    props.snapshot.project?.id, props.snapshot.sources.find(s => s.kind === 'local')?.generation,
+  ]));
   createEffect(on(
-    () => [props.snapshot.project?.id, props.snapshot.sources.find(s => s.kind === 'local')?.generation],
+    sourceIdentity,
     () => {
       ++generation; setPage(undefined); setSelected(undefined); setQuery(''); setFilter('all'); setError('');
       if (props.snapshot.project) void load();
