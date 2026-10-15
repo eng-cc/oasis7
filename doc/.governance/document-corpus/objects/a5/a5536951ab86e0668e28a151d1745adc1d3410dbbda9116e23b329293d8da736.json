@@ -2,7 +2,7 @@
   "record": {
     "authority_entry": "doc/p2p/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "6fe0f3b7ed73426410c5a69a247479437b67945a4ba6b494dbe3b01d59b14629",
+    "content_sha256": "b8e7b1312fcd2ce1b2636d66ec650cca0c8ef055b0e6a60afbca38b0844beae0",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
     "object_kind": "design",
