@@ -12,6 +12,8 @@ Trace refs：沿用 [AC-DCS-002](../../product/world-infrastructure/distributed-
 
 当前 native restore 复用已认证 current/parent Result envelope 的既有有界节点材料，仍核对内容摘要、完整根和最终 head；冷恢复新 RPC 从 777 次降至 6 次，协议期限不变。Business Index 的 257 个空树哈希只依赖固定 codec 与深度，进程内只构建一次；不缓存业务根、对象权威或资格，全部根与证明校验仍逐次执行。完整版本、构建和 CI 结果由 [PR #4683](https://github.com/eng-cc/oasis7/pull/4683)承载。
 
+原生历史读取适配器完整代理既有内容缓存读取与回填，维持共享 64 MiB/16384 项及局部 16 MiB/4096 项上限。读取持久 publication 的 proof 时，每次先按原私有路径和 no-follow/64 MiB 限额读取当前完整文件，再用域分离 BLAKE3 与长度绑定解析 memo；冷 miss 保留完整 CBOR 预算与字段解码，hit 仍核对所请求的位置。memo 仅保留未受信任的解析 proof，最多 256 项和 16 MiB 序列化权重（不是精确堆上限）；不保留 material、authority、Qualified 或失败结论。签名、权限、opaque cursor、历史与切面校验每次照常执行，文件篡改、删除或权限变化不能被旧缓存掩盖。
+
 fixture v87 / production v30 / endpoint release v14 的普通提交/重启、完整八阶段崩溃恢复、副本失联恢复、signer handoff、Frozen/Prepared 副本存活实际场景均有通过证据。旧组合长历史有两次失败：一次第 67 次提交的 RPC EOF（published/双端 head 仍为 70，原 pending 71 保留），另一次完成 70 次变更及最终重开后的普通签名查询超时。后者采样确认重复构造空哈希链的 CPU 热点；不能据此断言旧 EOF 根因已经确定。长历史须由优化后构建及最终 source HEAD CI 重新验证，不沿用这些失败组合签过。
 
 - TODO：继续定位偶发传输 EOF 的服务端错误，并为测试 oracle 提供安全可重建的持久现场；必须保留原请求并按既有 unknown/reopen 合同续做，不增加协议期限或替代 candidate。

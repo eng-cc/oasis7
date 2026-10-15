@@ -63,6 +63,14 @@ impl LookupTiming {
 }
 
 impl BusinessIndexNodeReader for NativeHistoryResolver {
+    fn read_cached_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        self.business_reader.read_cached_node(digest)
+    }
+
+    fn cache_content_node(&self, digest: &str, bytes: &[u8]) -> Result<(), String> {
+        self.business_reader.cache_content_node(digest, bytes)
+    }
+
     fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
         self.business_reader.read_node(digest)
     }

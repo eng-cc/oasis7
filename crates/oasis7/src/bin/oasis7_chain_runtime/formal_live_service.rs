@@ -575,6 +575,22 @@ impl FormalLiveService {
         ),
         String,
     > {
+        #[cfg(test)]
+        let mut lookup_stage = {
+            let enabled = std::env::var_os("OASIS7_FORMAL_LOOKUP_TIMING").is_some();
+            let started = std::time::Instant::now();
+            let mut previous = started;
+            move |stage: &str| {
+                if enabled {
+                    eprintln!(
+                        "formal_read_view_timing stage={stage} stage_ms={} elapsed_ms={}",
+                        previous.elapsed().as_millis(),
+                        started.elapsed().as_millis()
+                    );
+                }
+                previous = std::time::Instant::now();
+            }
+        };
         let status = self.runtime_status();
         let degraded_read_only =
             !status.ready && self.state.ready.load(Ordering::Acquire) && status.state == "degraded";
@@ -620,11 +636,15 @@ impl FormalLiveService {
             .formal_anchor
             .as_ref()
             .ok_or("formal read caller anchor missing")?;
+        #[cfg(test)]
+        lookup_stage("authorization_and_current_publication");
         let origin = if *origin_ref == anchor_ref(&current.anchor)? {
             FormalReadPublication::new(current.anchor.clone(), current.world.clone())?
         } else {
             self.history.origin_publication(origin_ref)?
         };
+        #[cfg(test)]
+        lookup_stage("origin_material");
         validate_anchor_ref(origin_ref, origin.anchor())?;
         let origin_anchor = origin.anchor().clone();
         let target = if let Some(fixed) = &request.fixed_commit {
@@ -731,8 +751,12 @@ impl FormalLiveService {
                 "HistoryUnavailable: formal read history page exceeds the 128-step bound".into(),
             );
         }
+        #[cfg(test)]
+        lookup_stage("target_selection_and_history_page");
         let service = FormalCommittedReadService::new(self.trust.initial_trust.clone(), target)?;
         let response = service.read(signed, &origin, &history)?;
+        #[cfg(test)]
+        lookup_stage("committed_read_service");
         response
             .validate(request)
             .map_err(|error| error.to_string())?;

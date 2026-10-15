@@ -128,82 +128,13 @@ pub(crate) struct FormalWriter<P: FormalDurabilityEndpoint, R: FormalDurabilityE
     business_reader: Option<super::formal_business_package::SharedBusinessReader>,
     recovery: Option<VerifiedRecovery>,
 }
+#[path = "formal_writer_published.rs"]
+mod published;
+pub(crate) use published::{read_published_candidate_at, read_published_proof_at};
+
 fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let bytes = crate::controlled_history_cli::read_bounded(path, 64 * 1024 * 1024)?;
-    World::validate_offline_formal_writer_envelope_cbor_budget(
-        &bytes,
-        oasis7::runtime::ObserverReadLimits {
-            max_file_bytes: 64 * 1024 * 1024,
-            max_single_allocation_bytes: 8 * 1024 * 1024,
-            max_elements: 24 * 1024 * 1024 + 64 * 1024,
-            ..oasis7::runtime::ObserverReadLimits::default()
-        },
-    )
-    .map_err(|error| format!("formal writer envelope budget: {error:?}"))?;
-    serde_cbor::from_slice(&bytes).map_err(|error| error.to_string())
-}
-
-/// Read one private exact-position publication as untrusted cached bytes. The
-/// caller must bind its record and material to an already verified opaque cut;
-/// this helper grants no authority and never scans the directory.
-fn read_published_at(writer_directory: &Path, position: u64) -> Result<Option<Published>, String> {
-    match std::fs::symlink_metadata(writer_directory) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
-        Ok(_) => crate::controlled_live_config::require_private_owned(writer_directory, true)?,
-    }
-    let published = writer_directory.join("published");
-    match std::fs::symlink_metadata(&published) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
-        Ok(_) => crate::controlled_live_config::require_private_owned(&published, true)?,
-    }
-
-    let path = published.join(format!("{position:020}.cbor"));
-    match std::fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
-        Ok(_) => crate::controlled_live_config::require_private_owned(&path, false)?,
-    }
-
-    let publication: Published = read(&path)?;
-    let record = &publication.candidate.candidate.record;
-    let proof_record = &publication.proof.decision.record;
-    let record_id = record.record_id().map_err(|error| error.to_string())?;
-    if publication.schema_version != 1
-        || record.position != position
-        || record != proof_record
-        || proof_record.position != position
-        || proof_record
-            .record_id()
-            .map_err(|error| error.to_string())?
-            != record_id
-    {
-        return Err("formal writer exact-position proof cache is inconsistent".into());
-    }
-    Ok(Some(publication))
-}
-
-/// Read a single exact-position publication as an untrusted proof candidate.
-/// The caller must verify the proof against its own opaque cursor and exact
-/// target; this helper grants no authority and never scans the directory.
-pub(crate) fn read_published_proof_at(
-    writer_directory: &Path,
-    position: u64,
-) -> Result<Option<FormalQualifiedCommitProofV1>, String> {
-    Ok(read_published_at(writer_directory, position)?.map(|publication| publication.proof))
-}
-
-/// Read private exact-position material for binding to an opaque qualified
-/// anchor. The returned proof and material are untrusted cache contents; the
-/// caller must independently match the full record to its verified anchor and
-/// validate the record/material commitments before use.
-pub(crate) fn read_published_candidate_at(
-    writer_directory: &Path,
-    position: u64,
-) -> Result<Option<(FormalCandidateMaterialV1, FormalQualifiedCommitProofV1)>, String> {
-    Ok(read_published_at(writer_directory, position)?
-        .map(|publication| (publication.candidate, publication.proof)))
+    published::decode(&bytes)
 }
 
 /// Extract immutable profile-2 CAS writes from the already approved initial

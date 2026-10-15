@@ -3,6 +3,62 @@ use std::sync::Mutex;
 
 use crate::formal_read_fixtures as fixtures;
 
+#[test]
+fn native_resolver_preserves_content_cache_hooks_without_endpoint_io() {
+    use crate::formal_live_runtime::RemoteBusinessIndexReader;
+    let (_, _, anchor, _) = fixtures::actual_world_initial_fixture();
+    let address = "127.0.0.1:1".parse().unwrap();
+    let endpoint = |role| {
+        RemoteFormalEndpoint::new(
+            address,
+            std::time::Duration::from_secs(1),
+            anchor.authority().clone(),
+            role,
+            fixtures::key(4),
+            anchor.head().head(),
+        )
+        .unwrap()
+    };
+    let reader = Arc::new(RemoteBusinessIndexReader::new(
+        endpoint(EndpointRole::Primary),
+        endpoint(EndpointRole::Replica),
+        1024 * 1024,
+        16,
+    ));
+    let resolver = NativeHistoryResolver {
+        addresses: [address; 2],
+        timeout: std::time::Duration::from_secs(1),
+        authentication: fixtures::key(4),
+        external_origin: anchor.clone(),
+        trusted: anchor.clone(),
+        permission: None,
+        active: anchor.authority().clone(),
+        permissions: Vec::new(),
+        release: ReleaseSecurityPolicy::default(),
+        business_reader: reader,
+        writer_directory: PathBuf::new(),
+        origin_history_directory: None,
+        activation_markers:
+            super::super::durable_set_activation::DurableSetActivationMarkerStoreV1::new(
+                PathBuf::new(),
+            ),
+    };
+    let bytes = BusinessIndexNodeV1::branch(0, "0".repeat(64), "1".repeat(64))
+        .unwrap()
+        .encode()
+        .unwrap();
+    let digest = hex::encode(blake3::hash(&bytes).as_bytes());
+    assert_eq!(resolver.read_cached_node(&digest).unwrap(), None);
+    resolver.cache_content_node(&digest, &bytes).unwrap();
+    assert_eq!(
+        resolver.read_cached_node(&digest).unwrap(),
+        Some(bytes.clone())
+    );
+    assert_eq!(resolver.read_node(&digest).unwrap(), Some(bytes.clone()));
+    assert!(resolver.cache_content_node(&digest, b"corrupt").is_err());
+    assert_eq!(resolver.read_cached_node(&digest).unwrap(), Some(bytes));
+}
+
 #[derive(Default)]
 struct CacheRecorder {
     writes: Mutex<Vec<BusinessIndexNodeWriteV1>>,
