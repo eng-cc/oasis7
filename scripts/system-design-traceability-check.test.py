@@ -341,6 +341,88 @@ def scenario_anchor_and_heading_fragment_collision_is_ambiguous() -> None:
         shutil.rmtree(root)
 
 
+def scenario_shared_markdown_adapters_cache_immutable_results_by_exact_text() -> None:
+    module = load_checker()
+    adapter = sys.modules["product_doc_markdown"]
+    text = """## Repeated Heading
+## Repeated Heading
+<a id="explicit-anchor"></a>
+
+[target](doc.md#target-anchor)
+
+```html
+<a id="code-anchor"></a>
+<a href="code.md#hidden">code link</a>
+## Code Heading
+```
+
+<!--
+<a id="comment-anchor"></a>
+<a href="comment.md#hidden">comment link</a>
+## Comment Heading
+-->
+"""
+    parsers = (
+        adapter.parse_markdown_blocks,
+        adapter.parse_markdown_html,
+        adapter.parse_markdown_links,
+    )
+    for parser in parsers:
+        parser.cache_clear()
+    parse_calls = 0
+    had_local_parse = "parse" in adapter._MARKDOWN.__dict__
+    original_parse = adapter._MARKDOWN.parse
+
+    def counted_parse(source, *args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(source, *args, **kwargs)
+
+    adapter._MARKDOWN.parse = counted_parse
+    try:
+        first = tuple(parser(text) for parser in parsers)
+        assert parse_calls == 3, parse_calls
+        assert tuple(parser(text) for parser in parsers) == first
+        assert parse_calls == 3, parse_calls
+        assert all(isinstance(result, tuple) for result in first)
+
+        blocks, html_nodes, links = first
+        assert blocks and all(item.kind in {"fence", "code_block"} for item in blocks)
+        assert any("explicit-anchor" in item.content for item in html_nodes)
+        assert any(item.target == "doc.md#target-anchor" for item in links)
+        for item, attribute in ((blocks[0], "kind"), (html_nodes[0], "content"), (links[0], "target")):
+            try:
+                setattr(item, attribute, "mutated")
+            except AttributeError:
+                pass
+            else:
+                raise AssertionError("cached markdown records must be immutable")
+
+        changed = text.replace('id="explicit-anchor"', 'id="changed-anchor"', 1)
+        changed = changed.replace("doc.md#target-anchor", "doc.md#changed-anchor", 1)
+        changed_results = tuple(parser(changed) for parser in parsers)
+        assert parse_calls == 6, parse_calls
+        assert changed_results[1] != html_nodes
+        assert changed_results[2] != links
+        assert tuple(parser(changed) for parser in parsers) == changed_results
+        assert parse_calls == 6, parse_calls
+        assert tuple(parser(text) for parser in parsers) == first
+        assert parse_calls == 6, parse_calls
+    finally:
+        if had_local_parse:
+            adapter._MARKDOWN.parse = original_parse
+        else:
+            del adapter._MARKDOWN.parse
+
+    assert module.fragment_occurrences(text, "REPEATED-HEADING") == 2
+    assert module.fragment_occurrences(text, "EXPLICIT-ANCHOR") == 1
+    assert module.fragment_occurrences(text, "code-anchor") == 0
+    assert module.fragment_occurrences(text, "code-heading") == 0
+    assert module.fragment_occurrences(text, "comment-anchor") == 0
+    assert module.fragment_occurrences(text, "comment-heading") == 0
+    assert module.fragment_occurrences(text, "hidden") == 0
+
+
 def scenario_fenced_code_trace_decoy_is_ignored() -> None:
     module = load_checker()
     decoy = """```markdown\n<a id=\"des-sample-001\"></a>\n### 2.1 需求承接与分配表\n| upstream | obligation | design | owner | excluded |\n| --- | --- | --- | --- | --- |\n| [bad](missing.md#bad) | bad | [bad](#des-sample-001) | bad | bad |\n```\n\n"""
@@ -1091,6 +1173,7 @@ def main() -> None:
         scenario_required_row_shape_and_cells,
         scenario_validation_source_must_be_test_or_manual,
         scenario_anchor_and_heading_fragment_collision_is_ambiguous,
+        scenario_shared_markdown_adapters_cache_immutable_results_by_exact_text,
         scenario_fenced_code_trace_decoy_is_ignored,
         scenario_complete_na,
         scenario_na_accepts_readable_repository_path_fragment,
