@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 oasis7_secure_envelope = { path = "../oasis7_secure_envelope" }
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 getrandom = "0.4"
 hex = "0.4"
