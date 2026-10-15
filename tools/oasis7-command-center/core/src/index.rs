@@ -1,5 +1,7 @@
 #[path = "index_coverage.rs"]
 mod coverage;
+#[path = "document_fragments.rs"]
+mod document_fragments;
 #[path = "document_pairings.rs"]
 mod document_pairings;
 #[path = "document_read.rs"]
@@ -100,6 +102,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
     let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
     let mut sections = Vec::new();
     let mut inventory_files = Vec::new();
+    let mut pairing_contents = std::collections::HashMap::new();
     let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
     let mut observed = Vec::new();
@@ -171,13 +174,14 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
         file.pairings = Some(document_pairings::parse(name, &content));
         inventory_files.push(file);
         sections.extend(parsed);
+        pairing_contents.insert(name.to_owned(), content);
     }
     let indexed: std::collections::HashSet<String> =
         sections.iter().map(|s| s.path.clone()).collect();
     for value in metadata.values_mut().flatten() {
         lifecycle_metadata::validate_indexed(value, &indexed);
     }
-    document_pairings::resolve(&mut inventory_files);
+    document_pairings::resolve(&mut inventory_files, &sections, &pairing_contents);
     for file in &mut inventory_files {
         file.lifecycle = metadata.get(&file.path).cloned().flatten();
     }

@@ -107,7 +107,7 @@ it('preserves filters, page and file selection when only personal snapshot data 
 });
 
 it('distinguishes legacy pairing coverage, explicit absence and unresolved targets', async () => {
-  api.documentInventory.mockResolvedValue(page([file(), file('doc/none.md', {pairings:{targets:[],issue:null}}), file('doc/paired.md', {pairings:{targets:[{declarationLine:8,destination:'design.md#section',target:'doc/design.md#section',resolution:'fragment_unchecked'}],issue:'incomplete'}})]));
+  api.documentInventory.mockResolvedValue(page([file(), file('doc/none.md', {pairings:{targets:[],issue:null}}), file('doc/paired.md', {pairings:{targets:[{declarationLine:8,destination:'design.md#section',target:'doc/design.md#section',resolution:'fragment_unchecked',targetSection:null,targetRevision:null}],issue:'incomplete'}})]));
   render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
   fireEvent.click(await screen.findByRole('button', {name:'设计文档'}));
   expect(screen.getByText('旧清单尚未解析配对，请刷新本地事实。')).toBeInTheDocument();
@@ -116,4 +116,37 @@ it('distinguishes legacy pairing coverage, explicit absence and unresolved targe
   fireEvent.click(screen.getByRole('button', {name:'doc/paired.md'}));
   expect(screen.getByText(/第 8 行 · doc\/design.md#section · 文件已读取，章节锚点尚未核对/)).toBeInTheDocument();
   expect(screen.getByText('配对解析不完整：incomplete')).toBeInTheDocument();
+});
+
+it('opens only the exact resolved pairing chapter and preserves its origin across personal updates', async () => {
+  const target = { ...section, path:'doc/target.md', id:'target', title:'配对章节', revision:'target-rev' };
+  const edge = {declarationLine:8,destination:'target.md#contract',target:'doc/target.md#contract',resolution:'resolved',targetSection:target.id,targetRevision:target.revision};
+  api.documentInventory.mockResolvedValue(page([file('doc/prd.md', {pairings:{targets:[edge],issue:null}})], {nextCursor:'next'}));
+  const [state, setState] = createSignal({...snapshot(),sections:[section,target]});
+  const showSource = vi.fn();
+  render(() => <DocumentInventory snapshot={state()} showSource={showSource} />);
+  fireEvent.click(await screen.findByRole('button', {name:'doc/prd.md'}));
+  const open = screen.getByRole('button', {name:'打开配对章节：配对章节'});
+  fireEvent.click(open);
+  expect(showSource).toHaveBeenCalledWith(target, open);
+  setState({...state(),decisions:[]});
+  await Promise.resolve();
+  expect(screen.getByRole('button', {name:'打开配对章节：配对章节'})).toBe(open);
+  expect(api.documentInventory).toHaveBeenCalledTimes(1);
+  setState({...state(),sections:[section,{...target,revision:'other-revision'}]});
+  await waitFor(() => expect(screen.queryByRole('button', {name:'打开配对章节：配对章节'})).not.toBeInTheDocument());
+});
+
+it('keeps ambiguous, missing and legacy pairings informational without fallback jumps', async () => {
+  const base = {declarationLine:3,destination:'design.md#same',target:'doc/design.md#same',targetSection:null,targetRevision:'rev'};
+  api.documentInventory.mockResolvedValue(page([file('doc/prd.md', {pairings:{targets:[
+    {...base,resolution:'ambiguous'}, {...base,resolution:'missing_fragment'},
+    {...base,resolution:'unread'}, {...base,resolution:'resolved',targetRevision:null},
+  ],issue:null}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', {name:'doc/prd.md'}));
+  expect(screen.getByText(/目标锚点重复，无法唯一定位/)).toBeInTheDocument();
+  expect(screen.getByText(/目标文件中未找到章节锚点/)).toBeInTheDocument();
+  expect(screen.getByText('旧清单尚无章节定位，请刷新本地事实。')).toBeInTheDocument();
+  expect(screen.queryByRole('button', {name:/打开配对章节/})).not.toBeInTheDocument();
 });

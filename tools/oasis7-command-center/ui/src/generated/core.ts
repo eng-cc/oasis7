@@ -34,9 +34,9 @@ status: string | null, successorDeclaration: string | null, successorTargets: Ar
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
 export type DocumentPairing = { declarationLine: number, destination: string, target: string | null,
 /**
- * resolved / fragment_unchecked / missing / unread / outside_scope
+ * resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
  */
-resolution: string, };
+resolution: string, targetSection: string | null, targetRevision: string | null, };
 export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
 export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
 /**

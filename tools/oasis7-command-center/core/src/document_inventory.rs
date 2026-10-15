@@ -37,8 +37,12 @@ pub struct DocumentPairing {
     pub declaration_line: usize,
     pub destination: String,
     pub target: Option<String>,
-    /// resolved / fragment_unchecked / missing / unread / outside_scope
+    /// resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
     pub resolution: String,
+    #[serde(default)]
+    pub target_section: Option<String>,
+    #[serde(default)]
+    pub target_revision: Option<String>,
 }
 
 impl IndexedDocument {
