@@ -49,6 +49,7 @@ impl FormalEndpointServer {
                 Command::Head
                     | Command::ArchiveManifest
                     | Command::ArchiveObject(_)
+                    | Command::BusinessIndexPath { .. }
                     | Command::ArchiveChunk { .. }
             ) {
                 return Err(invalid("sealed archive delegation cannot mutate"));
@@ -65,14 +66,15 @@ impl FormalEndpointServer {
         }
         let request_digest = hash("oasis7.formal.endpoint.rpc.request_digest.v1", body)?;
         let response = match &body.command {
-            Command::Head | Command::ArchiveChunk { .. } | Command::ArchiveObject(_) => {
-                self.endpoint.sign_formal_rpc_read_response(
-                    request_digest,
-                    body.challenge.clone(),
-                    body.minimum.clone(),
-                    &body.command,
-                )?
-            }
+            Command::Head
+            | Command::ArchiveChunk { .. }
+            | Command::ArchiveObject(_)
+            | Command::BusinessIndexPath { .. } => self.endpoint.sign_formal_rpc_read_response(
+                request_digest,
+                body.challenge.clone(),
+                body.minimum.clone(),
+                &body.command,
+            )?,
             _ => {
                 self.endpoint.verify_minimum(&body.minimum)?;
                 let result = self.execute(body.command.clone());
@@ -153,6 +155,9 @@ impl FormalEndpointServer {
                 self.endpoint
                     .seal_durable_set(&verified, &checkpoint)
                     .map(|seal| Value::DurableSetSeal(Some(Box::new(seal))))
+            }
+            Command::BusinessIndexPath { .. } => {
+                Err(invalid("business index path requires guarded read"))
             }
             Command::QueryDurableSet(transition) => {
                 let verified = self

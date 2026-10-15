@@ -224,6 +224,29 @@ impl RemoteFormalEndpoint {
     pub fn archive_object(&mut self, id: &str) -> Result<Option<Vec<u8>>, FormalError> {
         self.fetch_hash_object(id)
     }
+    /// Fetch immutable path bytes only. The caller supplies its independently
+    /// qualified descriptor; this RPC does not qualify a root or result.
+    pub fn business_index_path(
+        &mut self,
+        root: &super::super::business_index::BusinessIndexRootV1,
+        key_digest: &str,
+    ) -> Result<super::super::business_index::BusinessIndexPathV1, FormalError> {
+        root.validate().map_err(invalid)?;
+        hash_hex(key_digest)?;
+        match self
+            .call(Command::BusinessIndexPath {
+                root: root.clone(),
+                key_digest: key_digest.to_owned(),
+            })?
+            .0
+        {
+            Value::BusinessIndexPath(path) => {
+                path.verify(root, key_digest).map_err(invalid)?;
+                Ok(*path)
+            }
+            _ => Err(invalid("formal RPC response type")),
+        }
+    }
 
     pub fn seal_epoch(
         &mut self,

@@ -35,6 +35,10 @@ pub(crate) enum Command {
         checkpoint: fencing::EndpointCheckpointBindingV1,
     },
     QueryDurableSet(Box<SignedNormalDurableSetTransitionV1>),
+    BusinessIndexPath {
+        root: super::super::business_index::BusinessIndexRootV1,
+        key_digest: String,
+    },
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -68,6 +72,7 @@ pub(crate) enum Value {
     ArchiveChunk(Option<FormalArchiveChunkV1>),
     Seal(Box<fencing::EpochSealReceiptV1>),
     DurableSetSeal(Option<Box<fencing::EpochSealReceiptV1>>),
+    BusinessIndexPath(Box<super::super::business_index::BusinessIndexPathV1>),
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

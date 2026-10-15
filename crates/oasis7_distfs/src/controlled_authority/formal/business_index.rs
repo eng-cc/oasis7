@@ -100,7 +100,17 @@ pub struct BusinessIndexInclusionV1 {
     pub siblings: Vec<String>,
 }
 
+#[path = "business_index_path.rs"]
+mod path;
+pub use path::BusinessIndexPathV1;
+
 pub trait BusinessIndexNodeReader {
+    /// Optionally fetch one bounded content path. This grants no authority;
+    /// get/prove still traverse and verify the caller's exact root and key.
+    fn prefetch_path(&self, _root: &BusinessIndexRootV1, _key: &str) -> Result<(), String> {
+        Ok(())
+    }
+
     /// Reads raw canonical CAS bytes by their BLAKE3 content hash.
     fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String>;
     /// Return an already cached immutable object without doing IO. Callers must
@@ -160,6 +170,8 @@ impl BusinessIndexRootV1 {
         reader: &impl BusinessIndexNodeReader,
     ) -> Result<Option<BusinessIndexLeafV1>, String> {
         self.validate()?;
+        digest_bytes(key_digest)?;
+        reader.prefetch_path(self, key_digest)?;
         lookup(&self.node_root, &digest_bytes(key_digest)?, reader)
     }
 
@@ -170,6 +182,7 @@ impl BusinessIndexRootV1 {
     ) -> Result<BusinessIndexInclusionV1, String> {
         self.validate()?;
         let key = digest_bytes(key_digest)?;
+        reader.prefetch_path(self, key_digest)?;
         let empty = empty_hashes()?;
         let mut current = self.node_root.clone();
         let mut top_down = Vec::with_capacity(BUSINESS_INDEX_DEPTH);

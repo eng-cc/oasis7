@@ -202,6 +202,36 @@ fn signed_read_rpcs_use_one_guard_and_still_verify_minimum_and_sealed_reads() {
         None,
     )
     .unwrap();
+    // Immutable path reads do not confer qualification on this descriptor.
+    use crate::controlled_authority::formal::business_index::{
+        BusinessIndexDeltaV1, BusinessIndexLeafKindV1, BusinessIndexLeafV1, BusinessIndexRootV1,
+        metadata_key_digest,
+    };
+    let business_key = h(7);
+    let mut updates = vec![
+        BusinessIndexLeafV1 {
+            key_digest: metadata_key_digest(),
+            kind: BusinessIndexLeafKindV1::CommitMetadata,
+            canonical_value: vec![1],
+        },
+        BusinessIndexLeafV1 {
+            key_digest: business_key.clone(),
+            kind: BusinessIndexLeafKindV1::Outcome,
+            canonical_value: vec![2],
+        },
+    ];
+    updates.sort_by(|a, b| a.key_digest.cmp(&b.key_digest));
+    let delta = BusinessIndexDeltaV1::build(
+        BusinessIndexRootV1::empty().unwrap(),
+        updates,
+        &endpoint.store,
+    )
+    .unwrap();
+    endpoint
+        .store
+        .persist_business_nodes(&delta.node_writes)
+        .unwrap();
+    let business_root = delta.new;
     acquisitions.store(0, Ordering::SeqCst);
     let head_node_id = endpoint
         .store
@@ -274,6 +304,27 @@ fn signed_read_rpcs_use_one_guard_and_still_verify_minimum_and_sealed_reads() {
     ));
     assert_eq!(acquisitions.swap(0, Ordering::SeqCst), 1);
 
+    let path = client
+        .business_index_path(&business_root, &business_key)
+        .unwrap();
+    assert_eq!(path.nodes.len(), 257);
+    assert_eq!(
+        path.verify(&business_root, &business_key)
+            .unwrap()
+            .unwrap()
+            .key_digest,
+        business_key
+    );
+    assert_eq!(
+        acquisitions.swap(0, Ordering::SeqCst),
+        1,
+        "one guarded signed RPC for the whole cold path"
+    );
+    let absent = h(8);
+    let absence = client.business_index_path(&business_root, &absent).unwrap();
+    assert!(absence.verify(&business_root, &absent).unwrap().is_none());
+    assert_eq!(acquisitions.swap(0, Ordering::SeqCst), 1);
+
     let wrong_minimum = FormalHeadRefV1 {
         position: second_commit.head().position,
         record_id: h(244),
@@ -304,7 +355,12 @@ fn signed_read_rpcs_use_one_guard_and_still_verify_minimum_and_sealed_reads() {
     client.seal_epoch(h(245), 2, checkpoint).unwrap();
     acquisitions.store(0, Ordering::SeqCst);
     assert_eq!(client.head().unwrap(), second_commit.head());
-    assert_eq!(acquisitions.load(Ordering::SeqCst), 1);
+    assert_eq!(acquisitions.swap(0, Ordering::SeqCst), 1);
+    let sealed_path = client
+        .business_index_path(&business_root, &business_key)
+        .unwrap();
+    assert_eq!(sealed_path, path);
+    assert_eq!(acquisitions.swap(0, Ordering::SeqCst), 1);
 
     stop.store(true, Ordering::Release);
     let _ = TcpStream::connect(address);

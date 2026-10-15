@@ -98,3 +98,60 @@ fn cache_seed_accepts_only_canonical_content_addressed_nodes() {
     );
     assert!(bad_cache.entries.is_empty());
 }
+
+#[test]
+fn business_path_requires_both_complete_root_bound_paths_before_cache_install() {
+    use oasis7_distfs::controlled_authority::formal::business_index::{
+        BusinessIndexDeltaV1, BusinessIndexLeafKindV1, BusinessIndexLeafV1, metadata_key_digest,
+    };
+    struct Nodes(HashMap<String, Vec<u8>>);
+    impl BusinessIndexNodeReader for Nodes {
+        fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+            Ok(self.0.get(digest).cloned())
+        }
+    }
+    let key = metadata_key_digest();
+    let delta = BusinessIndexDeltaV1::build(
+        BusinessIndexRootV1::empty().unwrap(),
+        vec![BusinessIndexLeafV1 {
+            key_digest: key.clone(),
+            kind: BusinessIndexLeafKindV1::CommitMetadata,
+            canonical_value: vec![1],
+        }],
+        &Nodes(HashMap::new()),
+    )
+    .unwrap();
+    let nodes = Nodes(
+        delta
+            .node_writes
+            .iter()
+            .map(|node| (node.digest.clone(), node.bytes.clone()))
+            .collect(),
+    );
+    let path = delta.new.path_nodes(&key, &nodes).unwrap();
+    assert_eq!(path.nodes.len(), 257);
+    assert_eq!(
+        verify_dual_business_path(&delta.new, &key, path.clone(), path.clone()).unwrap(),
+        path.nodes
+    );
+    let mut corrupt = path.clone();
+    corrupt.nodes.last_mut().unwrap().bytes.push(0);
+    assert!(verify_dual_business_path(&delta.new, &key, path.clone(), corrupt).is_err());
+    let mut missing = path.clone();
+    missing.nodes.pop();
+    assert!(verify_dual_business_path(&delta.new, &key, path.clone(), missing).is_err());
+    assert!(
+        verify_dual_business_path(
+            &BusinessIndexRootV1::empty().unwrap(),
+            &key,
+            path.clone(),
+            path.clone()
+        )
+        .is_err()
+    );
+    let absent = hex::encode([7u8; 32]);
+    let absence = delta.new.path_nodes(&absent, &nodes).unwrap();
+    assert!(absence.verify(&delta.new, &absent).unwrap().is_none());
+    assert!(verify_dual_business_path(&delta.new, &absent, absence.clone(), absence).is_ok());
+    assert!(verify_dual_business_path(&delta.new, &absent, path.clone(), path).is_err());
+}

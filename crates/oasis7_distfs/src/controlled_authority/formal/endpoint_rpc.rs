@@ -66,6 +66,10 @@ impl FileFormalEndpoint {
                 }
                 Err(error) => Err(error),
             },
+            Command::BusinessIndexPath { root, key_digest } => root
+                .path_nodes(key_digest, &self.store)
+                .map(|path| Value::BusinessIndexPath(Box::new(path)))
+                .map_err(invalid),
             _ => Err(invalid("formal RPC guarded read command")),
         };
         if self.poisoned {

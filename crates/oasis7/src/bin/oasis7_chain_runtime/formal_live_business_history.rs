@@ -63,6 +63,14 @@ impl LookupTiming {
 }
 
 impl BusinessIndexNodeReader for NativeHistoryResolver {
+    fn prefetch_path(
+        &self,
+        root: &oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexRootV1,
+        key: &str,
+    ) -> Result<(), String> {
+        self.business_reader.prefetch_path(root, key)
+    }
+
     fn read_cached_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
         self.business_reader.read_cached_node(digest)
     }

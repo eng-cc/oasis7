@@ -20,6 +20,14 @@ pub(crate) struct SharedBusinessReader(
     pub(crate) std::sync::Arc<dyn BusinessIndexNodeReader + Send + Sync>,
 );
 impl BusinessIndexNodeReader for SharedBusinessReader {
+    fn prefetch_path(
+        &self,
+        root: &oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexRootV1,
+        key: &str,
+    ) -> Result<(), String> {
+        self.0.prefetch_path(root, key)
+    }
+
     fn read_cached_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
         self.0.read_cached_node(digest)
     }

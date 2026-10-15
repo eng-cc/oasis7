@@ -99,3 +99,42 @@ fn bounded_bytes<'de, D: serde::Deserializer<'de>, const MAX: usize>(
     }
     decoder.deserialize_byte_buf(Visitor::<MAX>)
 }
+
+pub(super) fn decode_path_nodes<'de, D: serde::Deserializer<'de>>(
+    decoder: D,
+) -> Result<Vec<BusinessIndexNodeWriteV1>, D::Error> {
+    struct PathVisitor;
+    impl<'de> serde::de::Visitor<'de> for PathVisitor {
+        type Value = Vec<BusinessIndexNodeWriteV1>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("bounded business node path")
+        }
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            if seq
+                .size_hint()
+                .is_some_and(|size| size > BUSINESS_INDEX_DEPTH + 1)
+            {
+                return Err(serde::de::Error::custom("business index path node bound"));
+            }
+            let mut nodes = Vec::new();
+            let mut total = 0usize;
+            while let Some(node) = seq.next_element::<BusinessIndexNodeWriteV1>()? {
+                if nodes.len() == BUSINESS_INDEX_DEPTH + 1 {
+                    return Err(serde::de::Error::custom("business index path node bound"));
+                }
+                total = total
+                    .checked_add(node.bytes.len())
+                    .ok_or_else(|| serde::de::Error::custom("business index path byte overflow"))?;
+                if total > BUSINESS_INDEX_MAX_DELTA_BYTES {
+                    return Err(serde::de::Error::custom("business index path byte bound"));
+                }
+                nodes.push(node);
+            }
+            Ok(nodes)
+        }
+    }
+    decoder.deserialize_seq(PathVisitor)
+}

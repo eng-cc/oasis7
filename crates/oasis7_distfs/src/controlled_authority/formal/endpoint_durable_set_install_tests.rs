@@ -540,7 +540,8 @@ fn remote_sealed_source(
             }
             if let Err(error) = result {
                 assert!(matches!(error, FormalError::Invalid(ref reason)
-                    if reason == "sealed archive delegation cannot mutate"));
+                    if reason == "sealed archive delegation cannot mutate"
+                        || reason == "archive delegation exact protected sealed scope"));
                 server_denials.fetch_add(1, Ordering::SeqCst);
             }
         }
@@ -601,6 +602,32 @@ fn remote_sealed_source(
         )
         .is_err()
     );
+    // A writer signature alone cannot widen the endpoint's actual sealed cut.
+    let mut wrong_scope = grant.clone();
+    wrong_scope.body.sealed_cut.record_id = h(198);
+    wrong_scope.writer_signature_hex = signed(
+        archive_read_grant_signing_bytes(&wrong_scope.body).unwrap(),
+        4,
+    );
+    let mut wrong_scope_client = RemoteFormalEndpoint::new_archive_reader(
+        address,
+        Duration::from_secs(3),
+        fixture.authority.clone(),
+        EndpointRole::Replica,
+        key(17),
+        wrong_scope,
+        &target,
+    )
+    .unwrap();
+    let empty_root =
+        crate::controlled_authority::formal::business_index::BusinessIndexRootV1::empty().unwrap();
+    assert!(
+        wrong_scope_client
+            .business_index_path(&empty_root, &h(197))
+            .is_err()
+    );
+    assert_eq!(denials.load(Ordering::SeqCst), 1);
+
     let mut client = RemoteFormalEndpoint::new_archive_reader(
         address,
         Duration::from_secs(3),
@@ -611,9 +638,16 @@ fn remote_sealed_source(
         &target,
     )
     .unwrap();
+    let delegated_path = client.business_index_path(&empty_root, &h(197)).unwrap();
+    assert!(
+        delegated_path
+            .verify(&empty_root, &h(197))
+            .unwrap()
+            .is_none()
+    );
     let checkpoint = client.checkpoint().unwrap();
     assert!(client.seal_epoch(h(200), 3, checkpoint).is_err());
-    assert_eq!(denials.load(Ordering::SeqCst), 1);
+    assert_eq!(denials.load(Ordering::SeqCst), 2);
     (
         client.into_archive_source(),
         TestSourceOwner {

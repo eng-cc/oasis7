@@ -19,7 +19,10 @@ use oasis7_client_api::world_service::WorldIdentity;
 use oasis7_distfs::controlled_authority::{
     formal::{
         SignedNormalDurableSetTransitionV1, VerifiedAuthorityV1,
-        business_index::{BusinessIndexNodeReader, BusinessIndexNodeWriteV1},
+        business_index::{
+            BusinessIndexNodeReader, BusinessIndexNodeWriteV1, BusinessIndexPathV1,
+            BusinessIndexRootV1,
+        },
         coordinator::FormalDurabilityEndpoint,
         transport::RemoteFormalEndpoint,
     },
@@ -148,7 +151,38 @@ fn seed_verified_business_writes(
     Ok(())
 }
 
+// A cache probe must never invoke remote prefetch recursively. Missing bytes are
+// an incomplete local path, not a proof of absence.
+struct CachedBusinessPath<'a>(&'a RemoteBusinessIndexReader);
+
+impl BusinessIndexNodeReader for CachedBusinessPath<'_> {
+    fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        self.0.read_cached_node(digest)
+    }
+}
+
 impl BusinessIndexNodeReader for RemoteBusinessIndexReader {
+    fn prefetch_path(&self, root: &BusinessIndexRootV1, key: &str) -> Result<(), String> {
+        if root.get(key, &CachedBusinessPath(self)).is_ok() {
+            return Ok(());
+        }
+        let primary = self
+            .primary
+            .lock()
+            .map_err(|_| "formal primary business reader poisoned")?
+            .business_index_path(root, key)
+            .map_err(|error| format!("formal primary business path: {error}"))?;
+        let replica = self
+            .replica
+            .lock()
+            .map_err(|_| "formal replica business reader poisoned")?
+            .business_index_path(root, key)
+            .map_err(|error| format!("formal replica business path: {error}"))?;
+        // Both authenticated responses must independently prove this exact
+        // root/key. Stage everything before mutating the shared content cache.
+        self.seed_verified_writes(verify_dual_business_path(root, key, primary, replica)?)
+    }
+
     fn cache_content_node(&self, digest: &str, bytes: &[u8]) -> Result<(), String> {
         self.seed_verified_writes(vec![BusinessIndexNodeWriteV1 {
             digest: digest.to_owned(),
@@ -195,6 +229,20 @@ impl BusinessIndexNodeReader for RemoteBusinessIndexReader {
             .insert(digest.to_owned(), bytes.clone());
         Ok(Some(bytes))
     }
+}
+
+fn verify_dual_business_path(
+    root: &BusinessIndexRootV1,
+    key: &str,
+    primary: BusinessIndexPathV1,
+    replica: BusinessIndexPathV1,
+) -> Result<Vec<BusinessIndexNodeWriteV1>, String> {
+    primary.verify(root, key)?;
+    replica.verify(root, key)?;
+    if primary.nodes != replica.nodes {
+        return Err("formal business path differs between signed replicas".into());
+    }
+    Ok(primary.nodes)
 }
 
 struct BoundedBusinessNodeCache {
