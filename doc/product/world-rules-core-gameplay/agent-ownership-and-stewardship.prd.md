@@ -17,7 +17,10 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 直接承载控制权确认、失去控制后的连续性和重认领的产品承诺；独立 design 会重复 ownership authority。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
-## 1. 产品承诺
+<a id="1-产品承诺"></a>
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
+## 1. 产品目标与承诺
 
 玩家通过经济认领取得 Agent 控制权时，必须作出明确、非零且可理解的承诺，并持续看见这份控制权的成本、义务、风险和下一次选择。首个支持路径可以降低进入门槛，但不会把经济认领变成免费、可套现或可无限复制的能力。
 
@@ -25,7 +28,8 @@
 
 玩家只能把已绑定或已拥有的 Agent 视为自己的可操作对象；共享世界中的其他 Agent 可以构成世界背景与机会，但不会被误导为当前玩家的控制权。
 
-## 2. 玩家边界与组合关系
+<a id="2-玩家边界与组合关系"></a>
+## 2. 玩家体验边界与组合关系
 
 - 在确认前，玩家能读懂取得控制权的主要投入、持续义务、候选差异或风险，以及继续、比较、等待或补足条件等下一步。
 - 取得后，玩家能理解控制权是否有效、何时需要维持、可能因何种可读原因失去或主动结束，以及相应的恢复或重新选择路径。
@@ -82,6 +86,15 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 <a id="req-wr-aos-001"></a>
 ### REQ-WR-AOS-001：首个经济认领必须是可比较的非零承诺
 
+Trace ID: O7-REQ-612f4d3d-e831-48f9-9dfc-f0844690e6cf
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[gameplay-agent-claim-economy-contract.design / des-claim-economy-001](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-economy-001)。已承接：非零认领成本、资金来源与回收的玩法设计。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：候选比较、全部确认前漂移与原子拒绝、runtime/正式入口组合覆盖仍需逐项核对。
+
 - 适用条件：当前取得 Agent 的路径将形成经济认领；单纯首次注册或控制绑定不自动满足这一条件。
 - 要求：玩家在确认首个经济认领前必须能比较候选用途与差异、非零 upfront 成本、确认后的 upkeep runway、失去控制权的可读触发，以及等待、补足或选择其他候选的替代路径；预览或本地提交不能单独产生控制权、自由财富或持久义务。
 - 专业权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
@@ -89,6 +102,8 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 
 <a id="ac-wr-aos-001"></a>
 ### AC-WR-AOS-001：确认前显示承诺包且不产生旁路效果
+
+Trace refs: O7-REQ-612f4d3d-e831-48f9-9dfc-f0844690e6cf；声明：[REQ-WR-AOS-001](#req-wr-aos-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-AOS-001
 - 给定：玩家看到一个将形成经济认领、仍可比较的首个 Agent 候选，其授权、成本、upkeep、失去控制权触发和替代路径均已声明。
@@ -98,12 +113,23 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 <a id="req-wr-aos-002"></a>
 ### REQ-WR-AOS-002：失去控制权后的恢复不能重置世界承诺
 
+Trace ID: O7-REQ-8b94a27c-bbae-4349-94c1-f1f40f46e287
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 要求：主动结束、到期、回收和争议限制必须区分原因与范围，保留已确认结果和未决义务，并只提供按当前资格重新评估的恢复、重新选择、申诉或安全停止路径。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 - 验收：[AC-WR-AOS-002](#ac-wr-aos-002)
 
 <a id="ac-wr-aos-002"></a>
 ### AC-WR-AOS-002：结束与重认领保持连续且不可套利
+
+Trace refs: O7-REQ-8b94a27c-bbae-4349-94c1-f1f40f46e287；声明：[REQ-WR-AOS-002](#req-wr-aos-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-AOS-002
 - 给定：一个已生效的 Agent 控制关系进入主动结束、到期、回收或争议限制之一。
@@ -113,12 +139,23 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 <a id="req-wr-aos-003"></a>
 ### REQ-WR-AOS-003：团队扩张必须保留取得、维护与授权边界
 
+Trace ID: O7-REQ-f247bdc7-f4ae-4893-a35e-6840fab7f465
+
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+
 - 要求：从一个主 Agent 扩张到团队时，每个额外 Agent 都必须经过当时有效的取得资格，并承担可读的取得、维护、授权和协调约束；团队成员数量不得自动放大自治范围、产能或世界权力，小规模独立路线必须继续可用。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 - 验收：[AC-WR-AOS-003](#ac-wr-aos-003)
 
 <a id="ac-wr-aos-003"></a>
 ### AC-WR-AOS-003：团队扩张不静默复制权力或自动产能
+
+Trace refs: O7-REQ-f247bdc7-f4ae-4893-a35e-6840fab7f465；声明：[REQ-WR-AOS-003](#req-wr-aos-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-AOS-003
 - 给定：玩家或组织从一个可操作的主 Agent 比较并申请一个或多个额外 Agent。
@@ -128,12 +165,23 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 <a id="req-wr-aos-004"></a>
 ### REQ-WR-AOS-004：工业制造供给必须承担资源、产能与交付约束
 
+Trace ID: O7-REQ-e7deec0c-7c4b-4f08-a2df-db2839cda928
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-010](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-010)。已承接：经本条对应 AC 承接的工业供给授权边界或转让资格与历史连续性。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。 已有间接控制设计记录 native lane/读面局部接线及组织 issuer、完整经济转让等限制；本次未独立复验这些运行事实，不将其升级为全范围实现结论。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：设计不拥有工业经济/产能规则或完整转让经济；组织 issuer、完整五门槛转让及所有正式入口证据未齐。
+
 - 要求：额外 Agent 的常态取得路径应通过世界内工业订单表达，并让玩家或组织理解资源投入、适用产能占用和可读交付时间；普通治理 quota 不得直接发放 Agent 或替代工业供给约束，取得后的维护、授权与协调义务仍持续。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 - 验收：[AC-WR-AOS-004](#ac-wr-aos-004)
 
 <a id="ac-wr-aos-004"></a>
 ### AC-WR-AOS-004：工业供给不以治理 quota 或无成本路径替代
+
+Trace refs: O7-REQ-e7deec0c-7c4b-4f08-a2df-db2839cda928；声明：[REQ-WR-AOS-004](#req-wr-aos-004)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-AOS-004
 - 给定：玩家或组织为额外 Agent 提交一个世界内工业订单。
@@ -143,12 +191,23 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 <a id="req-wr-aos-005"></a>
 ### REQ-WR-AOS-005：经济转让必须重评资格并保留连续性
 
+Trace ID: O7-REQ-42168149-c979-4211-9777-2d72f7050147
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-011](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-011)。已承接：经本条对应 AC 承接的工业供给授权边界或转让资格与历史连续性。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。 已有间接控制设计记录 native lane/读面局部接线及组织 issuer、完整经济转让等限制；本次未独立复验这些运行事实，不将其升级为全范围实现结论。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：设计不拥有工业经济/产能规则或完整转让经济；组织 issuer、完整五门槛转让及所有正式入口证据未齐。
+
 - 要求：Agent 的经济转让只能在当时有效的资格、容量、资源、治理和反滥用条件下生效，并保留既有身份、来源、审计历史、已生效结果和未决义务；经济转让本身不得推导额外自治、委托或世界权力。
 - 专业权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 - 验收：[AC-WR-AOS-005](#ac-wr-aos-005)
 
 <a id="ac-wr-aos-005"></a>
 ### AC-WR-AOS-005：转让生效点区分经济权利与 Agent 委托权威
+
+Trace refs: O7-REQ-42168149-c979-4211-9777-2d72f7050147；声明：[REQ-WR-AOS-005](#req-wr-aos-005)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-AOS-005
 - 给定：一个 Agent 的经济转让请求带有转让人、目标持有人、适用范围和待决义务。
@@ -213,3 +272,9 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 | [REQ-WR-AOS-003](#req-wr-aos-003) / [AC-WR-AOS-003](#ac-wr-aos-003) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `qa_engineer` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 主 Agent 到团队的扩张样例；额外 Agent 的取得/维护/授权/协调约束、非静默权力与小规模独立路线；Agent 专题只消费自治/责任结果 | `test_tier_required` |
 | [REQ-WR-AOS-004](#req-wr-aos-004) / [AC-WR-AOS-004](#ac-wr-aos-004) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `qa_engineer` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 世界内工业订单的资源/产能/交付、治理 quota 非直接供给、交付后的维护/授权/协调与早期单 Agent 锚点 | `test_tier_full` |
 | [REQ-WR-AOS-005](#req-wr-aos-005) / [AC-WR-AOS-005](#ac-wr-aos-005) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `viewer_engineer` / `qa_engineer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 资格、容量、资源、治理、反滥用五门槛逐项重评；通过/失败/过期/待决 blocker、下一步、非部分生效与不可重放；转让生效点、身份、来源、审计历史、已生效结果和未决义务连续性；Agent 专题消费自治/授权/责任结果而不重复立法 | `test_tier_full` |
+
+## 未决问题与证据边界
+
+费用、维护/回收参数、团队容量、恢复成本与完整经济转让的专业设计和同候选证据须分别核对；本文的非零承诺与连续性要求不因这些缺口取消，也不因存在比较卡或历史任务而视为已实现。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。

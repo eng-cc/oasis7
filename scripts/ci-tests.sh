@@ -293,10 +293,13 @@ run_provider_remote_https_smoke() {
 }
 
 run_doc_checker_contract_tests() {
+  run python3 ./scripts/resolve-product-doc-ci-range.test.py
   run python3 ./scripts/document-corpus-inventory-check.test.py
   run python3 ./scripts/doc-evidence-inventory-check.test.py
   run python3 ./scripts/product-doc-governance-check.test.py
   run python3 ./scripts/product-doc-content-check.test.py
+  run python3 ./scripts/doc-core-content-check.test.py
+  run python3 ./scripts/doc-content-warnings.test.py
   run_system_design_traceability_tests
   run bash ./scripts/product-doc-content-callers.test.sh
   run bash ./scripts/doc-governance-check.test.sh

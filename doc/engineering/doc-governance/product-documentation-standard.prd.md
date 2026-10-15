@@ -28,7 +28,7 @@
 
 ## 3. 采纳承诺
 
-规范正文 [`product-documentation-standard.design.md`](product-documentation-standard.design.md) 是本主题的内容权威，模板分册提供可复用结构但不制造新的 schema 或门禁。
+规范正文 [`product-documentation-standard.design.md`](product-documentation-standard.design.md) 是本主题的内容权威，模板分册提供可复用结构。内容规范的机械诊断按[增量检查边界](product-documentation-standard.design.md#advisory-content-checks)执行：PR 新增或实质修改的适用产品/系统设计文档规范 finding 阻断 CI，未触达历史只警告；范围/输入/执行错误及既有身份拓扑、库存、安全等完整性检查不降级。
 
 采纳后，新建或实质改写的产品主题应满足：
 
@@ -38,8 +38,10 @@
 4. 对异步、持久化、外部变化和多入口体验区分草稿、接受、应用、保存、历史和可重试授权等玩家语义。
 5. 对经济和持续玩法说明资源来源、用途、持有、流转、取舍与损失边界；精确公式和参数只引用专业权威。
 6. 将规则/能力正确性与玩家体验有效性分开，按适用入口、版本/范围和证据窗口描述可以证明与不能证明的结论。
-7. 对 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md` 的新建和实质变更执行明确 `base`/`head`/worktree 的机械准入：`base` 是集成目标、`head` 是待集成源，范围按 `merge-base(base, head)...head` 计算，worktree 另纳入 staged/unstaged/untracked；target-only、部分/格式错误输入不得进入或静默替代源范围。metadata、适用文档最低内容、真实 authority/fragment、显式 REQ/AC/anchor 唯一性与可达性必须通过；仅空白行、行尾空白和 HTML 注释变化排除，行首缩进变化算实质内容，不能用作者标签或 allowlist 任意绕过。
-8. 检查先移除 fenced code block；其中的 metadata、路径、REQ/AC 和 trace 示例既不能满足也不能触发门禁。配对 design 可以通过带路径和 fragment 的 Markdown 链接承接 paired PRD 的 REQ/AC，不要求复制；REQ/AC 块和追踪表单元格中的每个关联都必须解析，`REQ-X → AC-TYPO` 等未声明关联必须失败。自动门禁不判断趣味性、策略深度、数值合理性或玩家留存。
+7. 对 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md` 的新建和实质变更执行明确 `base`/`head`/worktree 的机械检查：`base` 是集成目标、`head` 是待集成源，范围按 `merge-base(base, head)...head` 计算，worktree 另纳入 staged/unstaged/untracked；target-only、部分/格式错误输入不得进入或静默替代源范围。metadata、适用文档最低内容、真实 authority/fragment、显式 REQ/AC/anchor 唯一性与可达性必须接受检查；规范不符合按本次增量失败/历史警告处理；仅空白行、行尾空白和 HTML 注释变化排除，行首缩进变化算实质内容，不能用作者标签或 allowlist 任意绕过。
+8. 检查先移除 fenced code block；其中的 metadata、路径、REQ/AC 和 trace 示例既不能满足也不能触发诊断。配对 design 可以通过带路径和 fragment 的 Markdown 链接承接 paired PRD 的 REQ/AC，不要求复制；REQ/AC 块和追踪表单元格中的每个关联都必须解析，`REQ-X → AC-TYPO` 等未声明关联必须报告规范诊断，本次触达范围内阻断 CI，未触达历史只警告。自动检查不判断趣味性、策略深度、数值合理性或玩家留存。
+
+9. 对每个新建或实质修改功能点保留[独立的系统设计状态与实现状态](product-documentation-standard.design.md#feature-design-implementation-status)、适用 Trace ID、准确设计条款和 Task/PR/验证证据；“部分”列剩余范围，“已验证”限定固定基线、环境与验收范围，要求变化后重核。详细过程仍在 Task，不强制全仓回填或新增任务审批流程。
 
 ## 4. 三类代表性试点
 
@@ -60,9 +62,10 @@
 - **PDOC-3 Prompt 追踪**：Prompt 主题的现有产品承诺全部保留，并可从叶子 REQ 追踪到 AC、配对 design 和专业 authority。
 - **PDOC-4 首局主题追踪**：首个工业闭环 walkthrough 的正常链路、八个节点、原材料子循环、Feasibility Gate、失败恢复和既有 FS 证据可从叶子 REQ/AC 定位。
 - **PDOC-5 三类试点边界**：根 SC-31 作为独立玩法试点保留，明确其专业迁移 owner；不得以本规范采纳范围宣称完整玩法语义已经迁移。
+- **PDOC-7 功能状态可核对**：本次触达功能点的设计/实现状态独立表达，能追到同一要求、准确承接设计和实际交付/验证依据；未知与剩余范围明确，需求变化后不会沿用不适用的完成结论。
 - **PDOC-6 结构与语义诚实**：适用文档检查、链接检查和 diff 检查通过；不新增第五模块、任务台账、实现能力或自动检查器未证明的语义。现行 bounded checker 以 canonical 正文定义的真实 paired-design backlink 与 `topic-missing` 诊断契约为准；结构检查不代替产品语义、专业规则或体验证据评审。
 
-验收证据由当前 GitHub task issue、专业评审和适用命令共同提供；本 PRD 不复制可变执行日志。
+验收证据由当前 PR、实际命令结果和适用专业评审共同提供，Issue 按跟踪需要使用；本 PRD 不复制可变执行日志。
 
 ## 6. Non-Goals
 
@@ -73,4 +76,4 @@
 
 ## 7. 变更与后续
 
-后续产品主题应在同一产品模块内按稳定语义逐文件迁移：只有新建或实质修改该文件时才触发本规范的内容准入；未触碰的旧文档不因本任务被要求全面重写。只有语义完整接收、专业权威仍可达、活跃引用修复后，才可删除来源。跨文件语义迁移必须记录旧条款到新叶子的映射、接收 owner、未接收语义和删除条件；该迁移记录属于 Git、PR 与实际 CI 记录，不在产品目录另建任务台账。产品输入按“产品意图 → system design → 代码/专业实现合同”传递，并在受影响条款处保留回链。
+后续产品主题应在同一产品模块内按稳定语义逐文件迁移：新建或实质修改的文件触发本规范的内容检查；另按内容规范对设计目标变更引发的新增无效设计依据或新增功能关系不匹配执行增量差分检查，即使引用方产品 PRD 未改。历史已存在的同样关系失效和未触碰文档的旧字段缺口不因此要求全面重写。只有语义完整接收、专业权威仍可达、活跃引用修复后，才可删除来源。跨文件语义迁移必须记录旧条款到新叶子的映射、接收 owner、未接收语义和删除条件；该迁移记录属于 Git、PR 与实际 CI 记录，不在产品目录另建任务台账。产品输入按“产品意图 → system design → 代码/专业实现合同”传递，并在受影响条款处保留回链。

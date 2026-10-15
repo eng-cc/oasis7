@@ -30,6 +30,10 @@ Git、PR、实际 CI 结果和评审记录承载代码交付事实。Issue 和 P
 
 采用 subagent 时，说明具体问题、必要上下文、允许的写入范围和期望结果。并行编辑应避免重叠，由负责人合并结果；不要求固定角色组合、模型证明、派工回执或额外评审文件链。
 
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本段承接[全局要求追踪](../doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)的流程边界。
+
+跨层要求按[跨层要求与验证映射](../doc-governance/cross-layer-requirements-traceability.design.md)使用同一稳定 Trace ID 关联产品或专业要求、系统设计和项目执行记录。ID 在要求原文声明一次，设计和 Task 引用；Task 可以直接使用 PR，不强制创建 Issue 或额外任务标识。只对新增或实质修改的相关要求补齐本次关系，不全仓迁移；Trace ID 分配和只读查询本身不新增任务准入、审批或合入检查。当前可使用[只读追踪工具](../../../scripts/requirement-trace.README.md)的有界查询/索引，结合全文检索和人工追链；只读索引本身不赋予检查器额外验证能力。文档内容与关系的机械检查按[内容规范的增量/历史边界](../doc-governance/product-documentation-standard.design.md#advisory-content-checks)及[系统设计关系合同](../doc-governance/system-design-writing-standard.design.md#product-system-design-relations)执行，包括本次变更新增的失效引用关系；机械通过不证明语义完备、实现或验收成立。产品文档按[内容规范](../doc-governance/product-documentation-standard.design.md#feature-design-implementation-status)保留功能点的设计/实现状态摘要，详细执行过程仍归 Task。
+
 修改影响对外行为、接口、部署方式或使用方法时，同步维护相关文档。文档长度是编辑参考，不能作为是否允许提交的门禁，也不能通过压成长行掩盖过量内容。
 
 涉及当前目标、阶段进展、重要设计决定或部署边界的工作，负责人在收尾时按[指挥面板持续更新流程](../command-center/command-center.manual.md)维护受影响的[项目状态](../command-center/README.md)和[架构索引](../command-center/architecture/README.md)；开始相关工作或项目回顾时核对旧摘要。先更新已授权的主责条款，再同步带来源、时间和未知项的派生内容；尚未发生的合入、部署和验收不能预写。无实质变化不制造提交，合入事实可在下一次刷新批量补齐，不为每个 PR 新建状态 PR。摘要维护不增加任务准入、审批、完成证明或合入门禁，读取失败只影响有关信息的时效。
@@ -47,7 +51,7 @@ Git、PR、实际 CI 结果和评审记录承载代码交付事实。Issue 和 P
 | 一次运行的原始事件、world/oracle、截图、fixture、manifest、hash 与不可重复事实 | 按证据生命周期保存的原始材料；Task/PR 定位该运行 | 被消费者使用或需要长期审计的原件、固定 source/build/Skill/环境/窗口、原判定与必要解释；历史 run README 不继续追加后续 CI/收尾义务 |
 | 当前方向、能力、风险与待决定事项的派生摘要 | 现有指挥面板索引，回链主责来源 | 来源、核验时间、覆盖范围与 unknown；替换同主题过期摘要，不复制逐候选尝试或测试计数流水 |
 
-普通变更不因此强制创建 Issue、Project、任务标识或新的本地 ledger；已有 Task 只承接其真实范围，不能把 PR 编号冒写成 Task。已关闭或 `not_planned` 的任务只能标为历史来源，不恢复其义务。仍有效的暂停、部署/发布限制、未结发放义务与能力缺口须在当前 PR/操作入口或适用合同中继续可见，不能仅放进历史时间线。
+普通变更不因此强制创建 Issue、Project、任务标识或新的本地 ledger；已有 Task 只承接其真实范围，不能将 PR 编号冒写为另一个 Task Issue 的身份或捏造归属；没有独立 Issue 时，当前 PR 可以直接承载本次任务说明。已关闭或 `not_planned` 的任务只能标为历史来源，不恢复其义务。仍有效的暂停、部署/发布限制、未结发放义务与能力缺口须在当前 PR/操作入口或适用合同中继续可见，不能仅放进历史时间线。
 
 长期合同不依赖阅读任务时间线才能理解接口、权限、失败/恢复或怎么使用。实填过程记录需要迁出时，先核准确接收方并保全独有历史，再精简源与修复引用/机器消费者；接收方未核实、原件不可取回或存在冻结/保留合同时，保留固定来源与原语义并注明限制，不批量建 Issue、不猜 Task，也不只留可能过期的 CI artifact 链接。后来的 PASS、合入或关闭不改写旧失败、旧候选或未验证范围；必要校验和更新只反映实际编辑，不能变成新的运行/审批证据。发行资产、许可/来源和版本身份按其原职责保留。
 

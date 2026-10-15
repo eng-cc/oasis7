@@ -8,7 +8,7 @@
 - Rust 体量治理专题入口：`doc/engineering/rust-governance/README.md`
 
 ## 索引边界
-- 本页只负责工程专题的文件级精确检索与三件套可达性；文档树问题从 `doc/engineering/doc-governance/README.md` 开始，Rust 体量与结构切片问题从 `doc/engineering/rust-governance/README.md` 开始。
+- 本页只负责工程专题的文件级精确检索与相关文档可达性；文档树问题从 `doc/engineering/doc-governance/README.md` 开始，Rust 体量与结构切片问题从 `doc/engineering/rust-governance/README.md` 开始。
 
 | 专题 PRD | 专题设计文档 | 任务与证据入口 |
 | --- | --- | --- |
@@ -28,9 +28,9 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与相关 PR 和实际验证记录。
 - 上述两份 standalone content standard 没有另建 PRD 或本地 project ledger；它们的规范正文由 design 文件承接，任务与执行证据使用 Git、PR 与实际 CI 记录。
-- `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留完整三件套可达性，不再要求读者从长表里判断治理问题归属。
+- `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留相关规范与执行记录的可达性，不再要求读者从长表里判断治理问题归属。
 - `doc/engineering/rust-governance/README.md` 是 Rust 文件结构治理簇级分流入口；本索引保留单一当前契约的精确检索入口，不再复制已完成专题的 design / project。
-- `engineering` 根目录默认只保留 `README.md / prd.md / design.md / PR、实际 CI 与评审记录（Issue 按需） / prd.index.md` 五个模块入口；治理专题已分别下沉到 `doc-governance/`、`rust-governance/` 与 `governance/`。`doc-structure-standard` 负责组织、职责和消费层边界，`governance/README.md` 负责 inventory 和维护成本 follow-up 路由；workflow source of truth 与 `.agents/skills/README.md` 分别承接 self-evolution task/evidence boundary 与 skill reachability。已完成且规则已被这些 current authorities 承接的一次性专题不再作为 live 三件套暴露。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
+- `engineering` 根目录默认只保留 `README.md / prd.md / design.md / prd.index.md` 四个模块文件入口；PR、实际 CI 与评审记录承载交付事实，Issue 按需；治理专题已分别下沉到 `doc-governance/`、`rust-governance/` 与 `governance/`。`doc-structure-standard` 负责组织、职责和消费层边界，`governance/README.md` 负责 inventory 和维护成本 follow-up 路由；workflow source of truth 与 `.agents/skills/README.md` 分别承接 self-evolution task/evidence boundary 与 skill reachability。已完成且规则已被这些 current authorities 承接的一次性专题不再作为 live 三件套暴露。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
 
 ## 历史审计留痕
 - 2026-04 `p2p-node-path-governance` 一次性落位三件套已退役删除；当前 `p2p/node` 的首读分流、主题簇与维护触发器由 `doc/p2p/node/README.md` 承接，历史实施证据保留在 git history 与 GitHub task evidence 中。
@@ -44,6 +44,6 @@
 - 2026-03 全量 PRD 审读机制三件套已退役删除；历史审读证据保留在 Git history logs，当前新增/变更文档追踪以模块入口、`prd.index.md`、PR、实际 CI 与评审记录（Issue 按需）、`prd.md` 与现行 doc governance 规则为准。
 - 2026-03 core release-candidate / next-round producer/QA/LiveOps 一次性 handoff 面与 release-candidate readiness / version / go-no-go 根目录三件套已退役删除；历史发布候选证据保留在 Git history 与 git history，当前角色证据 sink 为 PR、实际 CI 与评审记录（Issue 按需） 与 按风险安排的实际评审记录；历史 `.pm` execution log 只作为迁移前追溯层。
 - 2026-03 self-evolution file-based PM project 面与历史 pointer PRD 已退役删除；`PRD-ENGINEERING-021` 历史锚点由 `file-based-self-evolution-management-2026-03-30.design.md` 的 object-model 背景承接，当前开发、验证、评审与交付 规则以 `doc/engineering/workflow/source-of-truth.md` 为准。
-- 2026-03/05 dated self-evolution memory, external-workflow borrowing and skill-surface triplets，以及 2026-04 dated document-reading-surface and corpus-maintenance triplets 已退役删除；当前规则以 workflow source of truth、doc structure standard、engineering governance README、engineering project pending ledger 与 `.agents/skills/README.md` 为准。历史决策和 rollout 证据保留在 Git history 与 GitHub task issue evidence comments。
+- 2026-03/05 dated self-evolution memory, external-workflow borrowing and skill-surface triplets，以及 2026-04 dated document-reading-surface and corpus-maintenance triplets 已退役删除；当前规则以 workflow source of truth、doc structure standard、engineering governance README、当前 PR 与按需 Issue 中的剩余义务 与 `.agents/skills/README.md` 为准。历史决策和 rollout 证据保留在 Git history 与 GitHub task issue evidence comments。
 - 2026-04 `devlog-history-compaction` 一次性专题三件套已退役删除；`doc/devlog/README.md` 保留 compact archive summary，当前交付事实使用 Git、PR、实际 CI 和评审记录，Issue/Project 按需使用。
 - 2026-02 oversized Rust file splitting round3 三件套已退役删除；当前 Rust 1200 行治理统一从 `doc/engineering/rust-governance/README.md` 分流，历史 round3 审读证据保留在 Git history logs 与 git history。

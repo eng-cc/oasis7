@@ -167,5 +167,5 @@
 ## 6. 使用方式
 
 - 看当前 task truth / evidence / PR readiness 规则: `doc/engineering/workflow/source-of-truth.md`
-- 看 `.pm/` 仍然需要遵守的对象与流程约束: 本文档
+- 看 2026-03 `.pm/` 对象与流程约束的历史背景: 本文档；以下历史命令与身份模型不作为当前操作说明
 - 看历史背景与 PRD-ENGINEERING-021 追溯锚点: 本文档。

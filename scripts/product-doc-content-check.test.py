@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import importlib.util
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -1342,7 +1344,23 @@ def standalone_requirement_and_acceptance_anchors(root: Path) -> None:
     )
 
 
+def scenario_cross_layer_trace_ids_are_not_local_ids() -> None:
+    spec = importlib.util.spec_from_file_location("product_doc_content_checker", CHECKER)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    trace_id = "O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19"
+    assert module.id_tokens(f"Trace ID: {trace_id}") == set()
+    assert module.id_tokens(f"Trace refs: {trace_id}; REQ-SAMPLE-001 / AC-SAMPLE-001") == {"REQ-SAMPLE-001", "AC-SAMPLE-001"}
+    # An invalid/unrelated prefixed identifier still receives the ordinary check.
+    assert module.id_tokens("O7-REQ-NOT-A-UUID") == {"REQ-NOT-A-UUID"}
+    errors = []
+    module.check_requirements(TOPIC, TOPIC_TEXT + f"\nTrace ID: {trace_id}\n", errors)
+    assert not errors, errors
+
+
 def main() -> None:
+    scenario_cross_layer_trace_ids_are_not_local_ids()
     scenario_full_corpus_requires_active_topic_requirement()
     scenario_full_corpus_requires_active_topic_acceptance()
     scenario_full_corpus_exempts_non_active_topic_cardinality()

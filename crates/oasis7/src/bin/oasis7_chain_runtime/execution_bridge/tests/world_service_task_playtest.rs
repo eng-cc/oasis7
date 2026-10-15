@@ -21,6 +21,15 @@ use std::{
     },
     time::{Duration, Instant},
 };
+// These integration probes each run a real ticking node, HTTP listener and
+// fsync/CAS retention workload. Keep their fixture hosts from competing with
+// each other for the runner's CPU and disk inside a wall-clock gameplay budget.
+// Acquire before creating the fixture/deadline; retain every scenario and bound.
+fn prepared_world_probe_slot() -> std::sync::MutexGuard<'static, ()> {
+    static SLOT: Mutex<()> = Mutex::new(());
+    SLOT.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 fn write_private(path: &Path, bytes: &[u8]) {
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -667,6 +676,7 @@ fn run_prepared_world_service_kind(
 
 #[test]
 fn private_task_prepared_world_no_model_authority_cleanup() {
+    let _probe_slot = prepared_world_probe_slot();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-task-cleanup-ready-{}-{}.json",
         std::process::id(),
@@ -745,6 +755,7 @@ fn private_task_prepared_world_listener_guard_stops_scoped_thread_on_panic() {
 
 #[test]
 fn private_task_prepared_world_aged_cleanup_diagnostic() {
+    let _probe_slot = prepared_world_probe_slot();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-task-aged-cleanup-ready-{}-{}.json",
         std::process::id(),
@@ -780,6 +791,7 @@ fn private_task_prepared_world_aged_cleanup_diagnostic() {
 
 #[test]
 fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
+    let _probe_slot = prepared_world_probe_slot();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-task-unknown-cleanup-ready-{}-{}.json",
         std::process::id(),

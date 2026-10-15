@@ -147,11 +147,11 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 本轮以 `main@81649fd3baa248a905c2dd47a979ec5f04ef4a7d` 核对产品设计与现有入口，修订目标为“首页看清重点—统一工作详情—接续原工具或自管执行—回看结果”。[产品需求](command-center.prd.md#REQ-CC-013)明确首页内容、排序及来源冲突，[关联需求](command-center.prd.md#REQ-CC-014)明确复用/修复和既有现场接续；[整体验收](command-center.prd.md#cc-product-acceptance)覆盖开始一天、处理中断和恢复工作。
 
-已有原文视图、手工关联和实验 runtime 是实现基础；专用首页、统一工作详情及完整用户任务尚待实施和验收，见[差距表](command-center.design.md#1104-日常工作闭环的实现差距)。本段只记录本轮文档设计，不表示新能力已上线、PR已合入或桌面已验收，不刷新其他目标、PR与环境事实。Apple 签名/管理员集成的已有暂停继续有效。
+已有原文视图、手工关联和实验 runtime 是实现基础；首页现有[来源阅读降级入口](../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)直达项目状态与架构索引章节，保留正文核验窗口和缺失来源提示。四区投影、统一工作详情及完整用户任务尚待实施和验收，见[差距表](command-center.design.md#1104-日常工作闭环的实现差距)。本段只记录本轮文档设计，不表示新能力已上线、PR已合入或桌面已验收，不刷新其他目标、PR与环境事实。Apple 签名/管理员集成的已有暂停继续有效。
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
-以 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的源码和入口核对为依据，[REQ-CC-016](command-center.prd.md#REQ-CC-016)补齐产品/系统设计树、目录查漏、显式配对与覆盖反馈；[专题设计](document-tree.design.md)规定文件级快照、关系及真实桌面验证。本次只有设计文档，树 UI、快照投影和桌面验收尚待实施，不代表能力上线或已合入。
+以 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的源码和入口核对为依据，[REQ-CC-016](command-center.prd.md#REQ-CC-016)补齐产品/系统设计树、目录查漏、显式配对与覆盖反馈；[专题设计](document-tree.design.md)规定文件级快照、关系及真实桌面验证。生命周期读取基础已补原始声明/规范化类别分离，来源详情可显示类别；核对来源为 [解析实现](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs)和[专题设计实施顺序](document-tree.design.md#111-验证映射表)。2026-10-14 核对的本地候选已在现有章节索引补[实际覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)：读取/遗漏数量、原因计数及有界路径样本，范围见[专题设计实施顺序](document-tree.design.md#111-验证映射表)。树 UI、文件级快照投影、筛选和桌面验收尚待实施；本地候选不代表能力上线或已合入。
 
 <a id="cc-status-attention"></a>
 

@@ -71,9 +71,21 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 <a id="req-entry-candidate-001"></a>
 ### REQ-ENTRY-CANDIDATE-001：候选门禁必须绑定同一版本的跨域证据
 
+Trace ID: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b
+
 - 要求：阶段或公开 claim 的候选门禁必须把 primary mode、适用入口、权威 runtime/P2P 执行、恢复路径、长期经济审计、发行资产、QA 汇总与公开 claim 输入绑定到同一候选版本和证据窗口。任一输入缺失、来自不同候选、只具备局部/历史 green 或无法证明跨域对应关系时，产品结果只能保持 blocked、observer 或更窄的目标性结论；本要求不生成当前 release verdict。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`README.md`](../../../README.md)
 - 验收：[AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001)
+
+
+- 功能点：[REQ-ENTRY-CANDIDATE-001](#req-entry-candidate-001)；验收 [AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001)。
+- 适用范围：同候选的两种 primary mode、runtime/P2P 恢复、经济、发行资产及公开口径组合门禁；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 同候选对账，并加入跨版本、缺证和局部 green 负例；待取得实际 QA/发行复核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：同候选的两种 primary mode、runtime/P2P 恢复、经济、发行资产及公开口径组合门禁的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-candidate-001"></a>
 ### AC-ENTRY-CANDIDATE-001：局部或跨候选证据不能代签整体验收
@@ -86,8 +98,20 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 <a id="req-entry-mode-001"></a>
 ### REQ-ENTRY-MODE-001：每个入口必须绑定唯一 primary mode
 
+Trace ID: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264
+
 - 要求：玩家入口必须明确其 primary mode、当前阶段、受支持能力和证据范围；viewer、pure_api、observer 或 blocked 结论不得由 alias、provider、deployment 或 session context 隐式推导或互相代签。
 - 验收：AC-ENTRY-MODE-001
+
+
+- 功能点：[REQ-ENTRY-MODE-001](#req-entry-mode-001)；验收 [AC-ENTRY-MODE-001](#ac-entry-mode-001)。
+- 适用范围：viewer/pure_api 入口的唯一模式、阶段、能力及独立证据表达；沿用本条原有阶段和前置条件。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 分别核对 viewer/pure_api 当前入口及证据，加入 alias/另一模式代签负例；待取得逐入口记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：viewer/pure_api 入口的唯一模式、阶段、能力及独立证据表达中首次注册/返回以外的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-mode-001"></a>
 ### AC-ENTRY-MODE-001：入口证据独立证明模式能力
@@ -99,8 +123,20 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 <a id="req-entry-mode-002"></a>
 ### REQ-ENTRY-MODE-002：失败入口必须给出真实恢复路径
 
+Trace ID: O7-REQ-94ed85c5-c05d-4385-a919-687bfd66b270
+
 - 要求：入口前置缺失、身份/会话失效、provider 初始化失败、模式不受支持或后端不可用时，产品必须如实呈现 blocked/observer 分类、主要原因和适用恢复路径，不得用 fallback 或自动重试伪装成功。
 - 验收：AC-ENTRY-MODE-002
+
+
+- 功能点：[REQ-ENTRY-MODE-002](#req-entry-mode-002)；验收 [AC-ENTRY-MODE-002](#ac-entry-mode-002)。
+- 适用范围：前置、身份/会话、provider、模式和后端失败时的分类与真实恢复；沿用本条原有阶段和前置条件。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 注入前置缺失、会话失效及后端不可用，核对 blocked/observer 和恢复下一步；待取得运行/表面记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：前置、身份/会话、provider、模式和后端失败时的分类与真实恢复中首次注册/返回以外的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-mode-002"></a>
 ### AC-ENTRY-MODE-002：blocked 与可玩不会被静默互换
@@ -165,5 +201,5 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
 | [REQ-ENTRY-CANDIDATE-001](#req-entry-candidate-001) / [AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`README.md`](../../../README.md) | 同候选 primary mode/入口、runtime/P2P、恢复、长期经济审计、发行资产、QA 与公开 claim 的完整证据窗口；缺证、候选漂移或局部/历史 green 只能保持 blocked/observer/较窄目标性结论，不生成当前 release verdict | `test_tier_full` |
-| [REQ-ENTRY-MODE-001](#req-entry-mode-001) / [AC-ENTRY-MODE-001](#ac-entry-mode-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-MODE-002](#req-entry-mode-002) / [AC-ENTRY-MODE-002](#ac-entry-mode-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-ENTRY-MODE-001](#req-entry-mode-001) / [AC-ENTRY-MODE-001](#ac-entry-mode-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC 分别核对 viewer/pure_api 当前入口及证据，加入 alias/另一模式代签负例；待取得逐入口记录；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-MODE-002](#req-entry-mode-002) / [AC-ENTRY-MODE-002](#ac-entry-mode-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC 注入前置缺失、会话失效及后端不可用，核对 blocked/observer 和恢复下一步；待取得运行/表面记录；导航关系不等于通过证据 | `test_tier_required` |

@@ -34,6 +34,8 @@ Checks:
      content contract with the selected base/head and worktree changes.
   10. New or materially changed professional system-design files must carry
       exact upstream, local-design, and validation traceability.
+  --full-corpus additionally reports historical product and professional design
+  findings as warnings after the scoped strict checks; input errors still fail.
 USAGE
 }
 
@@ -95,12 +97,12 @@ run_product_doc_content_check() {
     echo "product-doc-content: error: unable to derive explicit base/head for worktree check" >&2
     return 1
   fi
+  "$PYTHON_BIN" scripts/product-doc-governance-check.py --enforce-changed \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
   "$PYTHON_BIN" scripts/product-doc-content-check.py \
     --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
-  if ((full_corpus == 1)); then
-    "$PYTHON_BIN" scripts/product-doc-content-check.py \
-      --repo-root "$repo_root" --full-corpus
-  fi
+  "$PYTHON_BIN" scripts/doc-core-content-check.py \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
 }
 
 run_system_design_traceability_check() {
@@ -629,16 +631,23 @@ if [[ ${#handoff_template_files[@]} -gt 0 ]]; then
   done
 fi
 
-if ! "$PYTHON_BIN" scripts/product-doc-governance-check.py; then
-  fail "product documentation overlay contract failed"
-fi
-
 if ! run_product_doc_content_check; then
   fail "product document content contract failed"
 fi
 
 if ! run_system_design_traceability_check; then
   fail "system-design traceability contract failed"
+fi
+
+# Run historical reports separately, after both scoped strict gates. Their
+# warning policy must never replace or reset a changed-range failure.
+if ((full_corpus == 1)); then
+  for checker in product-doc-content-check doc-core-content-check system-design-traceability-check; do
+    if ! "$PYTHON_BIN" "scripts/${checker}.py" --warn-only \
+      --repo-root "$repo_root" --full-corpus; then
+      fail "${checker} full-corpus check failed"
+    fi
+  done
 fi
 
 if ((failures > 0)); then

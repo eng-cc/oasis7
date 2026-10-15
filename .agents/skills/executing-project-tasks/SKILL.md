@@ -7,7 +7,9 @@ description: Use when implementing and finishing an authorized oasis7 change.
 
 通用规则见 [开发流程规范](../../../doc/engineering/workflow/source-of-truth.md)。
 
-明确问题、范围、验收和用户限制。简单修改写入 PR，复杂任务使用已有设计或 Issue checklist。同一授权范围内的实现取舍由负责人直接决定，必要时简要说明理由。
+明确问题、范围、验收和用户限制。简单修改写入 PR，复杂任务使用已有设计或按需使用的 Issue checklist。同一授权范围内的实现取舍由负责人直接决定，必要时简要说明理由。
+
+新增或实质修改的跨层要求按[要求追踪规范](../../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md)处理：先查原文声明，沿用同一要求的 Trace ID，在适用设计和当前 PR 等已有任务说明中写 Trace refs，并链接具体条款、说明本次范围与验证。Task 可直接是 PR，不另领要求 ID，也不强制建 Issue；未形成或不适用的层级如实说明。仅对本次涉及的关系更新，不全仓回填，不把 ID 或找到关联记录当作实现、验证或合入证明。
 
 修改前按开发规范检查 `git worktree list --porcelain`、工作区状态和使用情况，优先复用固定开发路径；聊天附件只用于识别附件，不能据此认定没有可复用工作区。需要新增时执行 `scripts/new-task-worktree.sh`，遵循仓库根目录配置，不以 App 创建、worktree fork 或 handoff 代替。用户明确要求其他入口时遵从用户要求；首次本地编译前执行 `./scripts/cargo-dev.sh --prepare-target`，日常反馈使用 wrapper，正式验收保留 canonical 命令。已有普通 target 不擅自删除。
 

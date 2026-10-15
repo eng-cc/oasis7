@@ -1,7 +1,7 @@
 # 指挥中心文档树系统设计
 
 - 文档 ID：`DESIGN-ENGINEERING-CC-DOCUMENT-TREE`
-- 状态：`draft`；目标方案，本次不交付程序或桌面验收
+- 状态：`draft`；树目标方案尚未完整实现，已有章节索引基础见 §4；未验收树桌面交互
 - owner_role：`runtime_engineer`
 - module：`engineering`
 - 上游：[REQ-CC-016](command-center.prd.md#REQ-CC-016)、[AC-CC-016](command-center.prd.md#AC-CC-016)
@@ -16,7 +16,7 @@
 | 对象 | 基线事实 | 目标与差距 |
 | --- | --- | --- |
 | 文档索引 | [index.rs](../../../tools/oasis7-command-center/core/src/index.rs)按 tracked 路径读取并生成章节，单文件/总量/数量有界 | 复用章节及生命周期解析；补文件级清单、明确遗漏原因、固定基线读取和树投影 |
-| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 文件节点须绑定同一快照；工作树并发编辑检测不能只检查 HEAD |
+| 来源身份 | 现有 Project 含 worktree、HEAD，章节含内容摘要 | 已有章节索引复核 HEAD、tracked 清单、dirty 路径和已读内容摘要，变化时拒绝候选；文件节点与独立树快照仍待实现 |
 | 导航与关系 | 仓库入口和配对链接存在；没有据此证明专用树 UI | 增加明确导航关系、配对关系和可见未归属集合 |
 | 桌面验证 | 本次仅源码与文档核对 | 未执行新 UI、读屏、性能或模型验收；不得以设计表认定已通过 |
 
@@ -59,6 +59,8 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 升级采用独立版本化的 document_tree_v1 派生缓存键/表，不向当前持久 Snapshot 的反序列化模型新增必填字段。旧缓存仍可供既有视图读取；树缓存缺失、版本不兼容或损坏时只重建树派生对象，不清空个人表和原 Snapshot。节点、关系、覆盖与部分尝试可重建，个人阅读偏好使用独立版本化记录和可选默认值；失败只回退树入口，不阻止原项目打开。缓存 schema 初始化及写入采用事务，失败保留旧 schema；旧 App 忽略新表/键，回退不删除个人或未决数据。生成 DTO 与 bridge/UI 随同包原子更新，tree 查询携带 schemaVersion，未知版本返回明确 unsupported，旧客户端不消费新 DTO；既有查询响应保持原 shape。实施回归须覆盖旧数据库打开、损坏树缓存、迁移失败和旧版本回读，确认个人关联/草稿/未决操作保留。
 
 本功能不执行 fetch、checkout、模型调用或源文档写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
+
+现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；跳过文件的逐项覆盖、独立树 attempt/generation、缓存与 UI 合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
 
 <a id="DES-CC-TREE-003"></a>
 
@@ -122,9 +124,13 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 未验证工作树并发与完整 corpus 性能 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 生命周期基础已有程序回归；树关系反例待实现 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 章节索引并发反例已有程序回归；独立树快照、迁移与完整 corpus 性能未验证 |
 | [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
+
+生命周期解析基础已由 [lifecycle_metadata.rs](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs) 和现有来源详情承接：原始声明与规范化类别分开，新增可选字段兼容旧阅读记录；[生命周期回归](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)覆盖附注、全角分隔符、未知原值和错误声明。这不提供文件级树、筛选或真实桌面验收。
+
+现有章节索引的覆盖反馈由 [index_coverage.rs](../../../tools/oasis7-command-center/core/src/index_coverage.rs) 承接：来源状态显示候选/已读/遗漏数量、实际已读字节、完整遗漏原因计数与最多 20 条路径样本（标明样本/总数）；单文件实际读取受文件和剩余总量预算限制，空文件计为已读，全量遗漏不判为空结果。这是现有工作树章节索引的局部反馈，不提供逐文件持久覆盖、独立树快照/attempt、固定提交或树 UI；本节表内尚待实现的义务仍保留。
 
 先实现文件清单与覆盖反馈，再实现关系和快照投影，随后接入树/详情及恢复，最后验证真实 App。只到前两步时可以交付索引切片，但不宣称 AC-CC-016 已通过。纯设计不改变游戏 Agent Skill/API/runtime 行为，开发自主试玩不适用；功能实现仍需上述真实桌面验证。
 
