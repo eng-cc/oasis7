@@ -48,6 +48,28 @@ def validate_candidate_graph(workflow, config):
 
 
 class Workflow(unittest.TestCase):
+    def test_formal_suites_share_build_and_propagate_all_failures(self):
+        matrix = JOBS['formal-process-tests']
+        self.assertIn('needs: [select, oasis7-test-build]', matrix)
+        self.assertNotIn('needs: oasis7-required', matrix)
+        self.assertIn('fail-fast: false', matrix)
+        self.assertIn('max-parallel: 3', matrix)
+        self.assertIn('suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]', matrix)
+        self.assertIn('actions/download-artifact@', matrix)
+        self.assertNotIn('cargo build', matrix)
+        self.assertNotIn('cargo test', matrix)
+        self.assertNotIn('rust-cache@', matrix)
+        self.assertIn('--results output/formal-process/results.jsonl', matrix)
+        self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', JOBS['formal-process'])
+        for name in ['full-regression', 'candidate-full-regression']:
+            self.assertIn('./scripts/ci-tests.sh full-standard', JOBS[name])
+            self.assertIn('needs: oasis7-test-build', JOBS[name])
+        self.assertIn('compression-level: 0', JOBS['oasis7-test-build'])
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        required_body = driver.split('run_oasis7_required_tier_tests() {', 1)[1].split('run_scenario_regression_tests()', 1)[0]
+        self.assertNotIn('formal-live-local-tests.sh', required_body)
+        self.assertIn('if [[ "$tier" == full ]]; then run_group formal_process; fi', driver)
+
     def test_manual_candidate_full_is_read_only_and_not_scheduled(self):
         candidate = JOBS['candidate-full-regression']
         self.assertIn("if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'", candidate)

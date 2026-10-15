@@ -120,6 +120,60 @@ class Process(unittest.TestCase):
         self.assertEqual(result['cleanup_result'], 'clean')
         self.assertLess(result['elapsed_seconds'], 3)
 
+    def test_fresh_consumer_restores_compiled_cargo_binary_path_and_prior_attempt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            original = root / 'target/debug/tool'
+            original.parent.mkdir(parents=True)
+            source = root / 'tool.rs'
+            source.write_text('fn main() {}')
+            subprocess.run(['rustc', str(source), '-o', str(original)], check=True)
+            harness = root / 'harness'
+            source.write_text('#[test] fn calls_tool() { assert!(std::process::Command::new(env!("CARGO_BIN_EXE_tool")).status().unwrap().success()); }')
+            subprocess.run(['rustc', '--test', str(source), '-o', str(harness)], check=True,
+                           env=dict(os.environ, CARGO_BIN_EXE_tool=str(original)))
+            bundle = root / 'bundle'
+            bundle.mkdir()
+            config_path = root / 'suites.json'
+            config = dict(suites={'fixture': []}, environment_formal_batches={}, legacy_ignored_filters={}, shell_tests={})
+            config_path.write_text(json.dumps(config))
+            binaries = {}
+            for logical in ['viewer', 'runtime', 'endpoint', 'runtime-tests']:
+                destination = bundle / logical
+                destination.write_bytes((harness if logical == 'runtime-tests' else original).read_bytes())
+                destination.chmod(0o755)
+                binaries[logical] = dict(path=logical, sha256=artifacts.digest(destination),
+                    original_executable=str(harness if logical == 'runtime-tests' else original),
+                    test=logical == 'runtime-tests', ordinary=logical == 'runtime-tests', cwd='.',
+                    tests=['calls_tool'], ignored_tests=[])
+            # Include a legitimate empty Cargo harness and the two original
+            # default-feature regressions. Ordinary execution must skip only
+            # the empty batch, while retaining both snapshot combinations.
+            for logical, rust_source in {
+                'empty-tests': '',
+                'snapshot-tests': '#[cfg(test)] mod snapshot_progress { #[test] fn one() {} } #[test] fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {}',
+            }.items():
+                source.write_text(rust_source)
+                destination = bundle / logical
+                subprocess.run(['rustc', '--test', str(source), '-o', str(destination)], check=True)
+                binaries[logical] = dict(path=logical, sha256=artifacts.digest(destination),
+                    original_executable=str(destination), test=True, ordinary=logical == 'empty-tests', cwd='.',
+                    tests=artifacts.inventory(destination), ignored_tests=[])
+            original.unlink()
+            manifest = dict(tested_sha='tested', source_sha='source', producer_run_id='run', producer_attempt='1',
+                checkout=str(root), config_sha256=artifacts.digest(config_path),
+                rust_toolchain=os.environ.get('RUST_TOOLCHAIN', 'local'), runner_image=os.environ.get('ImageOS', sys.platform),
+                binaries=binaries, suites={'fixture': []}, libraries={})
+            (bundle / 'manifest.json').write_text(json.dumps(manifest))
+            with patch.object(artifacts, 'ROOT', root), patch.object(artifacts, 'CONFIG', config_path), patch.object(artifacts, 'output', return_value='tested'), patch.dict(os.environ, SOURCE_SHA='source', GITHUB_RUN_ID='run', GITHUB_RUN_ATTEMPT='2'):
+                restored, env = artifacts.load(bundle)
+                self.assertEqual(restored['producer_attempt'], '1')
+                self.assertTrue(original.is_file())
+                artifacts.execute(bundle, 'ordinary', root / 'results.jsonl')
+                results = [json.loads(line) for line in (root / 'results.jsonl').read_text().splitlines()]
+                self.assertEqual(len(results), 3)
+                self.assertTrue(all(result['passed'] for result in results))
+
     def test_proc_scan_never_reads_other_users_environment(self):
         class OtherUser:
             def stat(self):
