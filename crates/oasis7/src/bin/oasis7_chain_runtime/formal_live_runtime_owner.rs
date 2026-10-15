@@ -607,21 +607,16 @@ pub(crate) fn launch_operation_with_fixed_trust(
         #[cfg(test)]
         command.env_remove("OASIS7_FORMAL_OWNER_TEST_READ_TRUST_DIGEST");
     }
+    // The owner outlives this CLI. Inheriting CLI-owned output pipes would
+    // leave it with broken stdout/stderr as soon as the launching CLI exits.
+    let diagnostics = WorkerDiagnostics::prepare(&prepared_root)?;
+    let (stdout, stderr) = diagnostics.stdio()?;
     let mut child = command
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
         .map_err(|error| format!("formal runtime owner spawn outcome unknown: {error}"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or("formal runtime owner stderr pipe unavailable")?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or("formal runtime owner stdout pipe unavailable")?;
-    let diagnostics = WorkerDiagnostics::drain(stdout, stderr)?;
     // Retain the exact Child handle to detect worker exit during startup. It is
     // used only for wait status, never for process control; lifecycle control
     // remains through the private authenticated socket.
@@ -659,7 +654,6 @@ pub(crate) fn launch_operation_with_fixed_trust(
                 return Ok(snapshot);
             }
             Ok(Some(mut snapshot)) if snapshot.state == "ready" => {
-                diagnostics.wait_for_stderr_close(Duration::from_millis(250));
                 snapshot.state = "unknown".into();
                 snapshot.last_error = Some(append_worker_diagnostic(
                     &format!(
@@ -675,8 +669,7 @@ pub(crate) fn launch_operation_with_fixed_trust(
                 // binding its socket. During that small window query_operation
                 // reports an unavailable socket; this is not a terminal
                 // worker failure. Keep polling only while the exact persisted
-                // instance is still starting. EOF on stderr proves the child
-                // has exited, so preserve the unresolved outcome immediately.
+                // instance is still starting and its exact Child is alive.
                 let startup_socket_race = snapshot.last_error.as_deref()
                     == Some(OWNER_SOCKET_UNAVAILABLE)
                     && read_owner_record(&state_path).is_ok_and(|record| {
@@ -688,7 +681,6 @@ pub(crate) fn launch_operation_with_fixed_trust(
                 if startup_socket_race && worker_exit.is_none() {
                     // Continue within the caller's original bounded deadline.
                 } else if startup_socket_race {
-                    diagnostics.wait_for_stderr_close(Duration::from_millis(250));
                     snapshot.last_error = Some(append_worker_diagnostic(
                         &format!(
                             "owner worker exited while its durable state remained starting and its control socket was unavailable (exit status {})",
@@ -709,7 +701,6 @@ pub(crate) fn launch_operation_with_fixed_trust(
                 }
             }
             Ok(Some(mut snapshot)) if snapshot.state == "failed" => {
-                diagnostics.wait_for_stderr_close(Duration::from_millis(250));
                 if let Some(error) = snapshot.last_error.as_deref() {
                     snapshot.last_error = Some(append_worker_diagnostic(error, &diagnostics));
                 }
@@ -717,7 +708,6 @@ pub(crate) fn launch_operation_with_fixed_trust(
             }
             Err(error) if error.contains("owner state schema") => return Err(error),
             Ok(None) if worker_exit.is_some() => {
-                diagnostics.wait_for_stderr_close(Duration::from_millis(250));
                 return Err(append_worker_diagnostic(
                     &format!(
                         "ORIGINAL_OUTCOME_UNKNOWN: owner worker exited before a durable owner receipt appeared (exit status {}); resume query-only",
@@ -727,7 +717,6 @@ pub(crate) fn launch_operation_with_fixed_trust(
                 ));
             }
             Err(error) if worker_exit.is_some() => {
-                diagnostics.wait_for_stderr_close(Duration::from_millis(250));
                 return Err(append_worker_diagnostic(
                     &format!(
                         "ORIGINAL_OUTCOME_UNKNOWN: owner worker exited while owner state could not be queried (exit status {}): {error}; resume query-only",

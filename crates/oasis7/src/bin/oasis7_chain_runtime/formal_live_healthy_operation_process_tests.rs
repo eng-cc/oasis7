@@ -4,7 +4,7 @@
 mod fixed_lookup;
 #[path = "formal_live_healthy_operation_process_tests/raw_seed.rs"]
 mod raw_seed;
-use super::durable_set_tests::{HealthySetCase, ManagedEndpointChild};
+use super::durable_set_tests::{HealthySetCase, ManagedEndpointChild, stop_healthy_runtime};
 use super::*;
 use crate::{formal_live_runtime, node_lifecycle::local_io as io};
 use oasis7_distfs::controlled_authority::formal::{
@@ -66,7 +66,7 @@ pub(super) fn exercise_with_fault(
     case.scenario_deadline
         .report_stage("actual op CLI fixture begins")?;
     if let Some(mut initial_runtime) = case.runtime.take() {
-        initial_runtime.stop(Duration::from_secs(10))?;
+        stop_healthy_runtime(&mut initial_runtime, case.scenario_deadline)?;
         drop(initial_runtime);
     } // shipping owner alone holds the real writer lock
     let original_operation = "fixture-original-healthy-owner";

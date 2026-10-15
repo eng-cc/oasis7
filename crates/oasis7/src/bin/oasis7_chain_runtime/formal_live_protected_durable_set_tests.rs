@@ -250,7 +250,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         .report_stage("signed C0-to-boundary lineage persisted")?;
     case.scenario_deadline
         .report_stage("stopping old runtime at sealed boundary")?;
-    runtime.stop(Duration::from_secs(10))?;
+    stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
     let stopped_snapshot = runtime.published.current()?.world.snapshot();
     drop(runtime);
     case.scenario_deadline.report_stage("old runtime stopped")?;
@@ -627,7 +627,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
             .report_stage("long successor history and cold lookup verified")?;
     }
 
-    runtime.stop(Duration::from_secs(10))?;
+    stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
     let stopped = runtime.published.current()?;
     let stopped_snapshot = stopped.world.snapshot();
     drop(runtime);
@@ -707,7 +707,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     }
     case.scenario_deadline
         .report_stage("cold retry preserved original CommitRef and effects")?;
-    reopened.stop(Duration::from_secs(10))?;
+    stop_healthy_runtime(&mut reopened, case.scenario_deadline)?;
     drop((
         case.primary_oracle,
         case.replica_oracle,
@@ -1021,7 +1021,7 @@ fn exercise_successor_long_history(
             ));
         }
         if ordinal == 15 || ordinal == 31 {
-            runtime.stop(Duration::from_secs(10))?;
+            stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
             let before = runtime.published.current()?;
             let snapshot = before.world.snapshot();
             drop(runtime);
@@ -1069,6 +1069,31 @@ fn exercise_successor_long_history(
         return Err("signed lookup changed old CommitRef after healthy successor history".into());
     }
     Ok(runtime)
+}
+
+/// Keep the same runtime and pending stop worker until graceful completion,
+/// bounded by this scenario's original expiry rather than a fresh allowance.
+pub(super) fn stop_healthy_runtime(
+    runtime: &mut FormalLiveRuntime,
+    scenario: ScenarioDeadline,
+) -> Result<(), String> {
+    loop {
+        let remaining = scenario
+            .expires_at
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or("healthy runtime stop exceeded the original scenario deadline")?;
+        match runtime.stop(remaining.min(Duration::from_secs(10))) {
+            Ok(()) => {
+                scenario.report_stage("healthy runtime graceful stop completed")?;
+                return Ok(());
+            }
+            Err(error) if error == "formal Node stop is still pending; runtime remains owned" => {
+                scenario.report_stage("healthy runtime stop pending; retaining same owner")?;
+            }
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 #[path = "formal_live_protected_durable_set_tests/managed_endpoint.rs"]
