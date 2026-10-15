@@ -91,7 +91,7 @@ Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；局部承接[REQ-AGENT
 
 现有 Vitest 入口自动发现的 `pixel_world_location_frame_pixels.test.js` 共 23 项，覆盖 RGB/行方向、格式拒绝、1/1.5/2 倍截图比例、次像素偏移，以及本体仍可见但无角框、缺单角/单臂、明显错位、错色、全白/全 mint、多余角框、不相连短条、孤立交点和实心角块的负例。这些通过只证明解析与判定算法能区分受控输入；真实 Bevy 合成、字体遮挡及具体候选的颜色容差仍待 S6 验证，不能用 DOM/DTO 状态或合成图冒充真实浏览器结果。
 
-[testing-manual S6](../../../testing-manual.md#s6：web-ui-闭环-smoke-套件（l4a）) 继续拥有真实浏览器与模型视觉评审的适用规则。[#3017](https://github.com/eng-cc/oasis7/issues/3017) 承载的独立视觉义务仍须以其受测候选、场景和真实证据验收，不能由本设计承接、Rust 通过、crop 自动检查或 #2116 关闭代签。
+[testing-manual S6](../../../testing-manual.md#s6web-ui-闭环-smoke-套件l4a) 继续拥有真实浏览器与模型视觉评审的适用规则。[#3017](https://github.com/eng-cc/oasis7/issues/3017) 承载的独立视觉义务仍须以其受测候选、场景和真实证据验收，不能由本设计承接、Rust 通过、crop 自动检查或 #2116 关闭代签。
 
 <a id="render-reconcile-validation"></a>
 ## 11. 验证设计与交付边界

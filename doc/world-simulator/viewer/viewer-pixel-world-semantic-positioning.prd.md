@@ -13,7 +13,7 @@
 - 当前 pixel-world 已具备 wasm-only renderer、关系线、热点层和增量渲染，但实际 runtime 快照经常只提供 `agent.location_id`，不提供 agent 精确坐标。
 - 当 agent 缺少坐标时，Viewer 可用 `location_id` 派生一个可解释的显示位置；位置可用不等于关系已获权威确认。
 - 本轮不改 runtime 协议，通过 Viewer host DTO 增加确定性语义定位：有精确坐标时使用 snapshot truth；缺坐标但有 `location_id` 时派生到地点附近，并标记 `position_source=location_derived`。
-- 关系线另行消费完整、当前、显式发布的关系 envelope；`location_id`、派生坐标和空间邻近不能独立生成关系。这一边界与[发行体验 P1-B](viewer-gameplay-release-experience-overhaul.prd.md#p1-b-world-semantic-presentation（当前切片已实现）)一致。
+- 关系线另行消费完整、当前、显式发布的关系 envelope；`location_id`、派生坐标和空间邻近不能独立生成关系。这一边界与[发行体验 P1-B](viewer-gameplay-release-experience-overhaul.prd.md#p1-b-world-semantic-presentation当前切片已实现)一致。
 
 ## 2. User Experience & Functionality
 

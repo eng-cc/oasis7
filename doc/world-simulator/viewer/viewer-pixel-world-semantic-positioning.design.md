@@ -18,7 +18,7 @@
 - Keep the semantic repair in Viewer host DTO construction.
 - Do not add runtime fields or change wasm bridge API.
 - Treat derived coordinates as presentation data with explicit provenance.
-- Consume the existing [P1-B relation boundary](viewer-gameplay-release-experience-overhaul.design.md#p1-b-world-semantic-presentation（当前切片源码与-headed-验收已完成）): never derive assignment, ownership, route or trust from `location_id` or geometry alone.
+- Consume the existing [P1-B relation boundary](viewer-gameplay-release-experience-overhaul.design.md#p1-b-world-semantic-presentation当前切片源码与-headed-验收已完成): never derive assignment, ownership, route or trust from `location_id` or geometry alone.
 
 <a id="position-and-relation-projection"></a>
 ## Data Flow

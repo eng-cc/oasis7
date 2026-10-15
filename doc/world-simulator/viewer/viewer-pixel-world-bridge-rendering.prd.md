@@ -113,7 +113,7 @@ Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；局部承接[REQ-AGENT
 <a id="claim-evidence-classification"></a>
 ### 已覆盖的 evidence fixture 归属
 
-#2701 的 claim evidence 页面归属已由[Viewer 前端结构标准](viewer-frontend-structure-standard.prd.md#接口-数据)和[构建真值](viewer-web-build-truth.prd.md#42-generated-artifact-single-source-of-truth)承接：`viewer_first_agent_claim_evidence.html` 是 canonical claim fixture，`dist/software_safe_first_agent_claim_evidence.html` 是生成的兼容测试页。它们不是新增玩家产品页。保留该导航即可，不再把旧文件名的负向检索或整批迁移核证作为当前未完成项；此分类不证明真实浏览器或产品验收完成。
+#2701 的 claim evidence 页面归属已由[Viewer 前端结构标准](viewer-frontend-structure-standard.prd.md#接口--数据)和[构建真值](viewer-web-build-truth.prd.md#42-generated-artifact-single-source-of-truth)承接：`viewer_first_agent_claim_evidence.html` 是 canonical claim fixture，`dist/software_safe_first_agent_claim_evidence.html` 是生成的兼容测试页。它们不是新增玩家产品页。保留该导航即可，不再把旧文件名的负向检索或整批迁移核证作为当前未完成项；此分类不证明真实浏览器或产品验收完成。
 
 ## 5. Risks & Roadmap
 - M1：完成专题 PRD / Project 建模，冻结 P0 优化边界。
