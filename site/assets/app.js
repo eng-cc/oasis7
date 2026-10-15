@@ -573,6 +573,12 @@
     const defaultSrc = String(reader.getAttribute("data-story-default") || "").trim();
     const initialButton =
       buttons.find((button) => button.getAttribute("data-story-src") === defaultSrc) || buttons[0];
+    document.querySelectorAll("[data-story-start]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        loadChapter(initialButton);
+      });
+    });
     loadChapter(initialButton);
   };
 
@@ -1001,7 +1007,7 @@
     });
   }
 
-  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"], ["#lore", "#lore > details"]]) {
+  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"], ["#lore", "#lore > details"], ["#case-conditions", "#case-conditions"]]) {
     const previewDetails = document.querySelector(selector);
     if (!previewDetails) continue;
     let previewLinkHashPending = false;
@@ -1036,8 +1042,8 @@
       if (tag) tag.textContent = releaseCandidate ? releaseCandidate.tag : node.dataset.verifiedRelease;
       if (!releaseCandidate || releaseCandidate.tag === node.dataset.verifiedRelease) { node.textContent = recordedCopy; return; }
       node.textContent = document.documentElement.lang.startsWith("zh")
-        ? "此下载候选没有已核对的安装、首次进入或玩法验收记录；下方旧候选构建记录不能代签本版本。"
-        : "No verified installation, first-entry or gameplay acceptance record is available for this candidate. The older build record below does not certify this version.";
+        ? "此下载候选没有完整试玩验证记录；下方六月构建记录只适用于六月版本。"
+        : "A complete playtest is not verified for this candidate. The June build record below applies only to the June version.";
     };
     releaseRefreshCallbacks.push(refresh);
     refresh();

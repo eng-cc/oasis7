@@ -100,7 +100,7 @@ Trace ID: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff
 - 功能点：[REQ-ENTRY-CLAIM-001](#req-entry-claim-001)；验收 [AC-ENTRY-CLAIM-001](#ac-entry-claim-001)。
 - 适用范围：所有拟发布口径的同候选、模式、入口、证据窗口及 README 对账；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：runtime_capture 绑定版本/场景/证据窗口与可公开来源；来源不足不背书运行事实；同 Trace 五列承接与六列验证限定网站子范围。
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：runtime_capture 绑定版本/场景/证据窗口与可公开来源；来源不足不背书运行事实；同 Trace 五列承接与六列验证限定网站子范围。 [测试 benchmark 局部边界](../../testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md#des-bench-public-window)仅承接历史/局部 green 不得生成当前公开事实；不覆盖全渠道发布、撤回、LiveOps 审核或四层全域验收，不改变本卡实现状态和既有证据。
 - 实现状态：部分实现
 - 实现与验证依据：官网 release-candidate 快照将版本和下载资产绑定同一 tag，缺 checksum/platform 时阻断推荐；首页 claim 检查保留公开 preview 边界。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/site/assets/release-candidate.js)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-release-candidate.test.cjs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/scripts/site-homepage-claim-check.sh)；[核验任务](https://github.com/eng-cc/oasis7/issues/4696)。本轮为固定源码审读，回归定义不等于实际通过。 网站交付及原候选局部检查见[PR #4697](https://github.com/eng-cc/oasis7/pull/4697)，不延伸为全部渠道验收。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
@@ -154,7 +154,7 @@ Trace ID: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
 - 功能点：[REQ-ENTRY-CLAIM-003](#req-entry-claim-003)；验收 [AC-ENTRY-CLAIM-003](#ac-entry-claim-003)。
 - 适用范围：每个拟发布 claim 的事实、目标、假设、证据边界与可发布条件；沿用本条原有阶段和前置条件。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：concept/illustrative/runtime_capture 与小说类型分离，目标/概念不冒充真实运行来源；同 Trace 五列承接与六列验证限定网站子范围。 [认领经济四层边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)原接收保留。
+- 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：concept/illustrative/runtime_capture 与小说类型分离，目标/概念不冒充真实运行来源；同 Trace 五列承接与六列验证限定网站子范围。 [认领经济四层边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)原接收保留。 [测试 benchmark 局部边界](../../testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md#des-bench-public-categories)仅承接历史事实、目标、假设与证据范围分离；不覆盖全渠道发布、撤回、LiveOps 审核或四层全域验收，不改变本卡实现状态和既有证据。
 - 实现状态：未核实
 - 实现与验证依据：按 AC 审核四层字段与可发布条件；专业认领边界仅为一项输入，待取得完整公开 claim 审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。

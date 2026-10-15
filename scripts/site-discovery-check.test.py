@@ -124,7 +124,7 @@ with tempfile.TemporaryDirectory() as tmp:
   text=source.read_text().replace('discovery-first','energy-example').replace('data-content-kind="devlog"','data-content-kind="observation"').replace('data-content-status="published"','data-content-status="published" data-provenance="illustrative"').replace('<article data-content-body>','<p data-content-provenance-label>'+label+'</p><article data-content-body>')
   p.write_text(text)
   home=root/prefix/'index.html';row=re.search(r'<article[^>]*data-content-summary="discovery-first".*?</article>',home.read_text(),re.S).group().replace('discovery-first','energy-example').replace('devlog/energy-example/','observations/energy-example/')
-  home_text=home.read_text();at=home_text.index('</section>',home_text.index('<section id="world"'));home.write_text(home_text[:at]+row+home_text[at:])
+  home_text=home.read_text();at=home_text.index('<section id="progress"');home.write_text(home_text[:at]+row+home_text[at:])
   listing=root/prefix/'observations/index.html';listing.write_text(listing.read_text().replace('</main>',row+'</main>'))
   feed=root/prefix/'feed.xml';tree=module.ET.parse(feed);channel=tree.getroot().find('channel');item=copy.deepcopy(channel.find('item'))
   for field in ['guid','link']:item.find(field).text=item.find(field).text.replace('devlog/discovery-first','observations/energy-example')

@@ -32,11 +32,12 @@
     <link rel="alternate" hreflang="en" href="https://oasis7.tech/en/" />
     <link rel="alternate" hreflang="x-default" href="https://oasis7.tech/" />
     <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
-    <link rel="stylesheet" href="assets/styles.css?v=20261015-case-first" />
+    <link rel="stylesheet" href="assets/styles.css?v=20261015-visible-results" />
     <link rel="alternate" type="application/rss+xml" title="oasis7" href="feed.xml" />
     <script defer src="assets/release-candidate.js?v=20261015-readable-gameplay"></script>
-    <script defer src="assets/app.js?v=20261015-case-first"></script>
-  </head>
+    <script defer src="assets/app.js?v=20261015-visible-results"></script>
+  <meta name="oasis7-site-build" content="20261015-visible-results" />
+</head>
   <body class="discovery-page">
     <a class="skip-link" href="#top">跳到正文</a>
     <header class="topbar">
@@ -105,14 +106,16 @@
 <p class="eyebrow">真实受控过程 · 预先准备的测试环境 · 非公共世界实况</p><h2>第一炉铁锭：受阻之后，目标还能继续。</h2>
 <p class="decision-lead" data-homepage-claim="consequence-story" data-evidence-mode="controlled-replay">你给方向，Agent 在授权与资源边界内尝试，再用世界结果核对完成。</p>
 <p class="hero-support-copy" data-homepage-claim="indirect-agency">你可以影响文明，但不能替 Agent 决定每一步。</p>
+<div class="player-role"><p><strong>你决定要达成什么、允许做什么。</strong></p><p>Agent 选择具体行动，并处理执行中的问题。</p><p>你根据结果，决定是否继续原来的方向。</p></div>
 <div class="decision-panels" role="group" aria-label="真实过程的四步"><article id="decision-0" data-decision-panel="0"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/></svg></span> 01</p><h3><span data-decision-step="0"><span class="decision-step-index" aria-hidden="true">01</span>设定目标</span></h3><p>用起始库存建造冶炼炉，完成第一批铁锭。</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-1" data-decision-panel="1"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19v-3a7 7 0 1 1 9-6v5h-4v4z"/><circle cx="12" cy="9" r="2"/></svg></span> 02</p><h3><span data-decision-step="1"><span class="decision-step-index" aria-hidden="true">02</span>遇到阻塞</span></h3><p>第一次选择的工厂不在授权范围，报价被拒绝，没有产生建造动作。</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-2" data-decision-panel="2"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7zm0 10v10M3 7l9 5 9-5M8 4l9 5"/></svg></span> 03</p><h3><span data-decision-step="2"><span class="decision-step-index" aria-hidden="true">03</span>调整行动</span></h3><p>Agent 读取实际授权，改用允许的冶炼炉，继续建造和供料。</p><div class="decision-atmosphere" aria-hidden="true"></div></article><article id="decision-3" data-decision-panel="3"><p class="decision-number"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></span> 04</p><h3><span data-decision-step="3"><span class="decision-step-index" aria-hidden="true">04</span>核对结果</span></h3><p>世界记录确认产出 <strong>3 个铁锭</strong>。这次受控测试到首批产出结束。</p><div class="decision-atmosphere" aria-hidden="true"></div></article></div>
-<p class="case-meaning">第一批产出让目标变成可以核对的世界变化。接下来值得继续观察的是：资源够不够、目标是否需要调整。持续生产、扩展和协作仍需分别验证，不是这次测试已经开放的下一关。</p><p class="case-source"><a href="devlog/first-iron-batch/">阅读完整过程 →</a> · <a href="#download">我现在能体验什么 →</a></p>
+<section class="case-result" aria-labelledby="case-result-heading" data-case-result><div class="case-result-heading"><h3 id="case-result-heading">一炉产出，逐项对账</h3><p>根据受控 CLI 记录整理的数据图解，非游戏实机界面。</p></div><dl class="result-flow"><div><dt>设施</dt><dd><strong>冶炼炉已建成</strong><span>此前被拒的报价没有产生建造动作。</span></dd></div><div><dt>本轮实际消耗</dt><dd><strong>4 矿石 + 1 燃料</strong><span>配方消耗 8 电。</span></dd></div><div class="result-output"><dt>实际产出</dt><dd><strong>3 铁锭</strong><span>+ 1 炉渣</span><i class="ingot-stack" aria-hidden="true"><i></i><i></i><i></i></i></dd></div><div><dt>结束时剩余</dt><dd><strong>4 矿石 + 1 燃料</strong><span>世界读回电量 86，待执行任务为 0。</span></dd></div></dl><p class="result-note">转入的是 8 矿石、2 燃料，不等于全部消耗。本轮在 tick 46 结算，测试到此结束，未验证持续生产。</p></section>
+<p class="case-meaning">第一批产出让目标变成可以核对的世界变化。接下来值得继续观察的是：资源够不够、目标是否需要调整。持续生产、扩展和协作仍需分别验证，不是这次测试已经开放的下一关。</p><p class="case-source"><a href="devlog/first-iron-batch/">阅读完整过程 →</a> · <a href="#case-conditions">了解案例复现条件 →</a> · <a href="#download">了解当前安装包 →</a></p>
+<details id="case-conditions" class="case-conditions"><summary>了解案例复现条件</summary><ol><li><strong>使用源码：</strong>52c136a7，测试于 2026-10-13，与六月安装包分开核对。</li><li><strong>准备条件：</strong>预置世界、已认领的 Agent、起始库存与有限授权。独立 Agent 通过命令行使用正式游戏 Skill。</li><li><strong>实际入口：</strong>受控测试客户端，不是本站可直接进入的公共游戏。<a href="devlog/first-iron-batch/">完整过程</a>提供保留报告与来源清单。</li><li><strong>还缺什么：</strong>从干净安装到同一准备状态、再完成首批产出的全程验证指南。这些条件说明还不是可直接照做的复现教程。</li></ol></details>
 <p class="decision-provenance" data-homepage-claim="provenance-story" data-evidence-provenance="runtime_capture" data-evidence-source="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">依据保留的玩家报告与世界记录整理。配图仅为概念氛围；<span data-homepage-claim="telemetry-boundary">不是实时世界遥测，也不是公开玩法模式。</span></p>
 <details class="decision-source case-verification"><summary>查看核验方法、版本与限制</summary><p>2026-10-13 · 测试源码 52c136a7；公开报告保存在 06fb5ee9。预置世界、已认领 Agent、instruction-only 隔离，独立 Agent 使用正式 Skill 完成 19 次 client 调用。建造在 tick 28 完成；8 矿石、2 燃料转入后，一批配方于 tick 46 结算 3 铁锭、1 炉渣。世界读回电量 86、待执行任务为 0。一次上下文冲突被保留为拒绝，再以新上下文继续。没有验证 GUI、从零安装或持续多厂生产。</p><a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">查看原报告与世界读回</a></details>
 </div><details class="historical-viewer"><summary>历史界面参考（非本案例、非当前界面）</summary><figure class="viewer-evidence"><h3>历史 Viewer 界面参考</h3><a href="assets/images/screenshots/minimal.webp"><img src="assets/images/screenshots/minimal.webp" alt="历史 native Viewer 参考图：顶栏连接状态与 tick 0，左侧展开操作面板的新手引导。" width="2400" height="1600" loading="lazy" /></a><figcaption>2026-02-26 · native Viewer 受控抓图（无 LLM）· a6c34b17。画面显示连接状态、tick 0 与新手引导，不是当前界面或上述生产案例截图。 <a href="https://github.com/eng-cc/oasis7/blob/a6c34b177a218445fc7f6737378305c21c3c8d0d/doc/devlog/2026-02-26.md">核对抓图来源</a></figcaption></figure></details>
-<p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：viewer</span> ，具体启动入口按所选版本手册核对。</p>
+<p class="doc-entry-note"><span data-homepage-claim="default-web-entry">本站不能直接进入游戏，需要先配置本地预览</span>；启动方式请按所选版本指南核对。</p>
 </section>
-      <section id="world" class="section landing-chapter world-record-status"><h2>世界记录</h2><p>世界记录栏目暂未发布条目，可先阅读<a href="#progress">开发进展</a>。<a href="observations/">记录栏目与发布说明 →</a></p></section>
       <div class="discovery-editorial-grid">
 
       <section id="progress" class="section landing-chapter landing-progress">
@@ -123,12 +126,12 @@
       </section>
 
 <section id="download" class="section landing-chapter landing-download discovery-portal portal-preview">
-        <h2>了解技术预览</h2><p class="section-intro">需本地环境和自备模型配置；公共网页加入尚未开放。下载前核对平台、费用与未签名风险。</p><details class="preview-installation" data-preview-details><summary>查看预览说明 →</summary><div class="preview-installation-body"><dl class="preview-quickfacts"><div><dt>体验范围</dt><dd>本地技术预览与受控验证；不是公开网页加入。</dd></div><div><dt>需要准备</dt><dd>受支持桌面系统、本地环境和模型 provider 配置；自然语言不等于零配置。</dd></div><div><dt>模型与费用</dt><dd>模型由你选择并配置；调用会使用对应服务账户的额度，并可能产生费用，按该服务的计费规则执行。本站不提供免费模型额度或凭据输入。</dd></div><div><dt>保存与升级</dt><dd>升级前备份配置与世界数据；签名和兼容性按当前发行说明核对，不保证自动迁移。</dd></div></dl>
+        <h2>了解技术预览</h2><p class="section-intro">需本地环境和自备模型配置；公共网页加入尚未开放。下载前核对平台、费用与未签名风险。</p><details class="preview-installation" data-preview-details><summary>查看预览说明 →</summary><div class="preview-installation-body"><p class="preview-paths"><a href="#package-download">了解安装包：选择平台 ↓</a><a href="#case-conditions">了解十月案例复现条件 →</a></p><dl class="preview-quickfacts"><div><dt>体验范围</dt><dd>本地技术预览与受控验证；不是公开网页加入。</dd></div><div><dt>需要准备</dt><dd>受支持桌面系统、本地环境和配置你使用的模型服务；自然语言不等于零配置。</dd></div><div><dt>模型与费用</dt><dd>模型由你选择并配置；调用会使用对应服务账户的额度，并可能产生费用，按该服务的计费规则执行。本站不提供免费模型额度或凭据输入。</dd></div><div><dt>保存与升级</dt><dd>升级前备份配置与世界数据；签名和兼容性按当前发行说明核对，不保证自动迁移。</dd></div></dl>
         <section class="preview-validation"><h3>本版本已验证到哪里</h3><dl>
-<div><dt>当前可下载预览 · <strong data-package-candidate-tag>2026-06-03_v2</strong></dt><dd><p data-package-validation-copy data-verified-release="2026-06-03_v2">公开记录确认 Windows、macOS、Linux 安装文件已构建发布；没有可恢复的同包安装、首次进入或完成游戏目标的验收记录。</p><a href="https://github.com/eng-cc/oasis7/actions/runs/26886794547">已核对的 2026-06-03_v2 构建发布记录</a></dd></div>
+<div><dt>当前可下载预览 · <strong data-package-candidate-tag>2026-06-03_v2</strong></dt><dd><p data-package-validation-copy data-verified-release="2026-06-03_v2">Windows、macOS、Linux 安装包已构建发布，但尚无完整试玩验证记录。</p><a href="https://github.com/eng-cc/oasis7/actions/runs/26886794547">已核对的 2026-06-03_v2 构建发布记录</a></dd></div>
 <div><dt>官网展示案例</dt><dd>十月源码 52c136a7 的预置环境 CLI 测试，确认首批 3 个铁锭；尚未证明推荐安装包能复现。</dd></div>
 <div><dt>尚未开放与建议起点</dt><dd>公共网页加入与零配置体验未开放。若选择实验性安装，建议先核对启动器配置与预览入口；这是起步目标，不是已通过的包体验验收。不安装也可继续阅读和核对完整案例。</dd></div>
-</dl></section><section class="preview-first-steps"><h3>首次预览：先确认入口，再尝试目标</h3><ol><li><strong>选择版本与平台。</strong>先读下方同候选发行说明、校验与签名风险，再下载和安装。首页案例对应测试源码，不代表该下载包已复现同样能力。</li><li><strong>准备模型与环境。</strong>按所选版本说明配置自己的服务账户。源码本地试玩另见 <a href="doc/cn/viewer-manual.html">Viewer 手册</a>；它需要已有构建与有效配置，不是零配置演示。</li><li><strong>确认已经进入。</strong>源码试玩以手册规定的就绪输出和 GAME_URL 为准；核对连接、实际世界与 Agent，再读当前目标。看到安装完成或动作受理，不等于世界已产出。</li><li><strong>先完成一次观察。</strong>找到当前目标及其回执或阻塞说明；能区分目标、尝试和结果，再决定是否继续。本文不承诺所有发行包都能直接执行上述生产案例。</li></ol><p>启动或连接有问题？查看 <a href="doc/cn/viewer-manual.html#troubleshooting">排障说明</a>，或到 <a href="https://github.com/eng-cc/oasis7/issues">问题反馈</a>附上版本、平台与脱敏后的错误；不要发送密钥。</p></section>
+</dl></section>
         <p class="release-status" data-release-status role="status">最后记录版本，未确认最新。</p>
         <p class="release-meta">
           当前版本：<strong data-release-tag>2026-06-03_v2</strong>
@@ -138,7 +141,7 @@
         <p class="doc-entry-note">这里的“发布说明”主要写构建说明和校验信息，不是面向玩家的正式公告。</p>
         <noscript><p>无脚本时：手动选择已记录的桌面平台包，安装前核对对应发行说明与 checksum。</p><ul class="doc-links"><li><a href="https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-windows-x64.exe">Windows x64</a></li><li><a href="https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-macos-x64.dmg">macOS x64</a></li><li><a href="https://github.com/eng-cc/oasis7/releases/download/2026-06-03_v2/oasis7-linux-x64.deb">Linux x64</a></li></ul></noscript>
         <div class="download-surface" data-download-surface>
-          <div class="download-surface-main">
+          <div id="package-download" class="download-surface-main">
             <p class="eyebrow" data-download-primary-badge>选择目标平台</p>
             <div class="download-platform-switch" role="group" aria-label="切换下载平台">
               <button
@@ -186,6 +189,7 @@
 <p class="download-trust-warning" data-download-primary-trust data-homepage-claim="access-signing-boundary">当前仍是技术预览主包：Windows 尚未补齐代码签名，macOS 尚未完成 notarization；checksums 仅用于辅助校验，不替代平台信任链。</p>
             <p class="download-primary-footnote" data-download-primary-footnote>如果你要给另一台机器下载，可切换上方平台按钮；默认面不会再把多个技术形态并列给普通用户判断。</p>
           </div>
+          <section class="preview-first-steps"><h3>安装包路径：先核对三件事</h3><ol><li><strong>在下方选择你的平台。</strong>安装前核对版本、架构、校验文件与签名提示。</li><li><strong>按该版本说明准备。</strong>配置本地环境和你使用的模型服务，再检查启动器是否提供可用入口；安装成功不等于已经完成试玩。</li><li><strong>决定是否继续尝试。</strong>这个包尚无完整试玩验证记录。如果你想了解十月案例，请先读另一条路径的<a href="#case-conditions">案例复现条件</a>。</li></ol><p>遇到问题？查看<a href="doc/cn/viewer-manual.html#troubleshooting">技术排障参考</a>，或到<a href="https://github.com/eng-cc/oasis7/issues">问题反馈</a>提供版本、平台与脱敏错误，不要发送密钥。</p></section>
           <details class="download-support-card">
             <summary>安装前的兼容性与信任边界</summary>
             <dl class="download-support-list">
@@ -390,7 +394,7 @@
       </section>
     </main>
 
-    <footer class="footer"><div class="footer-links"><a href="observations/">世界记录</a><a href="feed.xml">RSS</a><a href="story/">世界观小说</a><a href="doc/cn/">文档</a><a href="https://github.com/eng-cc/oasis7">GitHub</a></div>
+    <footer class="footer"><div class="footer-links"><a id="world" href="observations/">世界记录</a><a href="feed.xml">RSS</a><a href="story/">世界观小说</a><a href="doc/cn/">文档</a><a href="https://github.com/eng-cc/oasis7">GitHub</a></div>
       <p>© <span data-year></span> oasis7。当前是 limited playable technical preview，不是 closed beta 或正式发布。</p>
     </footer>
   </body>
