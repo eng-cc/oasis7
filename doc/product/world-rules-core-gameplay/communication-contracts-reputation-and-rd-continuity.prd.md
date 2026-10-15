@@ -133,6 +133,7 @@ Trace ID: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905
 
 - 要求：玩家发布或质疑社会事实、或声明关系前，必须能查看只读预览，了解可能受影响的主体、合作/治理/claim 表面和争端/质押风险，并据此选择继续或暂缓；预览不判定事实、不处理质押、不改变资格或权限、不保证合作、访问、排名、治理权重或奖励。声誉按主体与情境记录，并支持到期、更新和有界申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。当该记录被世界内机会消费时，仍由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)约束机会的作用域、容量、待决、结算和恢复边界；入口组合边界见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)；本要求不授予区域分配或优先级，也不声称当前实现或 readiness。
 - 专业权威：[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md)、[`social-fact-ledger-declarative-reputation.design.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 局部专业设计导航：Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905；[生命周期五项局部承接](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md#social-lifecycle-design)与[逐项验证](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md#111-验证映射表)仅支撑 lifecycle/只读预览；以下状态及剩余范围不变，不代表整项要求已覆盖。
 - 验收：[AC-WR-CR-003](#ac-wr-cr-003)
 
 <a id="ac-wr-cr-003"></a>
