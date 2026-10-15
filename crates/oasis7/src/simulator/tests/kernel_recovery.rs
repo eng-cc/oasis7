@@ -12,17 +12,57 @@ fn observe_triggers_chunk_generation_for_agent_chunk() {
     config.asteroid_fragment.radius_min_cm = 10;
     config.asteroid_fragment.radius_max_cm = 10;
 
-    let mut init = WorldInitConfig::default();
-    init.seed = 7;
-    init.agents.count = 1;
+    // One 1km voxel bounds the fixture's high-density generation. The old
+    // default 20×20×10km chunk requested roughly 400,000 candidates before
+    // the later output cap, with quadratic spacing checks during placement.
+    config.space.width_cm = 100_000;
+    config.space.depth_cm = 100_000;
+    config.space.height_cm = 100_000;
+    config.asteroid_fragment.min_fragment_spacing_cm = 0;
 
-    let (mut kernel, _) = initialize_kernel(config, init).expect("init kernel");
+    // Construct the lazy state explicitly: initialize_kernel generates the
+    // origin chunk itself, which cannot prove that observe caused generation.
+    let coord = chunk_coords(&config.space).into_iter().next().unwrap();
+    let location_pos = pos(50_000, 50_000);
+    let mut model = WorldModel::default();
+    model.chunks.insert(coord, ChunkState::Unexplored);
+    model.locations.insert(
+        "origin".into(),
+        Location::new_with_profile(
+            "origin".into(),
+            "Origin".into(),
+            location_pos,
+            LocationProfile::default(),
+        ),
+    );
+    model.agents.insert(
+        "agent-0".into(),
+        Agent::new_with_power("agent-0", "origin", location_pos, &config.power),
+    );
+    let chunk_runtime = ChunkRuntimeConfig {
+        world_seed: 7,
+        asteroid_fragment_enabled: true,
+        asteroid_fragment_seed_offset: 1,
+        min_fragment_spacing_cm: Some(0),
+    };
+    let mut kernel = WorldKernel::with_model_and_chunk_runtime(config, model, chunk_runtime);
+    assert!(matches!(
+        kernel.model().chunks.get(&coord),
+        Some(ChunkState::Unexplored)
+    ));
     let before = kernel.model().locations.len();
-
     let _ = kernel.observe("agent-0").expect("observe");
-
-    let after = kernel.model().locations.len();
-    assert!(after >= before);
+    assert!(matches!(
+        kernel.model().chunks.get(&coord),
+        Some(ChunkState::Generated)
+    ));
+    assert!(
+        kernel.model().locations.len() > before,
+        "observe must add generated locations"
+    );
+    assert!(kernel.journal().iter().any(|event| matches!(event.kind,
+        WorldEventKind::ChunkGenerated { coord: generated, cause: ChunkGenerationCause::Observe, .. }
+            if generated == coord)));
 }
 
 #[test]
