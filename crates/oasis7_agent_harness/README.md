@@ -6,6 +6,12 @@ available to their consumers. Native builds additionally expose
 `native_task_industry_v1` execution profile. They consume the same signed HTTP SDK
 as the ordinary CLI; neither the Harness nor SDK links the World or Viewer.
 
+The current delivery prioritizes external Agent clients, including Codex. The
+built-in industry profile remains explicitly opt-in. Per the operator decision
+on 2026-10-15, real-model play and further built-in entrypoint refinement are
+deferred TODOs; no paid inference was started. This does not establish complete
+built-in capability migration or real-Runtime acceptance.
+
 The native runner reads the full authorized task goal, constraints, observation
 and capability catalog. It accepts strict observation, quote, move, transfer,
 built-in build/schedule, bounded world-progress wait and abort tools. Unknown tools and authority arguments
