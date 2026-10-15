@@ -4,6 +4,41 @@ use std::sync::Mutex;
 use crate::formal_read_fixtures as fixtures;
 
 #[test]
+fn historical_native_restore_selects_only_the_exact_unique_recovery_permission() {
+    let (_, _, _, mut proof) = fixtures::actual_world_initial_fixture();
+    let first = fixtures::h(70);
+    let selected = fixtures::h(71);
+    assert_eq!(
+        historical_recovery_permission_index(&proof, [first.as_str()].into_iter()).unwrap(),
+        None
+    );
+    proof.decision.branch = FormalCompletionBranchV1::ReplayFrozen;
+    assert!(historical_recovery_permission_index(&proof, [].into_iter()).is_err());
+    proof.decision.primary.body.recovery_certificate_digest = Some(selected.clone());
+    proof.decision.replica.body.recovery_certificate_digest = Some(first.clone());
+    assert!(historical_recovery_permission_index(&proof, [selected.as_str()].into_iter()).is_err());
+    proof.decision.replica.body.recovery_certificate_digest = Some(selected.clone());
+    assert!(historical_recovery_permission_index(&proof, [first.as_str()].into_iter()).is_err());
+    assert_eq!(
+        historical_recovery_permission_index(
+            &proof,
+            [first.as_str(), selected.as_str()].into_iter()
+        )
+        .unwrap(),
+        Some(1)
+    );
+    assert!(
+        historical_recovery_permission_index(
+            &proof,
+            [selected.as_str(), selected.as_str()].into_iter()
+        )
+        .is_err()
+    );
+    proof.decision.branch = FormalCompletionBranchV1::Normal;
+    assert!(historical_recovery_permission_index(&proof, [selected.as_str()].into_iter()).is_err());
+}
+
+#[test]
 fn native_resolver_preserves_content_cache_hooks_without_endpoint_io() {
     use crate::formal_live_runtime::RemoteBusinessIndexReader;
     let (_, _, anchor, _) = fixtures::actual_world_initial_fixture();

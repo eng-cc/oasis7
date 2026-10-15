@@ -579,6 +579,44 @@ pub(super) fn result_from_commit(
     )
 }
 
+fn historical_recovery_permission_index<'a>(
+    proof: &FormalQualifiedCommitProofV1,
+    permission_digests: impl Iterator<Item = &'a str>,
+) -> Result<Option<usize>, String> {
+    let primary = proof
+        .decision
+        .primary
+        .body
+        .recovery_certificate_digest
+        .as_deref();
+    let replica = proof
+        .decision
+        .replica
+        .body
+        .recovery_certificate_digest
+        .as_deref();
+    if proof.decision.branch == FormalCompletionBranchV1::Normal {
+        if primary.is_some() || replica.is_some() {
+            return Err("HistoryUnavailable: Normal historical proof has recovery receipts".into());
+        }
+        return Ok(None);
+    }
+    let digest = primary
+        .filter(|digest| Some(*digest) == replica)
+        .ok_or("HistoryUnavailable: historical recovery receipt digests differ or are absent")?;
+    let mut matches = permission_digests
+        .enumerate()
+        .filter(|(_, candidate)| *candidate == digest);
+    let index = matches
+        .next()
+        .map(|(index, _)| index)
+        .ok_or("HistoryUnavailable: historical recovery permission is missing")?;
+    if matches.next().is_some() {
+        return Err("HistoryUnavailable: historical recovery permission is ambiguous".into());
+    }
+    Ok(Some(index))
+}
+
 pub(super) fn result(
     resolver: &NativeHistoryResolver,
     target: FormalReadPublication,
@@ -680,8 +718,21 @@ pub(super) fn result(
     #[cfg(test)]
     timing.finish("historical_anchor_and_local_seed", stage);
 
-    let restore = |address, role| {
-        RemoteFormalEndpoint::new(
+    let recovery_index = historical_recovery_permission_index(
+        historical.proof(),
+        resolver
+            .permissions
+            .iter()
+            .map(|permission| permission.recovery().certificate_digest()),
+    )?;
+    let recovery = recovery_index.map(|index| &resolver.permissions[index]);
+    let original = recovery.map_or(historical.authority(), |permission| {
+        permission.original_authority()
+    });
+    let restore = |address, role| -> Result<_, String> {
+        // Retain the current publication as the transport floor. NativeAt only
+        // selects the already qualified old cut; it cannot mint a new anchor.
+        let restored = RemoteFormalEndpoint::new(
             address,
             resolver.timeout,
             anchor.authority().clone(),
@@ -690,8 +741,36 @@ pub(super) fn result(
             anchor.head().head(),
         )
         .map_err(|error| error.to_string())?
-        .restore_committed_historical_cut_with_reader(&historical, resolver)
-        .map_err(|error| error.to_string())
+        .restore_native_at_cached(
+            &historical.commit().head(),
+            historical.authority(),
+            original,
+            recovery.map(|permission| permission.recovery()),
+            resolver,
+        )
+        .map_err(|error| error.to_string())?;
+        if restored.minimum() != &anchor.head().head()
+            || restored.commit().record() != historical.commit().record()
+            || restored.commit().head() != historical.commit().head()
+            || restored.commit().finalizing_authority_id()
+                != historical.commit().finalizing_authority_id()
+            || restored.commit().record() != old_anchor.head().record()
+            || restored.commit().head() != old_anchor.head().head()
+            || restored.commit().finalizing_authority_id()
+                != old_anchor.head().finalizing_authority_id()
+            || restored.proof() != historical.proof()
+            || restored
+                .authority()
+                .context_digest()
+                .map_err(|error| error.to_string())?
+                != old_anchor
+                    .authority()
+                    .context_digest()
+                    .map_err(|error| error.to_string())?
+        {
+            return Err("HistoryUnavailable: native original material differs from the qualified historical cut".into());
+        }
+        Ok(restored)
     };
     #[cfg(test)]
     let stage = timing.enter("primary_protected_restore");

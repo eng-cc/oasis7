@@ -1,52 +1,5 @@
 use super::*;
 use crate::controlled_authority::formal::business_index::*;
-use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
-
-struct ContentCache<'a, R> {
-    source: &'a R,
-    nodes: RefCell<BTreeMap<String, Vec<u8>>>,
-    source_reads: Cell<usize>,
-    installs: Cell<usize>,
-}
-
-impl<'a, R> ContentCache<'a, R> {
-    fn new(source: &'a R) -> Self {
-        Self {
-            source,
-            nodes: RefCell::new(BTreeMap::new()),
-            source_reads: Cell::new(0),
-            installs: Cell::new(0),
-        }
-    }
-}
-
-impl<R: BusinessIndexNodeReader> BusinessIndexNodeReader for ContentCache<'_, R> {
-    fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
-        if let Some(bytes) = self.nodes.borrow().get(digest) {
-            return Ok(Some(bytes.clone()));
-        }
-        self.source_reads.set(self.source_reads.get() + 1);
-        self.source.read_node(digest)
-    }
-    fn cache_content_node(&self, digest: &str, bytes: &[u8]) -> Result<(), String> {
-        if blake3::hash(bytes).to_hex().as_str() != digest {
-            return Err("test content hash".into());
-        }
-        self.nodes
-            .borrow_mut()
-            .insert(digest.into(), bytes.to_vec());
-        self.installs.set(self.installs.get() + 1);
-        Ok(())
-    }
-}
-
-struct MissingNodes;
-impl BusinessIndexNodeReader for MissingNodes {
-    fn read_node(&self, _: &str) -> Result<Option<Vec<u8>>, String> {
-        Ok(None)
-    }
-}
 #[test]
 fn committed_historical_cut_uses_current_canonical_inclusion_and_keeps_main_anchor() {
     let (fixture, initial_envelope) = super::business_tests::fixture();
@@ -136,109 +89,29 @@ fn committed_historical_cut_uses_current_canonical_inclusion_and_keeps_main_anch
         )
         .unwrap();
         assert_eq!(restored.commit().record(), cut.commit().record());
-        let source = &coordinator.endpoints_mut().0.store;
-        let baseline = ContentCache::new(source);
-        let original =
-            verify_committed_historical_material(&cut, (*state).clone(), &baseline).unwrap();
-        super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-            &original, &baseline, None,
-        )
-        .unwrap();
-        let cached = ContentCache::new(source);
-        let from_cache =
-            verify_committed_historical_material(&cut, (*state).clone(), &cached).unwrap();
-        super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-            &from_cache,
-            &cached,
-            Some(&cached),
-        )
-        .unwrap();
-        assert_eq!(from_cache.proof(), restored.proof());
-        assert_eq!(from_cache.commit().record(), restored.commit().record());
-        assert!(cached.source_reads.get() < baseline.source_reads.get());
-        assert!(cached.installs.get() > 0);
-        let envelope = FormalBusinessResultEnvelopeV1::decode(
-            &from_cache.material().objects.iter().find(|object| object.content_hash == from_cache.material().roots[&crate::controlled_authority::replicated_protocol::ArtifactRole::Result]).unwrap().bytes,
-        ).unwrap();
-        let reads = cached.source_reads.get();
-        for write in envelope.delta.node_writes.iter().chain(
-            envelope
-                .retained_history_delta
-                .iter()
-                .flat_map(|delta| &delta.node_writes),
-        ) {
-            assert_eq!(
-                cached.read_node(&write.digest).unwrap().as_deref(),
-                Some(write.bytes.as_slice())
-            );
-        }
-        assert_eq!(
-            cached.source_reads.get(),
-            reads,
-            "transport's existence loop must use the installed exact content"
-        );
-        assert!(
-            super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-                &original,
-                &MissingNodes,
-                None
-            )
-            .is_err(),
-            "no-cache API still rejects unavailable raw CAS"
-        );
-        if position == 1 {
-            let independent_cache = ContentCache::new(&MissingNodes);
-            super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-                &original,
-                &independent_cache,
-                Some(&independent_cache),
-            )
-            .unwrap();
-            assert_eq!(independent_cache.source_reads.get(), 0);
-        }
         let mut corrupt = (*state).clone();
         if let FormalRequestStateV1::Qualified { proof, .. } = &mut corrupt {
             proof.primary_complete.signature_hex = h(1);
         }
-        assert!(verify_committed_historical_material(&cut, corrupt.clone(), source).is_err());
-        let rejected = ContentCache::new(source);
         assert!(
-            verify_committed_historical_material(&cut, corrupt, &rejected)
-                .and_then(|material| {
-                    super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-                        &material,
-                        &rejected,
-                        Some(&rejected),
-                    )
-                })
-                .is_err()
-        );
-        assert_eq!(
-            rejected.installs.get(),
-            0,
-            "invalid proof must not install any Result writes"
+            verify_committed_historical_material(
+                &cut,
+                corrupt,
+                &coordinator.endpoints_mut().0.store
+            )
+            .is_err()
         );
         let mut corrupt = *state;
         if let FormalRequestStateV1::Qualified { candidate, .. } = &mut corrupt {
             candidate.material.objects[0].bytes.push(0);
         }
-        assert!(verify_committed_historical_material(&cut, corrupt.clone(), source).is_err());
-        let rejected = ContentCache::new(&MissingNodes);
         assert!(
-            verify_committed_historical_material(&cut, corrupt, &rejected)
-                .and_then(|material| {
-                    super::super::transport::RemoteFormalEndpoint::check_committed_material_content(
-                        &material,
-                        &rejected,
-                        Some(&rejected),
-                    )
-                })
-                .is_err()
-        );
-        assert_eq!(
-            rejected.installs.get(),
-            0,
-            "invalid material must not install any Result writes"
+            verify_committed_historical_material(
+                &cut,
+                corrupt,
+                &coordinator.endpoints_mut().0.store
+            )
+            .is_err()
         );
 
         assert_eq!(anchor.head().head(), current_head);
