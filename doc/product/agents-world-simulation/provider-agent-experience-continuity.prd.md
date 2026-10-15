@@ -68,8 +68,8 @@ Trace ID: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6
 - 系统设计状态：部分覆盖
 - 系统设计依据：[声明场景与证据身份](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-scope-evidence)及[受限结论与扩面边界](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-rollout-boundary)承接组合身份、证据不足不扩面和明确下一步。剩余：各入口玩家可读受限/退化呈现及真实组合全范围验证，不能由局部parity设计代签。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求审读基线 `4e94163a3dff9ba69f6959b406ca3fcedf8aa097`，局部设计关系为本次文档候选；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
+- 实现与验证依据：本轮文档关系核对未核清本条全范围实现与验收；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化。2026-10-15 局部实现核对发现[共享客户端 PR](https://github.com/eng-cc/oasis7/pull/4734)已合入 `25b4d211a612d783172e6266307c71c62b8c00c0`；[工业任务执行器候选](https://github.com/eng-cc/oasis7/tree/50e128cbe369f8f6adca6556ff99784c7f7c93ad)尚未合入，已通过脚本决策驱动的真实 HTTP 建厂、投料、排产及原结果恢复验证。该协议切片不代签真实模型、全部内置能力迁移或本条 provider 全范围一致性；整体验收由 [#4726](https://github.com/eng-cc/oasis7/issues/4726)承接，状态仍为未核实。
+- 核对日期与基线：2026-10-15；需求审读基线 `4e94163a3dff9ba69f6959b406ca3fcedf8aa097`，局部设计关系沿本轮文档核对；实现仅核验上述固定提交/候选，未核验部署环境，未执行本条全范围行为验收。
 - 剩余范围：设计：继续核清各入口玩家可读受限/退化表面的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
 
 - 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
