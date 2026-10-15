@@ -35,7 +35,7 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [安装、治理与兼容边界](agent-default-modules.prd.md#安装、治理与兼容边界) | 三个安装入口经治理 register/activate，重复安装不重复 register，已注册停用项恢复 activate；场景入口保持 power-first 与默认包配置边界。 | [安装约束](#4-约束与边界) | runtime 拥有安装与治理；WASM 拥有模块 manifest 与能力语义。 | 产品适用性：N/A；reason=本行只规范既有 bootstrap 入口的幂等和安装组合，不新增玩家能力或完整默认模块产品验收；scope=三个 install_m1 入口，身体槽位、扩容来源与完整模块功能不由本行证明。 |
+| [安装、治理与兼容边界](agent-default-modules.prd.md#agent-default-modules-install-governance-compatibility) | 三个安装入口经治理 register/activate，重复安装不重复 register，已注册停用项恢复 activate；场景入口保持 power-first 与默认包配置边界。 | [安装约束](#4-约束与边界) | runtime 拥有安装与治理；WASM 拥有模块 manifest 与能力语义。 | 产品适用性：N/A；reason=本行只规范既有 bootstrap 入口的幂等和安装组合，不新增玩家能力或完整默认模块产品验收；scope=三个 install_m1 入口，身体槽位、扩容来源与完整模块功能不由本行证明。 |
 
 ## 11. 验证设计与可追溯性
 
@@ -43,4 +43,4 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [安装、治理与兼容边界](agent-default-modules.prd.md#安装、治理与兼容边界) | [安装约束](#4-约束与边界) | 三个入口的治理安装、重复安装与停用恢复，以及场景 power-first/default-package toggle。 | 固定同一候选与 Wasmtime 配置，在 [power_bootstrap.rs](../../../crates/oasis7/src/runtime/tests/power_bootstrap.rs) 执行 L1 required 安装回归：`install_power_bootstrap_modules_registers_and_activates`、`install_agent_default_modules_registers_and_activates`、三个 `install_*_is_idempotent`、`install_power_bootstrap_modules_reactivates_registered_version` 及 `install_scenario_bootstrap_modules_supports_default_package_toggle`；比较 registry、active 集合与 journal 长度。默认包停用恢复与 power-first 事件顺序另需定向核对，不能由这些用例自动推出。文档编辑按 S0 核对合同与链接，本表不声明实际运行。 | 实施 PR 记录候选、配置、实际命令、registry/activation/事件对照与未运行项。 | 不证明完整七类模块功能、槽位扩容、跨节点 replay、生产发布或 saturating_add 的数值安全。 |
+| [安装、治理与兼容边界](agent-default-modules.prd.md#agent-default-modules-install-governance-compatibility) | [安装约束](#4-约束与边界) | 三个入口的治理安装、重复安装与停用恢复，以及场景 power-first/default-package toggle。 | 固定同一候选与 Wasmtime 配置，在 [power_bootstrap.rs](../../../crates/oasis7/src/runtime/tests/power_bootstrap.rs) 执行 L1 required 安装回归：`install_power_bootstrap_modules_registers_and_activates`、`install_agent_default_modules_registers_and_activates`、三个 `install_*_is_idempotent`、`install_power_bootstrap_modules_reactivates_registered_version` 及 `install_scenario_bootstrap_modules_supports_default_package_toggle`；比较 registry、active 集合与 journal 长度。默认包停用恢复与 power-first 事件顺序另需定向核对，不能由这些用例自动推出。文档编辑按 S0 核对合同与链接，本表不声明实际运行。 | 实施 PR 记录候选、配置、实际命令、registry/activation/事件对照与未运行项。 | 不证明完整七类模块功能、槽位扩容、跨节点 replay、生产发布或 saturating_add 的数值安全。 |
