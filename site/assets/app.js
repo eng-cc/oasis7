@@ -1283,16 +1283,6 @@
     });
   };
 
-  document.querySelectorAll("[data-decision-walkthrough]").forEach((root) => {
-    const buttons = Array.from(root.querySelectorAll("[data-decision-step]"));
-    const panels = Array.from(root.querySelectorAll("[data-decision-panel]"));
-    const select = (id) => {
-      buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.decisionStep === id)));
-      panels.forEach((panel) => { panel.classList.toggle("is-active", panel.dataset.decisionPanel === id); });
-    };
-    buttons.forEach((button) => { button.hidden = false; button.disabled = false; button.addEventListener("click", () => select(button.dataset.decisionStep)); });
-    select("0");
-  });
   document.querySelectorAll(".proof-figure img").forEach((img) => {
     img.addEventListener("error", () => {
       const figure = img.closest("figure");
@@ -1431,21 +1421,22 @@
     });
   }
 
-  const previewDetails = document.querySelector("[data-preview-details]");
-  if (previewDetails) {
+  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"]]) {
+    const previewDetails = document.querySelector(selector);
+    if (!previewDetails) continue;
     let previewLinkHashPending = false;
     const openPreviewFromHash = () => {
-      if (window.location.hash !== "#download") { previewLinkHashPending = false; return; }
+      if (window.location.hash !== anchor) { previewLinkHashPending = false; return; }
       // The link already opened it before native navigation; a later hash event must not undo a quick close.
       if (previewLinkHashPending) { previewLinkHashPending = false; return; }
       previewDetails.open = true;
     };
     openPreviewFromHash();
     window.addEventListener("hashchange", openPreviewFromHash);
-    document.querySelectorAll('a[href="#download"]').forEach((link) => {
+    document.querySelectorAll(`a[href="${anchor}"]`).forEach((link) => {
       link.addEventListener("click", (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        if (window.location.hash !== "#download") previewLinkHashPending = true;
+        if (window.location.hash !== anchor) previewLinkHashPending = true;
         previewDetails.open = true;
       });
     });
