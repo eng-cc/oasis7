@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "0b0a8644bac548c43974b077df13c13eeaeaadc28a487fd0ba1467f8b8a736a3",
+    "content_sha256": "ac06333d6fd3b098e7162f8f666f283a2c5c1a2cabef883cb2b4ee90f853786f",
     "current_authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_procedure",

@@ -18,7 +18,7 @@ Checks:
   1. Repository-owned documentation must not reintroduce project.md / *.project.md
      ledgers or active references to them.
   2. Non-archive/non-devlog markdown files must not contain absolute /Users/... or /home/... paths.
-  2. Non-archive/non-devlog markdown files must be <= 1000 lines.
+  - Non-archive/non-devlog markdown files over 1000 lines receive an advisory only.
   3. Root-level markdown files under doc/ must match the tracked allowlist.
   4. Root-level markdown files under each module (doc/<module>/*.md) must match
      the tracked allowlist (archive/devlog/.governance excluded).
@@ -580,14 +580,18 @@ if abs_hits=$(regex_match_with_line_numbers '/(Users|home)/[^[:space:]]+' "${all
   fail "absolute user-home paths found in non-archive docs"
 fi
 
-# 2) line count check
+# 2) editorial length advisory; never a submission or CI failure
 if [[ ${#all_doc_files[@]} -gt 0 ]]; then
-  while IFS=$'\t' read -r line_count file; do
-    [[ -n "$file" ]] || continue
-    if ((line_count > 1000)); then
-      fail "$file exceeds 1000 lines (${line_count})"
-    fi
-  done < <(awk 'FNR == 1 { if (NR > 1) print count "\t" prev; prev = FILENAME; count = 0 } { count++ } END { if (NR > 0) print count "\t" prev }' "${all_doc_files[@]}")
+  if ! line_counts=$(awk 'FNR == 1 { if (NR > 1) print count "\t" prev; prev = FILENAME; count = 0 } { count++ } END { if (NR > 0) print count "\t" prev }' "${all_doc_files[@]}"); then
+    fail "markdown line count scan failed"
+  else
+    while IFS=$'\t' read -r line_count file; do
+      [[ -n "$file" ]] || continue
+      if ((line_count > 1000)); then
+        echo "doc-governance-check: advisory: $file exceeds 1000 lines (${line_count}); review readability, not a gate"
+      fi
+    done <<< "$line_counts"
+  fi
 fi
 
 # 3) markdown doc path references must exist (except explicit exemptions)

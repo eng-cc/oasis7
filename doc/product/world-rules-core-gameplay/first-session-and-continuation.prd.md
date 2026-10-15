@@ -173,11 +173,11 @@
 Trace ID: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502
 
 - 系统设计状态：未核实
-- 实现状态：未核实
-- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+- 实现状态：部分实现
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：已交付 canonical Smelter→Assembler 的只读 feasibility，生成 authority_snapshot，返回 candidate_available/no_safe_starter_chain 与 blocker/next_action。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/state/starter_industrial.rs#L106-L216)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression_readiness/starter_chain_prerequisite.rs#L27-L74)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：当前核对 canonical Smelter→Assembler 只读 feasibility；推荐前所有目标/profile 的安全可行性与正式入口调用覆盖仍需验收。
 
 - 适用条件：系统准备把预设工业目标作为首局引导脊柱或当前主推荐。
 - 要求：系统必须先以同一份 fresh authority snapshot 通过 `Starter Industrial Feasibility Gate`，并只返回 `candidate_available` 或 `no_safe_starter_chain`；闸门不得扣资源、锁定库存/容量、排程或发放成长奖励。
@@ -191,11 +191,11 @@ Trace ID: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502
 Trace ID: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)；[industrial-resource-flow-contract.design / starter-quote-submit-binding](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
+- 实现与验证依据：已交付 canonical owner-bound 首产物投影与 milestone→Assembler 候选承接；历史独立 prepared-world 样本有构建、供料、生产和原结果恢复，不代表当前 main 重跑。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L11-L58)、[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/state/starter_industrial.rs#L155-L200)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L152-L179)、[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md#L3-L11)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 [实施 PR #4662 的原始样本](https://github.com/eng-cc/oasis7/pull/4662#issuecomment-6162409087)只支持其 prepared-world 范围；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已核对 canonical 首产物投影与历史 prepared-world 构建/供料/生产样本；需按适用 profile 另核来源精炼、handoff、物流/多输入与 terminal-admission，不能将 produced 写成交付。
 
 - 适用条件：玩家选择一个可行的首局工业目标。
 - 要求：玩家必须能沿当前 `starter_completion_profile` 声明的完成边界理解“工厂就绪 → 配方与合法输入/电力 → 排程 → 生产 receipt”；来源获取/精炼、handoff、物流抵达和多输入齐套仅在所选配方/profile 明确依赖时展开，交付 receipt 仅由后续 terminal-admission 专题要求。每个适用节点都必须保留当前动作、完成边界、主 blocker、投入状态和下一步。当前 canonical `production_only` 在匹配的 owner-bound 正量铁锭结算与持久首产物里程碑后开放 Assembler 候选，并保持 `produced/undelivered`，不要求稳定窗口、建成 Assembler 或 delivery/terminal settlement；`terminal-admission` profile 才必须继续到匹配的 delivery/terminal settlement。适用的中间阶段不得被合并成单一成功。
@@ -210,10 +210,10 @@ Trace ID: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51
 
 - 系统设计状态：未核实
 - 实现状态：未核实
-- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：需对实际依赖来源/精炼的 profile 核 source receipt、owner ledger handoff、损耗/lineage 和 ready_for_logistics；现有 canonical 输入路径不自动承担或证明这些条件义务。
 
 - 适用条件：选定配方/profile 明确要求来源获取/精炼、source/owner ledger handoff 及物流供应输入；不适用于已由其专业 authority 证明无需这些阶段的 canonical 输入路径。
 - 要求：只有 source/refinement 结算后按适用的 source/owner ledger 规则完成 handoff、实际数量/损耗与来源 lineage 可对账，并形成带 lineage 的 `ready_for_logistics` material batch 后，原料准备才算完成；`source-settled` 是 source/refinement receipt 的结算状态，不是 `ready_for_logistics` 的别名。`preview` 不产生世界效果，`transfer submit`、`in-transit` 和 `destination arrival` 必须由后续物流节点独立表达并重新校验。
@@ -227,11 +227,11 @@ Trace ID: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51
 Trace ID: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2
 
 - 系统设计状态：未核实
-- 实现状态：未核实
-- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+- 实现状态：部分实现
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：已交付只消费匹配当前 owner、profile、recipe、site、正量 iron_ingot 的持久首产物投影；不由当前余额反推结算。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L11-L58)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L152-L179)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：owner-bound 正量首产物投影已核；accepted/executing/produced/delivered 四态在全部入口及 terminal-admission profile 的区分仍未闭合。
 
 - 适用条件：工业链路处于接受、执行、生产或终端阶段。
 - 要求：入口必须区分“已接受但未开始”“正在执行/在途”“已生产但未交付”和“已交付并产生目的地后果”，并按当前 `starter_completion_profile` 表达完成边界。`production_only` profile 可在匹配 production receipt 后完成首产物，但仍保持 `produced/undelivered`；只有声明终端准入的 profile 才要求匹配的 delivery/terminal settlement。生产 receipt 不得代替 delivery/terminal settlement receipt，也不得把 production-only 完成表现为已交付。
@@ -245,11 +245,11 @@ Trace ID: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2
 Trace ID: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)；[industrial-resource-flow-contract.design / starter-quote-submit-binding](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)；[industrial-resource-flow-contract.design / request-outcome-observation-separation](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
+- 实现与验证依据：已交付 canonical 首产物投影的 owner/origin 重验及缺失历史事实不回填；局部 prerequisite 拒绝断言核对资源和待建队列不变。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L11-L58)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L152-L197)、[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression_readiness/starter_chain_prerequisite.rs#L77-L130)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：已有 intent 原请求去重、首产物归属和拒绝无副作用的局部断言；工业所有 action/profile 在漂移、乱序、restore/replay 下材料/资格/奖励不复制未核清。
 
 - 适用条件：报价后事实变化，或玩家重连、重复提交、乱序、Agent retry、snapshot restore 或 replay。
 - 要求：提交必须按当前 authority 重新校验；过期事实只能重新评估或无副作用拒绝，重复/回放只能重读同一 disposition，不得复制材料、资格、receipt、齐套进度、资源效果或奖励。
@@ -264,10 +264,10 @@ Trace ID: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3
 
 - 系统设计状态：未核实
 - 实现状态：未核实
-- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：存在工业阻塞与 fallback 投影；所有来源、规格、电力、物流、齐套、接收/终端 blocker 的最早可行动原因、已保留价值及真实恢复动作未逐项证明。
 
 - 适用条件：工业链路出现来源、规格、权限、电力、物流、容量、输入齐套、产出接收或终端阻塞。
 - 要求：入口必须指出当前最早且可行动的 blocker、已保留/已消费价值、下一复查边界和真实可用的等待、补充、减量、改源、改配方、改道、延期、恢复或重新定目标路径；没有安全路径时必须停止并返还决策面。
@@ -282,10 +282,10 @@ Trace ID: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812
 
 - 系统设计状态：未核实
 - 实现状态：未核实
-- 系统设计依据：本条下列专业权威与验收关系是待核对入口；尚未逐项确认准确专业设计条款及其反向承接，不以文档存在或产品设计豁免判定技术覆盖。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：本条完整适用条件、主要失败/恢复路径的专业设计承接及实际实现/验收证据待核对；保持原有目标要求与 Non-Goals，不推断未设计或未实现。
+- 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：共享 DTO/authority_snapshot 仅为入口同义基础；未获得同一工业候选与世界状态的 Viewer、pure API 各自实际消费证据。
 
 - 适用条件：Viewer 与 pure API 表达同一工业链路或恢复状态。
 - 要求：两入口必须消费同一权威事实，并对动作、主 blocker、完成边界、下一步和复查点保持同义；允许布局和操作方式不同，但不得让玩家猜测不同的世界结果。
@@ -299,11 +299,11 @@ Trace ID: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812
 Trace ID: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / starter-plan-interaction](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#starter-plan-interaction)。已承接：同一方案的查询/提交、事实漂移/未知结果或成果后继交互。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：Viewer 交互不单独覆盖整条工业因果链、runtime 守恒/恢复、所有 Agent/API 入口及体验证据。
+- 实现与验证依据：已交付匹配持久 milestone 后的 build_factory_assembler_mk1 候选和明确 next_action/progression_effect；只证明候选承接切片。 实现定位：[代码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/runtime/state/starter_industrial.rs#L155-L200)；断言/历史样本：[证据](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L528)。本轮只读源码和断言，未运行 Rust、正式入口或真人验收；历史样本仍以其原候选/环境为准。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：canonical milestone 可开放 Assembler 候选；持续能力、一次动作成功、首局信任和安全停止后的下一决策需分别验收，静态阶段文案不能代签。
 
 - 适用条件：玩家完成代表性首局工业阶段成果或安全结束不可达目标。
 - 要求：入口必须呈现已形成的能力或世界后果、当前主目标、主要 blocker 与可执行下一步；首次持续能力必须与一次动作成功、首局信任和后续分支分别判定，不得用静态总结或无限等待代替承接。
@@ -423,9 +423,9 @@ Trace ID: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / branch-stage-projection](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-stage-projection)。已承接：分支当前阶段投影或样例回退窗口的一致性。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：真实 runtime 分支/回退能力、玩家理解与各入口组合验收不能由 Viewer 样例或结构回归代替。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：Viewer 分支条款与工业阶段投影存在；尚未证明模块/工厂核心/合金选择的真实本地需求、风险及后续两步在正式入口可达。
 
 - 适用条件：当前主目标允许玩家从已形成的工业能力转向本地或区域专业化。
 - 要求：主指引、分支收益、后续两步、风险和回访动作必须表达同一阶段的可达用途。模块、工厂核心或合金等真实可用的生产选择应说明它们服务的本地需求；不得仅凭内部阶段名称暗示治理、投票、领土或冲突机制已经开放。
@@ -451,9 +451,9 @@ Trace ID: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / fixture-rollback-window](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#fixture-rollback-window)。已承接：分支当前阶段投影或样例回退窗口的一致性。
-- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
-- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
-- 剩余范围：真实 runtime 分支/回退能力、玩家理解与各入口组合验收不能由 Viewer 样例或结构回归代替。
+- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
+- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 剩余范围：需绑定具体回退窗口 authority 与关闭事件；当前状态不足、窗口关闭及已兑现收益/既有义务保全的正式入口组合未核清。
 
 - 适用条件：当前路线提供有明确有效窗口的回退选择。
 - 要求：玩家比较、进入下一阶段或完成恢复后，回退可用性、截止条件和解释必须一致。窗口关闭后说明不可回退的原因，保留真实可用的修复、重排或重新定目标路径；已兑现的收益和既有义务不因回退失效或换向而被抹去。状态不足或冲突时不能继续承诺可回退。

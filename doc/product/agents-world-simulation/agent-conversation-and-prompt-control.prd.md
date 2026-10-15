@@ -88,10 +88,10 @@ Trace ID: O7-REQ-14ddd9ba-2d94-48e8-b2e4-0dbae26ddc36
 - 功能点：[REQ-PROMPT-001](#req-prompt-001)；适用范围沿本条原条件与 [AC-PROMPT-001](#ac-prompt-001)，不扩大入口或阶段。
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“目标选择与控制资格的各入口表达”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清目标选择与控制资格的各入口表达的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L330)：服务端session/binding/Agent访问校验；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余所有入口的目标/权限显示与选择负例，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：所有入口的目标/权限显示与选择负例。
 
 - 适用条件：玩家进入对话或 Prompt/目标调整入口。
 - 要求：入口必须明确当前目标 Agent 和玩家当前控制/授权结果；选中、可见或共享世界中的 Agent 不得被呈现为因此可控制。
@@ -145,10 +145,10 @@ Trace ID: O7-REQ-59fca4ef-cd56-44ee-b982-b5eb9e15a111
 - 功能点：[REQ-PROMPT-004](#req-prompt-004)；适用范围沿本条原条件与 [AC-PROMPT-004](#ac-prompt-004)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#promptcontrol-system-contract)：accepted/applied 的权威结果区分；各正式入口的等待与结果呈现仍须分项核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：各正式入口的等待与结果呈现仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L610)：authority结果枚举与JS按status消费accepted/applied；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余真实surface组合与迟到error隔离，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：真实surface组合与迟到error隔离。
 
 - 适用条件：入口或 authority 返回请求接受，但没有实际应用结果。
 - 要求：入口必须保持 `accepted/pending` 或等价语义；只有 authority 确认实际应用时才可以显示 `applied`。
@@ -164,10 +164,10 @@ Trace ID: O7-REQ-b6140b6c-ca2c-4734-84ce-7963f9385fff
 - 功能点：[REQ-PROMPT-005](#req-prompt-005)；适用范围沿本条原条件与 [AC-PROMPT-005](#ac-prompt-005)，不扩大入口或阶段。
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“preview/rollback/持久化能力的逐surface收窄”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清preview/rollback/持久化能力的逐surface收窄的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L238)：能力协商、unsupported拒绝与runtime_instance范围；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余各surface的持久性/恢复说明和真实用户可读性，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：各surface的持久性/恢复说明和真实用户可读性。
 
 - 适用条件：某 surface 不支持 preview、rollback、持久化或完整回执。
 - 要求：该 surface 必须明确收窄能力，不得以加载配置、请求已发送或表面成功暗示未被 authority 支持的恢复或持久性保证。
@@ -202,10 +202,10 @@ Trace ID: O7-REQ-458146d9-d3c2-4e14-935d-29a91594e8dd
 - 功能点：[REQ-PROMPT-007](#req-prompt-007)；适用范围沿本条原条件与 [AC-PROMPT-007](#ac-prompt-007)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#promptcontrol-system-contract)：control-loss 先于版本检查及隐藏最新值；草稿保留、禁止重放与恢复界面的完整消费仍须分项核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：草稿保留、禁止重放与恢复界面的完整消费仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L330)：control_lost先于版本检查且hidden返回；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余草稿不可提交/迁移与多会话UI恢复完整验收，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：草稿不可提交/迁移与多会话UI恢复完整验收。
 
 - 适用条件：编辑期间 Agent 绑定、转让、撤销、owner/组织授权或玩家控制资格发生变化。
 - 要求：入口必须先按 `blocked/control-lost` 或等价语义处理；草稿只能保持未提交并显示 authority-safe 原因，不得展示最新权威值/差异，也不得提供提交、重放或转移旧草稿的路径。
@@ -221,10 +221,10 @@ Trace ID: O7-REQ-a9797fdb-39f7-48fb-9202-9700d9d86159
 - 功能点：[REQ-PROMPT-008](#req-prompt-008)；适用范围沿本条原条件与 [AC-PROMPT-008](#ac-prompt-008)，不扩大入口或阶段。
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“有效授权下 stale 草稿与合法最新值的恢复”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清有效授权下 stale 草稿与合法最新值的恢复的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L538)：合法授权下version_conflict返回Stale及刷新下一步；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余本地草稿/差异/放弃路径，旧error不覆盖新请求，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：本地草稿/差异/放弃路径，旧error不覆盖新请求。
 
 - 适用条件：控制/授权仍有效，但当前生效 Prompt/目标被其他合法 authority 改变。
 - 要求：入口必须保留本地草稿并明确 stale/needs-refresh，展示允许披露的最新值和变化原因，提供受支持的差异、刷新/重载、重新编辑或放弃路径；不得静默合并、覆盖、自动重试或把草稿表示为 applied。
@@ -240,10 +240,10 @@ Trace ID: O7-REQ-92124092-6021-49e4-8def-33038e20b637
 - 功能点：[REQ-PROMPT-009](#req-prompt-009)；适用范围沿本条原条件与 [AC-PROMPT-009](#ac-prompt-009)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#promptcontrol-system-contract)：身份/版本再校验、竞态和同键幂等；各入口不乐观成功、无静默重试的完整消费仍须分项核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：各入口不乐观成功、无静默重试的完整消费仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L448)：服务端当前身份/版本校验、result ledger去重及竞态测试；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余JS handleError未先校验request_id/Agent，旧error可污染新反馈，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：JS handleError未先校验request_id/Agent，旧error可污染新反馈。
 
 - 适用条件：玩家提交编辑草稿，或提交期间再次发生竞态。
 - 要求：提交必须重新校验目标、控制资格、当前生效值和适用授权；竞态只能呈现 authority 的一个真实 accepted/applied/rejected/blocked/stale 结果，不得乐观显示成功、静默重试或重复提交。
@@ -259,10 +259,10 @@ Trace ID: O7-REQ-3bbcade1-3f73-4899-b324-f857fd27b245
 - 功能点：[REQ-PROMPT-010](#req-prompt-010)；适用范围沿本条原条件与 [AC-PROMPT-010](#ac-prompt-010)，不扩大入口或阶段。
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“不同拒绝/阻塞的真实原因与可行下一步”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清不同拒绝/阻塞的真实原因与可行下一步的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L538)：结构化reason_code/next_step及JS拒绝状态消费；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余完整失败路径可理解性及跨请求error隔离，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：完整失败路径可理解性及跨请求error隔离。
 
 - 适用条件：出现非 `control-lost` 的 rejected/blocked 或受支持恢复失败。
 - 要求：入口必须保留玩家可理解的原因摘要和真实下一步，例如重新鉴权、刷新、修正输入、选择受支持模式或稍后重试；不得用静默 fallback、假成功或无边界等待代替恢复。
@@ -278,10 +278,10 @@ Trace ID: O7-REQ-36cc9e9d-eaa7-436f-b16b-6f6af089b04c
 - 功能点：[REQ-PROMPT-011](#req-prompt-011)；适用范围沿本条原条件与 [AC-PROMPT-011](#ac-prompt-011)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#promptcontrol-system-contract)：runtime_instance 应用范围与无持久化/同步边界；各正式表面对 scope tuple 的完整表达仍须分项核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：各正式表面对 scope tuple 的完整表达仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #3686](https://github.com/eng-cc/oasis7/pull/3686)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L623)：应用范围runtime_instance、persistence/sync均None；本轮只静态核对生产代码和对应测试源码，未运行浏览器或行为测试。剩余所有入口展示与重连/重启的产品范围验收，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：保留现有已核实范围，完整承接仍须核对；实现/验证：所有入口展示与重连/重启的产品范围验收。
 
 - 适用条件：专业 authority 已确认本次 Prompt/目标变更实际应用，但没有另行确认永久保存或其他入口同步。
 - 要求：入口可以显示 `applied`，但必须把它限定为当前 authority 声明的本次应用范围；除非有对应 authority 证据，不得把 applied 外推为永久保存、跨会话持久化或跨入口同步。

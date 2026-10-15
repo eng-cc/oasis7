@@ -1,5 +1,9 @@
 # pure API / software_safe 共享玩家语义 parity 证据（2026-04-28）
 
+历史记录边界：以下判定、命令、角色交接及“当前/下一步”均属于文中明确的采集窗口；保留原始失败、通过、未执行范围和审计定位，不作为当前规范、进度或持续跟踪义务。当前行动与验收回到[测试入口](../README.md)及对应专业 authority，使用新的候选和证据窗口；后续通过、合入或任务关闭不改写本次运行事实。
+
+本页的 shared-player-questions 矩阵保留为当时合同与验收映射的审计依据；当前玩法范围由[首会话与续玩产品要求](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)与测试入口维护，不由此历史 required-tier 通过永久放行。
+
 审计轮次: 1
 
 ## Meta

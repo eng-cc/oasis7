@@ -3,7 +3,7 @@
 ## 入口
 - 模块 PRD：`doc/engineering/prd.md`
 - 模块设计总览：`doc/engineering/design.md`
-- 模块标准执行入口：`doc/engineering/prd.md`
+- 通用开发流程：[开发流程规范](workflow/source-of-truth.md)；当前任务与结果在 PR、实际 CI 与评审记录（Issue 按需）
 - 文档治理专题入口：`doc/engineering/doc-governance/README.md`（规范正文与 maintainer manual）
 - Rust 体量治理专题入口：`doc/engineering/rust-governance/README.md`
 
@@ -20,9 +20,9 @@
 | 系统设计写作规范（standalone content standard） | `doc/engineering/doc-governance/system-design-writing-standard.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
 | 项目管理记录规范（standalone content standard） | `doc/engineering/doc-governance/project-management-record-standard.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
 | Document Corpus Inventory v3（standalone storage/admission design） | `doc/engineering/doc-governance/document-corpus-inventory-v3.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
-| `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
+| `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | 不另建 design：单一文件扫描与结构切片合同由该专业 PRD 完整承载 | 当前 PR、扫描与定向测试结果；旧批次见 Git history |
 | Historical document-governance triplets | Current organization and consumption rules: `doc/engineering/doc-governance/doc-structure-standard.design.md`; inventory and maintenance-cost routing: `doc/engineering/governance/README.md` | Historical decision/rollout evidence: Git history and GitHub task issue evidence comments |
-| Historical self-evolution / memory / borrowing / skill-surface triplets | Current task/evidence rules: `doc/engineering/workflow/source-of-truth.md`; retained pending scope: `doc/engineering/prd.md`; default-vs-library skill reachability: `.agents/skills/README.md` | Historical decision and rollout evidence: Git history and PR、实际 CI 与评审记录（Issue 按需） |
+| Historical self-evolution / memory / borrowing / skill-surface triplets | Current task/evidence rules: `doc/engineering/workflow/source-of-truth.md`; current pending work: PR and optional Issue; professional scope: `doc/engineering/prd.md`; default-vs-library skill reachability: `.agents/skills/README.md` | Historical decision and rollout evidence: Git history and PR、实际 CI 与评审记录（Issue 按需） |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

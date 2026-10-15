@@ -503,7 +503,7 @@ helper 没有 pending-order journal 或订单查询命令，无法自行证明 a
 `provider_preflight` 还必须在选定协议中得到结构化 completion/decision；Hosted W3
 和 OC 充值则分别满足各自 lane 的真实 browser、reconcile 与 receipt 条件。
 
-如果 LetAI token 文件已经包含 `platform_key`、`platform_user_id`、`platform_project_id`，可直接使用该文件。若它只包含 `Key:` 和 `base_url:`，用本地临时文件合并 token 与平台字段：
+**已退役的历史诊断示例，不用于当前配置生成或充值操作。** 下列片段仅保留旧排障方法的来源：它无条件将 `Key:` 解释为 `token_key`，并拼接旧平台字段，不能证明 inference token 类型或当前权威 user/project mapping；字段齐全也不代表身份正确。当前配置只按 §9.1 的既有 helper 和 authoritative mapping 生成、核验，并沿用该节显式设置的 `LETAI_TOKEN_FILE`。不得执行下列旧片段来生成当前配置，也不得将其临时输出交给当前 bridge。
 
 ```bash
 rtk python3 - <<'PY'
@@ -563,11 +563,11 @@ print({"path": str(merged), "keys": required, "value_lengths": {key: len(values[
 PY
 ```
 
-用 sanitized config 验证，不回显密钥：
+使用 §9.1 已生成并核验的当前配置做 sanitized config 验证，不回显密钥；以下命令不使用上面的退役示例输出：
 
 ```bash
 rtk ./scripts/run-local-letai-provider-bridge.sh \
-  --config /tmp/oasis7-letai-merged-local-bridge.env \
+  --config "$LETAI_TOKEN_FILE" \
   --model gpt-5.4 \
   --print-config
 ```
@@ -585,7 +585,7 @@ rtk env \
   OASIS7_PROVIDER_FEEDBACK_STATE_PATH=/tmp/oasis7-provider-feedback-state.json \
   OASIS7_REMOTE_LLM_MAX_OUTPUT_TOKENS=64 \
   ./scripts/run-local-letai-provider-bridge.sh \
-    --config /tmp/oasis7-letai-merged-local-bridge.env \
+    --config "$LETAI_TOKEN_FILE" \
     --model gpt-5.4 \
     --bind 127.0.0.1:5841 \
     --provider-agent letai-local-token-file

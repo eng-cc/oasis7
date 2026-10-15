@@ -1,7 +1,7 @@
 # oasis7：S10 五节点真实游戏数据在线长跑套件设计
 
 - 对应需求文档: `doc/testing/longrun/s10-five-node-real-game-soak.prd.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 ## 1. 设计定位
 定义 S10 五节点真实游戏数据在线长跑套件，统一五节点编排、真实游戏数据流、结算/资产指标、存储/共识健康采样与发布门禁证据。
@@ -48,6 +48,8 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 <a id="reward-timeline-source-design"></a>
 ## Reward 时间线导出
 
+产品适用性：N/A；reason=本节只规定已采集诊断计数到 CSV 的导出和空值解释，不改变奖励、结算或共识规则；scope=reward timeline exporter 的逐列序列化。真实节点、消费者、长跑与恢复验收不在此不适用范围，仍按原专业合同独立执行。
+
 采样层将同一 node/time 的 reward 计数传给 exporter，按固定 header 写入 `total_checks`、`failed_checks` 和比率；S10 还传 settlement attempts/failures。正分母用实际计数计算比率，已知 0/0 保留零计数与空比率，缺失指标保留空数值并回链同次 unavailable 告警。CSV 解析须区分空值与 0，不以独立 aggregate/gate 正确为逐行正确的证明。
 
 本节为 exporter 和消费者应共同满足的设计，不声称当前脚本已修复；不改变 reward 计算、结算、累计摘要聚合或既有门禁。验收按列回读 5/0、5/1、0/0、missing 和 S10 8/1 的离线 fixture，不启动节点。
@@ -59,3 +61,7 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [Reward 时间线](s10-five-node-real-game-soak.prd.md#reward-timeline-source-contract) | [导出设计](#reward-timeline-source-design) | 同次样本、header、分母、空值一致 | 候选版本[现有验证入口](../../../scripts/s10-five-node-game-soak-summary.test.sh)，补充逐行 5/0、5/1、0/0、missing、S10 8/1 fixture；原有 summary 断言不代签新 exporter 回归 | 实施 PR 的输入、CSV、解析断言与实际退出结果 | 本次文档修订不表示回归已运行，不证明真实长跑或结算 |
+
+## 范围、结构边界与风险
+
+本设计范围是五节点真实游戏数据长跑的编排、采样和门禁证据结构。主要风险是把本地进程数当作真实网络拓扑、把 probe seed 当作健康证明，或用末次采样遮蔽 status/HTTP 失败；按下文保留各类失败和同窗口证据，不扩大当前运行结论。

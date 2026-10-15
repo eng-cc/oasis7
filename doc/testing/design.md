@@ -169,8 +169,8 @@ This matrix is per frozen object, not a whole-file rewrite list. It preserves th
 - 索引入口：`doc/testing/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+- 历史来源 M1（2026-03-09）：ROUND-006 记录了补齐模块级 `design.md` 标准入口的目标；该轮次不构成当前任务准入。
+- 历史计划 M2：按专题继续补齐高复杂度主题的 `*.design.md`；本条未提供完成日期或当前任务归属，不视为现行排期。当前工作按 [workflow](../engineering/workflow/source-of-truth.md) 与实际 PR、CI、评审记录追踪，Issue/Project 按需。
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
@@ -182,7 +182,7 @@ This matrix is per frozen object, not a whole-file rewrite list. It preserves th
 
 ### 当前基线与交付边界
 
-固定基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 的静态核查中，L4B runner 仍默认调用 producer 普通 bundle、依赖 `__AW_TEST__`、创建独立 automation session 并只等待 `connected/authReady`；这与 release 不安装测试 API、Hosted 干净会话需要登录的现有合同不兼容。当前实现与后续验收由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 跟踪。本节补齐目标设计，未修改 runner 或执行真实试玩；下列验证矩阵不是通过记录，默认命令仍需实现修复后才能按目标合同验收。
+固定基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 的静态核查中，L4B runner 仍默认调用 producer 普通 bundle、依赖 `__AW_TEST__`、创建独立 automation session 并只等待 `connected/authReady`；这与 release 不安装测试 API、Hosted 干净会话需要登录的现有合同不兼容。[#4438](https://github.com/eng-cc/oasis7/issues/4438) 是本组问题的历史来源；其[关闭决定](https://github.com/eng-cc/oasis7/issues/4438#issuecomment-6127544475) 将后续落实交给 [PR #4641](https://github.com/eng-cc/oasis7/pull/4641) 承接的现行规范，未认定实现完成。本节补齐目标设计，未修改 runner 或执行真实试玩；下列验证矩阵不是通过记录，默认命令仍需实现修复后才能按目标合同验收。
 
 <a id="l4-build-selection"></a>
 ### 6.1 构建与驱动选择
@@ -230,6 +230,8 @@ This matrix is per frozen object, not a whole-file rewrite list. It preserves th
 
 <a id="l4-scaffold-serialization"></a>
 ### 6.6 Scaffold 序列化
+
+产品适用性：N/A；reason=此条只规定离线材料生成器的路径序列化、stdout/manifest 一致性和目录保护，不实现玩家行为或产品结论；scope=prd.md#l4-scaffold-output 对应的本节序列化合同及 L4-C06 离线验证，不延伸到其他 L4 条款或取消试玩证据要求。
 
 `prepare-playability-l4-review.sh --json` 的路径值通过 argv 传入 Python，由 `json.dumps` 序列化；不把 Bash `${VAR@Q}` 拼成 Python 源。普通、含空格、含单引号的合法路径使用同一方式，成功时 stdout 仅输出 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与磁盘 manifest 一致，`manifest_path` 指向该 manifest。保留已有目录保护；末尾输出失败后不得无提示覆盖已生成目录，调用方需要保留诊断并按既有保护处理。该合同可离线验证，不启动 L4A 栈、模型或浏览器，也不产生试玩完成结论。
 
