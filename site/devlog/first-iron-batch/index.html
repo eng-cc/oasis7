@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" data-locale-zh="index.html" data-locale-en="../../en/devlog/first-iron-batch/index.html">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="description" content="一段真实受控 CLI 过程：读取授权、建炉供料，并用世界回执核对首批三块铁锭。" />
+<title>第一炉铁锭：从权限拒绝到真实产出 | oasis7</title>
+<link rel="canonical" href="https://oasis7.tech/devlog/first-iron-batch/" />
+<link rel="icon" href="../../assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="../../assets/styles.css?v=20261014-discovery" />
+<link rel="alternate" type="application/rss+xml" title="oasis7" href="../../feed.xml" />
+<script defer src="../../assets/app.js?v=20261014-discovery">
+</script>
+</head>
+<body class="discovery-page content-page">
+<a class="skip-link" href="#top">跳到正文</a>
+<header class="topbar">
+<a class="brand" href="../../">
+<span class="brand-mark">
+</span>oasis7</a>
+<nav class="nav">
+<a href="../../observations/">世界记录</a>
+<a href="../../devlog/">开发进展</a>
+<a href="../../#download">了解预览</a>
+<a href="../../en/devlog/first-iron-batch/">English</a>
+</nav>
+</header>
+<main id="top" class="content-main" tabindex="-1" data-content-id="first-iron-batch" data-content-kind="devlog" data-content-status="published" data-content-locale="zh-CN" data-translation-of="first-iron-batch" data-published-at="2026-10-15" data-updated-at="2026-10-15" data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b">
+<p class="eyebrow">DEVLOG</p>
+<h1>第一炉铁锭：从权限拒绝到真实产出</h1>
+<p data-content-description>一段真实受控 CLI 过程：读取授权、建炉供料，并用世界回执核对首批三块铁锭。</p>
+<article data-content-body><p class="content-meta">2026-10-15 · 过程发生于 2026-10-13 · source 52c136a7</p><p class="content-lead">一段真实受控 CLI 过程：读取授权、建炉供料，并用世界回执核对首批三块铁锭。</p><h2>玩家的问题</h2><p>一次报价拒绝之后，如何继续原目标，并确认产物真的进入世界，而不把“动作已受理”误当作完成？</p><h2>实测过程：第一炉铁锭</h2><ol class="case-steps"><li><strong>目标</strong><p>在已准备好的测试世界，用起始库存建一座冶炼炉，完成首批 3 个铁锭。</p></li><li><strong>尝试与阻塞</strong><p>Agent 最初选择了未授权的工厂，报价被拒且没有动作产生；读取实际授权后，改用允许的冶炼炉。一次决策上下文冲突也被保留，换新上下文后再继续。</p></li><li><strong>实际后果</strong><p>建造在 tick 28 完成，转入 8 矿石与 2 燃料；一批配方于 tick 46 结算，产出 3 铁锭、1 炉渣。世界读回电量 86，待执行任务为 0。</p></li><li><strong>看完之后</strong><p>先核对回执与剩余资源，再决定是否继续。该测试到首批产出即结束，没有证明持续生产或多厂链。你可以阅读完整过程，或核对预览准备要求。</p></li></ol><h2>对玩家意味着什么</h2><p>目标、授权、尝试和世界结果可以分别核对。该次独立 Agent 使用正式 Skill，在 19 次真实 client 调用中完成建造、供料和首批生产；父级读取世界事件与库存，确认实际结算。它证明这段受控过程，不保证任意环境都可复现。</p><h2>限制与下一步</h2><p>2026-10-13 · 真实受控 CLI 测试 · 预置世界、已认领 Agent、instruction-only 隔离。不是公共世界或从零安装验收；下方历史 Viewer 图不属于这次运行。</p><p>本次没有验证冷身份接入、持续多厂链、GUI 或公共部署；原始私有输出与临时世界已清理，公开保留的是脱敏报告、事件与哈希摘要。阅读旧记录不等于新版本实测。</p><p class="content-source"><a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">测试范围与原判定</a> · <a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/player-report.json">player-report.json</a> · <a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/oracle-summary.json">oracle-summary.json</a></p><p><a href="../../#download">核对当前预览要求 →</a></p></article>
+<a class="text-link" href="../">返回开发日志</a>
+</main>
+<footer class="footer">
+<div class="footer-links">
+<a href="../../">首页</a>
+<a href="../../feed.xml">RSS</a>
+<a href="../../story/">世界观小说</a>
+<a href="https://github.com/eng-cc/oasis7">GitHub</a>
+</div>
+<p>limited playable technical preview · 尚未开放公共网页加入</p>
+</footer>
+</body>
+</html>

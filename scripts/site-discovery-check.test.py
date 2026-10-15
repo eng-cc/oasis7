@@ -8,6 +8,20 @@ import tempfile
 spec=importlib.util.spec_from_file_location('discovery_check',Path(__file__).with_name('site-discovery-check.py'))
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 files=['index.html','en/index.html','feed.xml','en/feed.xml','observations/index.html','en/observations/index.html','devlog/index.html','en/devlog/index.html','devlog/discovery-first/index.html','en/devlog/discovery-first/index.html']
+def copy_fixture(root):
+ # Keep publishing negative cases independent of newly published real articles.
+ for file in files:
+  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ import re
+ for prefix in ["", "en/"]:
+  for rel in ["index.html", "devlog/index.html"]:
+   p=root/prefix/rel
+   p.write_text(re.sub(r'<article[^>]*data-content-summary="([^"]+)".*?</article>', lambda m: m.group() if m.group(1)=="discovery-first" else "", p.read_text(), flags=re.S))
+  p=root/prefix/"feed.xml";tree=module.ET.parse(p);channel=tree.getroot().find("channel")
+  for item in list(channel.findall("item")):
+   if not item.findtext("guid", "").endswith("/devlog/discovery-first/"):channel.remove(item)
+  tree.write(p,encoding="unicode")
+
 cases=[
  ('index.html','data-decision-panel="3"','data-decision-panel="0"'),
  ('index.html','id="decision-2"','id="decision-2" hidden'),
@@ -24,8 +38,7 @@ cases=[
 ]
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
- for file in files:
-  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ copy_fixture(root)
  assert not module.check(root), module.check(root)
  for file,old,new in cases:
   target=root/file;source=target.read_text();assert old in source,(file,old)
@@ -34,8 +47,7 @@ with tempfile.TemporaryDirectory() as tmp:
   target.write_text(source)
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
- for file in files:
-  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ copy_fixture(root)
  # Withdrawal must not pass merely because homepage/list recommendations vanish.
  detail=root/'devlog/discovery-first/index.html'
  detail.write_text(detail.read_text().replace('data-content-status="published"','data-content-status="withdrawn"'))
@@ -65,8 +77,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # Two legitimate same-date items must be checked per record, sorted by slug.
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
- for file in files:
-  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ copy_fixture(root)
  for prefix in ['', 'en/']:
   source=root/prefix/'devlog/discovery-first/index.html'
   target=root/prefix/'devlog/second-note/index.html';target.parent.mkdir(parents=True)
@@ -86,8 +97,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # Zero public entries is an honest valid state.
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
- for file in files:
-  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ copy_fixture(root)
  for prefix in ['', 'en/']:
   shutil.rmtree(root/prefix/'devlog/discovery-first')
   for rel in ['index.html','devlog/index.html']:
@@ -97,8 +107,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # Observations share the identity/derivative contract and add provenance checks.
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
- for file in files:
-  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ copy_fixture(root)
  for prefix in ['', 'en/']:
   source=root/prefix/'devlog/discovery-first/index.html';p=root/prefix/'observations/energy-example/index.html';p.parent.mkdir(parents=True)
   label='illustrative example' if prefix else '说明性示例'

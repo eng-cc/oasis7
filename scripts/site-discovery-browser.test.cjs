@@ -14,7 +14,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   assert.equal(await p.locator('noscript a:visible').count(),3);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),360);
   await p.screenshot({path:path.join(out,locale+'-nojs-360.png'),fullPage:true});await c.close();record(locale+' no-JS complete steps/nav/manual packages');
  }
- // Composition regression: illustration must not push the reading rail below a separate image block.
+ // Keep the integrated hero, while allowing readable text and evidence to lengthen the page.
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
   for(const width of [390,1440]){
@@ -24,10 +24,31 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
     art:getComputedStyle(document.querySelector('.hero-visual')).position,
     rail:getComputedStyle(document.querySelector('.decision-panels')).gridTemplateColumns.split(' ').length}));
    assert.equal(await p.locator('.discovery-editorial-grid a[href*="story"]').count(),0);assert.equal(await p.locator('main > #world-laws').count(),1);assert.equal(await p.locator('#contribute #world-laws').count(),0);
-   assert.equal(layout.art,'absolute');assert.ok(layout.proof<550,JSON.stringify(layout));
-   assert.equal(layout.rail,width===390?1:4);assert.ok(layout.fourth<1000,JSON.stringify(layout));
+   assert.equal(layout.art,'absolute');
+   assert.equal(layout.rail,width===390?1:4);
+   assert.equal(await p.locator('[data-decision-step]').count(),4);
+   assert.equal(await p.locator('button[data-decision-step]').count(),0);
+   assert.equal(await p.locator('.editorial-synopsis:visible').count(),2);
+   assert.equal(await p.locator('.discovery-editorial-grid #world').count(),0);
+   if(width===390){
+    const sizes=await p.evaluate(()=>Object.fromEntries(['.decision-panels article > p:not(.decision-number)','.preview-badge','.hero-entry-note','.hero-telemetry-label'].map(s=>[s,parseFloat(getComputedStyle(document.querySelector(s)).fontSize)])));
+    assert.ok(sizes['.decision-panels article > p:not(.decision-number)']>=15,JSON.stringify(sizes));
+    assert.ok(sizes['.preview-badge']>=13 && sizes['.hero-entry-note']>=13 && sizes['.hero-telemetry-label']>=12,JSON.stringify(sizes));
+   }
   }
-  await c.close();record(locale+' integrated hero and early four-step reading rail');
+  await c.close();record(locale+' integrated hero, readable static steps and direct short summaries');
+ }
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale});const p=await c.newPage();const route=locale==='zh-CN'?'/':'/en/';await p.goto(origin+route);
+  await p.locator('.portal-rules a[href="#world-laws"]').click();
+  assert.equal(await p.locator('#world-laws > details').getAttribute('open'),'');
+  await p.locator('#world-laws > details > summary').click();await p.waitForTimeout(100);
+  assert.equal(await p.locator('#world-laws > details').getAttribute('open'),null);
+  await p.locator('.portal-rules a[href="#world-laws"]').click();
+  assert.equal(await p.locator('#world-laws > details').getAttribute('open'),'');
+  const deep=await c.newPage();await deep.goto(origin+route+'#world-laws');
+  assert.equal(await deep.locator('#world-laws > details').getAttribute('open'),'');
+  await c.close();record(locale+' world rules CTA and initial deep link reveal actual body');
  }
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
@@ -64,12 +85,13 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
  }
  {
   const c=await context({viewport:{width:390,height:844}});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();await p.goto(origin+'/');
-  for(let i=0;i<4;i++){await p.locator(`[data-decision-step="${i}"]`).focus();await p.keyboard.press('Enter');assert.equal(await p.locator('[data-decision-panel]:visible').count(),4);assert.equal(await p.locator(`[data-decision-panel="${i}"]`).getAttribute('class'),'is-active');}
+  assert.equal(await p.locator('[data-decision-panel]:visible').count(),4);
+  assert.equal(await p.locator('[data-decision-step][tabindex]').count(),0);
   await p.locator('[data-menu-toggle]').click();assert.equal(await p.locator('.topbar .nav a:visible').count(),4);await p.keyboard.press('Escape');assert.equal(await p.locator('[data-menu-toggle]').getAttribute('aria-expanded'),'false');
   await p.locator('#proof').scrollIntoViewIfNeeded();await p.screenshot({path:path.join(out,'keyboard-proof-390.png')});
   await p.evaluate(()=>document.documentElement.style.fontSize='200%');assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),390);
   const canvas=await p.locator('[data-hero-canvas]').count();assert.equal(canvas,1);
-  await c.close();record('keyboard steps/menu/Escape and 200 percent text zoom');
+  await c.close();record('static steps, keyboard menu/Escape and 200 percent text zoom');
  }
  // Reader empty/error/retry and both late response directions.
  for(const first of ['empty','error','late-success','late-error']){
