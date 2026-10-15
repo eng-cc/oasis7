@@ -318,7 +318,10 @@ fn serve_ready(
         listener.local_addr().map_err(|e| e.to_string())?
     );
     loop {
-        if server.serve_one(&listener).is_err() {
+        if let Err(error) = server.serve_one(&listener) {
+            if std::env::var_os("OASIS7_HEALTHY_NATIVE_TRACE").is_some() {
+                eprintln!("healthy endpoint RPC diagnostic: {error}");
+            }
             eprintln!("formal endpoint RPC rejected or incomplete; reconcile original request");
         }
     }
