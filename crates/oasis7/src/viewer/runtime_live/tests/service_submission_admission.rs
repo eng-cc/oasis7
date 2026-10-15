@@ -13,6 +13,7 @@ fn signed_unregistered_mismatched_and_revoked_sessions_never_submit_to_service()
             let service = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
             server.config.world_service =
                 Some(crate::world_service::client::WorldServiceClientConfig {
+                    formal_read_trust: None,
                     endpoint: format!("http://{}", listener.local_addr().unwrap()),
                     trusted_service_public_key: hex::encode(service.verifying_key().to_bytes()),
                     expected_world: oasis7_client_api::world_service::WorldIdentity {

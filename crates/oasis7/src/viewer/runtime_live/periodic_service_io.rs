@@ -329,6 +329,7 @@ mod tests {
     #[test]
     fn configuration_fence_rejects_trust_scope_world_and_private_identity_drift() {
         let config = WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint: "http://127.0.0.1:1".into(),
             trusted_service_public_key: "service".into(),
             expected_world: oasis7_client_api::world_service::WorldIdentity {

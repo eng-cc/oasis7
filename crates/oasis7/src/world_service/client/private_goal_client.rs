@@ -106,6 +106,7 @@ mod tests {
                 scope_id: "agent:a".into(),
                 read_private_key_hex: private.clone(),
                 timeout: Duration::from_millis(50),
+                formal_read_trust: None,
                 max_response_bytes: 65536,
             })
             .unwrap();
@@ -126,6 +127,7 @@ mod tests {
             scope_id: "agent:a".into(),
             read_private_key_hex: hex::encode([7; 32]),
             timeout: Duration::from_secs(5),
+            formal_read_trust: None,
             max_response_bytes: bound,
         }
     }

@@ -1,4 +1,93 @@
 use super::*;
+
+#[test]
+fn deterministic_replay_requires_finite_budgets_and_preserves_mode_on_clone() {
+    let config = WasmExecutorConfig {
+        max_fuel: 0,
+        ..Default::default()
+    };
+    assert!(WasmExecutor::new_for_deterministic_replay(config).is_err());
+    let executor =
+        WasmExecutor::new_for_deterministic_replay(WasmExecutorConfig::default()).unwrap();
+    assert!(!executor.wall_clock_timeout_enabled);
+    assert!(!executor.clone().wall_clock_timeout_enabled);
+    #[cfg(feature = "wasmtime")]
+    {
+        let legacy = WasmExecutor::new(WasmExecutorConfig::default()).unwrap();
+        // A legacy compiled artifact cannot bypass the deterministic lowering.
+        assert_ne!(
+            compiled_engine_fingerprint(executor.engine(), executor.config()),
+            compiled_engine_fingerprint(legacy.engine(), legacy.config())
+        );
+    }
+    assert!(
+        WasmExecutor::new(WasmExecutorConfig::default())
+            .unwrap()
+            .wall_clock_timeout_enabled
+    );
+}
+
+#[test]
+#[cfg(feature = "wasmtime")]
+fn deterministic_replay_canonicalizes_relaxed_simd_out_of_range_swizzle() {
+    let executor = WasmExecutor::new_for_deterministic_replay(Default::default()).unwrap();
+    let module = wasmtime::Module::new(
+        executor.engine(),
+        wat::parse_str(
+            r#"
+        (module (func (export "swizzle") (result i32)
+            v128.const i8x16 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+            v128.const i8x16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16 16
+            i8x16.relaxed_swizzle
+            i8x16.extract_lane_u 0))
+    "#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut store = wasmtime::Store::new(executor.engine(), ());
+    store.set_fuel(1024).unwrap();
+    store.set_epoch_deadline(u64::MAX);
+    let instance = wasmtime::Instance::new(&mut store, &module, &[]).unwrap();
+    let function = instance
+        .get_typed_func::<(), i32>(&mut store, "swizzle")
+        .unwrap();
+    // The deterministic lowering follows strict swizzle: indices >= 16 yield 0.
+    // Native relaxed implementations may instead wrap these indices.
+    assert_eq!(function.call(&mut store, ()).unwrap(), 0);
+}
+
+#[test]
+#[cfg(feature = "wasmtime")]
+fn deterministic_replay_uses_fuel_without_committing_wall_clock_interruption() {
+    let mut executor = WasmExecutor::new_for_deterministic_replay(WasmExecutorConfig {
+        max_fuel: 1024,
+        max_call_ms: 0,
+        ..Default::default()
+    })
+    .unwrap();
+    let wasm = call_ref_fuel_exhaustion_wasm();
+    let request = ModuleCallRequest {
+        module_id: "frozen-fuel".into(),
+        wasm_hash: sha256_hex_for_test(&wasm),
+        trace_id: "frozen-fuel".into(),
+        entrypoint: "call".into(),
+        input: vec![],
+        limits: ModuleLimits {
+            max_mem_bytes: 64 * 1024,
+            max_gas: 1024,
+            max_call_rate: 0,
+            max_output_bytes: 1024,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(wasm),
+    };
+    for _ in 0..2 {
+        let failure = executor.call(&request).unwrap_err();
+        assert_eq!(failure.code, ModuleCallErrorCode::OutOfFuel);
+    }
+}
 use oasis7_wasm_abi::ModuleLimits;
 #[cfg(feature = "wasmtime")]
 use std::fs;

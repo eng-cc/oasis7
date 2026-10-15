@@ -7,14 +7,14 @@ fn read_integrity_and_sync_failures_poison_until_explicit_reopen() {
         let root = root();
         let genesis = trust().genesis_anchor().unwrap();
         let (mut p, r) = endpoints(&root, &genesis, &genesis);
-        let path = root.join("p/replicated-endpoint.json");
+        let path = root.join("p/endpoint-hot-v2.json");
         let good = std::fs::read(&path).unwrap();
         match mode {
             "missing" => std::fs::remove_file(&path).unwrap(),
             "json" => std::fs::write(&path, b"{").unwrap(),
             "identity" => {
                 let mut value: serde_json::Value = serde_json::from_slice(&good).unwrap();
-                value["trust"]["world_id"] = serde_json::json!("wrong");
+                value["body"]["trust"]["world_id"] = serde_json::json!("wrong");
                 std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
             }
             "sync" => p.inject_read_sync_failure(true),
@@ -73,7 +73,7 @@ fn coordinator_maps_canonical_integrity_failure_to_unknown_without_stale_append(
     let root = root();
     let genesis = trust().genesis_anchor().unwrap();
     let mut c = coordinator(&root);
-    let path = root.join("p/replicated-endpoint.json");
+    let path = root.join("p/endpoint-hot-v2.json");
     let good = std::fs::read(&path).unwrap();
     std::fs::write(&path, b"{").unwrap();
     assert!(

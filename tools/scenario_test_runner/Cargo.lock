@@ -1789,6 +1789,7 @@ dependencies = [
  "blake3",
  "ed25519-dalek",
  "hex",
+ "libc",
  "oasis7_proto",
  "serde",
  "serde_cbor",

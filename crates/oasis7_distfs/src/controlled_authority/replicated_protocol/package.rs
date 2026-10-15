@@ -148,6 +148,7 @@ impl ClosedRecord {
         }
         Ok(())
     }
+    #[cfg(test)]
     pub(super) fn byte_len(&self) -> usize {
         self.objects.iter().map(|o| o.bytes.len()).sum()
     }

@@ -718,7 +718,29 @@ fn resolve_network_tier_runtime_ref_path(
         .unwrap_or(candidate)
 }
 
-fn node_pos_config_from_world_finality_registry(
+pub(super) fn validate_world_finality_signer_completeness(
+    registry: &GovernanceFinalitySignerRegistry,
+    requested: &[PosValidator],
+) -> Result<(), String> {
+    let keys = registry
+        .signer_bindings
+        .keys()
+        .map(|key| validator_id_from_registry_binding(&registry.slot_id, key))
+        .collect::<BTreeSet<_>>();
+    if keys.is_empty()
+        || registry
+            .validator_stakes
+            .keys()
+            .map(|key| validator_id_from_registry_binding(&registry.slot_id, key))
+            .chain(requested.iter().map(|v| v.validator_id.clone()))
+            .any(|id| !keys.contains(&id))
+    {
+        return Err("verified World registry omits required validator signer keys".into());
+    }
+    Ok(())
+}
+
+pub(super) fn node_pos_config_from_world_finality_registry(
     registry: &GovernanceFinalitySignerRegistry,
     fallback: &NodePosConfig,
 ) -> NodePosConfig {
@@ -817,3 +839,7 @@ fn node_main_token_controller_signer_policy_from_registry(
 #[cfg(test)]
 #[path = "governance_registry_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "governance_signer_completeness_tests.rs"]
+mod signer_completeness_tests;

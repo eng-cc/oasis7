@@ -1,11 +1,10 @@
 use super::body_projection::AgentMapProjection;
 pub use super::body_projection::BodyOverlay;
+use super::formal_retention_projection::{base_field_count, serialize_prefix};
 use super::governance_identity_projection::{
     GovernanceIdentityProfileMapProjection, GovernanceIdentityProfileOverlay,
 };
-use super::module_admission_freeze::{
-    projection_has_freeze_field, serialize_module_instance_projection,
-};
+use super::module_admission_freeze::serialize_module_instance_projection;
 use super::module_release_transition::ReleaseMapProjection;
 use super::*;
 use serde::Serialize;
@@ -529,8 +528,7 @@ where
         ..
     } = state;
 
-    let field_count = 95
-        + usize::from(projection_has_freeze_field(state, module_instance_overlay))
+    let field_count = base_field_count(95, state, module_instance_overlay)
         - usize::from(
             state.agent_intent_ledger.is_empty()
                 && agent_intent_overlay.is_none_or(|overlay| overlay.ledger_updates.is_empty()),
@@ -552,7 +550,7 @@ where
                 .is_empty(),
         );
     let mut output = serializer.serialize_struct("WorldState", field_count)?;
-    output.serialize_field("time", &state.time)?;
+    serialize_prefix(&mut output, state)?;
     if let Some(overlay) = agent_claim_terminal_overlay {
         overlay.serialize_agents(state, &mut output)?;
     } else if let Some(overlay) = agent_claim_economic_overlay {

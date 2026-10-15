@@ -305,10 +305,30 @@ impl WorldServiceTransport {
             ));
         }
         if status != 200 {
-            return Err(WorldServiceClientError::Rejected {
-                status,
-                message: "service rejected request".into(),
-            });
+            // Surface only a reason authenticated for this exact operation and
+            // request by the configured service. Untrusted error bodies remain
+            // generic and cannot become signed service assertions.
+            let message =
+                serde_json::from_slice::<SignedServiceResponse<serde_json::Value>>(&bytes)
+                    .ok()
+                    .filter(|reply| {
+                        authority::verify_service_response(
+                            path,
+                            &digest,
+                            reply,
+                            &self.config.trusted_service_public_key,
+                        )
+                        .is_ok()
+                    })
+                    .and_then(|reply| {
+                        reply
+                            .payload
+                            .get("message")
+                            .and_then(serde_json::Value::as_str)
+                            .map(|message| message.chars().take(1024).collect::<String>())
+                    })
+                    .unwrap_or_else(|| "service rejected request".into());
+            return Err(WorldServiceClientError::Rejected { status, message });
         }
         let signed: SignedServiceResponse<R> = serde_json::from_slice(&bytes)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -349,3 +369,6 @@ pub mod device_client;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod transport_error_tests;

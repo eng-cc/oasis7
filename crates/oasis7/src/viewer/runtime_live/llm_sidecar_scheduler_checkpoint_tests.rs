@@ -160,6 +160,7 @@ fn new_prefix_checkpoint_binds_verified_post_reserve_view_and_replays_original()
     sidecar.provider_service_projection = Some(projection);
     sidecar.provider_service_config =
         Some(crate::world_service::client::WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint: "http://127.0.0.1:1".into(),
             trusted_service_public_key: "11".repeat(32),
             expected_world: WorldIdentity {

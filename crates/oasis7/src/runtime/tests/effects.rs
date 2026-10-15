@@ -23,6 +23,9 @@ fn effect_pipeline_signs_receipt() {
     assert_eq!(intent.intent_id, intent_id);
 
     let receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: intent_id.clone(),
         status: "ok".to_string(),
         payload: json!({"status": 200}),
@@ -155,6 +158,9 @@ fn inflight_effect_dispatch_respects_capacity_limit() {
 
     world
         .ingest_receipt(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id: first_intent.clone(),
             status: "ok".to_string(),
             payload: json!({"status": 200}),
@@ -195,6 +201,9 @@ fn effect_pipeline_signs_receipt_with_ed25519_anchor() {
     let _intent = world.take_next_effect().unwrap();
     world
         .ingest_receipt(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id,
             status: "ok".to_string(),
             payload: json!({"status": 200}),
@@ -243,6 +252,9 @@ fn ingest_receipt_rejects_ed25519_anchor_mismatch() {
     let _intent = world.take_next_effect().unwrap();
 
     let mut receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id,
         status: "ok".to_string(),
         payload: json!({"status": 200}),
@@ -287,6 +299,9 @@ fn effect_pipeline_signs_receipt_with_threshold_ed25519() {
     let _intent = world.take_next_effect().unwrap();
     world
         .ingest_receipt(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id,
             status: "ok".to_string(),
             payload: json!({"status": 200}),

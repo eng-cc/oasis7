@@ -588,6 +588,18 @@ impl World {
         decode_budget::closed_record_cbor(bytes, limits)
     }
 
+    /// Byte-aware preflight for Pending/Published writer DTOs. ClosedRecord's
+    /// typed 8MiB/object/hash/reachability validation remains mandatory.
+    pub fn validate_offline_formal_writer_envelope_cbor_budget(
+        bytes: &[u8],
+        limits: ObserverReadLimits,
+    ) -> Result<(), ObserverLoadError> {
+        if bytes.len() > limits.max_file_bytes {
+            return Err(ObserverLoadError::ResourceLimited);
+        }
+        decode_budget::formal_writer_envelope_cbor(bytes, limits)
+    }
+
     /// Generic persisted-value preflight (including WorldEvent journals).
     pub fn validate_offline_cbor_budget(
         bytes: &[u8],

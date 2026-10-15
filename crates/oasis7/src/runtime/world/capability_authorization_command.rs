@@ -100,6 +100,23 @@ impl World {
             return Err(deny("committed nonce has no durable receipt"));
         }
 
+        // A committed nonce may have been moved to the authenticated archive.
+        // Treat an unavailable archive as an error; never rerun its module call.
+        if self.state.retained_history_root.is_some()
+            && let Some(retained) = self.read_retained_capability_nonce_record(&nonce_key_hash)?
+        {
+            if retained.record.request_hash != request_hash {
+                return Err(WorldError::CapabilityNonceConflict {
+                    nonce_key_hash,
+                    committed_request_hash: retained.record.request_hash,
+                    supplied_request_hash: request_hash,
+                });
+            }
+            let mut idempotent = retained.receipt;
+            idempotent.decision = "idempotent".to_string();
+            return Ok(idempotent);
+        }
+
         if grant.status != "verified" {
             return Err(deny("grant is not finalized and verified"));
         }
@@ -588,7 +605,7 @@ impl World {
             let effect_is_durable = staged
                 .pending_effects()
                 .iter()
-                .any(|intent| intent.intent_id == *intent_id)
+                .any(|intent| intent.identity_key() == *intent_id)
                 || self.inflight_effects.contains_key(intent_id);
             if !effect_is_durable {
                 return Err(deny(
@@ -615,14 +632,28 @@ impl World {
                 grant.grant_id.as_str(),
                 response.response_nonce.as_str(),
             )?;
-        let context = self
+        let hot_context = self
             .capability_invocation_contexts
             .get(&key)
             // Snapshots written before the nonce-key migration used the grant
             // id alone. Keep those records readable, but only when their
             // complete bound nonce still matches this response.
-            .or_else(|| self.capability_invocation_contexts.get(&grant.grant_id))
-            .ok_or_else(|| deny("trusted host invocation context is not bound"))?;
+            .or_else(|| self.capability_invocation_contexts.get(&grant.grant_id));
+        let retained_context;
+        let context = if let Some(context) = hot_context {
+            context
+        } else if self.state.retained_history_root.is_some() {
+            let nonce_key = super::capability_authorization_events::authorization_nonce_key(
+                grant,
+                &response.response_nonce,
+            )?;
+            retained_context = self
+                .read_retained_capability_invocation_context(&nonce_key)?
+                .ok_or_else(|| deny("trusted host invocation context is not bound"))?;
+            &retained_context
+        } else {
+            return Err(deny("trusted host invocation context is not bound"));
+        };
         if context.grant_id != grant.grant_id
             || context.subject != grant.subject
             || context.subject != catalog.subject
@@ -827,6 +858,7 @@ impl World {
             let cap_ref = self.resolve_trusted_effect_cap_ref(manifest, effect)?;
             self.verify_trusted_effect_grant(&cap_ref, manifest, response, effect)?;
             let intent = EffectIntent {
+                birth_era: staged.next_effect_birth_era(),
                 intent_id: format!("intent-{}", staged.allocate_next_intent_seq()),
                 kind: effect.kind.clone(),
                 params: effect.params.clone(),

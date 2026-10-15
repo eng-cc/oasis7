@@ -51,6 +51,8 @@ fn install_collect_data_verified_projection(
         .set(crate::simulator::ResourceKind::Electricity, 30)
         .unwrap();
     let request = ReadWorldViewRequest {
+        formal_anchor: None,
+        observation_nonce: None,
         contract_version: 1,
         world: identity.clone(),
         scope_id: "public".into(),
@@ -59,6 +61,8 @@ fn install_collect_data_verified_projection(
         deadline_unix_ms: None,
     };
     let response = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: None,
         contract_version: 1,
         version: ProjectionVersion {
@@ -86,6 +90,7 @@ fn install_collect_data_verified_projection(
         scope_id: "public".into(),
         read_private_key_hex: test_signer(241).1,
         timeout: Duration::from_millis(50),
+        formal_read_trust: None,
         max_response_bytes: 4096,
     });
 }
@@ -351,6 +356,7 @@ fn runtime_collect_data_service_submit_keeps_own_pending_result_and_canonical_ac
                 admission_error: None,
                 feedback_origin,
                 outcome: Ok(SubmitObservation::Response(Box::new(IntentResponse {
+                    formal_profile: None,
                     execution_evidence_scope: None,
                     contract_version: 1,
                     correlation: correlation.clone(),
@@ -445,6 +451,7 @@ fn runtime_collect_data_service_submit_keeps_own_pending_result_and_canonical_ac
                     admission_error: None,
                     feedback_origin,
                     outcome: Ok(SubmitObservation::Response(Box::new(IntentResponse {
+                        formal_profile: None,
                         execution_evidence_scope: None,
                         contract_version: 1,
                         correlation: correlation.clone(),

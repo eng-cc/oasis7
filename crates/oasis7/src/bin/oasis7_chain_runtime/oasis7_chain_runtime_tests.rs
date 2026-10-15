@@ -87,7 +87,7 @@ fn parse_options_defaults() {
     );
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
-    assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert!(options.replication_fetch_requester_public_keys.is_empty());
     assert!(options.provider_backed_bootstrap_authority_paths.is_empty());
     assert!(options.deployment_inventory_path.is_none());
     assert!(options.runtime_root.is_none());
@@ -137,8 +137,6 @@ fn parse_options_reads_custom_values() {
             "authority-a.json",
             "--provider-bootstrap-authority",
             "authority-b.json",
-            "--deployment-inventory",
-            "custom/inventory.json",
             "--runtime-root",
             "custom/runtime",
             "--replication-root",
@@ -188,13 +186,7 @@ fn parse_options_reads_custom_values() {
             Path::new("authority-b.json").to_path_buf(),
         ]
     );
-    assert_eq!(
-        options
-            .deployment_inventory_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().to_string()),
-        Some("custom/inventory.json".to_string())
-    );
+    assert!(options.deployment_inventory_path.is_none());
     assert_eq!(
         options
             .execution_world_dir
@@ -322,7 +314,7 @@ fn parse_options_reads_validator_signer_public_key_overrides() {
             "--node-validator",
             "node-a:55",
             "--node-validator-signer-public-key",
-            "node-a:deadbeef",
+            "node-a:1111111111111111111111111111111111111111111111111111111111111111",
         ]
         .into_iter(),
     )
@@ -333,7 +325,7 @@ fn parse_options_reads_validator_signer_public_key_overrides() {
             .node_validator_signer_public_keys
             .get("node-a")
             .map(String::as_str),
-        Some("deadbeef")
+        Some("1111111111111111111111111111111111111111111111111111111111111111")
     );
 }
 
@@ -406,12 +398,12 @@ fn parse_options_reads_replication_network_addresses() {
 }
 
 #[test]
-fn parse_options_reads_replication_remote_writer_public_keys() {
+fn parse_options_reads_replication_fetch_requester_public_keys() {
     let options = parse_options(
         [
-            "--replication-remote-writer-public-key",
+            "--replication-fetch-requester-public-key",
             "deadbeef",
-            "--replication-remote-writer-public-key",
+            "--replication-fetch-requester-public-key",
             "cafebabe",
         ]
         .into_iter(),
@@ -419,7 +411,7 @@ fn parse_options_reads_replication_remote_writer_public_keys() {
     .expect("parse should succeed");
 
     assert_eq!(
-        options.replication_remote_writer_public_keys,
+        options.replication_fetch_requester_public_keys,
         vec!["deadbeef".to_string(), "cafebabe".to_string()]
     );
 }
@@ -580,7 +572,9 @@ fn parse_options_rejects_hosted_local_mock_funding_without_authority_setup() {
     let error = parse_options(args.iter().map(String::as_str))
         .expect_err("provider tuple must not grant synthetic local authority");
     assert!(
-        error.contains("local test provider authority setup"),
+        error.contains(
+            "explicit local-provider/agent engineering options require complete provider setup"
+        ),
         "{error}"
     );
 }
@@ -1135,3 +1129,24 @@ fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_k
 
 #[path = "oasis7_chain_runtime_tests_network.rs"]
 mod network_tests;
+
+#[path = "cli_contract_tests.rs"]
+mod cli_contract_tests;
+
+#[test]
+fn engineering_parser_rejects_deployment_authority_and_malformed_signer_keys() {
+    let error =
+        parse_options(["--deployment-inventory", "custom/inventory.json"].into_iter()).unwrap_err();
+    assert!(error.contains("engineering typed runtime cannot consume manifest/formal/guarded/deployment authority inputs"));
+    let error = parse_options(
+        [
+            "--node-validator",
+            "node-a:55",
+            "--node-validator-signer-public-key",
+            "node-a:deadbeef",
+        ]
+        .into_iter(),
+    )
+    .unwrap_err();
+    assert!(error.contains("engineering validator signer identity is invalid or rebound"));
+}

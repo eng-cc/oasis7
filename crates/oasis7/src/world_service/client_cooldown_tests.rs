@@ -13,6 +13,7 @@ fn overload_cooldown_survives_recreated_queries_without_replaying_submit_or_bloc
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let service_key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
     let config = WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         trusted_service_public_key: hex::encode(service_key.verifying_key().to_bytes()),
         expected_world: WorldIdentity {
@@ -100,6 +101,7 @@ fn overload_cooldown_survives_recreated_queries_without_replaying_submit_or_bloc
                     LOOKUP_PATH,
                     digest,
                     IntentResponse::<Value> {
+                        formal_profile: None,
                         execution_evidence_scope: None,
                         contract_version: 1,
                         correlation: expected_correlation.clone(),

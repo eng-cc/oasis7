@@ -12,6 +12,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[path = "membership_operations.rs"]
+mod membership_operations;
 #[path = "world_service_operations.rs"]
 mod operations;
 #[path = "world_service_private_goal.rs"]
@@ -224,6 +226,7 @@ pub(super) fn maybe_handle_with_guarded(
         VIEW_PATH,
         oasis7_client_api::world_service::VIEW_JSON_PATH,
         CHANGES_PATH,
+        MEMBERSHIP_PATH,
     ]
     .contains(&path)
     {
@@ -263,6 +266,7 @@ pub(super) fn maybe_handle_with_guarded(
                 operations::view_json(&service, parse(body)?)
             }
             CHANGES_PATH => operations::changes(&service, parse(body)?),
+            MEMBERSHIP_PATH => membership_operations::read(&service, parse(body)?),
             _ => unreachable!(),
         }
     })();

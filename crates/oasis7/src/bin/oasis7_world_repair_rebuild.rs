@@ -97,7 +97,7 @@ fn run() -> Result<(), WorldError> {
     println!("journal_events={}", rebuilt.journal().len());
     println!(
         "tick_consensus_records={}",
-        verified.tick_consensus_records().len()
+        verified.tick_consensus_record_count()
     );
     println!("world_time={}", verified.state().time);
     println!("agent_count={}", verified.state().agents.len());

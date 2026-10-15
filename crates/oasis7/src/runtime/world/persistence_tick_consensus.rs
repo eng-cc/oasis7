@@ -54,7 +54,13 @@ pub(super) fn split_tick_consensus_snapshot_for_persistence(
     snapshot: &Snapshot,
 ) -> (Snapshot, Option<TickConsensusArchiveFile>) {
     let mut persisted_snapshot = snapshot.clone();
-    persisted_snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
+    if snapshot.tick_consensus_archived_record_count > 0
+        && snapshot.state.retained_history_root.is_some()
+    {
+        return (persisted_snapshot, None);
+    }
+    persisted_snapshot.tick_consensus_total_record_count =
+        snapshot.tick_consensus_records.len() as u64;
     if snapshot.tick_consensus_records.len() <= TICK_CONSENSUS_HOT_LIMIT {
         persisted_snapshot.tick_consensus_archived_record_count = 0;
         let (hot_from_tick, hot_to_tick) =
@@ -71,7 +77,7 @@ pub(super) fn split_tick_consensus_snapshot_for_persistence(
     let archived_records = snapshot.tick_consensus_records[..archived_record_count].to_vec();
     persisted_snapshot.tick_consensus_records =
         snapshot.tick_consensus_records[archived_record_count..].to_vec();
-    persisted_snapshot.tick_consensus_archived_record_count = archived_records.len();
+    persisted_snapshot.tick_consensus_archived_record_count = archived_records.len() as u64;
     let (hot_from_tick, hot_to_tick) =
         tick_consensus_hot_tick_bounds(persisted_snapshot.tick_consensus_records.as_slice());
     persisted_snapshot.tick_consensus_hot_from_tick = hot_from_tick;
@@ -206,7 +212,7 @@ fn load_tick_consensus_archive_records_from_index(
         .iter()
         .map(|segment| segment.record_count)
         .sum::<usize>();
-    if indexed_record_count != snapshot.tick_consensus_archived_record_count {
+    if indexed_record_count as u64 != snapshot.tick_consensus_archived_record_count {
         return Err(WorldError::DistributedValidationFailed {
             reason: format!(
                 "tick consensus archive index count mismatch: expected={} actual={}",
@@ -316,7 +322,7 @@ fn load_tick_consensus_legacy_archive_records(
         });
     }
     let archive: TickConsensusArchiveFile = read_json_from_path(archive_path.as_path())?;
-    if archive.archived_records.len() != snapshot.tick_consensus_archived_record_count {
+    if archive.archived_records.len() as u64 != snapshot.tick_consensus_archived_record_count {
         return Err(WorldError::DistributedValidationFailed {
             reason: format!(
                 "tick consensus archive count mismatch: expected={} actual={}",
@@ -350,7 +356,7 @@ pub(super) fn hydrate_tick_consensus_snapshot_from_archive(
     }
 
     if snapshot.tick_consensus_total_record_count == 0 {
-        snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
+        snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len() as u64;
     }
     if snapshot.tick_consensus_archived_record_count == 0 {
         return Ok(());
@@ -378,7 +384,7 @@ pub(super) fn hydrate_tick_consensus_snapshot_from_archived_records(
 ) -> Result<(), WorldError> {
     let mut records = archived_records;
     records.extend(snapshot.tick_consensus_records.clone());
-    if records.len() != snapshot.tick_consensus_total_record_count {
+    if records.len() as u64 != snapshot.tick_consensus_total_record_count {
         return Err(WorldError::DistributedValidationFailed {
             reason: format!(
                 "tick consensus total count mismatch: expected={} actual={}",
@@ -392,7 +398,7 @@ pub(super) fn hydrate_tick_consensus_snapshot_from_archived_records(
     // materialized, the in-memory snapshot is complete and a second hydration
     // pass must be a no-op.
     snapshot.tick_consensus_archived_record_count = 0;
-    snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len();
+    snapshot.tick_consensus_total_record_count = snapshot.tick_consensus_records.len() as u64;
     let (hot_from_tick, hot_to_tick) =
         tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
     snapshot.tick_consensus_hot_from_tick = hot_from_tick;

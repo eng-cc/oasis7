@@ -38,6 +38,9 @@ fn replay_rejects_receipt_committed_for_a_different_effect_intent() {
         time: 7,
         caused_by: None,
         body: WorldEventBody::ReceiptAppended(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id: "different-effect-intent".to_string(),
             status: "ok".to_string(),
             payload: serde_json::json!({}),
@@ -664,6 +667,7 @@ fn replay_rejects_journal_events_with_decreasing_world_time() {
     let snapshot = world.snapshot();
     let effect = |intent_id: &str| {
         WorldEventBody::EffectQueued(EffectIntent {
+            birth_era: None,
             intent_id: intent_id.to_string(),
             kind: "test_effect".to_string(),
             params: serde_json::json!({}),

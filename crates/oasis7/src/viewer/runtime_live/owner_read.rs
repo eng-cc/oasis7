@@ -160,14 +160,18 @@ impl ViewerRuntimeLiveServer {
             return Err(fail("owner read current owner fence mismatch"));
         }
         Ok(OwnerReadContext {
-            request: ReadWorldViewRequest {
-                contract_version: WORLD_SERVICE_CONTRACT_VERSION,
-                world: client.config().expected_world.clone(),
-                scope_id: format!("agent:{agent}"),
-                min_commit: Some(verified.version().commit.clone()),
-                fixed_commit: None,
-                deadline_unix_ms: None,
-            },
+            request: client
+                .prepare_read_view_request(ReadWorldViewRequest {
+                    observation_nonce: None,
+                    formal_anchor: None,
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    world: client.config().expected_world.clone(),
+                    scope_id: format!("agent:{agent}"),
+                    min_commit: Some(verified.version().commit.clone()),
+                    fixed_commit: None,
+                    deadline_unix_ms: None,
+                })
+                .map_err(|error| ViewerRuntimeLiveServerError::Init(error.to_string()))?,
             fence,
             expected,
         })

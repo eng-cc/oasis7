@@ -273,7 +273,7 @@ impl ViewerRuntimeLiveServer {
             matches!(
                 &event.body,
                 crate::runtime::WorldEventBody::ReceiptAppended(receipt)
-                    if receipt.intent_id == effect_intent_id
+                    if receipt.identity_key() == effect_intent_id
             )
             .then_some(event.id)
         }) else {

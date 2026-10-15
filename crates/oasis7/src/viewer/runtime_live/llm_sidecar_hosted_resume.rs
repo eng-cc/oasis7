@@ -656,6 +656,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 operation
             } else if resume.stage == "resume_view" {
                 AgentServiceIoOperation::View(ReadWorldViewRequest {
+                    observation_nonce: None,
+                    formal_anchor: None,
                     contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                     world: client.config().expected_world.clone(),
                     scope_id: client.config().scope_id.clone(),

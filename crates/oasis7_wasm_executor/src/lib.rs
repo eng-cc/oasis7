@@ -103,6 +103,7 @@ impl Default for WasmExecutorConfig {
 /// Placeholder WASM executor implementation.
 pub struct WasmExecutor {
     config: WasmExecutorConfig,
+    wall_clock_timeout_enabled: bool,
     metrics: SharedWasmExecutorMetrics,
     #[cfg(feature = "wasmtime")]
     engine: wasmtime::Engine,
@@ -241,6 +242,7 @@ impl Clone for WasmExecutor {
         let engine = self.engine.clone();
         Self {
             config: self.config.clone(),
+            wall_clock_timeout_enabled: self.wall_clock_timeout_enabled,
             metrics: Arc::clone(&self.metrics),
             compiled_cache: Arc::clone(&self.compiled_cache),
             compiled_disk_cache: self.compiled_disk_cache.clone(),
@@ -255,6 +257,7 @@ impl Clone for WasmExecutor {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
+            wall_clock_timeout_enabled: self.wall_clock_timeout_enabled,
             metrics: Arc::clone(&self.metrics),
         }
     }
@@ -299,6 +302,14 @@ impl WasmExecutor {
         config: WasmExecutorConfig,
         metrics: SharedWasmExecutorMetrics,
     ) -> Result<Self, WasmExecutorInitError> {
+        Self::new_with_execution_mode(config, metrics, true)
+    }
+
+    fn new_with_execution_mode(
+        config: WasmExecutorConfig,
+        metrics: SharedWasmExecutorMetrics,
+        wall_clock_timeout_enabled: bool,
+    ) -> Result<Self, WasmExecutorInitError> {
         #[cfg(feature = "wasmtime")]
         {
             let mut engine_config = wasmtime::Config::new();
@@ -311,6 +322,10 @@ impl WasmExecutor {
             engine_config.wasm_threads(false);
             engine_config.wasm_wide_arithmetic(false);
             engine_config.cranelift_nan_canonicalization(true);
+            if !wall_clock_timeout_enabled {
+                // Relaxed SIMD otherwise permits architecture-dependent results.
+                engine_config.relaxed_simd_deterministic(true);
+            }
             engine_config.debug_info(false);
             let engine = wasmtime::Engine::new(&engine_config)
                 .map_err(|err| WasmExecutorInitError::EngineInit(err.to_string()))?;
@@ -328,6 +343,7 @@ impl WasmExecutor {
                 .map_err(|err| WasmExecutorInitError::DiskCacheInit(err.to_string()))?;
             Ok(Self {
                 config,
+                wall_clock_timeout_enabled,
                 metrics,
                 watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
                 engine,
@@ -338,10 +354,26 @@ impl WasmExecutor {
 
         #[cfg(not(feature = "wasmtime"))]
         {
-            Ok(Self { config, metrics })
+            Ok(Self {
+                config,
+                wall_clock_timeout_enabled,
+                metrics,
+            })
         }
     }
 
+    /// Frozen execution uses deterministic fuel/memory/output budgets. A wall
+    /// clock interruption cannot be committed as a different replay outcome.
+    pub fn new_for_deterministic_replay(
+        config: WasmExecutorConfig,
+    ) -> Result<Self, WasmExecutorInitError> {
+        if config.max_fuel == 0 || config.max_mem_bytes == 0 || config.max_output_bytes == 0 {
+            return Err(WasmExecutorInitError::EngineInit(
+                "deterministic replay requires finite positive budgets".into(),
+            ));
+        }
+        Self::new_with_execution_mode(config, global_wasm_executor_metrics(), false)
+    }
     pub fn config(&self) -> &WasmExecutorConfig {
         &self.config
     }
@@ -661,7 +693,9 @@ impl ModuleSandbox for WasmExecutor {
                 store.limiter(|state| &mut state.limits);
                 store.epoch_deadline_trap();
                 store.set_epoch_deadline(1);
-                let _watchdog = self.watchdog.arm(self.config.max_call_ms);
+                let _watchdog = self
+                    .wall_clock_timeout_enabled
+                    .then(|| self.watchdog.arm(self.config.max_call_ms));
                 store
                     .set_fuel(self.requested_fuel(request))
                     .map_err(|err| {
@@ -884,7 +918,9 @@ impl ModuleSandbox for WasmExecutor {
                             self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
                         })?;
                 }
-                if total_started.elapsed().as_millis() as u64 > self.config.max_call_ms {
+                if self.wall_clock_timeout_enabled
+                    && total_started.elapsed().as_millis() as u64 > self.config.max_call_ms
+                {
                     return Err(self.failure(
                         request,
                         ModuleCallErrorCode::Timeout,

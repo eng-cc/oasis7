@@ -337,7 +337,7 @@ impl World {
                 && matches!(
                         &event.body,
                     WorldEventBody::ReceiptAppended(receipt)
-                        if receipt.intent_id == expected_effect_intent_id
+                        if receipt.identity_key() == expected_effect_intent_id
                 )
         }) else {
             return Err(invalid_intent(format!(

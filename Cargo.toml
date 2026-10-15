@@ -56,3 +56,13 @@ egui-winit = { path = "vendor-egui-winit-0.33.3" }
 
 [patch."https://github.com/libp2p/rust-libp2p"]
 libp2p-swarm = { path = "vendor-libp2p-swarm-0.48.0" }
+
+# Lifecycle image qualification repeatedly hashes complete executable files.
+# Keep the shipping hash checks affordable in local debug/test builds.
+[profile.dev.package."sha2@0.11.0"]
+opt-level = 3
+
+# Formal CAS reads authenticate every request and protected response. Preserve
+# those checks while avoiding unoptimized curve arithmetic in debug fixtures.
+[profile.dev.package."curve25519-dalek@5.0.0"]
+opt-level = 3

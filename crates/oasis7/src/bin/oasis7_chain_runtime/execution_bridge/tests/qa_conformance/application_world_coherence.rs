@@ -17,6 +17,8 @@ fn real_tcp_view_changes_interleaving_completes_coherently() {
     let client = RemoteWorldServiceClient::new(connection).unwrap();
     let baseline = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),
@@ -99,6 +101,8 @@ fn real_tcp_view_changes_interleaving_completes_coherently() {
     }
     let post = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),
