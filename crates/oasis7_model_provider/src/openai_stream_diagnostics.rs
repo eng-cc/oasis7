@@ -85,6 +85,27 @@ fn stream_transport_error(metadata: StreamTransportMetadata) -> OpenAiRequestErr
     OpenAiRequestError::StreamTransport(metadata)
 }
 
+/// Preserve only the recognized structural retry class. Never retain or expose
+/// an unparsed SSE frame, provider message, private goal or signer material.
+pub(super) fn sanitized_stream_decode_failure(raw: &str) -> String {
+    let concurrent_limit = serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .is_some_and(|value| {
+            let error = &value["error"];
+            error["type"].as_str() == Some("rate_limit_error")
+                && error["message"].as_str().is_some_and(|message| {
+                    message
+                        .to_ascii_lowercase()
+                        .contains("concurrency limit exceeded")
+                })
+        });
+    if concurrent_limit {
+        r#"{"error":{"type":"rate_limit_error","message":"Concurrency limit exceeded"}}"#.into()
+    } else {
+        "invalid Responses SSE event".into()
+    }
+}
+
 fn bounded_response_header(response: &reqwest::Response, name: &str) -> Option<String> {
     response
         .headers()
@@ -274,7 +295,8 @@ impl OpenAiChatCompletionClient {
             .send()
             .await
             .map_err(|error| {
-                stream_transport_error(StreamTransportMetadata {
+                let is_timeout = error.is_timeout();
+                let metadata = StreamTransportMetadata {
                     http_status: None,
                     request_timeout_ms: self.request_timeout_ms,
                     response_version: None,
@@ -287,7 +309,12 @@ impl OpenAiChatCompletionClient {
                     decoded_frame_count: 0,
                     elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
                     nested_transport_cause: error.to_string(),
-                })
+                };
+                if is_timeout {
+                    OpenAiRequestError::Timeout(format_stream_transport_diagnostics(&metadata))
+                } else {
+                    stream_transport_error(metadata)
+                }
             })?;
 
         let mut metadata = StreamTransportMetadata {
@@ -338,11 +365,8 @@ impl OpenAiChatCompletionClient {
                 continue;
             }
             let parsed =
-                serde_json::from_str::<ResponseStreamEvent>(&event.data).map_err(|error| {
-                    OpenAiRequestError::Other(format!(
-                        "responses stream event JSON decode failed: {}",
-                        summarize_trace_text(error.to_string().as_str(), 240)
-                    ))
+                serde_json::from_str::<ResponseStreamEvent>(&event.data).map_err(|_| {
+                    OpenAiRequestError::ParseBody(sanitized_stream_decode_failure(&event.data))
                 })?;
             metadata.decoded_frame_count += 1;
             events.push(parsed);

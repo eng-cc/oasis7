@@ -21,8 +21,8 @@ impl ClientLauncherApp {
             );
             let location = if status.phase == "not_selected" {
                 self.tr(
-                    "本节点未启用此执行 profile",
-                    "This execution profile is not selected on this node",
+                    "本节点未启用此执行模式",
+                    "This execution mode is not selected on this node",
                 )
             } else {
                 match status.execution_location.as_deref() {

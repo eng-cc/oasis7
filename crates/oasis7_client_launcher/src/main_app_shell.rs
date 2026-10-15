@@ -103,19 +103,29 @@ impl ClientLauncherApp {
         } else {
             egui::Color32::from_rgb(238, 244, 252)
         };
-        egui::Frame::new()
-            .fill(fill)
-            .stroke(Self::card_stroke())
-            .inner_margin(egui::Margin::symmetric(6, 2))
-            .show(ui, |ui| {
-                ui.label(
-                    egui::RichText::new(format!("• {text}"))
-                        .strong()
-                        .size(10.5)
-                        .color(color),
-                );
-            })
-            .response
+        // Measure before allocation so the wrapping parent moves the whole
+        // read-only status item instead of squeezing its text into a column.
+        let text = format!("• {text}");
+        let galley =
+            ui.painter()
+                .layout_no_wrap(text.clone(), egui::FontId::proportional(10.5), color);
+        let (rect, response) =
+            ui.allocate_exact_size(galley.size() + egui::vec2(12.0, 4.0), egui::Sense::hover());
+        if ui.is_rect_visible(rect) {
+            ui.painter().rect(
+                rect,
+                0.0,
+                fill,
+                Self::card_stroke(),
+                egui::StrokeKind::Inside,
+            );
+            ui.painter()
+                .galley(rect.min + egui::vec2(6.0, 2.0), galley, color);
+        }
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), &text)
+        });
+        response
     }
 
     fn render_top_status_bar(&mut self, ui: &mut egui::Ui) {
@@ -1001,3 +1011,7 @@ impl eframe::App for ClientLauncherApp {
         ctx.request_repaint_after(Duration::from_millis(120));
     }
 }
+
+#[cfg(test)]
+#[path = "main_header_layout_tests.rs"]
+mod header_layout_tests;

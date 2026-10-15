@@ -902,6 +902,14 @@ fn normalize_openai_api_base_url_handles_suffix_variants() {
 
 #[test]
 fn openai_client_respects_configured_timeout_without_hidden_retry() {
+    let _env_lock = llm_env_lock().lock().expect("env lock");
+    let _diagnostic_guard = EnvVarGuard::capture(ENV_LLM_STREAM_DIAGNOSTICS);
+    // SAFETY: The shared environment lock isolates the ordinary SDK contract
+    // from the parallel opt-in diagnostic transport test.
+    unsafe {
+        oasis7::env_mut::set_var(ENV_LLM_STREAM_DIAGNOSTICS, "0");
+    }
+
     let mut config = base_config();
     config.timeout_ms = 200;
     config.base_url = spawn_slow_openai_like_server(Duration::from_millis(600));
@@ -936,6 +944,14 @@ fn openai_client_respects_configured_timeout_without_hidden_retry() {
 
 #[test]
 fn openai_client_retries_single_concurrency_limit_decode_failure() {
+    let _env_lock = llm_env_lock().lock().expect("env lock");
+    let _diagnostic_guard = EnvVarGuard::capture(ENV_LLM_STREAM_DIAGNOSTICS);
+    // SAFETY: The shared environment lock isolates the ordinary SDK contract
+    // from the parallel opt-in diagnostic transport test.
+    unsafe {
+        oasis7::env_mut::set_var(ENV_LLM_STREAM_DIAGNOSTICS, "0");
+    }
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind flaky openai server");
     let bind = listener.local_addr().expect("listener addr");
     thread::spawn(move || {

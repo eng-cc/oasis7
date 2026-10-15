@@ -342,3 +342,7 @@ impl OpenAiChatCompletionClient {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "diagnostic_compat_tests.rs"]
+mod diagnostic_compat_tests;
