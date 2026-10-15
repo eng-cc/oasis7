@@ -23,7 +23,7 @@
 ## Packet
 ### Meta
 - `packet_id`:
-- `task_uid`:
+- `task_uid`: existing task reference, or `not_applicable` with the actual PR reference; no new task identity is required
 - `git_sha`:
 - `branch`:
 - `world_id`:

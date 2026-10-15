@@ -3,7 +3,7 @@
     "authority": "testing-manual.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "bba9b650aed3c91c9762d54e530a8c03ae3a2de6187d6d905f878c0e53e90b51",
+    "content_sha256": "32d4a65d72139516bbaa2e0aa400bb583b09af312f9cd9f2cc6e6e53b484562f",
     "disposition": "retain",
     "domain_owner": "qa_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

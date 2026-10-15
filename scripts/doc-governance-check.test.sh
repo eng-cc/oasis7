@@ -254,6 +254,96 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   exit 1
 fi
 
+# Use the real baseline caller; unrelated gates are isolated fixture no-ops.
+for gate in unified-world-code-terminology-scan.test.sh lint-skills.sh check-windows-paths.sh check-script-executable-bits.sh; do
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$FIXTURE/scripts/$gate"
+  chmod +x "$FIXTURE/scripts/$gate"
+done
+printf 'raise SystemExit(0)\n' >"$FIXTURE/scripts/validate-codex-agent-config.py"
+# Remove the inventoried input immediately before real awk opens it. This
+# exercises an actual read error without platform-dependent chmod semantics.
+REAL_AWK="$(command -v awk)"
+cat >"$TMPDIR/bin/awk" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${LENGTH_INPUT_FAILURE:-0}" == 1 && -f doc/many/doc-1.md ]]; then
+  mv doc/many/doc-1.md doc/many/doc-1.unreadable
+fi
+exec "${REAL_AWK:?}" "$@"
+SH
+chmod +x "$TMPDIR/bin/awk"
+
+# Length is editorial guidance, including through the full-corpus caller.
+# The same boundary documents must still fail for real reference/registry/read
+# errors. The content stub tests error propagation, not content parsing.
+cp "$FIXTURE/doc/many/doc-1.md" "$TMPDIR/length-original.md"
+cp "$FIXTURE/doc/.governance/top-level-directory-registry.json" "$TMPDIR/length-registry.json"
+for length in 999 1000 1001; do
+  for mode in default full baseline; do
+    command=(./scripts/doc-governance-check.sh)
+    case "$mode" in
+      full) command+=(--full-corpus) ;;
+      baseline) command=(bash "$ROOT_DIR/scripts/ci-tests.sh" required --group baseline --repo-root "$FIXTURE") ;;
+    esac
+    for defect in none reference structure content input; do
+      "$REAL_PYTHON" - "$FIXTURE/doc/many/doc-1.md" "$length" "$defect" <<'PY_LENGTH'
+from pathlib import Path
+import sys
+
+path, length, defect = Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+lines = ["# Length boundary fixture"] + ["Readable fixture paragraph." for _ in range(length - 1)]
+if defect == "reference":
+    lines[-1] = "Missing reference: doc/testing/nested/length-missing.md"
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+assert len(path.read_text(encoding="utf-8").splitlines()) == length
+PY_LENGTH
+      cp "$TMPDIR/length-registry.json" "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+      content_failure=0
+      input_failure=0
+      case "$defect" in
+        none) expected='doc-governance-check: OK' ;;
+        reference) expected='references missing markdown path: doc/testing/nested/length-missing.md' ;;
+        structure)
+          printf '%s\n' '{}' >"$FIXTURE/doc/.governance/top-level-directory-registry.json"
+          expected='top-level directory registry contract failed' ;;
+        content) content_failure=1; expected='product document content contract failed' ;;
+        input)
+          input_failure=1
+          expected='markdown line count scan failed' ;;
+      esac
+      status=0
+      (
+        cd "$FIXTURE"
+        OASIS7_PRODUCT_DOC_BASE="$fixture_history_commit" OASIS7_PRODUCT_DOC_HEAD="$fixture_history_commit" OASIS7_TEST_PYTHON="$REAL_PYTHON" PRODUCT_DOC_FAIL_CHANGED="$content_failure" LENGTH_INPUT_FAILURE="$input_failure" REAL_AWK="$REAL_AWK" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" "${command[@]}"
+      ) >"$TMPDIR/length-$length-$mode-$defect.out" 2>&1 || status=$?
+      if [[ "$defect" == input ]]; then
+        mv "$FIXTURE/doc/many/doc-1.unreadable" "$FIXTURE/doc/many/doc-1.md"
+      fi
+      output="$TMPDIR/length-$length-$mode-$defect.out"
+      if { [[ "$defect" == none ]] && [[ "$status" != 0 ]]; } || { [[ "$defect" != none ]] && [[ "$status" == 0 ]]; }; then
+        echo "doc-governance-check.test: length=$length mode=$mode defect=$defect unexpected status=$status" >&2
+        cat "$output" >&2
+        exit 1
+      fi
+      grep -Fq "$expected" "$output"
+      if [[ "$length" == 1001 && "$defect" != input ]]; then
+        grep -Fq 'advisory: doc/many/doc-1.md exceeds 1000 lines (1001)' "$output"
+      elif grep -Fq 'advisory: doc/many/doc-1.md' "$output"; then
+        echo "doc-governance-check.test: unexpected advisory at $length lines" >&2
+        exit 1
+      fi
+    done
+  done
+done
+rm "$TMPDIR/bin/awk"
+cp "$TMPDIR/length-original.md" "$FIXTURE/doc/many/doc-1.md"
+cp "$TMPDIR/length-registry.json" "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+(
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --help
+) >"$TMPDIR/length-help.out"
+grep -Fq 'over 1000 lines receive an advisory only' "$TMPDIR/length-help.out"
+
 printf 'Moving branch history: eng-cc/oasis7@main:doc/testing/nested/historical-source.md.\n' >>"$FIXTURE/doc/README.md"
 if (
   cd "$FIXTURE"

@@ -22,11 +22,11 @@ Agent owner 维护 Runtime 驱动和版本兼容；Runtime owner 验证 task/exe
 
 | 上游条款 | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 排除与未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [AC-EXT-001](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-001) | 声明 Runtime 必须确实执行且兼容方式可复现 | [adapter-drivers](#adapter-drivers) | agent_engineer / qa_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-004](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-004) | 在自身会话和工具能力中自主多轮决策 | [adapter-loop](#adapter-loop) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-007](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-007) | 无 GUI 时独立运行，停止 Runtime 不伪装继续 | [adapter-liveness](#adapter-liveness) | agent_engineer / viewer_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | 计量、预算和超时边界诚实且可执行 | [adapter-budget](#adapter-budget) | agent_engineer / qa_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | 两个 Runtime 分别通过可信 Skill 完成自助接入 | [adapter-skill](#adapter-skill) | agent_engineer / liveops_community | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-b3e367c3-c72d-4959-b599-613ac652dab8；[AC-EXT-001](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-001) | 声明 Runtime 必须确实执行且兼容方式可复现 | [adapter-drivers](#adapter-drivers) | agent_engineer / qa_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1；[AC-EXT-004](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-004) | 在自身会话和工具能力中自主多轮决策 | [adapter-loop](#adapter-loop) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e；[AC-EXT-007](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-007) | 无 GUI 时独立运行，停止 Runtime 不伪装继续 | [adapter-liveness](#adapter-liveness) | agent_engineer / viewer_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43；[AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | 计量、预算和超时边界诚实且可执行 | [adapter-budget](#adapter-budget) | agent_engineer / qa_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-a5bbf6e4-3e71-4d48-9eba-68c50867c95c；[AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | 两个 Runtime 分别通过可信 Skill 完成自助接入 | [adapter-skill](#adapter-skill) | agent_engineer / liveops_community | 不单独证明真实模型、客户端或公开发行就绪 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -166,11 +166,11 @@ worker 运行记录必须先持久保存 invocation_key，再启动 driver；若
 
 | 上游条款 | 本设计条款 | 独立 obligation 与适用条件 | 准确验证方法与场景 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [AC-EXT-001](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-001) | [adapter-drivers](#adapter-drivers) | 声明 Runtime 必须确实执行且兼容方式可复现 | [adapter-connect](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-connect)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-004](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-004) | [adapter-loop](#adapter-loop) | 在自身会话和工具能力中自主多轮决策 | [adapter-loop](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-loop)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-007](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-007) | [adapter-liveness](#adapter-liveness) | 无 GUI 时独立运行，停止 Runtime 不伪装继续 | [adapter-liveness](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-liveness)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | [adapter-budget](#adapter-budget) | 计量、预算和超时边界诚实且可执行 | [adapter-budget](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-budget)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | [adapter-skill](#adapter-skill) | 两个 Runtime 分别通过可信 Skill 完成自助接入 | [skill-release](../../testing/manual/external-agent-runtime-contract-validation.manual.md#skill-release)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-b3e367c3-c72d-4959-b599-613ac652dab8；[AC-EXT-001](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-001) | [adapter-drivers](#adapter-drivers) | 声明 Runtime 必须确实执行且兼容方式可复现 | [adapter-connect](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-connect)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1；[AC-EXT-004](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-004) | [adapter-loop](#adapter-loop) | 在自身会话和工具能力中自主多轮决策 | [adapter-loop](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-loop)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e；[AC-EXT-007](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-007) | [adapter-liveness](#adapter-liveness) | 无 GUI 时独立运行，停止 Runtime 不伪装继续 | [adapter-liveness](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-liveness)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43；[AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | [adapter-budget](#adapter-budget) | 计量、预算和超时边界诚实且可执行 | [adapter-budget](../../testing/manual/external-agent-runtime-contract-validation.manual.md#adapter-budget)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-a5bbf6e4-3e71-4d48-9eba-68c50867c95c；[AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | [adapter-skill](#adapter-skill) | 两个 Runtime 分别通过可信 Skill 完成自助接入 | [skill-release](../../testing/manual/external-agent-runtime-contract-validation.manual.md#skill-release)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
 
 ## 12. 决策、长期风险与未决问题
 

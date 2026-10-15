@@ -4,6 +4,8 @@
 
 本页承载跨模块专业治理与导航，不是第五个产品模块。通用开发与交付流程以[开发流程规范](../engineering/workflow/source-of-truth.md)为准；历史 ROUND、Task 和审计标记不构成当前任务准入材料。
 
+本文的阶段收口、发布评审、角色矩阵和计量目标仅适用于明确开展的跨模块阶段/发布工作，不是普通 PR 的固定角色组合、额外审批材料或另建台账要求。普通修改按受影响行为选择验证；真实发布阻断、已确认历史/权限/数据安全风险和有效暂停仍须满足，历史模板不能豁免它们。
+
 ## 目标
 - 作为项目级总 PRD，提供 oasis7 的全局设计全貌入口。
 - 统一跨模块边界、关键链路、术语口径与验收基线。
@@ -73,7 +75,7 @@
   1. Flow-CORE-001: `读取模块地图 -> 识别改动所属模块 -> 定位上下游依赖 -> 形成影响面清单`
   2. Flow-CORE-002: `读取关键链路 -> 映射到模块 PRD-ID -> 对照测试分层 -> 输出发布风险判断`
   3. Flow-CORE-003: `发现口径冲突 -> 回溯分册来源 -> 在 core 基线中统一术语与边界 -> 回写模块文档`
-  4. Flow-CORE-004: `评估当前项目状态 -> 划分 P0/P1/P2 -> 指定跨角色 owner / 输入 / 输出 / Done -> 回写对应模块 project`
+  4. Flow-CORE-004: `评估当前项目状态 -> 划分 P0/P1/P2 -> 指定跨角色 owner / 输入 / 输出 / Done -> 在当前 PR 或按需 Issue 记录执行范围`
   5. Flow-CORE-005: `收集玩法 / runtime / testing / playability / headless 证据 -> 对照阶段收口门禁 -> 形成 go / no-go 结论`
   6. Flow-CORE-006: `确认本轮 completed -> 汇总候选缺口 -> 划分 P0/P1/P2 -> 选定下一条执行主路径`
   7. Flow-CORE-007: `读取玩家访问模式产品 REQ/AC -> 按其 primary mode 约束映射产品/专业 authority 与适用 evidence -> 保留 core PRD-ID 和跨模块验收追踪 -> 输出不越界的跨模块结论`
@@ -82,7 +84,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD/design 与 PR 与实际验证记录 | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
-| 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
+| 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 按条款内容与 scope 回到对应 authority；core 词典只汇总 | 相关专业 owner 裁定本域语义，core 同步跨模块引用 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并记录在实际 PR 或按需 Issue | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
 | 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 PR、实际 CI 与评审记录（Issue 按需） / role review evidence，接收方确认责任边界，owner 回写正式 PRD 与实际 PR/CI/评审记录（Issue 按需） | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
@@ -198,14 +200,14 @@
   - 按现行开发流程进行的适用评审记录（不要求额外通用放行材料）
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
-  - 信息缺失：若模块 PRD 尚未更新，标记“口径待同步”并阻断发布结论。
+  - 信息缺失：若缺失内容影响本次发布判断，标记“口径待同步”并阻断该发布结论；无依赖的已授权分析、修复与测试继续。
   - 版本漂移：先按争议内容和声明 scope 确定 authority，再在同一 authority 内比较审定版本；较新日期不产生跨域覆盖权。范围不明或跨域冲突由对应责任人显式决定，并同步受影响条款，见 [权威裁决](../engineering/doc-governance/doc-structure-standard.design.md#doc-authority-resolution)。
   - 依赖冲突：同一链路被多个模块修改时，需合并影响面并重跑 required 级验证。
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
-  - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
+  - 术语冲突：先按争议内容与 scope 定位专业或产品 authority，core 词典同步其定义；跨域矛盾在当前 PR/评审中显式裁定，不以 core 总览覆盖专业合同。
   - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按正式专题的职责范围与当前明确负责人协调；core 记录跨域决定，PR/评审及按需 Issue 记录执行事实，不依赖退役 `.pm` task owner 或额外角色回执。
   - Git、PR 与实际 CI 记录 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
-  - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
+  - 证据缺口：不能核对本次候选、适用范围或真实结果时，不得宣称 fully ready；沿用适用专业证据合同，不因未套用统一模板而另增普通 PR 门禁。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
 - Non-Functional Requirements:
   - NFR-CORE-1: 核心入口文档链接可用率 100%。

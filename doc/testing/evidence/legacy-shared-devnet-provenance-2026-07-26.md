@@ -5,7 +5,7 @@ Status: historical/rehearsal record only. This is the single entry point for the
 ## Authority and boundary
 
 - Current environment and network-tier authority: `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` and `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`; current mechanism and readiness operations start from `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`.
-- Current readiness and claim evidence: `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md` and `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`.
+- Retained 2026-07 readiness and claim evidence windows (not present-day readiness): `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md` and `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`.
 - The retained legacy conclusion is: `shared_devnet` rehearsal reached `pass / eligible_for_promotion` on 2026-05-24, but that result does not promote, substitute for, or relax any formal `public_testnet` or `mainnet` gate.
 
 ## Replay identity and final gate state

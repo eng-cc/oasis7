@@ -3,7 +3,7 @@
     "authority": "doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "d9bf37d382449646694a9be719a95e5921e514ad112262bd7600ceecf383ab3b",
+    "content_sha256": "0c160ff0ba2780ee52a666fc34f61864ed34d304e59c4c1bf2668de36e8192bb",
     "disposition": "retain",
     "domain_owner": "qa_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

@@ -1,7 +1,7 @@
 # oasis7 Simulator：场景文件化（设计文档）设计
 
 - 对应需求文档: `doc/world-simulator/scenario/scenario-files.prd.md`
-- 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
+- 当前任务状态与历史变更：GitHub PR、实际验证记录与 Git history；Issue 按需。
 
 ## 1. 设计定位
 定义场景文件化设计，把内置 `WorldScenario` 迁移为 JSON 场景文件并作为单一权威来源。
@@ -20,6 +20,8 @@
 | [加载与 demo 例外](scenario-files.prd.md#scenario-loading-contract) | include_str 重编译与 demo 显式文件初始化；同解析与校验 | [设计约束](#scenario-loading-design) | 对应模块维护者与 QA | 文档补齐不宣称实现或真实运行完成 |
 | [消费入口矩阵](scenario-files.prd.md#场景初始化与消费入口矩阵) | Simulator/named runtime-live/generated-world 的模型保留与默认 Agent 分开 | [设计约束](#scenario-loading-design) | 对应模块维护者与 QA | 文档补齐不宣称实现或真实运行完成 |
 | [generated-world 来源](scenario-files.prd.md#generated-world-provenance-contract) | 区分当前文件存在检查与未来内容绑定、固定输入重建验证 | [来源校验边界](#generated-world-provenance-design) | Simulator 工件生成器、runtime-live 消费者与 QA | 不把现有加载成功当成已验证来源；本次不改加载器或持久格式 |
+| [固定场景重现产品要求](../../product/agents-world-simulation/prd.md#sc-agent-001)；Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448 | 固定场景重现中的相同有效 seed/config/触发顺序初始化及 generated-world 来源重建切片 | [场景约束](#scenario-loading-design) | simulator/runtime 维护有效输入；Viewer 与 QA 核对权威事件及交互结果 | 不覆盖整个事件执行/replay、正式 surface 交互结果或真实 provider 确定性；产品根仍为部分覆盖 |
+| [固定场景重现产品要求](../../product/agents-world-simulation/prd.md#sc-agent-001)；Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448 | 固定场景重现中的相同有效 seed/config/触发顺序初始化及 generated-world 来源重建切片 | [来源与重建](#generated-world-provenance-design) | simulator/runtime 维护有效输入；Viewer 与 QA 核对权威事件及交互结果 | 不覆盖整个事件执行/replay、正式 surface 交互结果或真实 provider 确定性；产品根仍为部分覆盖 |
 
 ## 3. 关键接口 / 入口
 - `crates/oasis7/scenarios/*.json`
@@ -60,3 +62,9 @@
 | [加载与 demo 例外](scenario-files.prd.md#scenario-loading-contract) | [设计约束](#scenario-loading-design) | include_str 重编译与 demo 显式文件初始化；同解析与校验 | 候选版本的[验证入口](../../../crates/oasis7/tests/oasis7_init_demo.rs)：核对自定义文件与内置场景入口、不可读/解析失败，不宣称热更新；静态核对与实际执行分别记录 | 实施 PR 的候选、命令、fixture 与真实结果 | 不代签未执行回归、真实模型、浏览器、节点或发布验收 |
 | [消费入口矩阵](scenario-files.prd.md#场景初始化与消费入口矩阵) | [设计约束](#scenario-loading-design) | Simulator/named runtime-live/generated-world 的模型保留与默认 Agent 分开 | 候选版本的[验证入口](../../../crates/oasis7/src/simulator/tests/init.rs)：核对纯碎片四 chunks、无 origin/Agent；Web 保留入口未实现则不宣称通过；静态核对与实际执行分别记录 | 实施 PR 的候选、命令、fixture 与真实结果 | 不代签未执行回归、真实模型、浏览器、节点或发布验收 |
 | [generated-world 来源](scenario-files.prd.md#generated-world-provenance-contract) | [来源校验边界](#generated-world-provenance-design) | 来源存在、内容绑定与固定输入重建分别验证 | [snapshot_generated_world.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_generated_world.rs) 当前 fixture 的场景 seed 为 9、provenance seed 为 42，仅验证映射；实现候选需另补一致产物、非法/缺失 provenance、seed/config/sidecar/manifest 不匹配，以及固定生成输入重建的离线回归 | 实施 PR 的候选、实际产物摘要、输入与真实验证结果 | 现有 fixture 不证明来源校验，本次未执行绑定或重建回归 |
+| [固定场景重现产品要求](../../product/agents-world-simulation/prd.md#sc-agent-001)；Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448 | [场景约束](#scenario-loading-design) | 固定完整有效输入与触发顺序，区分初始化重现、来源绑定和整段交互结果 | 复用[初始化回归定义](../../../crates/oasis7/src/simulator/tests/init.rs)，只作为相关测试源，不视为本SC通过；实施候选另记录固定输入重建及错误 provenance/seed/config/sidecar/manifest 负例，整段事件与正式交互由各 consumer 另核 | 实施 PR 的候选、有效输入、生成产物及实际对比结果 | 未运行；加载或局部 fixture 不代签根 SC-1 全部事件及玩家交互结果 |
+| [固定场景重现产品要求](../../product/agents-world-simulation/prd.md#sc-agent-001)；Trace refs: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448 | [来源与重建](#generated-world-provenance-design) | 固定完整有效输入与触发顺序，区分初始化重现、来源绑定和整段交互结果 | 复用[generated-world 回归定义](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_generated_world.rs)，只作为相关测试源，不视为本SC通过；实施候选另记录固定输入重建及错误 provenance/seed/config/sidecar/manifest 负例，整段事件与正式交互由各 consumer 另核 | 实施 PR 的候选、有效输入、生成产物及实际对比结果 | 未运行；加载或局部 fixture 不代签根 SC-1 全部事件及玩家交互结果 |
+
+## 12. 风险与未决边界
+
+来源文件存在不证明内容绑定；当前六字段 provenance 不携带 sidecar 内容摘要。固定输入初始化重现也不证明后续权威事件与正式玩家交互一致。生成/消费格式兼容、来源负例及全链路重现仍需实现候选与真实验证；本文只补既有场景合同到产品 SC-1 的部分承接，不增加当前运行能力。

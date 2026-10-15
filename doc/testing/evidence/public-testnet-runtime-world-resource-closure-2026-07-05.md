@@ -1,5 +1,7 @@
 # Public Testnet Runtime And World Resource Closure Evidence (2026-07-05)
 
+证据窗口边界：本文的 `current`、`live`、`fresh`、lane verdict 和后续建议仅指文中记录的采集窗口，不证明当前端点可用、节点健康、发布 readiness 或持续任务义务。当前部署/恢复以[governed bootstrap runbook](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md)为准，当前 readiness 以[formal network runbook](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)及新采集的同窗证据裁决；保留本次失败、通过与未验证范围，不以较晚结果覆盖。
+
 ## Meta
 - Task: GitHub issue #1964 / `task_643302fe9bf7404fb9bd9dcf7f8985ed`
 - Lanes: `runtime_bootstrap`, `world_resource_provenance_ready`
