@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-fn fixture(scope: &str) -> (ReadWorldViewRequest, ReadWorldViewResponse<Value>) {
+pub(crate) fn fixture(scope: &str) -> (ReadWorldViewRequest, ReadWorldViewResponse<Value>) {
     let world = WorldIdentity {
         world_id: "world".into(),
         genesis_digest: "genesis".into(),

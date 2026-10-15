@@ -41,3 +41,24 @@ The native task wire profile rejects legacy provider/browser/lease/continuation
 request variants. It does not expand the CLI's supported gameplay or migrate the
 legacy built-in executor. See [the API scope](../../doc/world-simulator/llm/external-agent-game-api.design.md)
 and [implementation scope](https://github.com/eng-cc/oasis7/issues/4726).
+
+The feedback foundation exposes bounded, service-authenticated scoped history.
+`record_caller_persisted_feedback_acceptance` resolves a record inside a
+`VerifiedTaskWorldView`; call it only after the caller durably commits its private
+feedback effects and acceptance digest. The SDK records that signed caller
+statement, not proof of private-memory correctness. It does not run or restore
+Harness cognition, reorder private effects, or turn server delivery state into a
+local acceptance marker. Only committed service feedback supports the existing
+ACK protocol; other feedback remains readable without gaining ACK authority.
+
+Acceptance and the original signed ACK share the existing encrypted operation
+store. The view and journal bind the exact configured read authority; changing
+that trust configuration cannot authorize acceptance or recovery of the old ACK. Immutable feedback-ID and session/sequence indexes must agree before an
+ACK can be recovered or sent. A repeated acceptance must retain the same digest,
+generation and feedback identity; recovery uses `recover_caller_persisted_feedback_ack`
+without applying private effects again. `acknowledge_caller_persisted_feedback`
+submits that exact cached payload and uses bounded original-result polling.
+Unknown/Pending remains unresolved, and no authoritative ACK-completion marker is
+persisted locally. A missing or conflicting index blocks sending; an interrupted
+initial write can be retried with the exact original acceptance. This foundation
+alone does not complete the legacy feedback/memory consumer migration.

@@ -25,6 +25,36 @@ impl OperationStore {
             Err("private client operation storage unsupported".into())
         }
     }
+    pub(crate) fn read_feedback_state<T: serde::de::DeserializeOwned>(
+        &self,
+        operation: &str,
+        validate: impl Fn(&ClientStateV1<T>, ClientStateKind) -> Result<(), String>,
+    ) -> Result<Option<ClientStateV1<T>>, String> {
+        read_client_state_with(
+            #[cfg(unix)]
+            &self.directory,
+            &self.key,
+            ClientStateKind::FeedbackAcceptance,
+            operation,
+            validate,
+        )
+    }
+    pub(crate) fn put_feedback_state<T: Serialize + serde::de::DeserializeOwned>(
+        &self,
+        operation: &str,
+        record: &ClientStateV1<T>,
+        validate: impl Fn(&ClientStateV1<T>, ClientStateKind) -> Result<(), String>,
+    ) -> Result<ClientStateV1<T>, String> {
+        put_client_state_with(
+            #[cfg(unix)]
+            &self.directory,
+            &self.key,
+            ClientStateKind::FeedbackAcceptance,
+            operation,
+            record,
+            validate,
+        )
+    }
     pub fn read_client_state(
         &self,
         kind: ClientStateKind,

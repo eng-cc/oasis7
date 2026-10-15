@@ -89,9 +89,11 @@ impl Probe {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let config = crate::tests::config(format!("http://{}", listener.local_addr().unwrap()));
+        static NEXT_PROBE: AtomicUsize = AtomicUsize::new(0);
         let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-            "oasis7-device-poll-{}-{}",
+            "oasis7-device-poll-{}-{}-{}",
             std::process::id(),
+            NEXT_PROBE.fetch_add(1, Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

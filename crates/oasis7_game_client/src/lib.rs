@@ -342,10 +342,12 @@ pub use task_client::WorldServiceTaskClient;
 pub mod operation_store;
 
 mod verified_task_view;
-pub use verified_task_view::{TaskWorldProjection, VerifiedTaskWorldView};
+pub use verified_task_view::{AuthorizedFeedbackRecord, TaskWorldProjection, VerifiedTaskWorldView};
 
 pub mod commands;
 pub mod device_client;
 
 #[cfg(test)]
 mod tests;
+
+mod feedback;
