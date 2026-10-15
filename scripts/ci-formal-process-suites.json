@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "suites": {
+    "runtime-protocol": [
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::protected_endpoint_children_submit_qualify_restart_and_read_from_external_pin",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::protected_endpoint_children_start_from_qualified_zero_height_genesis",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::oracle_support::handoff_tests::protected_endpoint_children_signer_handoff_stops_exact_owner_and_qualifies_successor",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::availability_tests::protected_endpoint_children_replica_unavailable_preserves_exact_read_and_reconciles_original",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::crash_tests::protected_endpoint_children_sigkill_runtime_durable_phases_resume_original_once",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::effect_tests::protected_endpoint_children_effect_lost_reply_sigkill_resolves_original_once",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::effect_tests::protected_endpoint_children_effect_without_retry_contract_never_posts_after_restart",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::effect_tests::protected_endpoint_children_effect_lost_store_new_authorized_sender_queries_original_receipt",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::oracle_support::survivor_tests::protected_endpoint_children_replica_only_frozen_and_prepared_resume_without_original_private_key",
+        "ignored": true
+      }
+    ],
+    "world-history": [
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::long_history_tests::protected_endpoint_children_world_long_history_prunes_reopens_and_retains_original",
+        "ignored": true
+      }
+    ],
+    "healthy-set": [
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::durable_set_tests::formal_protected_healthy_durable_set_rebind_and_restart",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::durable_set_tests::formal_protected_healthy_durable_set_cold_original_lookup_after_restart",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::healthy_operation_tests::formal_protected_healthy_durable_set_operation_cli_owner_and_original_result",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::healthy_fault_tests::healthy_durable_set_owner_retries_same_operation_after_real_successor_writer_lock_failure",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::healthy_fault_tests::healthy_durable_set_owner_resumes_same_operation_after_old_owner_sigkill",
+        "ignored": true
+      }
+    ],
+    "storage-recovery": [
+      {
+        "binary": "distfs-tests",
+        "name": "controlled_authority::formal::endpoint::tests::protected_tests::formal_endpoint_child_process_dual_qualification_sigkill_reopen_original",
+        "ignored": true
+      },
+      {
+        "binary": "distfs-tests",
+        "name": "controlled_authority::formal::endpoint::tests::protected_tests::recovery_process_tests::recovered_endpoint_children_import_ready_complete_original_and_reopen_without_reexecution",
+        "ignored": true
+      },
+      {
+        "binary": "distfs-tests",
+        "name": "controlled_authority::formal::endpoint::tests::protected_tests::recovery_process_tests::recovered_endpoint_children_consecutive_epoch_before_first_completion_preserves_original",
+        "ignored": true
+      },
+      {
+        "binary": "distfs-tests",
+        "name": "controlled_authority::formal::endpoint::tests::long_run_c10_tests::native_profile2_c10_over_64_records_and_16mib_reopens_and_retries_original_once",
+        "ignored": true
+      }
+    ],
+    "lifecycle-cli": [
+      {
+        "binary": "runtime-tests",
+        "name": "formal_live_runtime::tests::protected_process_tests::world_initialization_tests::formal_world_initialization_cli_repeated_and_interrupted_activation_reconciles_original",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "node_lifecycle::formal_full_sync::tests::cli_process_tests::formal_full_state_sync_cli_init_join_restart_preserves_external_c0",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "node_lifecycle::formal_full_sync::tests::cli_process_tests::formal_full_state_sync_cli_moving_head_restart_catches_up_from_fixed_c0",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "node_lifecycle::formal_full_sync::tests::cli_process_tests::formal_full_state_sync_cli_legal_epoch_new_grant_replays_from_unchanged_c0",
+        "ignored": true
+      },
+      {
+        "binary": "runtime-tests",
+        "name": "node_lifecycle::formal_full_sync::tests::cli_process_tests::formal_full_state_sync_cli_dead_seed_joins_alternate_and_restarts_from_fixed_c0",
+        "ignored": true
+      }
+    ]
+  },
+  "environment_formal_batches": {
+    "oasis7-lib-tests": "runtime-protocol",
+    "runtime-tests": "runtime-protocol",
+    "distfs-tests": "storage-recovery"
+  },
+  "shell_tests": {
+    "lifecycle-cli": [
+      "local-node-lifecycle.test.sh",
+      "legacy-observer-migration.test.sh"
+    ]
+  },
+  "legacy_ignored_filters": {
+    "runtime-tests": [
+      "protected_endpoint_children",
+      "formal_protected_healthy_durable_set_",
+      "healthy_durable_set_owner_",
+      "formal_world_initialization_cli_",
+      "formal_full_state_sync_cli"
+    ],
+    "distfs-tests": [
+      "formal_endpoint_child_process_dual_qualification_sigkill_reopen_original",
+      "recovered_endpoint_children",
+      "native_profile2_c10_over_64_records_and_16mib_reopens_and_retries_original_once"
+    ]
+  },
+  "auxiliary_entries": {
+    "runtime-tests": [
+      "formal_live_runtime::tests::protected_process_tests::crash_tests::protected_runtime_crash_child",
+      "formal_live_runtime::tests::protected_process_tests::oracle_support::handoff_tests::protected_handoff_owner_worker",
+      "node_lifecycle::legacy_migration::tests::legacy_export_real_source_fixture"
+    ],
+    "distfs-tests": [
+      "controlled_authority::formal::endpoint::tests::protected_tests::pack_partial_crash_tests::endpoint_pack_first_link_crash_child",
+      "controlled_authority::formal::business_pack::tests::pack_sigkill_harness_child"
+    ]
+  }
+}
