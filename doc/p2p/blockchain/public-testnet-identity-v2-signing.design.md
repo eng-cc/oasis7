@@ -531,3 +531,40 @@ determinism guarantee is limited to canonical byte production and exact
 admission pairing. Runtime integration, custody ceremony, trust-root approval,
 and real provider evidence remain residual risks requiring blockchain-ops,
 runtime, QA, and TPM follow-up.
+
+## 审读基线与当前差距
+
+- Owner role：`runtime_engineer`、`blockchain_ops_engineer`；验证由 `qa_engineer` 独立核对。
+- 本次文档/源码审读基线：`4e94163a3dff9ba69f6959b406ca3fcedf8aa097`，日期 `2026-10-15`。当前实现说明与历史阶段记录分别保留；本次不执行签名、部署、恢复或构建，不推导新的运行完成态。
+- 产品关系只承接下表明确列出的局部义务；功能整体仍为部分覆盖，现有产品实现状态与原验收层级不变。
+
+## 上游、目标与边界补充
+
+<a id="identity-v2-role-isolation"></a>
+### 身份证明与共识权限隔离
+
+本专题仅承接 DCS-003 中的 identity-v2 signer/verifier 域隔离子范围。原 §1/3/6/8 的独立 authority、固定 verifier 与语义签名域共同限制 sidecar、planner、adapter 和服务节点：它们只能验证/传送材料，不因签名或 verified 标志取得 validator finality 或世界写入权。身份回执不能成为共识证书；批准 provider 也不能跳过治理 activation。完整服务角色、验证者转换及运行暴露面的组合验收仍由 P2P 主设计与 QA 持有。
+
+## 状态、事务与持久化边界
+
+原 §6 的 prepare/sign/assemble/verify 是文件处理阶段，assemble 的 verdict 为 false；只有独立 verifier 输出与本地重算一致才可发布输出对，仍不意味着世界 applied。验证失败保留已有派生产物；捕获的发布失败按 pair 恢复机制处置，恢复失败保留 backup 并要求 reconciliation，不保证跨两个输出路径的 crash-atomic visibility。输出不能 alias 输入/authority/code-owned 路径。原 §7 的私有 staging、七工件闭包与 atomic promotion 管理证据生命周期；原 §8 的 metadata authentication 不证明 checkpoint 文件存在、restore 成功或 fleet health。本设计没有 tick/replay/recovery-state 写入权。
+
+## 兼容、部署与风险
+
+原始 v1 receipt 原字节进入 digest，但 legacy identity-receipts 不得当作 v2 map；historical_audit 只能取证，不能 current_admission/apply。旧签名不能通过重算字段迁移。真实 custody、root/profile 批准、registry pinning 与独立 verifier 未 provisioned 时保持 capability_blocked；同 owner 替换 executable 的竞态限制保留。没有本次 live 验收，测试 provider 与 fixture 不能进入 deployed allowlist。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)；Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3 | 身份-v2 的材料生产者/验证者不能取得共识 authority。 | [身份域隔离](#identity-v2-role-isolation) | P2P / governance root owner / QA | 只覆盖 signer/verifier 域边界，不证明全部服务角色或 BFT 隔离。 |
+| [runbook identity-v2 preparation](public-testnet-governed-bootstrap.runbook.md#identity-v2-evidence-preparation-capability-gated) | 按已批准 authority 生产、校验 exact raw/context/intent 字节与完整 evidence map；缺能力 fail closed。 | [offline executable contract](#6-executable-contract-offline-implementation-live-authority-not-provisioned) | deployment authority / provider custody owner | 产品适用性：N/A；理由：本行是 operator 文件与 CLI 验证合同，不定义玩家准入；范围：prepare/sign/assemble/verify。真实 provisioning 与 apply 授权未覆盖。 |
+
+### 11.1 验证映射表
+
+以下是验证要求与已有入口的对应，不是本次执行结果。源码/测试定义只提供静态核对；实际验收须在同候选、适用 feature/config 与环境下运行，并保留命令、提交、输出、失败样例和未覆盖范围。文档检查通过不证明运行、部署或 release readiness。
+
+| 上游 requirement / acceptance | 本设计条款 | 验证目标 / oracle | 验证方法 / 精确来源 | 证据产物 | 未覆盖边界 / residual risk |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-DCS-003](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-003)；Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3 | [身份域隔离](#identity-v2-role-isolation) | 错误域、替换 verifier、复制 verdict 不得生成可准入结果。 | 审读并执行 [signing tool regression](../../../scripts/p2p-public-testnet-identity-v2-signing-tool.test.py) 中 registry-selected verifier、retired/revoked key 与 copied verdict 拒绝用例。 | 对应候选的命令、退出码、断言输出与环境；本次未运行此技术验收。 | 只覆盖 signer/verifier 域边界，不证明全部服务角色或 BFT 隔离。 |
+| [runbook identity-v2 preparation](public-testnet-governed-bootstrap.runbook.md#identity-v2-evidence-preparation-capability-gated) | [offline executable contract](#6-executable-contract-offline-implementation-live-authority-not-provisioned) | 精确字节与 authority pin 一致；验证失败不覆盖已有输出；捕获的 publication failure 尝试恢复，恢复失败保留 backup，不保证崩溃原子性；fixture 不产生 live 证据。 | 执行 [signing tool tests](../../../scripts/p2p-public-testnet-identity-v2-signing-tool.test.py) 的 deterministic prepare、unchanged payload、output alias、publication failure 和 verifier mismatch 断言。 | 对应候选的命令、退出码、断言输出与环境；本次未运行此技术验收。 | 产品适用性：N/A；理由：本行是 operator 文件与 CLI 验证合同，不定义玩家准入；范围：prepare/sign/assemble/verify。真实 provisioning 与 apply 授权未覆盖。 |
