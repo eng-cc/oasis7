@@ -1,5 +1,6 @@
 use super::*;
-use oasis7::world_service::task_factory_quote::{
+use oasis7_client_api::world_service as authority;
+use oasis7_client_api::world_service::task_factory_quote::{
     TASK_FACTORY_QUOTE_PATH, TaskFactoryQuoteRequestV1, TaskFactoryQuoteV1,
 };
 
@@ -106,7 +107,7 @@ fn validate_cached_build_action(
     factory: &str,
     kind: &str,
 ) -> Result<(), String> {
-    let expected = oasis7::runtime::builtin_factory_spec(kind, factory)
+    let expected = oasis7_agent_api::world_quote::builtin_factory_spec(kind, factory)
         .ok_or("factory kind requires an exact built-in ID")?;
     match action {
         crate_action::Action::BuildFactory {
@@ -190,8 +191,11 @@ mod tests {
         let action = crate_action::Action::BuildFactory {
             builder_agent_id: "configured".into(),
             site_id: "ready-site".into(),
-            spec: oasis7::runtime::builtin_factory_spec("factory.smelter.mk1", "new-smelter")
-                .unwrap(),
+            spec: oasis7_agent_api::world_quote::builtin_factory_spec(
+                "factory.smelter.mk1",
+                "new-smelter",
+            )
+            .unwrap(),
         };
         assert!(
             validate_cached_build_action(
@@ -233,7 +237,7 @@ mod tests {
         );
         let other = crate_action::Action::MoveAgent {
             agent_id: "configured".into(),
-            to: oasis7::GeoPos::new(0, 0, 0),
+            to: oasis7_agent_api::world_action::GeoPos::new(0, 0, 0),
         };
         assert!(
             validate_cached_build_action(

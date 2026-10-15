@@ -222,6 +222,7 @@ pub(super) fn maybe_handle_with_guarded(
         SUBMIT_PATH,
         LOOKUP_PATH,
         VIEW_PATH,
+        oasis7_client_api::world_service::VIEW_JSON_PATH,
         CHANGES_PATH,
     ]
     .contains(&path)
@@ -258,6 +259,9 @@ pub(super) fn maybe_handle_with_guarded(
             SUBMIT_PATH => operations::submit(&service, parse(body)?),
             LOOKUP_PATH => operations::lookup(&service, parse(body)?),
             VIEW_PATH => operations::view(&service, parse(body)?),
+            oasis7_client_api::world_service::VIEW_JSON_PATH => {
+                operations::view_json(&service, parse(body)?)
+            }
             CHANGES_PATH => operations::changes(&service, parse(body)?),
             _ => unreachable!(),
         }

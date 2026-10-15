@@ -42,3 +42,6 @@ pub use signing::{
     main_token_transfer_signing_payload, sign_main_token_transfer,
     sign_main_token_transfer_request, sign_transfer, verify_main_token_transfer_signature,
 };
+
+pub mod world_service_correlation;
+pub mod world_service_wire;

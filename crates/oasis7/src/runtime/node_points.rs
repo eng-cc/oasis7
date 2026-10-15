@@ -95,36 +95,9 @@ pub struct NodeContributionSample {
     pub explicit_penalty_points: f64,
 }
 
-/// Per-node settlement result for one epoch.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct NodeSettlement {
-    pub node_id: String,
-    pub obligation_met: bool,
-    pub compute_score: f64,
-    pub storage_score: f64,
-    pub uptime_score: f64,
-    pub reliability_score: f64,
-    pub storage_reward_score: f64,
-    pub rewardable_storage_bytes: u64,
-    pub penalty_score: f64,
-    pub total_score: f64,
-    pub main_awarded_points: u64,
-    pub storage_awarded_points: u64,
-    pub awarded_points: u64,
-    pub cumulative_points: u64,
-}
+pub use oasis7_agent_api::world_action::NodeSettlement;
 
-/// A full epoch settlement report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct EpochSettlementReport {
-    pub epoch_index: u64,
-    pub pool_points: u64,
-    pub storage_pool_points: u64,
-    pub distributed_points: u64,
-    pub storage_distributed_points: u64,
-    pub total_distributed_points: u64,
-    pub settlements: Vec<NodeSettlement>,
-}
+pub use oasis7_agent_api::world_action::EpochSettlementReport;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodePointsError {

@@ -148,59 +148,7 @@ pub enum ProposalDecision {
     Reject { reason: String },
 }
 
-/// Finality certificate bound to consensus height and signer threshold.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GovernanceFinalityCertificate {
-    pub proposal_id: ProposalId,
-    pub manifest_hash: String,
-    pub consensus_height: u64,
-    #[serde(default)]
-    pub epoch_id: u64,
-    #[serde(default)]
-    pub validator_set_hash: String,
-    #[serde(default)]
-    pub stake_root: String,
-    #[serde(default)]
-    pub threshold_bps: u16,
-    #[serde(default)]
-    pub min_unique_signers: u16,
-    #[serde(default)]
-    pub threshold: u16,
-    pub signatures: BTreeMap<String, String>,
-}
-
-impl GovernanceFinalityCertificate {
-    pub const SIGNATURE_PREFIX_ED25519_V1: &'static str = "govsig:ed25519:v1:";
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "The governance signature preimage is a stable wire contract; grouping arguments would alter callers and signing compatibility."
-    )]
-    pub fn signing_payload_v1(
-        proposal_id: ProposalId,
-        manifest_hash: &str,
-        consensus_height: u64,
-        epoch_id: u64,
-        validator_set_hash: &str,
-        stake_root: &str,
-        threshold_bps: u16,
-        min_unique_signers: u16,
-        signer_node_id: &str,
-    ) -> Vec<u8> {
-        format!(
-            "govfinal:ed25519:v1|{proposal_id}|{manifest_hash}|{consensus_height}|{epoch_id}|{validator_set_hash}|{stake_root}|{threshold_bps}|{min_unique_signers}|{signer_node_id}"
-        )
-        .into_bytes()
-    }
-
-    pub fn effective_min_unique_signers(&self) -> u16 {
-        if self.min_unique_signers > 0 {
-            self.min_unique_signers
-        } else {
-            self.threshold
-        }
-    }
-}
+pub use oasis7_agent_api::world_action::GovernanceFinalityCertificate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct GovernanceFinalityEpochSnapshot {

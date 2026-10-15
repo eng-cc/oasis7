@@ -468,3 +468,44 @@ fn validate_projection(version: &ProjectionVersion) -> Result<(), ContractError>
     required(&version.projection_revision)?;
     required(&version.visibility_scope)
 }
+
+/// Authentication codecs shared by remote clients and runtime adapters.
+mod authority;
+pub use authority::*;
+
+pub const DESCRIBE_PATH: &str = "/v1/world/describe";
+pub const SUBMIT_PATH: &str = "/v1/world/submit";
+pub const LOOKUP_PATH: &str = "/v1/world/lookup";
+pub const VIEW_PATH: &str = "/v1/world/view";
+pub const CHANGES_PATH: &str = "/v1/world/changes";
+
+/// The signature binds the operation domain and every request field.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SignedReadRequest<T> {
+    pub request: T,
+    pub subject_public_key: String,
+    pub signature_hex: String,
+}
+
+/// Verified against configured service trust, not a caller-supplied key.
+/// This authenticates a service assertion; consensus proofs remain separate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SignedServiceResponse<T> {
+    pub request_digest: String,
+    pub payload: T,
+    pub signature_hex: String,
+}
+
+pub mod private_goal;
+
+pub mod private_goal_read;
+
+pub mod task_context;
+
+pub mod client_state;
+
+/// Explicit normalized-JSON projection profile; independent signature domain.
+pub const VIEW_JSON_PATH: &str = "/v1/world/view-json";
+
+pub mod task_factory_quote;
+pub mod task_recipe_quote;

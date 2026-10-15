@@ -5,7 +5,7 @@ use crate::world_service::private_goal_prepare::SignedGoalPrepareV1;
 #[cfg(unix)]
 use oasis7_agent_api::game::GameGoalPrepareV1;
 use oasis7_agent_api::game::GameGoalPublishV1;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zeroize::Zeroizing;
 
 #[cfg(unix)]
@@ -13,110 +13,10 @@ const DOMAIN: &str = "oasis7/private-prepared-goal/v1";
 #[cfg(unix)]
 const MAGIC: &[u8; 8] = b"O7PREP01";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PreparedGoalError {
-    Invalid,
-    Conflict,
-    Unavailable,
-}
-impl std::fmt::Display for PreparedGoalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Invalid => "invalid private goal proof",
-            Self::Conflict => "private goal operation conflict",
-            Self::Unavailable => "private goal recovery required",
-        })
-    }
-}
-impl std::error::Error for PreparedGoalError {}
-
-/// Private only: clients verify this exact proof and recompute its salted
-/// reference before signing the separate public PublishGoal. No Debug.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PreparedGoalReceiptV1 {
-    pub schema_revision: u32,
-    pub goal_ref: String,
-    pub reference_salt: String,
-    pub owner_proof: SignedGoalPrepareV1,
-}
-impl PreparedGoalReceiptV1 {
-    pub fn validate(&self) -> Result<(), PreparedGoalError> {
-        if self.schema_revision != 1 {
-            return Err(PreparedGoalError::Invalid);
-        }
-        self.owner_proof
-            .verify()
-            .map_err(|_| PreparedGoalError::Invalid)?;
-        let salt = decode_salt(&self.reference_salt)?;
-        if self.goal_ref != commitment(&salt, &self.owner_proof)? {
-            return Err(PreparedGoalError::Invalid);
-        }
-        Ok(())
-    }
-
-    /// Expected proposal is retained on the owner device, not reconstructed
-    /// from the server receipt. Parsing or self-consistency is insufficient.
-    pub fn validate_against(
-        &self,
-        original: &SignedGoalPrepareV1,
-    ) -> Result<(), PreparedGoalError> {
-        self.validate()?;
-        if &self.owner_proof != original {
-            return Err(PreparedGoalError::Conflict);
-        }
-        Ok(())
-    }
-
-    pub fn validate_publish(&self, publish: &GameGoalPublishV1) -> Result<(), PreparedGoalError> {
-        self.validate()?;
-        publish.validate().map_err(|_| PreparedGoalError::Invalid)?;
-        let r = &self.owner_proof.request;
-        if self.goal_ref != publish.goal_ref
-            || r.client_operation_id != publish.prepare_operation_id
-            || r.world_id != publish.world_id
-            || r.genesis_digest != publish.genesis_digest
-            || r.task_id != publish.task_id
-            || r.agent_id != publish.agent_id
-            || r.owner_public_key != publish.owner_public_key
-            || r.owner_binding != publish.owner_binding
-            || r.owner_generation != publish.owner_generation
-            || r.branch_id != publish.branch_id
-            || r.reorg_epoch != publish.reorg_epoch
-            || r.expected_task_revision != publish.expected_task_revision
-            || r.expected_latest_goal_revision != publish.expected_latest_goal_revision
-            || r.goal_revision != publish.goal_revision
-        {
-            return Err(PreparedGoalError::Conflict);
-        }
-        Ok(())
-    }
-}
-
-fn decode_salt(value: &str) -> Result<[u8; 32], PreparedGoalError> {
-    if value.len() != 64
-        || !value
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    {
-        return Err(PreparedGoalError::Invalid);
-    }
-    hex::decode(value)
-        .map_err(|_| PreparedGoalError::Invalid)?
-        .try_into()
-        .map_err(|_| PreparedGoalError::Invalid)
-}
-fn commitment(salt: &[u8; 32], proof: &SignedGoalPrepareV1) -> Result<String, PreparedGoalError> {
-    let bytes = Zeroizing::new(
-        oasis7_wasm_abi::encode_canonical_cbor(&(
-            "oasis7/private-goal-reference/v1",
-            hex::encode(salt),
-            proof,
-        ))
-        .map_err(|_| PreparedGoalError::Invalid)?,
-    );
-    Ok(blake3::hash(&bytes).to_hex().to_string())
-}
+use oasis7_client_api::world_service::private_goal::prepared_goal_commitment as commitment;
+pub use oasis7_client_api::world_service::private_goal::{
+    PreparedGoalError, PreparedGoalReceiptV1,
+};
 
 // Revisions, nonce, body and signature are deliberately excluded. Changing any
 // of them under the same operation must conflict rather than select a new file.

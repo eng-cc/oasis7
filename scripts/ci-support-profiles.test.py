@@ -37,6 +37,14 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertNotIn('oasis7_local_signer', result.stdout)
         self.assertNotIn('full-inventory', result.stdout)
 
+    def test_game_client_isolated_and_strict(self):
+        result = self.invoke(json.dumps(['oasis7_game_client']))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('clippy -p oasis7_game_client --all-targets', result.stdout)
+        self.assertIn('cargo test -p oasis7_game_client --lib', result.stdout)
+        self.assertNotIn('cargo test -p oasis7 ', result.stdout)
+        self.assertNotIn('full-inventory', result.stdout)
+
     def test_invalid_lists_fail_before_execution(self):
         for value in ['[]', '["unknown"]', '["oasis7_agent_api", "oasis7_agent_api"]',
                       'null', '{}', '[1]', 'invalid']:
