@@ -52,6 +52,14 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         self.assertNotIn('cargo test -p oasis7 ', result.stdout)
         self.assertNotIn('full-inventory', result.stdout)
 
+    def test_model_provider_isolated_and_strict(self):
+        result = self.invoke(json.dumps(['oasis7_model_provider']))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('clippy -p oasis7_model_provider --all-targets', result.stdout)
+        self.assertIn('cargo test -p oasis7_model_provider --lib', result.stdout)
+        self.assertNotIn('cargo test -p oasis7 ', result.stdout)
+        self.assertNotIn('full-inventory', result.stdout)
+
     def test_invalid_lists_fail_before_execution(self):
         for value in ['[]', '["unknown"]', '["oasis7_agent_api", "oasis7_agent_api"]',
                       'null', '{}', '[1]', 'invalid']:
@@ -85,6 +93,7 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         result = self.invoke('plan:' + json.dumps(plan))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('support profile completed: oasis7_game_client', result.stdout)
+        self.assertIn('support profile completed: oasis7_model_provider', result.stdout)
         self.assertIn('support profile completed: wasm_module_observe', result.stdout)
 
     def test_full_inventory_preserves_packages_and_special_commands(self):

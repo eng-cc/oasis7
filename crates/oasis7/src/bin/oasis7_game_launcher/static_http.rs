@@ -96,7 +96,8 @@ struct HostedTestLoginRequest {
 pub(super) struct StaticHttpRuntimeConfig {
     pub(super) live_bind: String,
     viewer_runtime_config_json: String,
-    pub(super) identity: Mutex<Option<super::hosted_identity::IdentityService>>,
+    pub(super) identity: Arc<Mutex<Option<super::hosted_identity::IdentityService>>>,
+    pub(super) model_client: Option<super::hosted_model_client::HostedModelClient>,
 }
 
 impl StaticHttpRuntimeConfig {
@@ -115,10 +116,13 @@ impl StaticHttpRuntimeConfig {
         } else {
             None
         };
+        let identity = Arc::new(Mutex::new(identity));
+        let model_client = super::hosted_model_client::HostedModelClient::from_env(&identity)?;
         Ok(Self {
             live_bind: live_bind.to_string(),
             viewer_runtime_config_json: viewer_runtime_config_json(deployment_mode, web_bind)?,
-            identity: Mutex::new(identity),
+            identity,
+            model_client,
         })
     }
 }
@@ -142,12 +146,13 @@ pub(super) fn handle_http_connection(
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
 
-    let request_bytes = read_http_request_bytes(&mut stream)?;
+    let request_bytes = zeroize::Zeroizing::new(read_http_request_bytes(&mut stream)?);
     if request_bytes.is_empty() {
         return Ok(());
     }
 
-    let request = String::from_utf8_lossy(request_bytes.as_slice());
+    let request = std::str::from_utf8(request_bytes.as_slice())
+        .map_err(|_| "invalid HTTP request encoding")?;
     let Some(line) = request.lines().next() else {
         write_http_response(&mut stream, 400, "text/plain", b"Bad Request", false)
             .map_err(|err| format!("failed to write 400 response: {err}"))?;
@@ -161,6 +166,18 @@ pub(super) fn handle_http_connection(
 
     let head_only = method.eq_ignore_ascii_case("HEAD");
     let path_only = target.split('?').next().unwrap_or(target);
+    if path_only == super::hosted_model_client::PREFIX || path_only.starts_with("/v1/agent-client/")
+    {
+        let reply = super::hosted_model_client::handle_request(
+            runtime_config,
+            method,
+            target,
+            request,
+            request_body,
+        );
+        write_identity_response(&mut stream, &reply)?;
+        return Ok(());
+    }
     {
         let mut identity = runtime_config
             .identity
@@ -205,6 +222,10 @@ pub(super) fn handle_http_connection(
                         .lock()
                         .map_err(|_| "session issuer lock poisoned")?,
                 );
+                drop(identity);
+                if let Some(client) = &runtime_config.model_client {
+                    let _ = client.manager.revoke_invalid_sessions();
+                }
                 write_identity_response(&mut stream, &reply)?;
                 return Ok(());
             }
@@ -1131,4 +1152,8 @@ pub(super) fn resolve_viewer_auth_bootstrap_for_embedded_server(
         )
         .ok()
     }
+}
+
+pub(super) fn parse_model_json(body: &[u8]) -> Result<serde_json::Value, String> {
+    identity_security::parse_identity_json(body)
 }
