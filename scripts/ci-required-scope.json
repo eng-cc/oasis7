@@ -120,6 +120,9 @@
     "oasis7_agent_harness": [
       "workspace_support"
     ],
+    "oasis7_model_provider": [
+      "workspace_support"
+    ],
     "oasis7": [
       "oasis7_required",
       "launcher_web",

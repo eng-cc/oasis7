@@ -1,3 +1,4 @@
+import { ModelConnectionPanel } from "./model_connection_panel.jsx";
 import { CanonicalAgentGoal } from "./canonical_agent_goal.jsx";
 import { IndustrialStarterOutcomeCard } from "./industrial_starter_outcome_card.jsx";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
@@ -3397,6 +3398,7 @@ function InteractionPanel() {
         </div>
       </div>
       <AgentContextLite model={selectedAgentContextModel()} locale={locale()} fixtureMetadata={selectedAgentContextFixtureMetadata()} />
+      <ModelConnectionPanel locale={locale} agentId={agentId} canControl={canControlSelectedAgent} />
       <Show
         when={interactionEnabled() && canControlSelectedAgent()}
         fallback={

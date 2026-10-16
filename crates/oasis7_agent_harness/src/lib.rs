@@ -34,8 +34,8 @@ pub use memory::{
 };
 pub use model_provider::{
     ModelProvider, ModelProviderError, ModelProviderRequest, ModelProviderResponse,
-    ModelProviderTool, ModelProviderTrace, ModelProviderTraceEntry, ModelProviderTurn,
-    ModelProviderUsage,
+    ModelProviderTool, ModelProviderToolCall, ModelProviderToolResult, ModelProviderTrace,
+    ModelProviderTraceEntry, ModelProviderTurn, ModelProviderUsage,
 };
 pub use provider::{DecisionProvider, DecisionProviderError, cognition_response_digest};
 pub use turn_engine::{

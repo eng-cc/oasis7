@@ -3,6 +3,7 @@ mod config;
 mod credentials;
 mod email;
 pub mod model;
+mod model_session;
 mod recovery;
 mod service;
 #[cfg(test)]
@@ -75,6 +76,9 @@ pub(super) fn run_maintenance(
             } else {
                 service.email.clock_healthy = false;
             }
+        }
+        if let Some(client) = &runtime.model_client {
+            let _ = client.manager.sweep();
         }
         for _ in 0..50 {
             if stop.load(std::sync::atomic::Ordering::Acquire) {

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { bridge, errorMessage, observedTime } from './bridge';
 import DocumentRelations from './DocumentRelations';
+import DocumentAllocations from './DocumentAllocations';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
 
@@ -116,7 +117,7 @@ export default function DocumentInventory(props: {
             </>}</Show>
           </section>
           <DocumentRelations relations={file().pairings} mode="pairing" sections={props.snapshot.sections} showSource={props.showSource} />
-          <Show when={file().kind === 'design'}><DocumentRelations relations={file().upstream} mode="upstream" sections={props.snapshot.sections} showSource={props.showSource} /></Show>
+          <Show when={file().kind === 'design'}><DocumentRelations relations={file().upstream} mode="upstream" sections={props.snapshot.sections} showSource={props.showSource} /><DocumentAllocations allocations={file().allocations} sections={props.snapshot.sections} showSource={props.showSource} /></Show>
         </Show>
         <Show when={file().state === 'read' && !chapters().length}><p>已读取，文件没有可展示的章节。</p></Show>
         <For each={chapters()}>{section => <p><button onClick={e => props.showSource(section, e.currentTarget)}>{section.title} · 第 {section.line} 行</button></p>}</For>

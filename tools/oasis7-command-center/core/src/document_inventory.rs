@@ -27,6 +27,26 @@ pub struct IndexedDocument {
     /// Explicit design-header upstream declarations; None means not yet parsed.
     #[serde(default)]
     pub upstream: Option<DocumentPairings>,
+    /// Explicit body allocation tables; None in older caches/unread or non-design files.
+    #[serde(default)]
+    pub allocations: Option<DocumentAllocations>,
+}
+
+/// Bounded source-declared rows; does not establish implementation acceptance.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentAllocations {
+    pub rows: Vec<DocumentAllocation>,
+    pub issue: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentAllocation {
+    pub declaration_line: usize,
+    /// At most 512 characters of the original Markdown row, never rendered as HTML.
+    pub raw_sample: String,
+    pub upstream: DocumentPairings,
+    pub design: DocumentPairings,
 }
 
 /// Header declaration only; never used as a file key or proof of authority.
@@ -93,6 +113,7 @@ impl IndexedDocument {
             lifecycle: None,
             pairings: None,
             upstream: None,
+            allocations: None,
         }
     }
     pub(crate) fn omit(&mut self, reason: &str) {
