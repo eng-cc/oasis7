@@ -1359,7 +1359,118 @@ def scenario_cross_layer_trace_ids_are_not_local_ids() -> None:
     assert not errors, errors
 
 
+def scenario_incremental_design_decision(selection: str, worktree: bool, declared: bool) -> None:
+    root, _base, _head = make_repo()
+    try:
+        missing = TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
+        if selection == "added":
+            (root / TOPIC).unlink()
+            (root / DESIGN).unlink()
+        else:
+            (root / TOPIC).write_text(missing, encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "prepare design decision baseline")
+        base = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        text = TOPIC_TEXT if declared else missing
+        text += "\n玩家可以从恢复入口继续当前选择。\n"
+        path = TOPIC
+        design = DESIGN
+        if selection == "renamed":
+            path = TOPIC.replace("sample.", "renamed.")
+            design = DESIGN.replace("sample.", "renamed.")
+            (root / TOPIC).unlink()
+            (root / DESIGN).unlink()
+            text = text.replace("sample.design.md", "renamed.design.md")
+        (root / path).write_text(text, encoding="utf-8")
+        (root / design).write_text(
+            DESIGN_TEXT.replace("sample.prd.md", Path(path).name), encoding="utf-8"
+        )
+        head = base
+        if not worktree:
+            run_git(root, "add", ".")
+            run_git(root, "commit", "-qm", "selected topic change")
+            head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        result = invoke(root, base, head, worktree=worktree)
+        output = result.stdout + result.stderr
+        assert result.returncode == (0 if declared else 1), (selection, worktree, declared, output)
+        if declared:
+            count = 1 if selection == "modified" else 2
+            assert f"OK (checked {count} changed/new documents)" in output, output
+        else:
+            assert f"missing-design-decision: {path}" in output, output
+            assert "missing-design-or-exemption" not in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_incremental_design_contract_boundaries() -> None:
+    # All these cases go through Git selection and the actual CLI, not check_document mocks.
+    for lifecycle in ("draft", "proposed", "superseded", "retired"):
+        scenario_checked(lambda root, lifecycle=lifecycle: (root / TOPIC).write_text(
+            lifecycle_topic_text(lifecycle).replace("- 设计判定：`paired-design`\n", ""),
+            encoding="utf-8",
+        ))
+    scenario_checked(lambda root: (root / "doc/product/world-rules-core-gameplay/prd.md").write_text(
+        ROOT_TEXT + "\n补充当前模块的产品承诺。\n", encoding="utf-8"
+    ))
+    scenario_checked(lambda root: (root / TOPIC).write_text(simple_topic_text(), encoding="utf-8"))
+    scenario("missing-design-exemption-reason", lambda root: (root / TOPIC).write_text(
+        simple_topic_text().replace("这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。", "TBD"),
+        encoding="utf-8",
+    ))
+    scenario("missing-paired-design-link", lambda root: (root / TOPIC).write_text(
+        TOPIC_TEXT.replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", ""),
+        encoding="utf-8",
+    ))
+    scenario("inactive-paired-design", lambda root: (
+        (root / TOPIC).write_text(TOPIC_TEXT + "\n补充当前体验边界。\n", encoding="utf-8"),
+        (root / DESIGN).write_text(DESIGN_TEXT.replace("生命周期：`active`", "生命周期：`draft`"), encoding="utf-8"),
+    ))
+
+
+def scenario_untouched_design_decision_stays_advisory(comment_only: bool) -> None:
+    root, _base, _head = make_repo()
+    try:
+        isolate_topic_full_corpus(root)
+        (root / TOPIC).write_text(
+            TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", ""), encoding="utf-8"
+        )
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "historical missing decision")
+        base = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        # Touch the paired design but leave its historical PRD outside the selected range.
+        (root / DESIGN).write_text(DESIGN_TEXT + "\n补充当前设计验证边界。\n", encoding="utf-8")
+        # Comment-only edits must not pull historical PRDs into strict scope either.
+        if comment_only:
+            (root / TOPIC).write_text((root / TOPIC).read_text() + "\n<!-- comment-only change -->\n", encoding="utf-8")
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "design only substantive change")
+        head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        for worktree in (False, True):
+            result = invoke(root, base, head, worktree=worktree)
+            output = result.stdout + result.stderr
+            assert result.returncode == 0, output
+            assert "OK (checked 1 changed/new documents)" in output, output
+            assert "missing-design-decision" not in output, output
+        for extra, status in (((), 1), (("--warn-only",), 0)):
+            result = invoke_full_corpus(root, *extra)
+            output = result.stdout + result.stderr
+            assert result.returncode == status, output
+            assert f"missing-design-decision: {TOPIC}" in output, output
+            if extra:
+                assert "::warning::" in output and "advisory" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def main() -> None:
+    for selection in ("added", "modified", "renamed"):
+        for worktree in (False, True):
+            for declared in (False, True):
+                scenario_incremental_design_decision(selection, worktree, declared)
+    scenario_incremental_design_contract_boundaries()
+    for comment_only in (False, True):
+        scenario_untouched_design_decision_stays_advisory(comment_only)
     scenario_cross_layer_trace_ids_are_not_local_ids()
     scenario_full_corpus_requires_active_topic_requirement()
     scenario_full_corpus_requires_active_topic_acceptance()
@@ -1493,7 +1604,7 @@ def main() -> None:
     root, base, head = make_repo()
     try:
         untracked = root / "doc/product/world-rules-core-gameplay/untracked.prd.md"
-        untracked.write_text(TOPIC_TEXT, encoding="utf-8")
+        untracked.write_text(simple_topic_text(), encoding="utf-8")
         result = invoke(root, base, head, worktree=True)
         output = result.stdout + result.stderr
         assert result.returncode == 0, output
