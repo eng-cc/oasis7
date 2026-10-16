@@ -123,7 +123,7 @@ impl HostedModelClient {
             body.as_object_mut()
                 .ok_or_else(|| error(400, "invalid_request"))?
                 .remove("raw_key");
-            let input: Create = serde_json::from_value(std::mem::take(body))
+            let input: Create = serde::Deserialize::deserialize(&*body)
                 .map_err(|_| error(400, "invalid_request"))?;
             if !input.consent {
                 return Err(error(400, "consent_required"));
@@ -197,7 +197,7 @@ impl HostedModelClient {
     }
 }
 fn decode<T: serde::de::DeserializeOwned>(body: &mut Value) -> Result<T, IdentityReply> {
-    serde_json::from_value(std::mem::take(body)).map_err(|_| error(400, "invalid_request"))
+    serde::Deserialize::deserialize(&*body).map_err(|_| error(400, "invalid_request"))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
