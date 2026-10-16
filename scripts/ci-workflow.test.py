@@ -267,6 +267,8 @@ run_cargo() {
 """ + "\n".join(functions) + "\nrun_oasis7_required_tier_tests\nrun_oasis7_full_tier_tests\n"
             environment = dict(os.environ, CI_LOG=str(log), VIEWER_BIN=str(viewer))
             environment.pop('PRE2_VIEWER_BINARY', None)
+            # Exercise the Cargo fallback even when the outer CI uses a bundle.
+            environment.pop('OASIS7_CI_TEST_BUNDLE', None)
             result = subprocess.run(['bash', '-c', script], text=True, capture_output=True, env=environment)
             self.assertEqual(result.returncode, 0, result.stderr)
             calls = log.read_text().splitlines()
