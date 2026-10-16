@@ -1,5 +1,22 @@
 use super::model::{IdentityNamespace, RpConfig};
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, time::Duration};
+
+pub(super) fn runtime_control_timeout() -> Result<Duration, String> {
+    match env::var("OASIS7_WORLD_SERVICE_TIMEOUT_MS") {
+        Ok(value) => value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+            .then(|| value.parse::<u64>().ok())
+            .flatten()
+            .filter(|value| (100..=30_000).contains(value))
+            .map(Duration::from_millis)
+            .ok_or_else(|| {
+                "OASIS7_WORLD_SERVICE_TIMEOUT_MS must be an integer from 100 to 30000".into()
+            }),
+        Err(env::VarError::NotPresent) => Ok(Duration::from_secs(2)),
+        Err(_) => Err("OASIS7_WORLD_SERVICE_TIMEOUT_MS is not valid Unicode".into()),
+    }
+}
 
 pub(crate) struct IdentityConfig {
     pub namespace: IdentityNamespace,
@@ -35,6 +52,7 @@ impl IdentityConfig {
             }
             return Ok(None);
         }
+        runtime_control_timeout()?;
         fn required(key: &str) -> Result<String, String> {
             env::var(key)
                 .ok()
