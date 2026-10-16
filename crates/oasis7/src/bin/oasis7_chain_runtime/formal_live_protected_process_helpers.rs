@@ -351,8 +351,14 @@ pub(super) fn wait_for_published_position(
                 snapshot.consensus.latest_height,
                 snapshot.consensus.committed_height,
                 snapshot.consensus.last_execution_height,
-                snapshot.consensus.pending_consensus_actions.submit_buffer_action_count,
-                snapshot.consensus.pending_consensus_actions.queued_action_count,
+                snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .submit_buffer_action_count,
+                snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .queued_action_count,
             ));
         }
         thread::sleep(Duration::from_millis(25));
