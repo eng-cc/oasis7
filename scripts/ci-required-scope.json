@@ -24,7 +24,8 @@
     "cargo_tooling_contracts",
     "windows_rollout",
     "macos_package_contract",
-    "fleet_health"
+    "fleet_health",
+    "command_center"
   ],
   "resources": {
     "baseline": [
@@ -111,7 +112,8 @@
     "formal_process": [
       "rust_toolchain",
       "system_deps"
-    ]
+    ],
+    "command_center": []
   },
   "package_groups": {
     "oasis7_agent_api": [
@@ -187,7 +189,8 @@
       "workspace_support"
     ],
     "oasis7_local_signer": [
-      "workspace_support"
+      "workspace_support",
+      "command_center"
     ],
     "wasm_build_suite": [
       "workspace_support"
@@ -196,10 +199,12 @@
       "workspace_support"
     ],
     "oasis7_context": [
-      "workspace_support"
+      "workspace_support",
+      "command_center"
     ],
     "oasis7_secure_envelope": [
-      "workspace_support"
+      "workspace_support",
+      "command_center"
     ]
   },
   "rules": [
@@ -448,6 +453,18 @@
         "workspace_support"
       ],
       "reason": "local_signer_installation"
+    },
+    {
+      "match": [
+        "tools/oasis7-command-center/**",
+        "scripts/cargo-dev.sh",
+        "scripts/cargo-cache.py",
+        "scripts/find-python-with-module.sh"
+      ],
+      "groups": [
+        "command_center"
+      ],
+      "reason": "command_center"
     }
   ]
 }

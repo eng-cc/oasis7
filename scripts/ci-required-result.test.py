@@ -16,6 +16,15 @@ class Results(unittest.TestCase):
         self.needs = {'select': {'result': 'success'}, 'baseline': {'result': 'success'},
                       'rust': {'result': 'skipped'}, 'windows': {'result': 'success'}}
 
+    def test_command_center_failure_cannot_pass_gate(self):
+        jobs = {'baseline': 'baseline', 'command_center': 'command-center'}
+        plan = {'groups': ['baseline', 'command_center']}
+        for state in ('failure', 'cancelled', 'skipped', None):
+            with self.subTest(result=state), self.assertRaises(ValueError):
+                result.validate(plan, {'select': {'result': 'success'},
+                                          'baseline': {'result': 'success'},
+                                          'command-center': {'result': state}}, jobs)
+
     def test_expected_success(self):
         self.assertTrue(result.validate(self.plan, self.needs, self.jobs))
         self.needs['rust']['result'] = 'success'

@@ -1,4 +1,5 @@
 """Packaging regression: Cargo artifacts need not live under checkout/target."""
+import ast
 import fnmatch
 import re
 import hashlib
@@ -137,17 +138,28 @@ if mode == 'failed':
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_desktop_workflow_covers_cli_build_driver_inputs(self):
-        workflow = (SCRIPT.parents[3] / '.github/workflows/command-center.yml').read_text()
-        for event, ending in (('pull_request', '  push:'), ('push', 'permissions:')):
-            section = workflow.split('  ' + event + ':', 1)[1].split(ending, 1)[0]
-            patterns = re.findall(r"^\s+- '([^']+)'$", section, re.MULTILINE)
-            for dependency in ('scripts/cargo-dev.sh', 'scripts/cargo-cache.py',
-                               'scripts/find-python-with-module.sh', 'rust-toolchain.toml',
-                               '.cargo/config.toml'):
-                with self.subTest(event=event, dependency=dependency):
-                    self.assertTrue(any(fnmatch.fnmatchcase(dependency, pattern)
-                                        for pattern in patterns),
-                                    f'{event} must package when only {dependency} changes')
+        root = SCRIPT.parents[3]
+        workflow = (root / '.github/workflows/command-center.yml').read_text()
+        self.assertIn('  workflow_call:', workflow)
+        caller = (root / '.github/workflows/rust.yml').read_text()
+        self.assertIn('uses: ./.github/workflows/command-center.yml', caller)
+        config = json.loads((root / 'scripts/ci-required-scope.json').read_text())
+        patterns = [pattern for rule in config['rules']
+                    if 'command_center' in rule.get('groups', [])
+                    for pattern in rule['match']]
+        # Shared build controls select every group, including desktop packaging.
+        planner = ast.parse((root / 'scripts/plan-rust-required-scope.py').read_text())
+        controls = next(ast.literal_eval(node.value) for node in planner.body
+                        if isinstance(node, ast.Assign)
+                        and any(isinstance(target, ast.Name) and target.id == 'CONTROL'
+                                for target in node.targets))
+        for dependency in ('scripts/cargo-dev.sh', 'scripts/cargo-cache.py',
+                           'scripts/find-python-with-module.sh', 'rust-toolchain.toml',
+                           '.cargo/config.toml'):
+            with self.subTest(dependency=dependency):
+                self.assertTrue(any(fnmatch.fnmatchcase(dependency, pattern)
+                                    for pattern in [*patterns, *controls]),
+                                f'planner must package when only {dependency} changes')
 
     def test_main_window_can_invoke_every_registered_app_command(self):
         host = SCRIPT.parent.parent / 'src-tauri'

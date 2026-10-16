@@ -58,6 +58,39 @@ class Selection(unittest.TestCase):
     def plan(self, head=None):
         return selector.select(self.config, self.base, head or self.commit())
 
+    def test_command_center_pr4790_paths_are_targeted(self):
+        # Exact paths from 4f12acc; fixture stays usable without its Git object.
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        paths = ['doc/.governance/document-corpus/objects/30/307677361b6dc1927f90fb3a6ff9960fbadaa3816a721dea819ab00c86f658c1.json', 'doc/.governance/document-corpus/objects/d2/d2970f104b5996a9da0e9ac9c3b6494bfe0ffb20419f0d60f9c77bb97ee5d772.json', 'doc/engineering/command-center/README.md', 'doc/engineering/command-center/document-tree.design.md', 'tools/oasis7-command-center/README.md', 'tools/oasis7-command-center/core/examples/export_types.rs', 'tools/oasis7-command-center/core/src/document_allocations.rs', 'tools/oasis7-command-center/core/src/document_inventory.rs', 'tools/oasis7-command-center/core/src/document_pairings.rs', 'tools/oasis7-command-center/core/src/index.rs', 'tools/oasis7-command-center/core/tests/document_allocations.rs', 'tools/oasis7-command-center/ui/src/DocumentAllocations.tsx', 'tools/oasis7-command-center/ui/src/DocumentInventory.test.tsx', 'tools/oasis7-command-center/ui/src/DocumentInventory.tsx', 'tools/oasis7-command-center/ui/src/DocumentRelations.tsx', 'tools/oasis7-command-center/ui/src/generated/core.ts']
+        self.assertEqual(len(paths), 16)
+        for path in paths:
+            self.write(path, 'changed allocation input')
+        plan = self.plan()
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'command_center'})
+        self.assertFalse(any('unknown input:' in reason for reason in plan['reasons']))
+
+    def test_command_center_shared_tools_keep_dedicated_checks(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('scripts/cargo-dev.sh', 'scripts/cargo-cache.py',
+                     'scripts/find-python-with-module.sh'):
+            with self.subTest(path=path):
+                self.write(path, 'shared tool changed')
+                self.assertIn('command_center', self.plan()['groups'])
+                Path(path).unlink()
+                self.commit()
+
+    def test_command_center_unknown_sibling_and_control_stay_full(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('tools/new-tool/src/lib.rs',
+                     'tools/oasis7-command-center/Cargo.lock',
+                     'tools/oasis7-command-center/core/build.rs'):
+            with self.subTest(path=path):
+                self.write(path, 'unknown or shared control')
+                self.assertEqual(self.plan()['scope'], 'full')
+                Path(path).unlink()
+                self.commit()
+
     def test_docs_baseline_only(self):
         self.write('doc/readme.md', 'changed')
         self.assertEqual(self.plan()['groups'], ['baseline'])
@@ -210,7 +243,7 @@ class Selection(unittest.TestCase):
             'new-task-worktree.sh': {'baseline', 'cargo_tooling_contracts', 'fleet_health'},
             'worktree-gc-report.sh': {'baseline', 'workflow_governance'},
             'pr-review-thread-closeout.py': {'baseline', 'workflow_governance'},
-            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts'},
+            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts', 'command_center'},
         }
         for filename, expected in cases.items():
             with self.subTest(filename=filename):

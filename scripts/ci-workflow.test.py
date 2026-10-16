@@ -42,12 +42,49 @@ def validate_candidate_graph(workflow, config):
             raise ValueError('group requires successful select and full migration fallback')
         if group != 'fleet_health' and 'strategy:' in job:
             raise ValueError('ordinary groups must not have singleton matrices')
+        if group == 'command_center' and 'uses: ./.github/workflows/command-center.yml' not in job:
+            raise ValueError('Command Center checks must execute through the reusable workflow')
         if 'ci-authority' in job:
             raise ValueError('execution must use candidate checkout')
     return True
 
 
 class Workflow(unittest.TestCase):
+    def test_command_center_is_reusable_and_required(self):
+        workflow = (ROOT / '.github/workflows/command-center.yml').read_text()
+        self.assertIn('  workflow_call:', workflow)
+        self.assertNotIn('  pull_request:', workflow)
+        self.assertNotIn('  push:', workflow)
+        self.assertIn('uses: ./.github/workflows/command-center.yml', JOBS['command-center'])
+        self.assertIn('run_command_center: ${{ steps.select.outputs.run_command_center }}', JOBS['select'])
+        for command in ('cargo test --locked', '--example export_types', 'npm test',
+                        'npm run build', 'cargo clippy --locked', 'desktop:build -- --debug'):
+            self.assertIn(command, workflow)
+        self.assertNotIn('continue-on-error:', workflow)
+        for package in ('oasis7_context', 'oasis7_local_signer', 'oasis7_secure_envelope'):
+            self.assertIn('command_center', CONFIG['package_groups'][package])
+
+    def test_corpus_data_uses_baseline_and_implementation_uses_platforms(self):
+        workflow = (ROOT / '.github/workflows/document-corpus-platform.yml').read_text()
+        for path in ('doc/.governance/document-corpus-inventory.json',
+                     'doc/.governance/document-corpus/**', 'doc/testing/evidence/inventory.json'):
+            self.assertNotIn('      - ' + path + '\n', workflow)
+        for path in ('scripts/document_corpus.py', 'scripts/document_evidence_policy.py',
+                     'scripts/document-corpus-inventory*', 'scripts/doc-evidence-inventory-check*',
+                     'scripts/fixtures/document-corpus-v3/**', '.gitattributes', '.gitignore'):
+            self.assertEqual(workflow.count('      - ' + path + '\n'), 2)
+        for os in ('ubuntu-24.04', 'macos-latest', 'windows-latest'):
+            self.assertIn('- ' + os, workflow)
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        self.assertIn('baseline) run_required_gate_checks', driver)
+        baseline = driver.split('run_required_gate_checks() {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('run_product_doc_governance_check', baseline)
+        governance = (ROOT / 'scripts/doc-governance-check.sh').read_text()
+        self.assertIn('scripts/document-corpus-inventory-check.py', governance)
+        checker = (ROOT / 'scripts/document-corpus-inventory-check.py').read_text()
+        self.assertIn('dc.validate_evidence(view, model)', checker)
+        self.assertIn('evidence_policy.validate_evidence_policy(view, model, baseline)', checker)
+
     def test_formal_suites_share_build_and_propagate_all_failures(self):
         matrix = JOBS['formal-process-tests']
         self.assertIn('needs: [select, oasis7-test-build]', matrix)
@@ -408,7 +445,7 @@ run_cargo_clippy() { printf 'clippy|%s\\n' "$*"; }
             selected = [call for call in calls if package in call]
             self.assertTrue(selected, package)
             self.assertTrue(any('--all-targets' in call and '--locked' in call for call in selected))
-            self.assertEqual(CONFIG['package_groups'][package], ['workspace_support'])
+            self.assertEqual(CONFIG['package_groups'][package], ['workspace_support', 'command_center'])
         self.assertTrue(any('oasis7_local_signer' in call and '--test' in call and 'context_cli' in call for call in calls))
         for path in ('crates/oasis7_context/**', 'crates/oasis7_secure_envelope/**'):
             selected_groups = {group for rule in CONFIG['rules'] if path in rule['match'] for group in rule['groups']}
