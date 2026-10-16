@@ -59,6 +59,21 @@ class Selection(unittest.TestCase):
     def plan(self, head=None):
         return selector.select(self.config, self.base, head or self.commit())
 
+    def test_chain_extraction_existing_script_inputs_are_registered(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        expected = {
+            'scripts/module-release-node-acceptance.sh': {'oasis7_required', 'formal_process', 'operational_contracts'},
+            'scripts/release-web-fixture-lib.sh': {'launcher_web', 'operational_contracts'},
+            'scripts/run-launcher-stack.sh': {'launcher_web', 'operational_contracts'},
+        }
+        for path, groups in expected.items():
+            with self.subTest(path=path):
+                self.write(path, '# changed existing chain caller')
+                plan = self.plan()
+                self.assertEqual(plan['scope'], 'targeted')
+                self.assertTrue(groups.issubset(plan['groups']))
+                self.base = self.git('rev-parse', 'HEAD')
+
     def test_command_center_pr4790_paths_are_targeted(self):
         # Exact paths from 4f12acc; fixture stays usable without its Git object.
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())

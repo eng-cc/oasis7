@@ -220,6 +220,28 @@
     },
     {
       "match": [
+        "scripts/module-release-node-acceptance.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "formal_process",
+        "operational_contracts"
+      ],
+      "reason": "module_release_runtime_acceptance"
+    },
+    {
+      "match": [
+        "scripts/release-web-fixture-lib.sh",
+        "scripts/run-launcher-stack.sh"
+      ],
+      "groups": [
+        "launcher_web",
+        "operational_contracts"
+      ],
+      "reason": "launcher_and_release_web_runtime_callers"
+    },
+    {
+      "match": [
         "scripts/formal-live-local-tests.sh",
         "scripts/local-node-lifecycle.test.sh",
         "scripts/legacy-observer-migration.test.sh"
