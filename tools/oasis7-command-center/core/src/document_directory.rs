@@ -14,6 +14,10 @@ pub struct DocumentDirectoryQuery {
     pub inventory: DocumentInventoryQuery,
     /// Empty for root; otherwise an exact repository-relative directory path.
     pub parent_path: String,
+    /// Omitted preserves the original unfiltered query contract.
+    #[serde(default)]
+    #[ts(optional)]
+    pub lifecycle_filter: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +48,9 @@ pub struct DocumentDirectoryPage {
     pub eligible_files: usize,
     /// Matching unique files across the full projection, not just this page/parent.
     pub matching_files: usize,
+    /// History matches excluded by the current filter, before pagination.
+    pub hidden_history_files: usize,
+    pub lifecycle_filter: String,
     pub total_children: usize,
     pub entries: Vec<DocumentDirectoryEntry>,
     pub next_cursor: Option<String>,
@@ -73,6 +80,25 @@ impl CommandCenter {
                 "invalid document directory parent or depth limit".into(),
             ));
         }
+        let lifecycle = request.lifecycle_filter.as_deref().unwrap_or("all");
+        if lifecycle.len() > 1024
+            || !(matches!(
+                lifecycle,
+                "all"
+                    | "current"
+                    | "proposed"
+                    | "draft"
+                    | "active"
+                    | "superseded"
+                    | "retired"
+                    | "other"
+                    | "unknown"
+            ) || lifecycle
+                .strip_prefix("raw:")
+                .is_some_and(|raw| !raw.is_empty()))
+        {
+            return Err(Error::Invalid("invalid document lifecycle filter".into()));
+        }
         let inventory = self.load_document_inventory(query)?;
         let eligible: Vec<_> = inventory
             .files
@@ -95,6 +121,7 @@ impl CommandCenter {
             parent,
             &text,
             &query.read_filter,
+            lifecycle,
         ))?);
         let offset = if let Some(cursor) = &query.cursor {
             let cursor: Cursor = serde_json::from_str(cursor)
@@ -108,10 +135,19 @@ impl CommandCenter {
         } else {
             0
         };
-        let matching: Vec<_> = eligible
+        let filtered: Vec<_> = eligible
             .iter()
             .copied()
             .filter(|f| f.matches_filter(&text, &query.read_filter))
+            .collect();
+        let hidden_history_files = if lifecycle == "current" {
+            filtered.iter().filter(|f| is_history(f)).count()
+        } else {
+            0
+        };
+        let matching: Vec<_> = filtered
+            .into_iter()
+            .filter(|f| matches_lifecycle(f, lifecycle))
             .collect();
         let mut children: BTreeMap<String, DocumentDirectoryEntry> = BTreeMap::new();
         for file in &matching {
@@ -178,9 +214,34 @@ impl CommandCenter {
             error: source.and_then(|s| s.error.clone()),
             eligible_files: eligible.len(),
             matching_files: matching.len(),
+            hidden_history_files,
+            lifecycle_filter: lifecycle.into(),
             total_children,
             entries: children.into_values().skip(offset).take(100).collect(),
             next_cursor,
         })
+    }
+}
+
+fn is_history(file: &IndexedDocument) -> bool {
+    matches!(
+        file.lifecycle.as_ref().and_then(|l| l.category.as_deref()),
+        Some("superseded" | "retired")
+    )
+}
+fn matches_lifecycle(file: &IndexedDocument, filter: &str) -> bool {
+    let lifecycle = file.lifecycle.as_ref();
+    match filter {
+        "all" => true,
+        "current" => !is_history(file),
+        raw if raw.starts_with("raw:") => {
+            lifecycle.and_then(|l| l.raw_status.as_deref()) == raw.strip_prefix("raw:")
+        }
+        category => {
+            lifecycle
+                .and_then(|l| l.category.as_deref())
+                .unwrap_or("unknown")
+                == category
+        }
     }
 }
