@@ -18,14 +18,16 @@
   - SC-3: 为长期在线且提供更多有效存储的节点提供额外收益。
 
 ## 2. User Experience & Functionality
-- User Personas: 协议维护者、任务执行者、质量复核者。
-- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
-- User Stories: As a 维护者, I want oasis7 Runtime：节点贡献积分激励 的需求结构化, so that implementation is auditable.
-- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
-- Functional Specification Matrix:
+- User Personas: 节点贡献结算维护者、runtime 实现者与积分审计复核者。
+- User Scenarios & Frequency: epoch 结算、重复 tick、重启/replay 及贡献画像回归时。
+- User Stories: 作为结算维护者，需要把合格额外贡献确定性地计入对应 epoch，区分基础义务、采样与奖励台账。
+- Critical User Flows: 采集贡献快照 -> epoch 边界检查基础义务、挑战资格与原计分公式 -> 按主池/独立存储池合格正得分分配 -> 产出 EpochSettlementReport 并幂等更新累计积分；重复 tick 或恢复重放仅复现同一结果。
+- Functional Specification Matrix（仅承接下文既有专业合同；不新增实现或验收结论）:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+| 贡献资格 | NodeContributionSample | 区分自身模拟义务、代跑/维护、存储与在线 | 采样不直接更新奖励台账 | 沿 §4 原公式和阈值 | 不以启发式输入证明公网真实性 |
+| 双池结算 | epoch、主池/存储池、settlements | 固定预算确定性分配，允许未分配余额 | epoch 结算才更新累计积分 | 独立存储池启用时主池排除存储权重 | 不调整权重、阈值或预算 |
+| 恢复与资产路径 | collector snapshot、epoch report | 重放幂等；资产路径独立核 gate | 同 epoch 不重复入账；不可读 collector 可观测降级 | NodePoints 非自动兑换 | PowerCredit 与 Token bridge 各保留原治理边界 |
 - Acceptance Criteria:
   - AC-1: 新增节点积分结算引擎（epoch 级）。
   - AC-2: 贡献维度：
@@ -47,13 +49,13 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Architecture Overview: 贡献快照、epoch 计分/双池分配与累计台账分层；runtime closure 草案仍按本文件专业权威口径保留其未完整吸收边界。
 - Integration Points:
   - `doc/p2p/node/node-contribution-points.prd.md`
   - GitHub Issue / GitHub Project
   - `testing-manual.md`
-- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
-- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+- Edge Cases & Error Handling: 义务不足施加原惩罚，负总分归零；存储资格及封顶沿原规则。重复 tick/重启/replay 不增发；collector 不可读仅可观测降级，不证明已结算资产恢复。
+- Non-Functional Requirements: 固定池不超发、排序与惩罚可重复、累计积分不回退；不将本地夹具升级为生产经济安全证明。
 - Security & Privacy: 不引入敏感信息与本地绝对路径。
 
 ### 原文技术约束（保真）
@@ -187,11 +189,11 @@ EpochSettlementReport {
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-P2P-MIG-091-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| 原 AC 与 §4 专业合同 | 对应业务变更的 PR / 实际验证记录 | `test_tier_required` | AC-7/8/9 与 §4 Runtime 与多节点闭环约束：至少 3 节点、连续 2 epoch，覆盖计算/存储/在线/可靠性/惩罚、池守恒、排序、累计单调和重复 tick/恢复不重复入账；积分进入资产路径另核原 gate。 | 既有专业行为及负向边界；不代签当前运行通过 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-PRD-P2P-MIG-091-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
+| DEC-PRD-P2P-MIG-091-001 | 历史文档迁移：逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标” -> 第 1 章。
@@ -238,3 +240,25 @@ Trace refs: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5；唯一声明：[世界
 - 原义务：积分与资产结算边界；积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。
 - 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
 - 有限接收：[积分与独立资产路径保持门禁设计](node-contribution-points.design.md#des-economic-points-asset-gates)；不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness。
+
+## 历史 strictification 迁移记录（不属于业务流程或验收）
+
+以下保留迁移时的原流程、矩阵、结构说明和验证来源，仅供 Git history / 原 GitHub task evidence 追溯；`draft -> active -> done` 指文档迁移，不是运行状态。正文流程与 §6 现在承接本文原 AC/技术合同，未改变经济参数、权限、实现状态或重新激活前置。
+
+- User Personas: 协议维护者、任务执行者、质量复核者。
+- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
+- User Stories: As a 维护者, I want oasis7 Runtime：节点贡献积分激励 的需求结构化, so that implementation is auditable.
+- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
+- Functional Specification Matrix:
+| 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
+| --- | --- | --- | --- | --- | --- |
+| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
+- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+
+原迁移验证行（仅文档结构，不代签业务验收）：
+| PRD-P2P-MIG-091-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+
+原迁移决定：
+| DEC-PRD-P2P-MIG-091-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |

@@ -14,12 +14,12 @@ const resolutions: Record<string, string> = { resolved: '目标文件已读取',
 
 export default function DocumentRelations(props: {
   relations: DocumentPairings | null | undefined;
-  mode: 'pairing' | 'upstream' | 'allocation_upstream' | 'allocation_design';
+  mode: 'pairing' | 'product_pairing' | 'upstream' | 'allocation_upstream' | 'allocation_design';
   sections: DocumentSection[];
   showSource: (section: DocumentSection, origin?: HTMLElement) => void;
 }) {
-  const subject = () => ({pairing:'配对',upstream:'上游',allocation_upstream:'承接上游',allocation_design:'承接设计'}[props.mode]);
-  const title = () => ({pairing:'显式配对系统设计',upstream:'显式上游声明',allocation_upstream:'承接上游条款',allocation_design:'本设计承接条款'}[props.mode]);
+  const subject = () => ({pairing:'配对',product_pairing:'配对',upstream:'上游',allocation_upstream:'承接上游',allocation_design:'承接设计'}[props.mode]);
+  const title = () => ({pairing:'显式配对系统设计',product_pairing:'显式配对产品设计',upstream:'显式上游声明',allocation_upstream:'承接上游条款',allocation_design:'本设计承接条款'}[props.mode]);
   function targetSection(edge: DocumentPairing) {
     if (edge.resolution !== 'resolved' || !edge.target || !edge.targetSection || !edge.targetRevision) return undefined;
     const path = edge.target.split('#')[0];
@@ -31,10 +31,10 @@ export default function DocumentRelations(props: {
     <Show when={props.mode === 'upstream'}><p class="muted small">仅展示首个顶层非一级标题之前的顶层“上游”字段。目标类型来自清单路径分类，声明和链接存在不代表需求已经实现；正文承接表另行展示。</p></Show>
     <Show when={props.relations} fallback={<p>旧清单尚未解析{subject()}，请刷新本地事实。</p>}>{relations => <>
       <Show when={relations().issue}><p role="status">{subject()}解析不完整：{pairingIssues[relations().issue!] ?? relations().issue}</p></Show>
-      <Show when={!relations().targets.length && !relations().issue}><p>{props.mode === 'pairing' ? '本次范围未发现显式配对系统设计链接。' : props.mode === 'upstream' ? '本次文件头范围未发现显式上游链接。' : '本单元格明确声明无链接。'}</p></Show>
+      <Show when={!relations().targets.length && !relations().issue}><p>{props.mode === 'pairing' ? '本次范围未发现显式配对系统设计链接。' : props.mode === 'product_pairing' ? '本次范围未发现显式配对产品设计链接。' : props.mode === 'upstream' ? '本次文件头范围未发现显式上游链接。' : '本单元格明确声明无链接。'}</p></Show>
       <For each={relations().targets}>{edge => <div class="small">
         <p>第 {edge.declarationLine} 行 · {edge.target ?? edge.destination} · {resolutions[edge.resolution] ?? edge.resolution}</p>
-        <Show when={props.mode !== 'pairing'}><p class="muted">目标类型：{targetKind(edge)}</p></Show>
+        <Show when={props.mode !== 'pairing' && props.mode !== 'product_pairing'}><p class="muted">目标类型：{targetKind(edge)}</p></Show>
         <Show when={targetSection(edge)}>{target => <button onClick={event => props.showSource(target(), event.currentTarget)}>打开{subject()}章节：{target().title}</button>}</Show>
         <Show when={edge.resolution === 'resolved' && !targetSection(edge)}><p class="muted">{edge.targetRevision ? '目标没有可定位的索引章节。' : '旧清单尚无章节定位，请刷新本地事实。'}</p></Show>
       </div>}</For>

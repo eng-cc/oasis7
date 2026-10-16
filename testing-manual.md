@@ -30,7 +30,9 @@
 
 ## TCP conformance 完成条件
 
-Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证等待原 canonical receipt、settled lease，以及有 memory intent 的双 turn 对应 memory，不把原来的三、四、八秒观察窗口当作产品 SLA。这三个用例的 isolated child 分别使用其父进程设置的同一个 60 秒单调硬截止；父进程使用私有 regular log 文件并保留最多 2 MiB tail，避免继承 pipe 阻塞；`PRE2_CONFORMANCE_EVIDENCE_DIR` 可保留完整日志，超时只终止自有 child。真实 pump、memory 或 terminal rejection 提前失败；metadata-held 的零提交断言、协议顺序和双 turn identity/nonce 验证仍保留。
+Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证等待原 canonical receipt、settled lease，以及有 memory intent 的双 turn 对应 memory，不把原来的三、四、八秒观察窗口当作产品 SLA。这三个用例的父进程使用 `Instant` 执行最多 60 秒的本地单调硬截止；跨进程通过 `PRE2_CONFORMANCE_COMPLETION_DEADLINE_MS` 传递 wall-clock epoch 截止，child 将剩余预算转为本地 `Instant`，nested launcher 另预留 10 秒清理。因此不能将跨进程预算描述为共享同一个纯单调时钟。父进程以 `create_new` 建立 regular log 文件，stdout 和 stderr 各保留最多 2 MiB tail，避免继承 pipe 阻塞；`PRE2_CONFORMANCE_EVIDENCE_DIR` 可保留完整日志，超时只终止自有 child。真实 pump、memory 或 terminal rejection 提前失败；metadata-held 的零提交断言、协议顺序和双 turn identity/nonce 验证仍保留。
+
+日志仍必须满足私有性要求：测试根目录和归档目录应仅允许当前用户访问，日志应仅允许当前用户读写，并在运行前后核验权限（Unix 目录 `0700` / 文件 `0600`，其他平台须有等效 ACL）。当前这三个入口的普通 `create_dir_all` 与 log `create_new` 没有显式收窄权限，不能单凭这些 API 保证私有；是否可被其他用户读取取决于 umask、父目录与 ACL。未补齐并验证私有创建或等效环境前置时，私有性验收保持未满足，不得将功能测试通过当作权限通过；完整日志归档也须保留同等保护。本说明不代表已观察到实际泄露。
 
 因果延迟探针只在已验证成功的 View 响应上等待，响应字节保持原样。串行运行目标用例时，可设置 `PRE2_CONFORMANCE_VIEW_DELAY_MS=600`（低于 transport timeout），分别过滤 `real_tcp_hosted_fresh_admission_observes_reserves_and_invokes_provider`、`real_tcp_fresh_admission_waits_for_successful_metadata` 和 `real_tcp_hosted_ordinary_cadence_commits_two_distinct_turns`。日志记录原请求和阶段推进；通过仍须获得同一原请求的 canonical result、唯一结算；双 turn 还须保留各自 memory。该探针验证多阶段累计延迟，不是吞吐或性能验收。
 
@@ -106,13 +108,12 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - `commit`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-script-executable-bits.sh`
-  - `./scripts/check-rust-file-size.sh`
-  - `cargo fmt --check`
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - 用途：显式本地诊断 baseline，不由普通 `pre-commit` 自动执行；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
+  - 范围：该入口不调用 `rust_baseline`，因此不运行 Rust 文件体量检查或 fmt；需要这些检查时另行显式运行 `./scripts/ci-tests.sh required --group rust_baseline`（也会执行该组的其他检查）。
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-script-executable-bits.sh`
@@ -132,7 +133,9 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
 - `full`：
-  - `required` 全部
+  - 调用 `run_full_required_superset`、`rust_baseline` 及下列 full 测试；函数名不代表当前已覆盖 `required` 的每个子检查。
+  - 当前仍缺 `oasis7` / consensus / distfs / node / net / net-libp2p 的组级 Clippy 和 `viewer-auth-browser-security-smoke.mjs`；workspace-support 的 Clippy 仍会执行。`full-standard` 同样存在这些缺口，`full` 另加 `formal_process`。
+  - `required` 全量包含于 full 是 [CI 分层设计](doc/testing/ci/ci-tiered-execution.design.md) 的目标，尚不能凭本入口通过宣称实现；应按变更范围执行实际选中的 required 组。
   - `cargo test -p oasis7 --tests --features test_tier_full,wasmtime,viewer_live_integration`
   - `cargo test -p oasis7_node --lib`
   - `cargo test -p oasis7_net --lib`
@@ -140,7 +143,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - `./scripts/llm-baseline-fixture-smoke.sh`
   - 以 `wasmtime` 且不含 test-tier feature 构建真实 `oasis7_chain_runtime` / `oasis7_game_launcher`，由 `scripts/hosted-local-mock-production-guard.py` 读取 Cargo artifact 清单，分别核对 Hosted local-mock funding 参数被生产 guard 精确拒绝；不以其他启动错误代替拒绝结果。
   - `cargo test -p oasis7 --features test_tier_required,wasmtime --lib --bins`：启用跨 crate 测试夹具，保持未启用 `test_tier_full` 时的严格 Wasmtime 默认预算。驱动按相同 features 构建 Viewer，并通过 `PRE2_VIEWER_BINARY` 传入 Cargo 返回的真实路径；不依赖预先存在的 executable。
-  - 机械调用所有 scoped-required capability：包括 scenario regression、Pixel World Bridge lib + wasm、Viewer build、launcher web build 与 workspace-support crates；重叠的 support shard 只保留一次，避免无意义的重复执行。
+  - `run_full_required_superset` 显式调用当前 scoped-required capability；重叠 support shard 只保留一次。仍以实际命令为准，不能据函数名推断每个 required 子检查都覆盖。
+  - 独立 `full-support` tier 仍运行 `cargo test -p oasis7 --features wasmtime --lib --bins`；`full` 和 `full-standard` 使用上述 `test_tier_required,wasmtime` 命令及对应 Viewer artifact。
 
 `./scripts/ci-tests.sh` 不设默认 tier；省略参数会打印 usage 并失败，避免误把升级专用的 `full` 当成本地默认。
 
@@ -352,7 +356,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
 ./scripts/ci-tests.sh commit
 ```
 - 覆盖重点：
-  - 文档治理、release 关键脚本执行位、Rust 文件体量、`cargo fmt --check`
+  - 文档治理、release 关键脚本执行位等 `baseline` 治理/契约检查；不含 `rust_baseline` 的 Rust 文件体量和 fmt 检查
   - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
   - `software_safe` feedback contract regression
 - 边界：
@@ -1158,7 +1162,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - 默认串行执行：`ci-tests full`、`sync-m1/m4/m5 --check`、Web strict、S9/S10。
 - `release-gate-web-strict.sh` 的两个 Web 阶段使用隔离的签名 WorldService QA 后端：先执行现有 `build:viewer:visual-test` 生成真实 WebGL2 bridge 与 `.viewer-test-dist`（不改写 tracked `viewer.js`），再显式编译 `test_tier_required` 的 ignored helper，启动真实 loopback HTTP handler，并将六项普通 `public` read 配置通过临时 `0700` 目录中的 `0600` 文件交给默认生产 launcher/Viewer。后端按真实 Node tick 推进；这验证 Hosted Web 消费者入口和 realtime UI，不代表正式世界部署、玩家所有权激活或 provider 自治验收。测试不传外部链状态 bind、世界目录或工程 scope，结束时删除私配置并有界停止自有进程组。
 - `viewer-primary-web-entry-regression.sh` 专用于该隔离后端；`viewer-software-safe-step-regression.sh --release-web-fixture` 才启用同一路径，通用 `--url` / stack 参数仍使用调用者的原有运行源。primary/strict 的 `--scenario` 与 release 总入口的 `--web-scenario` 已移除；显式 release fixture 也会拒绝 step 的 debug scenario 参数；不得将它报告为指定 scenario 的验证。启动等待会立即报告 launcher/fixture 退出码和日志。
-- `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
+- `--quick` 只缩短 S9/S10 时长；它不向 `release-gate-web-strict.sh` 传递 visual/quick 开关，也不关闭 Web visual baseline。Web 阶段仍按选中的 release steps 与 strict 入口执行，不能从 quick 推断视觉检查被跳过。
 - `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
 
 <a id="network-tiers-validation-evidence"></a>

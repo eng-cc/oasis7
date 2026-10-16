@@ -611,3 +611,6 @@ fn exhausted_ready_context_does_not_terminate_after_task_stop() {
 
 #[path = "native_task_protocol_tests.rs"]
 mod protocol;
+
+#[path = "native_task_history_tests.rs"]
+mod history;

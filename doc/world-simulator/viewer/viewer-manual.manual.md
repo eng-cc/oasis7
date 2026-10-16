@@ -361,7 +361,7 @@ turn those tests into issuer-backed production access or a release claim.
 
 ### 已退役的 legacy 操作
 
-历史 Standard-3D / egui 表面曾提供 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板；该表面及这些操作均已退役，不能作为当前 canonical `viewer` Web 页面的使用说明或能力声明。当前支持边界仍以实时观察、当前选中对象、prompt/chat、`window.__AW_TEST__` 以及本手册列出的三条回归脚本为准。
+历史 Standard-3D / egui 表面曾提供 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板；该表面及这些操作均已退役，不能作为当前 canonical `viewer` Web 页面的使用说明或能力声明。当前支持边界仍为实时观察、当前选中对象与 prompt/chat；`window.__AW_TEST__` 仅在显式 visual-test 构建且 opt-in 时可用，三条回归脚本的结果按各自构建与场景解释。
 
 ## 证据边界
 - `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 是固定历史样本；其中 2026-04-08 的 LLM-enabled follow-up PASS 仅代表原候选、环境和场景，不是今天默认生效的 formal gameplay 或 release-grade PASS。
@@ -392,9 +392,24 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstr
 env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ```
 
+默认终端 B 服务 release/UI 构建；即使 URL 带 `test_api=1`，也不得安装 `window.__AW_TEST__`。默认采证只检查页面、可见状态与 console/screenshot，不把缺少测试 API 当失败。
+
+需要语义测试 API 时，另在独立终端构建并服务隔离产物（前提为 Viewer 的 Node/Rust/WASM 构建依赖已准备好）：
+```bash
+npm --prefix crates/oasis7_viewer run build:viewer:visual-test && \
+python3 -m http.server 4174 --bind 127.0.0.1 --directory crates/oasis7_viewer/.viewer-test-dist
+```
+不要把 `.viewer-test-dist` 当 release 发布，也不要用 `run-viewer-web.sh` 代替这个测试产物服务。下方终端 C 默认 `release`；只在上述测试服务就绪后，于终端 C 显式设置 `export VIEWER_CAPTURE_MODE=visual-test`。`test_api=1` 是测试构建的额外 opt-in，不能把 release 转成测试构建；它也不是玩家权限或正式接入凭证。记录所选 profile、source/build 身份和 URL，不用测试 API 结果代签真实输入或正式发布。
+
 终端 C：
 ```bash
 set -euo pipefail
+VIEWER_CAPTURE_MODE="${VIEWER_CAPTURE_MODE:-release}"
+case "$VIEWER_CAPTURE_MODE" in
+  release) VIEWER_CAPTURE_PORT=4173 ;;
+  visual-test) VIEWER_CAPTURE_PORT=4174 ;;
+  *) echo "unknown VIEWER_CAPTURE_MODE: $VIEWER_CAPTURE_MODE" >&2; exit 2 ;;
+esac
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 agent-browser --version
 agent-browser doctor --offline --quick --json
@@ -425,12 +440,18 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:${VIEWER_CAPTURE_PORT}/viewer.html?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
 agent-browser --session "$AB_SESSION" wait --load domcontentloaded
-agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+if [[ "$VIEWER_CAPTURE_MODE" == "visual-test" ]]; then
+  agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+else
+  agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'undefined'"
+fi
 agent-browser --session "$AB_SESSION" session info --json | tee "$VIEWER_EVIDENCE_DIR/session-info.json"
 agent-browser --session "$AB_SESSION" snapshot -i
-agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
+if [[ "$VIEWER_CAPTURE_MODE" == "visual-test" ]]; then
+  agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__.getState())" | tee "$VIEWER_EVIDENCE_DIR/state.json"
+fi
 agent-browser --session "$AB_SESSION" console | tee "$VIEWER_EVIDENCE_DIR/console.log"
 agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-web.png"
 ```
@@ -461,12 +482,11 @@ agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-we
 
 以下页面最低通过只证明 surface observation。required/full 由 [QA tier boundaries](../../testing/prd.md#qa-infrastructure-tier-boundaries) 和 [S6 receiver](../../../testing-manual.md#testing-s6-qa-receiver) 判定：required 包含 active-provider pure API，full 另需真实 provider-backed Agent parity 与实际 external headed desktop+narrow evidence。缺失 mandatory identity、phase、freshness、oracle join 或 artifact 保持 blocked/unverified；实际语义违反为 failed。PWT planned scenes 和 equal-version `1→1` semantic negative 保持 planned/unexecuted；历史证据、当前 technical-preview/GPU 限制与 Launcher/login/auth 合同保留，本段不升级任何现有状态。
 
-- 页面可加载，且 `window.__AW_TEST__` 可用。
-- `getState().renderMode=viewer`（兼容 alias 场景可回出 `software_safe` 但不再是 canonical 期望）。
-- `connectionStatus=connected`，或页面显式给出可追溯 blocker。
-- 至少产出 1 张截图与 1 份 console/state 证据。
+- release/UI：页面可加载，`window.__AW_TEST__` 不存在（包括带 `test_api=1` 时）；检查页面可见的连接状态或可追溯 blocker，至少保留截图与 console。页面加载不等于 renderer-ready 或玩法通过。
+- visual-test：显式测试构建且 opt-in 后 `window.__AW_TEST__` 可用，另采 `getState()`；`renderMode=viewer`（兼容 alias 可回出 `software_safe`），`connectionStatus=connected` 或有明确 blocker。测试 API 可用不替代真实输入、图形或正式玩法验收。
 
 ## 常用调试点
+以下仅适用于显式 visual-test 构建且已 opt-in 的测试会话；控制/Prompt/chat 调用仍遵守当前账号权限与确认要求。
 - `window.__AW_TEST__.getState()`
 - `window.__AW_TEST__.sendControl("step")`
 - `window.__AW_TEST__.sendPromptControl("preview", { agentId: "agent-0", shortTermGoal: "test" })`
@@ -479,7 +499,7 @@ agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-we
 - 无法进入正式玩法：检查 LLM provider 配置；若显式 `--no-llm`，只允许 observer/debug。
 - `agent-browser` 失败：先运行 `agent-browser --version`、`agent-browser doctor --offline --quick --json` 与 `agent-browser --session <owned-session> session info --json`；若是 daemon/IPC 读取失败，只重建本轮 session，不重放非幂等动作，也不影响其他任务 session。
 - 有状态但不推进：优先跑 `viewer-software-safe-step-regression.sh`，确认是正常推进还是显式 blocker。
-- `test_api=1` 下停在 `connecting` 且 `logicalTime=0`：立即检查 `getState().lastError` / `errorCount` 并归档 state、console、screenshot。已知 WebGL/SwiftShader fatal 最多自动 reload 一次；再次失败是 S6 环境/图形 blocker，不得当作 gameplay 证据。只有确认 Web 图形阻塞后，native 才可作为诊断 fallback。
+- 显式 visual-test 构建且 `test_api=1` 下停在 `connecting` 且 `logicalTime=0`：立即检查 `getState().lastError` / `errorCount` 并归档 state、console、screenshot。已知 WebGL/SwiftShader fatal 最多自动 reload 一次；再次失败是 S6 环境/图形 blocker，不得当作 gameplay 证据。只有确认 Web 图形阻塞后，native 才可作为诊断 fallback。
 - 如果只看到 `--no-llm` 截图证据：不要把它当成 formal gameplay PASS；按本手册[证据边界](#证据边界)查找与实际候选、环境和场景匹配的 LLM-enabled 结果。Apr07/08 follow-up 仅为历史示例，不能替代当前结论。
 
 ## 已移除能力

@@ -309,3 +309,51 @@ pub async fn query_document_directory(
     host.run(move |app| app.core.document_directory(query).map_err(error))
         .await
 }
+
+#[tauri::command]
+pub async fn query_document_semantic_tree(
+    host: State<'_, Host>,
+    query: oasis7_command_center_core::document_semantic_tree::DocumentSemanticTreeQuery,
+) -> Result<oasis7_command_center_core::document_semantic_tree::DocumentSemanticTreePage, String> {
+    host.run(move |app| app.core.document_semantic_tree(query).map_err(error))
+        .await
+}
+
+#[tauri::command]
+pub async fn load_document_tree_reading(
+    host: State<'_, Host>,
+    key: oasis7_command_center_core::document_tree_reading::DocumentTreeReadingKey,
+) -> Result<oasis7_command_center_core::document_tree_reading::DocumentTreeReadingLoadResult, String>
+{
+    host.run(move |app| app.core.load_document_tree_reading(key).map_err(error))
+        .await
+}
+
+#[tauri::command]
+pub async fn save_document_tree_reading(
+    host: State<'_, Host>,
+    request: oasis7_command_center_core::document_tree_reading::DocumentTreeReadingSaveRequest,
+) -> Result<oasis7_command_center_core::document_tree_reading::DocumentTreeReadingLoadResult, String>
+{
+    host.run(move |app| app.core.save_document_tree_reading(request).map_err(error))
+        .await
+}
+
+#[tauri::command]
+pub async fn reset_document_tree_reading(
+    host: State<'_, Host>,
+    key: oasis7_command_center_core::document_tree_reading::DocumentTreeReadingKey,
+) -> Result<oasis7_command_center_core::document_tree_reading::DocumentTreeReadingLoadResult, String>
+{
+    host.run(move |app| app.core.reset_document_tree_reading(key).map_err(error))
+        .await
+}
+
+#[tauri::command]
+pub async fn load_document_tree_last_view(
+    host: State<'_, Host>,
+    scope: oasis7_command_center_core::document_tree_reading::DocumentTreeReadingScope,
+) -> Result<oasis7_command_center_core::document_tree_reading::DocumentTreeLastView, String> {
+    host.run(move |app| app.core.load_document_tree_last_view(scope).map_err(error))
+        .await
+}

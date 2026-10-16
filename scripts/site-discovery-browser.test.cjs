@@ -18,7 +18,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();
   for(const width of [360,390,768,1024,1440]){
-   await p.setViewportSize({width,height:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
+   await p.setViewportSize({width,height:width===360?800:width===390?844:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
    const layout=await p.evaluate(()=>({proof:document.querySelector('#proof').getBoundingClientRect().top,
     fourth:document.querySelector('[data-decision-step="3"]').getBoundingClientRect().bottom,
     art:getComputedStyle(document.querySelector('.hero-visual')).position,
@@ -36,11 +36,20 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
    assert.equal(await p.locator('[data-decision-step]').count(),4);
    assert.equal(await p.locator('button[data-decision-step]').count(),0);
    assert.equal(await p.locator('.editorial-synopsis:visible').count(),2);
-   const entryArt=await p.locator('.discovery-editorial-grid .entry-art').evaluateAll(images=>images.map(img=>{const section=img.closest('section');const art=img.getBoundingClientRect();const heading=section.querySelector('h2').getBoundingClientRect();const copy=section.querySelector('.section-intro, .editorial-row, p:not(.eyebrow)')?.getBoundingClientRect();return {top:art.top,bottom:art.bottom,height:art.height,headingBottom:heading.bottom,copyTop:copy?.top};}));
-   assert.equal(entryArt.length,3);for(const a of entryArt){assert.ok(a.top>=a.headingBottom);assert.ok(a.copyTop>=a.bottom,JSON.stringify(a));}
-   if(width>=1100){assert.ok(Math.max(...entryArt.map(a=>a.top))-Math.min(...entryArt.map(a=>a.top))<1,JSON.stringify(entryArt));assert.ok(Math.max(...entryArt.map(a=>a.height))-Math.min(...entryArt.map(a=>a.height))<1,JSON.stringify(entryArt));}
+   assert.equal(await p.locator('.discovery-editorial-grid .entry-art:visible').count(),0);
+   assert.equal(await p.locator('.case-art img:visible').count(),1);
+   assert.equal(await p.locator('.preview-faq details').count(),3);
+   assert.equal(await p.locator('#download > .preview-quickfacts').isVisible(),true);
+   assert.equal(await p.locator('#lore > h2').isVisible(),true);
+   const order=await p.locator('#proof, #progress, #download, .preview-faq, #lore').evaluateAll(nodes=>nodes.map(n=>n.id||n.className.split(' ')[0]));
+   assert.deepEqual(order,['proof','progress','download','preview-faq','lore']);
+   await p.screenshot({path:path.join(out,locale+'-'+width+'-observatory.png'),fullPage:true});
 
    assert.equal(await p.locator('.discovery-editorial-grid #world').count(),0);
+   if(width<=390){
+    const menu=await p.locator('[data-menu-toggle]').boundingBox();const language=await p.locator('.lang-switch').boundingBox();
+    assert.ok(menu.x+menu.width<=language.x,JSON.stringify({menu,language}));
+   }
    if(width===390){
     const sizes=await p.evaluate(()=>Object.fromEntries(['.decision-panels article > p:not(.decision-number)','.preview-badge','.hero-entry-note','.hero-telemetry-label'].map(s=>[s,parseFloat(getComputedStyle(document.querySelector(s)).fontSize)])));
     assert.ok(sizes['.decision-panels article > p:not(.decision-number)']>=15,JSON.stringify(sizes));
@@ -54,7 +63,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale});const p=await c.newPage();
   for(const width of [360,390,768,1024,1440]){
-   await p.setViewportSize({width,height:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/')+'devlog/first-iron-batch/');await p.evaluate(()=>document.fonts.ready);
+   await p.setViewportSize({width,height:width===360?800:width===390?844:900});await p.goto(origin+(locale==='zh-CN'?'/':'/en/')+'devlog/first-iron-batch/');await p.evaluate(()=>document.fonts.ready);
    const box=await p.evaluate(()=>({title:document.querySelector('h1').getBoundingClientRect().top,header:document.querySelector('.topbar').getBoundingClientRect().bottom,width:innerWidth,scroll:document.documentElement.scrollWidth}));
    assert.ok(box.title>=box.header,JSON.stringify(box));assert.equal(box.scroll,box.width);
    assert.equal(await p.locator('meta[property="og:type"]').getAttribute('content'),'article');
@@ -100,6 +109,38 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
   await c.close();record(locale+' compact preview opens by CTA, keyboard-native disclosure and deep link with visible risk');
  }
+ // Deep links must land in the viewport, not merely open the disclosure.
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale,viewport:{width:390,height:844}});const p=await c.newPage();
+  const route=locale==='zh-CN'?'/':'/en/';
+  await p.goto(origin+route+'#package-download');
+  assert.equal(await p.locator('[data-preview-details]').evaluate(e=>e.open),true);
+  await p.waitForFunction(()=>{const r=document.querySelector('#package-download').getBoundingClientRect();return r.top>=0&&r.top<innerHeight/2;});
+  await p.locator('[data-preview-details] > summary').click();
+  await p.locator('.preview-paths a[href="#package-download"]').click();
+  assert.equal(await p.locator('[data-preview-details]').evaluate(e=>e.open),true);
+  await p.waitForFunction(()=>{const r=document.querySelector('#package-download').getBoundingClientRect();return r.top>=0&&r.top<innerHeight/2;});
+  await c.close();record(locale+' platform deep link and repeated link reveal and position the destination');
+ }
+ // Concept media failure must not remove the decision path or disclosure.
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale,viewport:{width:390,height:844},reducedMotion:'no-preference'});
+  await c.route('https://api.github.com/**',r=>r.abort());
+  await c.route('**/assets/images/hero/*.webp',r=>r.abort());
+  const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));
+  await p.goto(origin+(locale==='zh-CN'?'/':'/en/'));
+  assert.equal(await p.locator('.hero .button.primary').isVisible(),true);
+  assert.equal(await p.locator('.hero-telemetry-label').isVisible(),true);
+  assert.equal(await p.locator('[data-decision-panel]:visible').count(),4);
+  await p.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await p.locator('.hero .button.primary').evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
+  await p.locator('.preview-faq summary').first().click();
+  assert.equal(await p.locator('.preview-faq details').first().getAttribute('open'),'');
+  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),390);
+  assert.deepEqual(errors,[]);
+  await p.screenshot({path:path.join(out,locale+'-media-failure-390.png'),fullPage:true});
+  await c.close();record(locale+' failed concept media and runtime reduced-motion retain readable controls and FAQ');
+ }
  const files=['oasis7-windows-x64.exe','oasis7-macos-x64.dmg','oasis7-linux-x64.deb','oasis7-checksums.txt'];
  for(const scenario of ['full','no-platform','no-checksum','invalid','timeout']){
   const c=await context();await c.route('https://api.github.com/**',async r=>{
@@ -139,7 +180,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   await p.locator('#case-conditions > summary').click();await p.locator('.case-source a[href="#case-conditions"]').click();assert.equal(await p.locator('#case-conditions').getAttribute('open'),'');
   await p.locator('.hero-overview-link').click();await p.locator('.preview-paths a[href="#package-download"]').click();await p.waitForTimeout(700);
   assert.ok(await p.locator('[data-download-platform-button="windows"]').isVisible());const top=await p.locator('#package-download').evaluate(e=>e.getBoundingClientRect().top);assert.ok(top>=-1&&top<250,String(top));
-  assert.equal(await p.locator('meta[name="oasis7-site-build"]').getAttribute('content'),'20261015-entry-alignment');await c.close();record(locale+' result, separate setup paths and direct mobile platform access');
+  assert.equal(await p.locator('meta[name="oasis7-site-build"]').getAttribute('content'),'20261016-observatory');await c.close();record(locale+' result, separate setup paths and direct mobile platform access');
  }
  {
   const c=await context({viewport:{width:390,height:844}});const p=await c.newPage();await p.goto(origin+'/story/');await p.waitForFunction(()=>document.querySelector('[data-story-reader]').dataset.readerState==='ready');

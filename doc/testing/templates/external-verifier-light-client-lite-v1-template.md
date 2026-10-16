@@ -2,7 +2,8 @@
 
 Purpose: record one operator-run external verifier sample for `WorldHeadProofV1`.
 This packet proves that a separate process loaded a proof artifact, ran the
-repo-owned verifier, and checked a bounded height window. It is an audit lane
+repo-owned verifier, and checked one sampled head at `--expect-height`. It does
+not prove every height in a continuous window. It is an audit lane
 only; it is not full light-client security, multi-client consensus equivalence,
 public-testnet live-candidate readiness, or mainnet-grade finality.
 
@@ -17,6 +18,12 @@ public-testnet live-candidate readiness, or mainnet-grade finality.
 | does_not_claim | `mainnet-grade`, `production OC settlement`, `public validator onboarding open`, `multi-client consensus equivalence`, `full light client security`, `ready_for_live_candidate` |
 
 ## Required Fields
+
+The existing v1 helper emits `verified_range`; keep that wire field for compatibility,
+but interpret it only as the requested `from_height` / sampled `to_height` bounds.
+Its name is not a continuous-range verification claim. `observed_head.height` and
+the verifier summary identify the one sampled head actually checked. Do not rewrite
+historical packets; attach this interpretation when presenting their scope.
 
 ```json
 {
@@ -90,6 +97,11 @@ public-testnet live-candidate readiness, or mainnet-grade finality.
 
 ## Validation Notes
 
+- If `from_height < to_height` and only one proof is supplied, acceptance still
+  proves only that sampled head, not the intervening heights. The helper checks
+  that the requested bounds are not inverted; it does not invoke the verifier
+  `--proof-window` branch. Continuous-window evidence requires its own actual
+  window verification and cannot be inferred from this lite packet.
 - Run the helper from outside the node process and preserve the command output
   as the `external_verifier` object.
 - `manifest_ref`, `genesis_ref`, and `bootstrap_peer_ref` must match the active

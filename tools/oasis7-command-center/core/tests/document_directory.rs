@@ -33,6 +33,8 @@ fn fixture(files: &[(&str, &str)]) -> (tempfile::TempDir, CommandCenter, Documen
     let query = DocumentDirectoryQuery {
         parent_path: String::new(),
         lifecycle_filter: None,
+        kind_filter: None,
+        pairing_filter: None,
         inventory: DocumentInventoryQuery {
             schema_version: 1,
             project_id: snapshot.project.unwrap().id,
@@ -113,6 +115,27 @@ fn directory_pagination_binds_parent_filter_snapshot_schema_and_project() {
     assert_eq!(first.total_children, 105);
     assert_eq!(first.matching_files, 105);
     assert_eq!(first.entries.len(), 100);
+    // v2 predates product-identity parsing coverage. The same inventory snapshot
+    // can project legacy product pairing states differently, so old offsets expire.
+    {
+        use sha2::{Digest, Sha256};
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(first.next_cursor.as_ref().unwrap()).unwrap();
+        let old_filter = serde_json::to_vec(&(
+            "document-directory-v2",
+            "doc",
+            "",
+            "all",
+            "all",
+            "all",
+            "all",
+        ))
+        .unwrap();
+        legacy["filter"] = format!("{:x}", Sha256::digest(old_filter)).into();
+        let mut old_query = query.clone();
+        old_query.inventory.cursor = Some(legacy.to_string());
+        assert!(core.document_directory(old_query).is_err());
+    }
     query.inventory.cursor = first.next_cursor.clone();
     query.inventory.snapshot_id = Some(first.snapshot_id.clone());
     let next = core.document_directory(query.clone()).unwrap();
@@ -252,6 +275,8 @@ fn lifecycle_filters_keep_unknowns_and_bind_cursors_without_changing_coverage() 
     let legacy_json = serde_json::to_value(&query).unwrap();
     let mut legacy_json = legacy_json.as_object().unwrap().clone();
     legacy_json.remove("lifecycleFilter");
+    legacy_json.remove("kindFilter");
+    legacy_json.remove("pairingFilter");
     let legacy_request: DocumentDirectoryQuery =
         serde_json::from_value(legacy_json.into()).unwrap();
     assert_eq!(
@@ -272,5 +297,240 @@ fn lifecycle_filters_keep_unknowns_and_bind_cursors_without_changing_coverage() 
     query.lifecycle_filter = Some("invented".into());
     assert!(core.document_directory(query.clone()).is_err());
     query.lifecycle_filter = Some("raw:".into());
+    assert!(core.document_directory(query).is_err());
+}
+
+#[test]
+fn current_view_keeps_only_verified_historical_references_and_their_ancestors() {
+    let (_tmp, core, mut query) = fixture(&[
+        (
+            "doc/old/design.md",
+            "# Old\n- 状态：retired\n\n<a id='OLD-1'></a>\n\n## Old clause\n",
+        ),
+        ("doc/hidden/design.md", "# Hidden\n- 状态：superseded\n"),
+        (
+            "doc/current/design.md",
+            "# Current\n- 状态：draft\n- 上游：[old](../old/design.md#OLD-1)、[same](../old/design.md#OLD-1)、[bad fragment](../hidden/design.md#absent)\n- 配对系统设计：[old](../old/design.md#OLD-1)\n",
+        ),
+        (
+            "doc/retired-source/design.md",
+            "# Retired source\n- 状态：retired\n- 上游：[hidden](../hidden/design.md)\n",
+        ),
+        ("doc/plain.md", "# Plain\n[ordinary](hidden/design.md)\n"),
+    ]);
+    query.lifecycle_filter = Some("current".into());
+    let root = core.document_directory(query.clone()).unwrap();
+    assert_eq!(root.matching_files, 2);
+    assert_eq!(root.hidden_history_files, 2);
+    query.parent_path = "doc".into();
+    let doc = core.document_directory(query.clone()).unwrap();
+    assert_eq!(
+        doc.entries
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>(),
+        ["current", "old"]
+    );
+    query.parent_path = "doc/old".into();
+    let old = core.document_directory(query.clone()).unwrap();
+    assert_eq!(old.entries[0].historical_reference_files, 1);
+    assert_eq!(
+        old.entries[0].historical_reference_paths,
+        ["doc/current/design.md"]
+    );
+    assert_eq!(
+        old.entries[0]
+            .file
+            .as_ref()
+            .unwrap()
+            .lifecycle
+            .as_ref()
+            .unwrap()
+            .category
+            .as_deref(),
+        Some("retired")
+    );
+    query.inventory.query = "Old".into();
+    let searched = core.document_directory(query.clone()).unwrap();
+    assert_eq!(searched.matching_files, 1);
+    assert_eq!(searched.entries[0].historical_reference_files, 1);
+    query.lifecycle_filter = Some("all".into());
+    let all = core.document_directory(query).unwrap();
+    assert_eq!(all.entries[0].historical_reference_files, 0);
+}
+
+#[test]
+fn history_reference_counts_deduplicate_sources_and_bound_path_samples() {
+    let mut files: Vec<_> = (0..25)
+        .map(|i| {
+            (
+                format!("doc/{i:02}.design.md"),
+                "# Source\n- 上游：[old](old/design.md)、[duplicate](old/design.md)\n".into(),
+            )
+        })
+        .collect();
+    files.push((
+        "doc/old/design.md".into(),
+        "# Old\n- 状态：retired\n".into(),
+    ));
+    files.push(("doc/table.design.md".into(), "# Allocation\n\n## 需求承接与分配表\n\n| 上游条款 | 本设计条款 |\n| --- | --- |\n| [old](old/design.md) | [old](old/design.md) |\n".into()));
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (_tmp, core, mut query) = fixture(&refs);
+    query.lifecycle_filter = Some("current".into());
+    query.parent_path = "doc/old".into();
+    let page = core.document_directory(query).unwrap();
+    let entry = &page.entries[0];
+    assert_eq!(entry.historical_reference_files, 26);
+    assert_eq!(entry.historical_reference_paths.len(), 20);
+    assert_eq!(entry.historical_reference_paths[0], "doc/00.design.md");
+    assert_eq!(entry.historical_reference_paths[19], "doc/19.design.md");
+    assert_eq!(page.hidden_history_files, 0);
+    assert_eq!(page.matching_files, 27);
+}
+
+#[test]
+fn kind_filters_preserve_coverage_and_cross_kind_history_evidence() {
+    let files: Vec<_> = (0..105)
+        .map(|i| (format!("doc/{i:03}.prd.md"), "# Requirements\n".into()))
+        .chain([
+            ("AGENTS.md".into(), "# Entry\n".into()),
+            ("doc/README.md".into(), "# Docs\n".into()),
+            (
+                "doc/old/design.md".into(),
+                "# Old\n- 状态：retired\n".into(),
+            ),
+            (
+                "doc/source/prd.md".into(),
+                "# Source\n- 配对系统设计：[old](../old/design.md)\n".into(),
+            ),
+            ("doc/plain.md".into(), "# Body\n".into()),
+        ])
+        .collect();
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (_tmp, core, mut query) = fixture(&refs);
+    let all = core.document_directory(query.clone()).unwrap();
+    assert_eq!(all.candidates, 110);
+    assert_eq!(all.eligible_files, 109);
+    query.kind_filter = Some("design".into());
+    query.lifecycle_filter = Some("current".into());
+    let design = core.document_directory(query.clone()).unwrap();
+    assert_eq!(design.matching_files, 1);
+    assert_eq!(design.eligible_files, 109);
+    assert_eq!(design.candidates, 110);
+    query.parent_path = "doc/old".into();
+    let leaf = core.document_directory(query.clone()).unwrap();
+    assert_eq!(leaf.entries[0].historical_reference_files, 1);
+    assert_eq!(
+        leaf.entries[0].historical_reference_paths,
+        ["doc/source/prd.md"]
+    );
+    query.parent_path.clear();
+    query.kind_filter = Some("entry".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        2
+    );
+    query.parent_path = "doc".into();
+    query.kind_filter = Some("prd".into());
+    let prd = core.document_directory(query.clone()).unwrap();
+    assert_eq!(prd.matching_files, 106);
+    assert!(prd.next_cursor.is_some());
+    query.inventory.cursor = prd.next_cursor;
+    query.kind_filter = Some("all".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.inventory.cursor = None;
+    query.kind_filter = Some("other".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.kind_filter = Some("design".into());
+    query.inventory.read_filter = "omitted".into();
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        0
+    );
+    query.inventory.read_filter = "all".into();
+    query.inventory.query = "nonmatching".into();
+    assert_eq!(core.document_directory(query).unwrap().matching_files, 0);
+}
+
+#[test]
+fn pairing_gap_filters_use_only_explicit_pairings_and_preserve_coverage() {
+    let files: Vec<_> = (0..105)
+        .map(|i| {
+            (
+                format!("doc/{i:03}.prd.md"),
+                "# Requirement\n- 配对系统设计：[missing](deleted.design.md)\n".into(),
+            )
+        })
+        .chain([
+            ("doc/deleted.design.md".into(), "# Deleted\n".into()),
+            (
+                "doc/unpaired.prd.md".into(),
+                "# Unpaired\n- 上游：[missing](deleted.design.md)\n".into(),
+            ),
+            (
+                "doc/incomplete.prd.md".into(),
+                "# Incomplete\n- 配对系统设计：unclear\n".into(),
+            ),
+        ])
+        .collect();
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (tmp, mut core, mut query) = fixture(&refs);
+    fs::remove_file(tmp.path().join("repo/doc/deleted.design.md")).unwrap();
+    core.refresh().unwrap();
+    query.pairing_filter = Some("missing".into());
+    query.parent_path = "doc".into();
+    let page = core.document_directory(query.clone()).unwrap();
+    assert_eq!(page.matching_files, 105);
+    assert_eq!(page.candidates, 108);
+    assert_eq!(page.eligible_files, 108);
+    assert_eq!(page.omitted, 1);
+    assert!(page.next_cursor.is_some());
+    query.inventory.cursor = page.next_cursor;
+    query.pairing_filter = Some("all".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.inventory.cursor = None;
+    query.pairing_filter = Some("unpaired".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("unparsed".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("incomplete".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("missing".into());
+    query.inventory.query = "unpaired".into();
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        0
+    );
+    query.pairing_filter = Some("invented".into());
     assert!(core.document_directory(query).is_err());
 }

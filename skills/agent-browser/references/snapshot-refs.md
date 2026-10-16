@@ -2,10 +2,23 @@
 
 Compact element references that reduce context usage dramatically for AI agents.
 
-All examples assume an owned named session exported through
-`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Never use the
-default session or global multi-session cleanup; refs remain local to the named session and
-become stale after page changes.
+Use the owned-session setup and cleanup from [session-management.md](session-management.md)
+in the same shell before these examples (also inside any standalone script):
+
+```bash
+AB_SESSION="$(agent-browser session id --scope worktree --prefix snapshot)" || exit $?
+: "${AB_SESSION:?Session creation returned an empty id}"
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+```
+
+Install the scoped `EXIT INT TERM` cleanup from that reference after setup.
+Every `ab` invocation passes the owned id explicitly; an ambient
+`AGENT_BROWSER_SESSION` alone is not sufficient. Never use the default session
+or global multi-session cleanup. This follows the repository's 0.37.1 session
+contract; if the installed CLI differs, read `agent-browser skills get core --full`
+before adapting these examples.
+
+Refs remain local to the named session and become stale after page changes.
 
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
@@ -35,10 +48,10 @@ Compact snapshot → @refs assigned → Direct interaction (~200-400 tokens)
 
 ```bash
 # Basic snapshot (shows page structure)
-agent-browser snapshot
+ab snapshot
 
 # Interactive snapshot (-i flag) - RECOMMENDED
-agent-browser snapshot -i
+ab snapshot -i
 ```
 
 ### Snapshot Output Format
@@ -71,16 +84,16 @@ Once you have refs, interact directly:
 
 ```bash
 # Click the "Sign In" button
-agent-browser click @e6
+ab click @e6
 
 # Fill email input
-agent-browser fill @e10 "user@example.com"
+ab fill @e10 "user@example.com"
 
 # Fill password
-agent-browser fill @e11 "password123"
+ab fill @e11 "password123"
 
 # Submit the form
-agent-browser click @e12
+ab click @e12
 ```
 
 ## Ref Lifecycle
@@ -89,14 +102,14 @@ agent-browser click @e12
 
 ```bash
 # Get initial snapshot
-agent-browser snapshot -i
+ab snapshot -i
 # @e1 [button] "Next"
 
 # Click triggers page change
-agent-browser click @e1
+ab click @e1
 
 # MUST re-snapshot to get new refs!
-agent-browser snapshot -i
+ab snapshot -i
 # @e1 [h1] "Page 2"  ← Different element now!
 ```
 
@@ -106,29 +119,29 @@ agent-browser snapshot -i
 
 ```bash
 # CORRECT
-agent-browser open https://example.com
-agent-browser snapshot -i          # Get refs first
-agent-browser click @e1            # Use ref
+ab open https://example.com
+ab snapshot -i          # Get refs first
+ab click @e1            # Use ref
 
 # WRONG
-agent-browser open https://example.com
-agent-browser click @e1            # Ref doesn't exist yet!
+ab open https://example.com
+ab click @e1            # Ref doesn't exist yet!
 ```
 
 ### 2. Re-Snapshot After Navigation
 
 ```bash
-agent-browser click @e5            # Navigates to new page
-agent-browser snapshot -i          # Get new refs
-agent-browser click @e1            # Use new refs
+ab click @e5            # Navigates to new page
+ab snapshot -i          # Get new refs
+ab click @e1            # Use new refs
 ```
 
 ### 3. Re-Snapshot After Dynamic Changes
 
 ```bash
-agent-browser click @e1            # Opens dropdown
-agent-browser snapshot -i          # See dropdown items
-agent-browser click @e7            # Select item
+ab click @e1            # Opens dropdown
+ab snapshot -i          # See dropdown items
+ab click @e7            # Select item
 ```
 
 ### 4. Snapshot Specific Regions
@@ -137,7 +150,7 @@ For complex pages, snapshot specific areas:
 
 ```bash
 # Snapshot just the form
-agent-browser snapshot @e9
+ab snapshot @e9
 ```
 
 ## Ref Notation Details
@@ -173,27 +186,27 @@ agent-browser snapshot @e9
 
 ```bash
 # Ref may have changed - re-snapshot
-agent-browser snapshot -i
+ab snapshot -i
 ```
 
 ### Element Not Visible in Snapshot
 
 ```bash
 # Scroll down to reveal element
-agent-browser scroll down 1000
-agent-browser snapshot -i
+ab scroll down 1000
+ab snapshot -i
 
 # Or wait for dynamic content
-agent-browser wait 1000
-agent-browser snapshot -i
+ab wait 1000
+ab snapshot -i
 ```
 
 ### Too Many Elements
 
 ```bash
 # Snapshot specific container
-agent-browser snapshot @e5
+ab snapshot @e5
 
 # Or use get text for content-only extraction
-agent-browser get text @e5
+ab get text @e5
 ```

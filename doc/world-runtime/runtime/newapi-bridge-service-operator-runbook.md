@@ -116,7 +116,13 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
 
 ## 与 Remote Provider Bridge 串接
 
-remote provider bridge 可直接读取同一份 state:
+remote provider bridge 可读取同一份受控 state，但自动映射的 selector 仅用于路由，
+不是调用者认证。先按 [Remote Provider Bridge 认证与授权前提](provider-remote-https-bridge-operator-runbook.md#认证与授权前提)
+核实独立认证与 caller → selector 授权绑定，或严格可信调用边界；未核实前不得将
+下面配置用于公网入口。全局 bridge auth token 在自动映射分支不构成额外校验，
+公钥 fingerprint、TLS、限流及 state 中的 active binding 也不替代该前提。
+
+配置示例:
 
 ```bash
 OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER=true

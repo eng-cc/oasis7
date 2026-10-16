@@ -2,13 +2,23 @@
 
 Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
-All examples assume an owned named session has already been established with
-`export AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix auth)"`.
-Install an `EXIT INT TERM` trap that runs `agent-browser close` for that exact
-session; never use the default session or the global multi-session close mode. Prefer `--restore
---restore-save auto` plus a restore check for new persistent-login flows. The
-explicit `state save/load` examples below are compatibility recipes for cases
-that must exchange a concrete state file.
+Use the owned-session setup and cleanup from [session-management.md](session-management.md)
+in the same shell before these examples (also inside any standalone script):
+
+```bash
+AB_SESSION="$(agent-browser session id --scope worktree --prefix auth)" || exit $?
+: "${AB_SESSION:?Session creation returned an empty id}"
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+```
+
+Install the scoped `EXIT INT TERM` cleanup from that reference after setup.
+Every `ab` invocation passes the owned id explicitly; an ambient
+`AGENT_BROWSER_SESSION` alone is not sufficient. Never use the default session
+or global multi-session cleanup. This follows the repository's 0.37.1 session
+contract; if the installed CLI differs, read `agent-browser skills get core --full`
+before adapting these examples.
+
+Prefer `--restore --restore-save auto` plus a restore check for new persistent-login flows. Explicit state save/load below is a compatibility recipe for exchanging a concrete state file.
 
 **Related**: [session-management.md](session-management.md) for state persistence details, [SKILL.md](../SKILL.md) for quick start.
 
@@ -28,40 +38,53 @@ that must exchange a concrete state file.
 
 ```bash
 # Navigate to login page
-agent-browser open https://app.example.com/login
-agent-browser wait --load networkidle
+ab open https://app.example.com/login
+ab wait --load networkidle
 
 # Get form elements
-agent-browser snapshot -i
+ab snapshot -i
 # Output: @e1 [input type="email"], @e2 [input type="password"], @e3 [button] "Sign In"
 
 # Fill credentials
-agent-browser fill @e1 "user@example.com"
-agent-browser fill @e2 "password123"
+ab fill @e1 "user@example.com"
+ab fill @e2 "password123"
 
 # Submit
-agent-browser click @e3
-agent-browser wait --load networkidle
+ab click @e3
+ab wait --load networkidle
 
 # Verify login succeeded
-agent-browser get url  # Should be dashboard, not login
+ab get url  # Should be dashboard, not login
 ```
 
 ## Saving Authentication State
 
-After logging in, save state for reuse:
+First prepare a new private directory outside every checkout. The example below
+uses the user's home directory; verify its resolved location is outside the repo
+and that local ACLs and backup/sync policy are suitable before saving tokens.
+Repo-external placement reduces accidental commits; it is not a secure-storage
+guarantee. Keep state files private and never upload them as test evidence.
+
+```bash
+umask 077
+AUTH_STATE_DIR="$(mktemp -d "$HOME/.oasis7-browser-auth.XXXXXX")" || exit $?
+export AUTH_STATE_DIR
+```
+
+Use the same directory for later load examples; do not generate a new directory
+when restoring an existing state. After logging in, save state for reuse:
 
 ```bash
 # Login first (see above)
-agent-browser open https://app.example.com/login
-agent-browser snapshot -i
-agent-browser fill @e1 "user@example.com"
-agent-browser fill @e2 "password123"
-agent-browser click @e3
-agent-browser wait --url "**/dashboard"
+ab open https://app.example.com/login
+ab snapshot -i
+ab fill @e1 "user@example.com"
+ab fill @e2 "password123"
+ab click @e3
+ab wait --url "**/dashboard"
 
 # Save authenticated state
-agent-browser state save ./auth-state.json
+ab state save "$AUTH_STATE_DIR/auth-state.json"
 ```
 
 ## Restoring Authentication
@@ -70,13 +93,13 @@ Skip login by loading saved state:
 
 ```bash
 # Load saved auth state
-agent-browser state load ./auth-state.json
+ab state load "$AUTH_STATE_DIR/auth-state.json"
 
 # Navigate directly to protected page
-agent-browser open https://app.example.com/dashboard
+ab open https://app.example.com/dashboard
 
 # Verify authenticated
-agent-browser snapshot -i
+ab snapshot -i
 ```
 
 ## OAuth / SSO Flows
@@ -85,23 +108,23 @@ For OAuth redirects:
 
 ```bash
 # Start OAuth flow
-agent-browser open https://app.example.com/auth/google
+ab open https://app.example.com/auth/google
 
 # Handle redirects automatically
-agent-browser wait --url "**/accounts.google.com**"
-agent-browser snapshot -i
+ab wait --url "**/accounts.google.com**"
+ab snapshot -i
 
 # Fill Google credentials
-agent-browser fill @e1 "user@gmail.com"
-agent-browser click @e2  # Next button
-agent-browser wait 2000
-agent-browser snapshot -i
-agent-browser fill @e3 "password"
-agent-browser click @e4  # Sign in
+ab fill @e1 "user@gmail.com"
+ab click @e2  # Next button
+ab wait 2000
+ab snapshot -i
+ab fill @e3 "password"
+ab click @e4  # Sign in
 
 # Wait for redirect back
-agent-browser wait --url "**/app.example.com**"
-agent-browser state save ./oauth-state.json
+ab wait --url "**/app.example.com**"
+ab state save "$AUTH_STATE_DIR/oauth-state.json"
 ```
 
 ## Two-Factor Authentication
@@ -110,18 +133,18 @@ Handle 2FA with manual intervention:
 
 ```bash
 # Login with credentials
-agent-browser open https://app.example.com/login --headed  # Show browser
-agent-browser snapshot -i
-agent-browser fill @e1 "user@example.com"
-agent-browser fill @e2 "password123"
-agent-browser click @e3
+ab open https://app.example.com/login --headed  # Show browser
+ab snapshot -i
+ab fill @e1 "user@example.com"
+ab fill @e2 "password123"
+ab click @e3
 
 # Wait for user to complete 2FA manually
 echo "Complete 2FA in the browser window..."
-agent-browser wait --url "**/dashboard" --timeout 120000
+ab wait --url "**/dashboard" --timeout 120000
 
 # Save state after 2FA
-agent-browser state save ./2fa-state.json
+ab state save "$AUTH_STATE_DIR/2fa-state.json"
 ```
 
 ## HTTP Basic Auth
@@ -130,10 +153,10 @@ For sites using HTTP Basic Authentication:
 
 ```bash
 # Set credentials before navigation
-agent-browser set credentials username password
+ab set credentials username password
 
 # Navigate to protected resource
-agent-browser open https://protected.example.com/api
+ab open https://protected.example.com/api
 ```
 
 ## Cookie-Based Auth
@@ -142,10 +165,10 @@ Manually set authentication cookies:
 
 ```bash
 # Set auth cookie
-agent-browser cookies set session_token "abc123xyz"
+ab cookies set session_token "abc123xyz"
 
 # Navigate to protected page
-agent-browser open https://app.example.com/dashboard
+ab open https://app.example.com/dashboard
 ```
 
 ## Token Refresh Handling
@@ -156,55 +179,57 @@ For sessions with expiring tokens:
 #!/bin/bash
 # Wrapper that handles token refresh
 
-STATE_FILE="./auth-state.json"
+: "${AUTH_STATE_DIR:?Prepare the private repo-external state directory first}"
+STATE_FILE="$AUTH_STATE_DIR/auth-state.json"
 
 # Try loading existing state
 if [[ -f "$STATE_FILE" ]]; then
-    agent-browser state load "$STATE_FILE"
-    agent-browser open https://app.example.com/dashboard
+    ab state load "$STATE_FILE"
+    ab open https://app.example.com/dashboard
 
     # Check if session is still valid
-    URL=$(agent-browser get url)
+    URL=$(ab get url)
     if [[ "$URL" == *"/login"* ]]; then
         echo "Session expired, re-authenticating..."
         # Perform fresh login
-        agent-browser snapshot -i
-        agent-browser fill @e1 "$USERNAME"
-        agent-browser fill @e2 "$PASSWORD"
-        agent-browser click @e3
-        agent-browser wait --url "**/dashboard"
-        agent-browser state save "$STATE_FILE"
+        ab snapshot -i
+        ab fill @e1 "$USERNAME"
+        ab fill @e2 "$PASSWORD"
+        ab click @e3
+        ab wait --url "**/dashboard"
+        ab state save "$STATE_FILE"
     fi
 else
     # First-time login
-    agent-browser open https://app.example.com/login
+    ab open https://app.example.com/login
     # ... login flow ...
 fi
 ```
 
 ## Security Best Practices
 
-1. **Never commit state files** - They contain session tokens
-   ```bash
-   echo "*.auth-state.json" >> .gitignore
-   ```
+1. **Keep state files outside the repo** - They contain session tokens.
+   Use the private `AUTH_STATE_DIR` above. If legacy state exists in a checkout,
+   stop and assess it rather than relying on ignore rules: `.gitignore` does not
+   remove tracked files or revoke exposed tokens. This example is not evidence
+   that any real token has been exposed.
 
 2. **Use environment variables for credentials**
    ```bash
-   agent-browser fill @e1 "$APP_USERNAME"
-   agent-browser fill @e2 "$APP_PASSWORD"
+   ab fill @e1 "$APP_USERNAME"
+   ab fill @e2 "$APP_PASSWORD"
    ```
 
 3. **Clean up after automation**
    ```bash
-   agent-browser cookies clear
-   rm -f ./auth-state.json
+   ab cookies clear
+   rm -f "$AUTH_STATE_DIR/auth-state.json"
    ```
 
 4. **Use short-lived sessions for CI/CD**
    ```bash
    # Don't persist state in CI
-   agent-browser open https://app.example.com/login
+   ab open https://app.example.com/login
    # ... login and perform actions ...
-   agent-browser close  # Session ends, nothing persisted
+   ab close  # Session ends, nothing persisted
    ```

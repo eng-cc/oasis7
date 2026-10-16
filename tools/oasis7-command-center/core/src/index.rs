@@ -6,6 +6,8 @@ mod document_allocations;
 mod document_fragments;
 #[path = "document_identity.rs"]
 mod document_identity;
+#[path = "document_navigation.rs"]
+mod document_navigation;
 #[path = "document_pairings.rs"]
 mod document_pairings;
 #[path = "document_read.rs"]
@@ -176,6 +178,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
         file.revision = Some(revision);
         file.bytes = Some(content.len());
         file.identity = Some(document_identity::parse(&content));
+        file.navigation = Some(document_navigation::parse(name, &content));
         file.pairings = Some(document_pairings::parse(name, &content, "配对系统设计"));
         if file.kind == "design" {
             file.allocations = Some(document_allocations::parse(name, &content));

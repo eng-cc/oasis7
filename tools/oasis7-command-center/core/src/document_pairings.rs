@@ -2,8 +2,20 @@
 use crate::document_inventory::{DocumentPairing, DocumentPairings, IndexedDocument};
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::collections::HashMap;
+#[path = "document_product_pairings.rs"]
+mod product;
 
 pub(super) fn parse(path: &str, content: &str, field_name: &str) -> DocumentPairings {
+    let mut result = parse_header(path, content, field_name);
+    if field_name == "配对系统设计"
+        && path.starts_with("doc/product/")
+        && (path.ends_with("/prd.md") || path.ends_with(".prd.md"))
+    {
+        product::append(&mut result, path, content);
+    }
+    result
+}
+fn parse_header(path: &str, content: &str, field_name: &str) -> DocumentPairings {
     let mut result = DocumentPairings {
         targets: Vec::new(),
         issue: None,
@@ -121,6 +133,7 @@ pub(super) fn resolve(
             .into_iter()
             .flatten()
             .chain(allocation_groups)
+            .chain(file.navigation.iter_mut().map(|nav| &mut nav.relationships))
         {
             for edge in &mut pairings.targets {
                 let Some(target) = &edge.target else { continue };

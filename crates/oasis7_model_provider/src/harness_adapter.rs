@@ -2,12 +2,12 @@
 use crate::{
     connection::{ConnectionManager, Principal},
     protocol::{Conversation, Message, Tool, ToolCall},
-    transport::ModelTransport,
+    transport::{ModelTransport, validate_input},
 };
 use oasis7_agent_harness::{
-    ModelProvider, ModelProviderError, ModelProviderRequest, ModelProviderResponse,
-    ModelProviderToolCall, ModelProviderToolResult, ModelProviderTrace, ModelProviderTurn,
-    ModelProviderUsage,
+    ModelProvider, ModelProviderError, ModelProviderHistory, ModelProviderRequest,
+    ModelProviderResponse, ModelProviderToolCall, ModelProviderToolResult, ModelProviderTrace,
+    ModelProviderTurn, ModelProviderUsage,
 };
 
 pub struct SessionModelProvider {
@@ -53,6 +53,12 @@ impl SessionModelProvider {
     }
 }
 impl ModelProvider for SessionModelProvider {
+    fn history_mode(&self) -> ModelProviderHistory {
+        ModelProviderHistory::ProviderConversation
+    }
+    fn preflight(&self, request: &ModelProviderRequest) -> Result<(), ModelProviderError> {
+        self.candidate(request).map(|_| ())
+    }
     fn check_execution(&self) -> Result<(), ModelProviderError> {
         self.manager
             .check_execution(
@@ -123,15 +129,10 @@ impl ModelProvider for SessionModelProvider {
     }
 }
 impl SessionModelProvider {
-    fn complete_using(
-        &mut self,
+    fn candidate(
+        &self,
         request: &ModelProviderRequest,
-        send: impl FnOnce(
-            &crate::connection::RequestPermit,
-            &Conversation,
-        )
-            -> Result<crate::protocol::ProviderResponse, crate::protocol::ProviderFailure>,
-    ) -> Result<ModelProviderResponse, ModelProviderError> {
+    ) -> Result<Conversation, ModelProviderError> {
         request.validate()?;
         if request.budget.max_model_calls == 0
             || request.budget.max_latency_ms == 0
@@ -153,7 +154,7 @@ impl SessionModelProvider {
             .collect::<Vec<_>>();
         let output = u32::try_from(self.manager.limits().max_output_tokens)
             .map_err(|_| blocked("budget_exhausted"))?;
-        let conversation = self.conversation.get_or_insert_with(|| Conversation {
+        let mut conversation = self.conversation.clone().unwrap_or_else(|| Conversation {
             system_prompt: request.system_prompt.clone(),
             messages: vec![],
             tools: tools.clone(),
@@ -165,6 +166,32 @@ impl SessionModelProvider {
         conversation.messages.push(Message::User {
             content: request.user_prompt.clone(),
         });
+        let preset = self
+            .manager
+            .active_preset(
+                &self.principal,
+                &self.connection_id,
+                self.version,
+                self.generation,
+            )
+            .map_err(|_| blocked("model_session_unavailable"))?;
+        if preset.model != request.model {
+            return Err(blocked("model_identity_mismatch"));
+        }
+        validate_input(&preset, self.manager.limits(), &conversation)
+            .map_err(|e| blocked(&e.to_string()))?;
+        Ok(conversation)
+    }
+    fn complete_using(
+        &mut self,
+        request: &ModelProviderRequest,
+        send: impl FnOnce(
+            &crate::connection::RequestPermit,
+            &Conversation,
+        )
+            -> Result<crate::protocol::ProviderResponse, crate::protocol::ProviderFailure>,
+    ) -> Result<ModelProviderResponse, ModelProviderError> {
+        let mut conversation = self.candidate(request)?;
         let reservation = self
             .manager
             .limits()
@@ -184,7 +211,10 @@ impl SessionModelProvider {
             let _ = permit.finish(None, false);
             return Err(blocked("model_identity_mismatch"));
         }
-        let response = match send(&permit, conversation) {
+        // Admission failures leave the durable history untouched. Once reserved,
+        // an uncertain physical request remains conservatively budgeted.
+        self.conversation = Some(conversation.clone());
+        let response = match send(&permit, &conversation) {
             Ok(response) => response,
             Err(error) => {
                 let _ = permit.finish(None, false);
@@ -204,6 +234,7 @@ impl SessionModelProvider {
         }
         self.pending = response.tool_calls;
         conversation.messages.extend(response.replay);
+        self.conversation = Some(conversation);
         Ok(ModelProviderResponse {
             request_digest: request.request_digest.clone(),
             turns: self

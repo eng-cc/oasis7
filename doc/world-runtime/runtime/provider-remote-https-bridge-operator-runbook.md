@@ -24,16 +24,17 @@ HTTP body 没有 `compatibility_lane` 字段；路由/adapter 配置是 lane 选
 
 repo-owned 参考装配中，这些端点由 `oasis7_provider_local_bridge` 提供，公网 `https://` 入口由 `nginx` 代理到本机 `127.0.0.1:5841`。参考 nginx 模板已包含按 IP 与 `Authorization` 的限流，以及连接数限制，用来降低单个 bearer 快速打空 LetAI quota 的风险。
 
-## 当前环境矩阵
+<a id="当前环境矩阵"></a>
+## 历史环境观察（2026-06-04）
 
-本矩阵只描述 remote provider bridge 的 runtime decision provider 口径；NewAPI bridge 自身是额度/token state 服务。
+本矩阵保留 2026-06-04 的 remote provider bridge 观察，不代表当前部署配置或认证边界已复核；NewAPI bridge 自身是额度/token state 服务。
 
-| Lane | Host | Provider bridge | 对外入口 | State 来源 | 当前 live gate |
+| Lane | Host | Provider bridge | 对外入口 | State 来源 | 历史 live gate |
 | --- | --- | --- | --- | --- | --- |
 | 测试环境 | `39.104.204.172` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | 暂无公网域名；本机/内网验证优先 | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: state realigned to the same NewAPI project/token as 205; bare legacy decision smoke passes with `provider_version=letai/gpt-5.4` |
 | 正式环境 | `39.104.205.67` | `oasis7-remote-provider-bridge.service`，监听 `127.0.0.1:5841` | `https://t2t.oasis7.tech` | 本机 `/etc/oasis7/newapi-bridge/bridge-state.json` | 2026-06-04 live gate: bare legacy decision smoke passes with `provider_version=letai/gpt-5.4`; current Codex control host to public TLS is reset before nginx, while 204-to-205 public TLS/HTTP succeeds; this is not target cognition proof |
 
-两套 provider bridge 当前都启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 target `/v1/world-simulator/decision-context` smoke 为准。若使用仓库现有的 bare-route contract smoke，结果只能证明 legacy compatibility 路径可达，不能替代 target cognition 验证。
+该历史窗口记录两套 provider bridge 启用自动映射模式：client 传 `newapi_user_ref:<user_ref>` 或 `bridge_user_id:<id>`，provider bridge 从本机 NewAPI bridge state 解析对应 `token_key`。`GET /v1/provider/health` 可能因上游 health URL 返回 `HTTP 401` 而显示 `degraded`；是否能调用模型以 target `/v1/world-simulator/decision-context` smoke 为准。若使用仓库现有的 bare-route contract smoke，结果只能证明 legacy compatibility 路径可达，不能替代 target cognition 验证。
 
 ## 仓库资产
 
@@ -86,7 +87,7 @@ openssl rand -hex 32
 
 若要做到“每个用户一个 `token_key`”，当前参考装配支持按 `bridge bearer token -> route label -> upstream token_key/model/base_url` 路由。
 
-还支持自动映射模式：`bridge bearer token -> newapi bridge state -> token_key`。这里 bearer token 直接承载用户标识，不再需要单独维护 auth-routes / llm-routes JSON。
+还支持自动映射模式：`bridge bearer token -> newapi bridge state -> token_key`。这里 Authorization bearer 字段承载路由 selector，不是调用者拥有该用户的证明；满足下述安全前提后，才可省去单独维护的 auth-routes / llm-routes JSON。
 
 需要两份 JSON:
 
@@ -111,7 +112,24 @@ OASIS7_REMOTE_LLM_ROUTES_PATH=/etc/oasis7/remote-provider-llm-routes.json
 
 ### 自动映射模式
 
-若 `oasis7_newapi_bridge_service` 已在持久化 state 里维护 `newapi_user_ref -> bridge_user_id -> token_key`，可以直接启用:
+#### 认证与授权前提
+
+`newapi_user_ref`、`bridge_user_id` 及公钥 fingerprint 都是路由标识，不是秘密，
+也不证明调用者拥有该用户或有权使用其额度。TLS 和按 IP/Authorization 限流不能
+替代调用者认证与 caller → selector 授权绑定。
+
+当前 `http_bridge_support.rs::authorize_request` 先使用非空静态 auth route map；
+仅在该 map 为空时进入自动映射分支。该分支解析 selector 并查询 state，不再叠加
+`OASIS7_PROVIDER_BRIDGE_AUTH_TOKEN` 的比较。配置这个全局 token 不能被当作自动映射
+的第二层认证；state 中的 active binding / token_key 也只证明路由可用。
+
+部署 owner 必须先核实：入口已独立认证调用主体并约束其可选 selector，或整个入口
+严格隔离于仅获准操作这些用户额度的可信调用方。仅监听 loopback 不足以证明经反向
+代理后的入口仍满足该前提。未核实前不得把下面的自动映射示例作为公网安全配置。
+本节不宣称任何现网已暴露、发生费用损失或完成安全修复；实现、部署变更及真实调用
+另行验证和授权。格式解析与认证授权分别验收，禁止裸格式也不能替代授权检查。
+
+满足上述安全前提，且 `oasis7_newapi_bridge_service` 已在持久化 state 里维护 `newapi_user_ref -> bridge_user_id -> token_key` 后，自动映射配置示例为:
 
 ```bash
 OASIS7_PROVIDER_AUTH_ROUTE_FROM_BEARER=true
@@ -303,4 +321,8 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
 - 该参考装配复用了 `oasis7_provider_local_bridge` 的 provider contract 和 prompt/decision parser，因此 `provider_id` 仍会表现为 `provider_local_bridge`。
 - `provider_health` 默认通过 `OASIS7_REMOTE_LLM_HEALTH_URL` 做 upstream 探针；若 LetAI/兼容服务不支持该路径，需要显式改成可用的健康检查地址。
 - 在未提供真实 LetAI `api_key/model` 前，ECS 端只能部署模板和二进制，不能完成最终 smoke。
-- 自动映射模式当前只接受 `newapi_user_ref:<user_ref>` / `bridge_user_id:<id>` 这类显式 bearer selector；不再接受裸 `newapi_user_ref`，避免把可猜测的短字符串直接当作公网 bridge token。
+- 自动映射示例使用显式 `newapi_user_ref:<user_ref>` / `bridge_user_id:<id>`。当前
+  `auth_support.rs::parse_newapi_bridge_bearer_selector` 仍兼容不含冒号且长度至少
+  `MIN_BRIDGE_AUTH_TOKEN_LEN`（24 字节）的裸值，并将其同时作为两类标识候选查找；
+  显式前缀要求非空值，未知前缀不接受。解析成功不等于 binding 存在或已授权。
+  这描述当前格式兼容行为，不推荐把裸值当作认证凭据；若要移除兼容，须另行修改实现与回归。

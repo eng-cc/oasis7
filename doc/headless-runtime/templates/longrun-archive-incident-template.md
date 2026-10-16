@@ -52,4 +52,4 @@
 - 是否至少填写 1 条归档证据路径。
 - 是否记录失败签名、触发阶段、恢复动作。
 - `fail/blocked` 是否具备直接证据支撑。
-- 是否回写 `doc/headless-runtime/prd.md` 与对应 PR、实际 CI 与评审记录（Issue 按需）。
+- 是否在实际 PR/已有 Task 记录本次结果并定位原始证据；仅当长期要求、合同、验证方法或真实能力边界变化时同步受影响 PRD/design，分工见[开发流程规范](../../engineering/workflow/source-of-truth.md#information-record-placement)。

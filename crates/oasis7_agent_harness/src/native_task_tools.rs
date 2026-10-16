@@ -200,14 +200,23 @@ pub(super) fn request(
     context: &NativeTaskContext,
     transcript: &[Value],
     rejected_feedback: &[Value],
-) -> Result<ModelProviderRequest, String> {
-    let user_prompt = serde_json::to_string(
-        &json!({"operation":context.operation,"authorized_context":context.model_context,
-        "tool_results":transcript,"prior_authorized_rejections":rejected_feedback}),
-    )
-    .map_err(|_| "native prompt encoding failed")?;
+    continuation: Option<u32>,
+) -> Result<ModelProviderRequest, crate::ModelProviderError> {
+    let user_prompt = serde_json::to_string(&match continuation {
+        Some(index) => json!({"operation":context.operation,"decision_index":index,
+                "continue_from_tool_results":true}),
+        None => json!({"operation":context.operation,"authorized_context":context.model_context,
+                "tool_results":transcript,"prior_authorized_rejections":rejected_feedback}),
+    })
+    .map_err(|_| {
+        crate::ModelProviderError::new("input_limit", "native prompt encoding failed", false)
+    })?;
     if user_prompt.len() > 8 * 1024 * 1024 {
-        return Err("complete native prompt exceeds bound; no content was truncated".into());
+        return Err(crate::ModelProviderError::new(
+            "input_limit",
+            "complete native prompt exceeds bound; no content was truncated",
+            false,
+        ));
     }
     let runtime_rules = "Act on the complete authorized goal and soft constraints using the native industry tools. Read results may inform subsequent calls. Read the native_delegation_authorizations before choosing action objects. A new factory ID must exactly match an authorized BuildFactory grant object_id; factory kind is not object authority. A verified read-only selection rejection has no world effect: consume its reason, inspect current capabilities, and choose a different authorized selection or explicitly abort within the existing budget and context lease. Do not repeat the same denied selection blindly. Authentication, revoked authority, unverified responses, and unknown writes must not be treated as correctable quote rejections. Use at most one physical side effect per context, as the final tool. Use wait to observe bounded independent world progress when a job is still pending; it never advances the world clock. If no valid continuation is appropriate, explicitly abort. Tools never grant authority; the World Service may reject proposals. Unsupported capabilities must not be replaced with Wait.";
     let system_prompt = format!("{}\n\n{runtime_rules}", config.system_prompt);

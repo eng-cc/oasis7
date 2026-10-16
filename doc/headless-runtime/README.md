@@ -11,12 +11,12 @@
 ## 入口
 - PRD: `doc/headless-runtime/prd.md`
 - 设计总览: `doc/headless-runtime/design.md`
-- 当前任务与执行证据: 对应 GitHub Issue / Project
+- 当前任务与执行证据: 对应 PR、实际 CI 与评审记录；Issue/Project 按需
 - 文件级索引: `doc/headless-runtime/prd.index.md`
 
 ## 从这里开始
 - 想先确认 headless-runtime 当前职责、生命周期边界与发布接口：先读 `doc/headless-runtime/prd.md`。
-- 想看这个模块还有没有活跃执行项、最近一次收口了什么：读对应 GitHub Issue / Project 与 task evidence。
+- 想看这个模块还有没有活跃执行项、最近一次收口了什么：读对应 PR/已有 Task、实际 CI 与评审证据。
 - 想理解旧 `nonviewer` 命名及已退役专题的追溯边界：读上面的“说明”。
 - 想查生命周期 / 鉴权一致性自检入口：先读 `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`。
 - 想查长稳归档、事故追溯或 release gate 对接模板：进入 `doc/headless-runtime/templates/`。
@@ -31,12 +31,12 @@
 - `templates/`：长稳归档、事故追溯与 release gate 对接模板。
 
 ## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、PR、实际 CI 与评审记录（Issue 按需）、`prd.index.md`。
+- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`prd.index.md`；过程记录由实际 PR/已有 Task 承接。
 - 其余专题文档按主题下沉到 `checklists/`、`templates/`。
-- 2026-03-11 模块状态 closure / handoff root 文档已退役删除；当前状态与下一任务入口以对应 GitHub Issue / Project 为准。
+- 2026-03-11 模块状态 closure / handoff root 文档已退役删除；当前状态与下一任务入口以对应 PR/已有 Task 的实际记录为准，Issue/Project 按需。
 
 ## 维护约定
-- 无界面运行链路行为变更，优先回写 `prd.md` 与 PR、实际 CI 与评审记录（Issue 按需）。
+- 无界面运行链路行为变更时，更新受影响的长期要求、设计与验证方法；执行结果留在实际 PR/已有 Task，分工见[开发流程规范](../engineering/workflow/source-of-truth.md#information-record-placement)。
 - 新文档使用 `headless-runtime-*` 前缀；已吸收的历史 `nonviewer-*` slug 只从 Git history 与 PR 与实际验证记录 追溯。
 - 新增专题后，需同步回写 `doc/headless-runtime/prd.index.md` 与本目录索引。
 - README 负责解释命名迁移与模块级入口顺序，不替代 `checklists/`、`templates/` 或 `prd.index.md` 的详细内容。

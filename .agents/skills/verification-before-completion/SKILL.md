@@ -11,6 +11,8 @@ description: Use when reporting oasis7 verification or completion.
 
 直接检查退出码和输出，记录命令、所测版本、结果和未覆盖部分。当前 source HEAD 的必需 CI 成功结果不会仅因 main 前进而失效；按通用规范中的冲突或明确集成风险决定是否更新分支和重测。旧版本结果不能代表新 HEAD 或新的 main 合并组合。失败、取消、缺失、未知和应执行却跳过不能算通过。
 
+问题修复的自检按[设计检查与修复](../../../doc/engineering/workflow/source-of-truth.md#root-cause-design-check)核对根因及设计判断：设计缺陷已先修正文档，实现与回归符合正确约定；纯实现 bug 能说明设计依据且已完成修复验证。没有设计缺陷不要求文档 diff，未确认的设计缺口不能用测试通过代替澄清；不另造完成证书。
+
 报告 ready 前检查适用评审及阻断项，报告代码完成前确认 PR 实际 merged 和提交。明确的部署、多 PR 和管理义务尚未完成时列出剩余工作。
 
 ## Related methods

@@ -70,6 +70,12 @@
 
 用固定 Chat Completions/Responses 响应覆盖多工具 call ID、参数增量、结果顺序、必要推理历史、流式终态缺失/中断、字段损坏、截断与未知 usage。OpenRouter 检查锁定 provider.only、禁集合外回退/跨模型回退、require_parameters；Responses 检查完整无状态历史、store:false 和空 previous_response_id。验证不支持字段或工具时明确拒绝而非静默删约束、切协议或把文本 JSON 当行动。
 
+增加无付费的多轮 Harness + Provider 组合回归，分别覆盖默认调用者快照与 Provider 结构化会话：同一 Context 至少三轮只读/报价工具往返，检查每个结果在 supplier ID 通道出现一次，user prompt 不重复嵌入累计 transcript；多工具批次保留调用与结果顺序；新 Context 首轮包含完整新切点、目标与 fence。用可识别的非敏感标记验证必要 assistant 推理历史仍在，不能仅以最终响应成功判定。
+
+以完整编码后的候选请求构造低于、等于、超过 byte/token 配置边界的输入，包含“新增片段很小但累计必要历史超限”和首次完整 Context 就超限。断言预检无会话修改、host 持久物理调用预留或网络请求，返回 typed `input_limit`，不新增 unknown usage、不 retry/新 slot/清历史/重置预算。另注入预检之后的 Stop/fence 变化，确认不能凭预检通过发送；已预留后的竞态或结果不明维持保守预算，不误退款。
+
+容量阻塞后检查原 Context、已验证结果与 action/operation 身份仍保留，原未知操作先查；Stop 能独立完成且旧运行代迟到输出失效。重启/重连不得复活旧代、重放未知动作或清零持久预算。记录实际请求编码大小与限额、物理发送和预留增量，不记录完整 prompt/Key；这些离线负例不能代签 BYOK-08 的获授权真实模型持续试玩。
+
 判定：模型适配保持工具因果和协议终态；上游调用标识不被当作免费重试保证。固定 fixture 不能证明真实供应商/模型兼容。
 
 <a id="byok-08"></a>

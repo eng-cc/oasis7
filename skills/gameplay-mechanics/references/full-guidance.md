@@ -296,8 +296,13 @@ RAPID BALANCE WORKFLOW:
 │     → Verify change has intended effect                     │
 │                                                              │
 │  5. REPEAT                                                   │
-│     → Target: 4-6 iterations per hour                       │
+│     → Full cycle above: 30-60 min (1-2 cycles/hour)          │
 └─────────────────────────────────────────────────────────────┘
+
+The rapid-tuning target of 4-6 iterations/hour requires a separately
+timeboxed micro-adjustment/test loop (10-15 min each). It cannot describe
+the full playtest/analyze/adjust/test cycle above. Choose and record which
+loop is measured; do not count micro-adjustments as complete playtests.
 
 BALANCE SPREADSHEET FORMAT:
 ┌──────────┬────────┬─────────┬─────────┬──────────┐
