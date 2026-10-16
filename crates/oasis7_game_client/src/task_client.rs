@@ -309,17 +309,19 @@ impl WorldServiceTaskClient {
 }
 
 impl WorldServiceTaskClient {
-    pub fn quote_task_factory(
+    pub fn quote_task_factory_outcome(
         &self,
         original: &SignedReadRequest<
             oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteRequestV1,
         >,
-    ) -> Result<oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteV1, Error>
-    {
+    ) -> Result<
+        oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteResponseV1,
+        Error,
+    > {
         use oasis7_client_api::world_service::task_factory_quote::*;
         verify_factory_quote_request(original).map_err(assurance)?;
         self.task_scope(&original.request.context_proof.request.context.fence)?;
-        let response: SignedServiceResponse<TaskFactoryQuoteV1> =
+        let response: SignedServiceResponse<TaskFactoryQuoteResponseV1> =
             self.transport.private_signed_response(
                 TASK_FACTORY_QUOTE_PATH,
                 original,
@@ -337,5 +339,24 @@ impl WorldServiceTaskClient {
             .validate_against(original)
             .map_err(assurance)?;
         Ok(response.payload)
+    }
+}
+
+impl WorldServiceTaskClient {
+    /// Compatibility API remains fail-closed for callers without denial handling.
+    pub fn quote_task_factory(
+        &self,
+        original: &SignedReadRequest<
+            oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteRequestV1,
+        >,
+    ) -> Result<oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteV1, Error>
+    {
+        use oasis7_client_api::world_service::task_factory_quote::TaskFactoryQuoteResponseV1;
+        match self.quote_task_factory_outcome(original)? {
+            TaskFactoryQuoteResponseV1::Quote(quote) => Ok(*quote),
+            TaskFactoryQuoteResponseV1::Denied(_) => {
+                Err(assurance("factory selection denied; no action submitted"))
+            }
+        }
     }
 }

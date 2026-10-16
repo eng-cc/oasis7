@@ -90,3 +90,56 @@ impl TaskFactoryQuoteV1 {
         )
     }
 }
+
+/// Only this authenticated, read-only selection denial permits a fresh decision.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskFactoryQuoteDeniedV1 {
+    pub schema_revision: u32,
+    pub context: TaskContextIdentityV1,
+    pub read_commit: CommitRef,
+    pub current_public_context: TaskPublicContextV1,
+    pub reason: FactoryQuoteDenialV1,
+    pub no_action_submitted: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FactoryQuoteDenialV1 {
+    FactoryNotAuthorized,
+}
+/// Untagged to retain the original successful quote wire format.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TaskFactoryQuoteResponseV1 {
+    Quote(Box<TaskFactoryQuoteV1>),
+    Denied(Box<TaskFactoryQuoteDeniedV1>),
+}
+impl TaskFactoryQuoteResponseV1 {
+    pub fn validate_against(
+        &self,
+        original: &SignedReadRequest<TaskFactoryQuoteRequestV1>,
+    ) -> Result<(), String> {
+        match self {
+            Self::Quote(quote) => quote.validate_against(original),
+            Self::Denied(denial) => denial.validate_against(original),
+        }
+    }
+}
+impl TaskFactoryQuoteDeniedV1 {
+    pub fn validate_against(
+        &self,
+        original: &SignedReadRequest<TaskFactoryQuoteRequestV1>,
+    ) -> Result<(), String> {
+        verify_factory_quote_request(original)?;
+        if self.schema_revision != 1
+            || !self.no_action_submitted
+            || self.context != original.request.context_proof.request.context
+            || self.read_commit != self.current_public_context.read_commit
+            || self.current_public_context.captured_base_binding
+                != original.request.expected_base_binding
+        {
+            return Err("task factory quote denial binding mismatch".into());
+        }
+        self.current_public_context.validate_for(&self.context)
+    }
+}

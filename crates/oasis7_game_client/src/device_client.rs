@@ -1,6 +1,7 @@
 use oasis7_client_api::world_service as authority;
 #[path = "device_client_build.rs"]
 mod client_build;
+pub use client_build::BuildQuoteOutcome;
 
 use crate::operation_store::{ClientStateKind, ClientStateV1, OperationStore as PrivateGoalStore};
 use crate::private_key_file::read_private_key_file;
@@ -143,7 +144,7 @@ impl Client {
             json!({"api_revision":1,"read_version":view.version(),"logical_tick":view.logical_tick(),
                 "task_control":projection.game_task_control,
                 "proposal_forms":[
-                    {"action_ref":"native.build_factory","arguments":{"site":"authorized ready site ID","factory":"new factory ID","kind":"factory.smelter.mk1|factory.assembler.mk1"},"signed_quote_required":true,"admission_required":true},
+                    {"action_ref":"native.build_factory","arguments":{"site":"authorized ready site ID","factory":"factory ID matching a current BuildFactory grant.object_id","kind":"factory.smelter.mk1|factory.assembler.mk1"},"signed_quote_required":true,"admission_required":true},
                     {"action_ref":"native.move_agent","arguments":{"to":"three signed i64 centimeter coordinates x,y,z"},"admission_required":true},
                     {"action_ref":"native.schedule_recipe","arguments":{"factory":"factory ID","recipe":"exact built-in recipe ID","batches":"positive u32"},"signed_quote_required":true,"admission_required":true},
                     {"action_ref":"native.transfer_material","arguments":{"from":"ledger ID","to":"ledger ID","material":"kind","amount":"positive i64","distance_km":"nonnegative i64","priority":"standard|urgent","routes":"ordered route IDs or direct"},"admission_required":true}

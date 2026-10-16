@@ -95,7 +95,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 本批从已有 claimed Agent、建设材料和显式世界授权开始，补齐没有工厂到建厂、转运投料、首批内置配方产物的连续链路。普通客户端增加 `quote-build` / `build`，只接收 Context、site、factory 与规范 kind ID；builder 固定为配置 Agent。共享目录提供 Smelter/Assembler 的完整内置建设规格。native grant-backed `BuildFactory` 按可信建设电力 profile 的 kind 重算完整规格，预算使用当前建设电力义务，不以工厂运行耗电或 WASM 最低门槛替代。trusted 无 native grant 和历史回放保留既有语义。
 
-签名 POST `/v1/world/private-task/factory-quote` 绑定主体、原 Context 证明、当前 fence 和预期 base，在 canonical pin 的私有 clone 上复用真实建设准入，返回规范 action、材料账本、耗时、site/location revision、电力义务及拒绝原因；交付前再核对 pin 与授权。报价不预留材料或扣预算。首次提交先保存原签名；已有缓存先核对完整业务选择并恢复原结果，Unknown 不替换请求。
+签名 POST `/v1/world/private-task/factory-quote` 绑定主体、原 Context 证明、当前 fence 和预期 base，在 canonical pin 的私有 clone 上复用真实建设准入，返回规范 action、材料账本、耗时、site/location revision、电力义务及拒绝原因；交付前再核对 pin 与授权。报价不预留材料或扣预算。对已验证当前 executor/Context 的对象选择缺少匹配授权，可返回绑定原请求和当前切点的签名只读拒绝；它不授予 action、不终结 Context，也不能由通用403推断。分类、同 batch 工具截断与有界重新决策消费[共享客户端失败合同](agent-game-client-boundary.design.md#des-agc-004)，未知内部错误和真实撤权仍停止。首次提交先保存原签名；已有缓存先核对完整业务选择并恢复原结果，Unknown 不替换请求。
 
 `industry` 增加有界 pending build、建设场地、Agent 位置和建设电力授权观察。新增投影只交付该 Agent 的建设和位置范围，场地不泄露其他主体 owner/allowlist。既有公共 anchor 与工厂电力观察边界沿用原合同。建设开始须关联唯一完成事件，再核对投料到账和真实首产物；[历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4662#issuecomment-6162409087)；[首轮证据](../../testing/evidence/native-task-starter-chain-2026-10-13/README.md)与[最后有界复测](../../testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md)分别保存 inconclusive 和 targeted 结果，不以合入源冒充实际试玩源。身份注册、配对/token、多工厂完整 starter chain、稳定生产与两 Runtime 完整首局仍未由该切片证明；部署暂停。
 
