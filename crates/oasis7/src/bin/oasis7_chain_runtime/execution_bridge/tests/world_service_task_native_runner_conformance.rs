@@ -430,12 +430,15 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
                 .unwrap();
             // Canonical rejection belongs to the exact immutable signed
             // original, not merely the same action kind or business stage.
-            assert!(
-                client
-                    .cached_intent(ClientStateKind::Action, &operation)
-                    .unwrap()
-                    .unwrap()
-                    == receipt.request
+            assert_eq!(
+                serde_json::to_value(
+                    client
+                        .cached_intent(ClientStateKind::Action, &operation)
+                        .unwrap()
+                        .unwrap()
+                )
+                .unwrap(),
+                serde_json::to_value(&receipt.request).unwrap()
             );
             let feedback = client.known_stale_rejection(&operation).unwrap().unwrap();
             assert_eq!(
