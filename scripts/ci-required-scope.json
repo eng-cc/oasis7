@@ -220,6 +220,19 @@
     },
     {
       "match": [
+        "deny.toml",
+        "scripts/rustsec-ignore-direct-dependency-baseline.json",
+        "scripts/check-rustsec-ignore-baseline.sh",
+        "scripts/check-rustsec-ignore-baseline.test.sh"
+      ],
+      "groups": [
+        "rust_baseline",
+        "operational_contracts"
+      ],
+      "reason": "rustsec_dependency_scope_baseline"
+    },
+    {
+      "match": [
         "scripts/module-release-node-acceptance.sh"
       ],
       "groups": [

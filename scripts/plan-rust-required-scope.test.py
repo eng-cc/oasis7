@@ -74,6 +74,18 @@ class Selection(unittest.TestCase):
                 self.assertTrue(groups.issubset(plan['groups']))
                 self.base = self.git('rev-parse', 'HEAD')
 
+    def test_rustsec_baseline_inputs_are_registered(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('deny.toml', 'scripts/rustsec-ignore-direct-dependency-baseline.json',
+                     'scripts/check-rustsec-ignore-baseline.sh',
+                     'scripts/check-rustsec-ignore-baseline.test.sh'):
+            with self.subTest(path=path):
+                self.write(path, 'changed security baseline input')
+                plan = self.plan()
+                self.assertEqual(plan['scope'], 'targeted')
+                self.assertTrue({'rust_baseline', 'operational_contracts'}.issubset(plan['groups']))
+                self.base = self.git('rev-parse', 'HEAD')
+
     def test_command_center_pr4790_paths_are_targeted(self):
         # Exact paths from 4f12acc; fixture stays usable without its Git object.
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
