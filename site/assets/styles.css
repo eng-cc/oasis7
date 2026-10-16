@@ -4051,6 +4051,8 @@ body.discovery-page.observatory { --text-soft: #b7c9d3; --line-soft: #263d49; ba
 }
 @media (max-width: 639px) {
  .observatory.discovery-page:not(.content-page) > .topbar { padding: 12px 24px; }
+ .observatory.discovery-page:not(.content-page) .menu-button { margin-right: 64px; }
+ .observatory.discovery-page:not(.content-page) .lang-switch { right: 24px; top: 12px; }
  .observatory.discovery-page:not(.content-page) main { padding: 0 24px; }
  .observatory.discovery-page:not(.content-page) .landing-hero { padding: 40px 0 30px; }
  .observatory.discovery-page:not(.content-page) .landing-hero .hero-grid { min-height: 570px; align-items: flex-start; }

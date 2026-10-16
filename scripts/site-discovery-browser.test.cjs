@@ -46,6 +46,10 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
    await p.screenshot({path:path.join(out,locale+'-'+width+'-observatory.png'),fullPage:true});
 
    assert.equal(await p.locator('.discovery-editorial-grid #world').count(),0);
+   if(width<=390){
+    const menu=await p.locator('[data-menu-toggle]').boundingBox();const language=await p.locator('.lang-switch').boundingBox();
+    assert.ok(menu.x+menu.width<=language.x,JSON.stringify({menu,language}));
+   }
    if(width===390){
     const sizes=await p.evaluate(()=>Object.fromEntries(['.decision-panels article > p:not(.decision-number)','.preview-badge','.hero-entry-note','.hero-telemetry-label'].map(s=>[s,parseFloat(getComputedStyle(document.querySelector(s)).fontSize)])));
     assert.ok(sizes['.decision-panels article > p:not(.decision-number)']>=15,JSON.stringify(sizes));
