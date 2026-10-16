@@ -43,6 +43,18 @@ impl WorldServiceClientConfig {
             return Ok(None);
         };
         let required = |name: &str| std::env::var(name).map_err(|_| format!("missing {name}"));
+        let timeout = match std::env::var("OASIS7_WORLD_SERVICE_TIMEOUT_MS") {
+            Ok(value) => value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit())
+                .then(|| value.parse::<u64>().ok())
+                .flatten()
+                .filter(|milliseconds| (100..=30_000).contains(milliseconds))
+                .map(Duration::from_millis)
+                .ok_or("OASIS7_WORLD_SERVICE_TIMEOUT_MS must be an integer from 100 to 30000")?,
+            Err(std::env::VarError::NotPresent) => Duration::from_millis(1500),
+            Err(_) => return Err("OASIS7_WORLD_SERVICE_TIMEOUT_MS is not valid Unicode".into()),
+        };
         Ok(Some(Self {
             endpoint,
             trusted_service_public_key: required("OASIS7_WORLD_SERVICE_PUBLIC_KEY")?,
@@ -52,7 +64,7 @@ impl WorldServiceClientConfig {
             },
             scope_id: required("OASIS7_WORLD_SERVICE_SCOPE")?,
             read_private_key_hex: required("OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY")?,
-            timeout: Duration::from_millis(1500),
+            timeout,
             max_response_bytes: 1_048_576,
         }))
     }

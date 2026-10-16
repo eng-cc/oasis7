@@ -5,6 +5,60 @@ use std::{
     net::TcpListener,
     thread,
 };
+
+#[test]
+fn environment_timeout_is_honored_and_invalid_values_fail_closed() {
+    const CHILD: &str = "OASIS7_TEST_SERVICE_TIMEOUT_CHILD";
+    if let Ok(expected) = std::env::var(CHILD) {
+        let result = WorldServiceClientConfig::from_env();
+        if expected == "invalid" {
+            assert!(result.is_err(), "invalid timeout must reject configuration");
+        } else {
+            assert_eq!(
+                result.unwrap().unwrap().timeout,
+                Duration::from_millis(expected.parse().unwrap())
+            );
+        }
+        return;
+    }
+    for (value, expected) in [
+        (None, "1500"),
+        (Some("10000"), "10000"),
+        (Some("100"), "100"),
+        (Some("30000"), "30000"),
+        (Some("0"), "invalid"),
+        (Some("99"), "invalid"),
+        (Some("30001"), "invalid"),
+        (Some("invalid"), "invalid"),
+        (Some("18446744073709551616"), "invalid"),
+    ] {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "tests::environment_timeout_is_honored_and_invalid_values_fail_closed",
+                "--nocapture",
+            ])
+            .env(CHILD, expected)
+            .env("OASIS7_WORLD_SERVICE_ENDPOINT", "http://127.0.0.1:1")
+            .env("OASIS7_WORLD_SERVICE_PUBLIC_KEY", "09".repeat(32))
+            .env("OASIS7_WORLD_SERVICE_WORLD_ID", "timeout-config-test")
+            .env("OASIS7_WORLD_SERVICE_GENESIS_DIGEST", "test-genesis")
+            .env("OASIS7_WORLD_SERVICE_SCOPE", "public")
+            .env("OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY", "07".repeat(32));
+        match value {
+            Some(value) => child.env("OASIS7_WORLD_SERVICE_TIMEOUT_MS", value),
+            None => child.env_remove("OASIS7_WORLD_SERVICE_TIMEOUT_MS"),
+        };
+        let output = child.output().unwrap();
+        assert!(
+            output.status.success(),
+            "timeout {value:?}: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
 pub(super) fn config(endpoint: String) -> WorldServiceClientConfig {
     let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
     WorldServiceClientConfig {
