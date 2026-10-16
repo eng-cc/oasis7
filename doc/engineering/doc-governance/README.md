@@ -29,6 +29,7 @@
 | 专业系统设计如何承接需求、表达合同并映射验证 | `system-design-writing-standard.design.md` | 十二段技术骨架；不替代产品设计、实现、运行或发布证据 |
 | 任务范围、实际版本和组合验收如何留证 | `project-management-record-standard.design.md` | 复用 PR 与实际验证记录，Issue/Project 按需；不新增本地台账或状态机 |
 | 需要执行迁移、登记一级目录/例外或处理治理检查失败 | `documentation-governance.manual.md` | maintainer how-to；只执行 Design 已定义的规则，不另行裁定规则 |
+| 需要按模块或问题核对文档语义、证据边界和修复范围 | [有界人工语义审读](documentation-governance.manual.md#bounded-semantic-review) | 复用既有职责与 authority，区分实际阅读覆盖、文档处置及业务验收；不新增统一模板或 CI 语义门禁 |
 | 根入口或模块 README 过长、重复维护共享规则 | `doc-structure-standard.design.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
 | 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `../governance/README.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
 | 需要确认全量 `doc/**` 覆盖、对象内容漂移、semantic 复核绑定或 testing evidence 范围 | [`document-corpus-inventory-v3.design.md`](document-corpus-inventory-v3.design.md)；`python3 scripts/document-corpus-inventory-check.py --repo-root .`；`python3 scripts/doc-evidence-inventory-check.py --repo-root .` | 入口为静态 schema，逐对象与复核记录按源分片；全量检查不代表语义批准，迁移仍由对应 owner 裁决 |
