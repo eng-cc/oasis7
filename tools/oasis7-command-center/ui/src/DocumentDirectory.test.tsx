@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({documentDirectory:vi.fn()}));
 vi.mock('./bridge', () => ({bridge:api,errorMessage:String,observedTime:()=>'核验时间'}));
 const file: IndexedDocument = {fileKey:'file',path:'doc/a/design.md',title:'A设计',kind:'design',state:'read',reason:null,revision:'rev',bytes:10,dirty:false,lifecycle:null,identity:null,pairings:null,upstream:null,allocations:null};
 const snapshot = (id='project',generation='1'): Snapshot => ({project:{id,path:'/repo',head:'head',branch:'main',gitCommonDir:'/repo/.git',environment:'local'},sources:[{kind:'local',generation,state:'partial',lastAttempt:'1',lastSuccess:'1',sourceRevision:'head',coverage:'',error:null}],sections:[],decisions:[],preferences:{projectPath:'/repo',query:'',view:'rules'},associations:[],readingPositions:[],git:{status:'',worktrees:''}});
-const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,file:null}],nextCursor:null,...extra});
+const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,file:null}],nextCursor:null,...extra});
 beforeEach(() => api.documentDirectory.mockReset()); afterEach(cleanup);
 it('navigates candidate ancestors with bound snapshots and selects the original file', async () => {
   api.documentDirectory.mockResolvedValueOnce(page()).mockResolvedValueOnce(page({parentPath:'doc',entries:[{path:file.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file}]})).mockResolvedValue(page());
@@ -26,7 +26,7 @@ it('binds paging to applied filters, handles IME and keeps full counts and focus
   const input = screen.getByRole('textbox',{name:'筛选目录文档'});
   await screen.findByRole('button',{name:'进入目录：doc（匹配 2 个文件）'});
   fireEvent.input(input,{target:{value:'  设计  '}}); fireEvent.compositionStart(input); fireEvent.submit(input.closest('form')!);expect(api.documentDirectory).toHaveBeenCalledTimes(1);
-  fireEvent.compositionEnd(input); fireEvent.change(screen.getByRole('combobox'),{target:{value:'omitted'}});fireEvent.submit(input.closest('form')!);
+  fireEvent.compositionEnd(input); fireEvent.change(screen.getByRole('combobox',{name:'目录读取结果'}),{target:{value:'omitted'}});fireEvent.submit(input.closest('form')!);
   await waitFor(()=>expect(api.documentDirectory).toHaveBeenCalledTimes(2));
   await screen.findByRole('button',{name:'进入目录：doc（匹配 2 个文件）'});
   fireEvent.input(input,{target:{value:'not applied'}});fireEvent.click(screen.getByRole('button',{name:'下一页目录（最多 100 项）'}));
@@ -49,4 +49,27 @@ it('shows stale coverage and depth limits, and recovers failed queries explicitl
   await screen.findByRole('alert');fireEvent.click(screen.getByRole('button',{name:'重试当前目录'}));
   expect(await screen.findByRole('button',{name:'进入目录：deep（匹配 1 个文件）'})).toBeDisabled();
   expect(screen.getByText(/目录使用过期清单/)).toBeInTheDocument();expect(screen.getByText(/深层文件仍保留在文件清单/)).toBeInTheDocument();
+});
+
+it('defaults to current, reveals hidden history with applied filters and binds lifecycle paging', async () => {
+  api.documentDirectory.mockResolvedValue(page({hiddenHistoryFiles:3,nextCursor:'next'}));
+  render(()=><DocumentDirectory snapshot={snapshot()} selectFile={vi.fn()}/>);
+  await screen.findByRole('button',{name:'显示历史匹配'});
+  expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({lifecycleFilter:'current'}));
+  const input=screen.getByRole('textbox',{name:'筛选目录文档'});
+  fireEvent.input(input,{target:{value:'unapplied'}});
+  fireEvent.click(screen.getByRole('button',{name:'显示历史匹配'}));
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({parentPath:'',lifecycleFilter:'all',inventory:expect.objectContaining({query:'',snapshotId:null})})));
+  expect(input).toHaveValue('');
+  fireEvent.change(screen.getByRole('combobox',{name:'目录生命周期'}),{target:{value:'raw'}});
+  const raw=screen.getByRole('textbox',{name:'目录生命周期原始声明'});
+  expect(screen.getByRole('button',{name:'筛选目录'})).toBeDisabled();
+  fireEvent.input(raw,{target:{value:'target-contract'}});fireEvent.compositionStart(raw);fireEvent.submit(raw.closest('form')!);
+  expect(api.documentDirectory).toHaveBeenCalledTimes(2);
+  fireEvent.compositionEnd(raw);fireEvent.submit(raw.closest('form')!);
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({lifecycleFilter:'raw:target-contract'})));
+  await screen.findByRole('button',{name:'进入目录：doc（匹配 2 个文件）'});
+  fireEvent.change(screen.getByRole('combobox',{name:'目录生命周期'}),{target:{value:'retired'}});
+  fireEvent.click(screen.getByRole('button',{name:'下一页目录（最多 100 项）'}));
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({lifecycleFilter:'raw:target-contract',inventory:expect.objectContaining({cursor:'next'})})));
 });
