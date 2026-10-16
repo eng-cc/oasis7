@@ -4,7 +4,7 @@ import { createSignal } from 'solid-js';
 import DocumentInventory from './DocumentInventory';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
-const api = vi.hoisted(() => ({ documentInventory: vi.fn() }));
+const api = vi.hoisted(() => ({ documentInventory: vi.fn(), documentDirectory: vi.fn() }));
 vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => String(error), observedTime: () => '核验时间' }));
 const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
 const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
@@ -237,4 +237,28 @@ it('distinguishes unparsed absent and incomplete allocation tables', async () =>
   fireEvent.click(screen.getByRole('button',{name:'doc/limited.design.md'}));
   expect(screen.getByText(/承接表解析不完整：超过每文件 32 行/)).toBeInTheDocument();
   expect(screen.queryByText('本次明确章节范围未发现需求承接表行。')).not.toBeInTheDocument();
+});
+
+it('reuses file details when selecting a directory leaf', async () => {
+  api.documentInventory.mockResolvedValue(page());
+  const selected = file();
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  const showSource=vi.fn();render(()=><DocumentInventory snapshot={snapshot()} showSource={showSource}/>);
+  fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
+  fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
+  fireEvent.click(screen.getByRole('button',{name:'设计章节 · 第 1 行'}));
+  expect(showSource).toHaveBeenLastCalledWith(section,expect.any(HTMLElement));
+  expect(screen.getByRole('button',{name:'文档目录'})).toHaveAttribute('aria-pressed','true');
+});
+it('does not let a late file-list response clear the selected directory leaf', async () => {
+  let finish!: (value:DocumentInventoryPage)=>void;
+  api.documentInventory.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  const selected=file();
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  render(()=><DocumentInventory snapshot={snapshot()} showSource={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
+  fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
+  await screen.findByRole('button',{name:'设计章节 · 第 1 行'});
+  finish(page()); await Promise.resolve();
+  expect(screen.getByRole('button',{name:'设计章节 · 第 1 行'})).toBeInTheDocument();
 });

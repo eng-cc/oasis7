@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { bridge, errorMessage, observedTime } from './bridge';
 import DocumentRelations from './DocumentRelations';
+import DocumentDirectory from './DocumentDirectory';
 import DocumentAllocations from './DocumentAllocations';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
@@ -26,6 +27,7 @@ export default function DocumentInventory(props: {
   snapshot: Snapshot;
   showSource: (section: DocumentSection, origin?: HTMLElement) => void;
 }) {
+  const [view, setView] = createSignal('files');
   const [page, setPage] = createSignal<DocumentInventoryPage>();
   const [selected, setSelected] = createSignal<IndexedDocument>();
   const [query, setQuery] = createSignal('');
@@ -37,6 +39,10 @@ export default function DocumentInventory(props: {
   let applied = { query: '', filter: 'all' };
   let list: HTMLDivElement | undefined;
 
+  function browse(mode: string) {
+    ++generation; setBusy(false); setSelected(undefined); setView(mode);
+    if (mode === 'files' && !page()) void load();
+  }
   async function load(next = false) {
     const projectId = props.snapshot.project?.id;
     if (!projectId) return;
@@ -70,7 +76,7 @@ export default function DocumentInventory(props: {
     sourceIdentity,
     () => {
       ++generation; setPage(undefined); setSelected(undefined); setQuery(''); setFilter('all'); setError('');
-      if (props.snapshot.project) void load();
+      if (props.snapshot.project && view() === 'files') void load();
     },
   ));
   const chapters = () => {
@@ -78,9 +84,12 @@ export default function DocumentInventory(props: {
     return file?.state === 'read' ? props.snapshot.sections.filter(s => s.path === file.path && s.revision === file.revision) : [];
   };
   return <section class="panel" aria-label="文档文件清单">
-    <div class="panel-title"><h3>文件清单与读取缺口</h3><button disabled={busy()} onClick={() => void load()}>重新查询首页</button></div>
+    <div class="panel-title"><h3>文件清单与读取缺口</h3><Show when={view() === 'files'}><button disabled={busy()} onClick={() => void load()}>重新查询首页</button></Show></div>
     <div class="panel-body">
       <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头的显式配对系统设计和设计上游声明；可打开已解析的目标章节并返回，尚未提供产品/专业树。</p>
+      <div class="actions" role="group" aria-label="文档浏览方式"><button aria-pressed={view() === 'files'} onClick={() => browse('files')}>文件清单</button><button aria-pressed={view() === 'directory'} onClick={() => browse('directory')}>文档目录</button></div>
+      <Show when={view() === 'directory'}><DocumentDirectory snapshot={props.snapshot} selectFile={setSelected} /></Show>
+      <Show when={view() === 'files'}>
       <form class="inventory-filters" onSubmit={event => { event.preventDefault(); if (!composing()) void load(); }}>
         <label>标题、路径或文档 ID<input aria-label="筛选文档文件" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (composing() || e.isComposing || e.keyCode === 229) { if (e.key === 'Enter') e.preventDefault(); } }} /></label>
         <label>读取结果<select aria-label="文档读取结果" value={filter()} onChange={e => setFilter(e.currentTarget.value)}><option value="all">全部文件</option><option value="read">已读取</option><option value="omitted">仅看遗漏</option></select></label>
@@ -103,6 +112,7 @@ export default function DocumentInventory(props: {
         </div>
         <div class="actions"><button disabled={busy() || !result().nextCursor} onClick={() => void load(true)}>下一页（最多 100 项）</button></div>
       </>}</Show>
+      </Show>
       <Show when={selected()}>{file => <section class="inventory-detail" aria-label="文件读取详情"><h4>{file().path}</h4>
         <p>{states[file().state] ?? file().state} · {file().reason ? reasons[file().reason!] ?? file().reason : `${file().bytes ?? 0} 字节`}</p>
         <Show when={file().revision}><p class="muted small">内容摘要 {file().revision}</p></Show>

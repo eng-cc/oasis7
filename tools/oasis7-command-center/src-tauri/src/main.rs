@@ -122,6 +122,7 @@ fn main() {
             commands::query_view,
             commands::search_rules,
             commands::query_document_inventory,
+            commands::query_document_directory,
             commands::save_decision_draft,
             commands::save_preference,
             commands::read_source,
