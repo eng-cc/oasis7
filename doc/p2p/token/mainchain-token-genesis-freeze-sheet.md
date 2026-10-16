@@ -1,5 +1,7 @@
 # oasis7 主链 Token 创世参数正式执行清单
 
+执行状态边界：`Freeze Status`、地址绑定与勾选表是固定来源中的批次快照，不是今日签收或 mint 许可。未核到唯一 ceremony/绑定 Task，过程原件保留；本文件仍持有 supply/bps/rounding、bucket/vesting、公共 signer set/threshold 与 QA-before-mint 合同。未满足门槛不得 mint；文档归位不改签名集合、不解除 pending、不授权密钥或发放操作。
+
 审计轮次: 2
 
 ## Meta

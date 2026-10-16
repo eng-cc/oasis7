@@ -749,7 +749,7 @@ fn apply_command_commit(
         let effect_is_durable = world
             .pending_effects
             .iter()
-            .any(|intent| intent.intent_id == *intent_id)
+            .any(|intent| intent.identity_key() == *intent_id)
             || world.inflight_effects.contains_key(intent_id);
         if !effect_is_durable {
             return Err(deny(

@@ -14,10 +14,14 @@
   - SC-2: Viewer 默认 `open ... --headed`，并附带 `--use-angle=gl,--ignore-gpu-blocklist`；实际命中 software renderer 时按 [S6 renderer/验收目的分流](../../../testing-manual.md#testing-software-renderer-scope)，只允许 `viewer` / compat alias 的最小 DOM 闭环继续，不能据此完成 GPU、完整视觉、producer 或 release/playability 验收。
   - SC-3: 至少输出 `snapshot + console + screenshot + state` 证据。
   - SC-4: 当前 repo-owned Web 回归脚本可直接复用手册约束。
-  - SC-5: 文档迁移后统一 `.prd.md plus GitHub task issue evidence` 命名并通过治理检查。
+  - SC-5: 文档迁移后统一 `.prd.md` 需求与 `.manual.md` 操作手册命名，执行结果记录在实际 PR、CI 与评审中（Issue 按需）并通过治理检查。
   - SC-6: `oasis7_web_launcher` 的产品动作路径默认走 GUI Agent，不再把 canvas 直点或纯 agent-browser 动作作为首选执行链路。
   - SC-7: 当 Viewer 进入 `renderMode=viewer` 且 auth bootstrap 可用时，QA 可通过专用脚本稳定复验 prompt apply/rollback、chat ack 与消息流采样，并将 `agent_spoke` 缺失分级为可追溯失败签名；`renderMode=software_safe` 仅作为 compat alias 复核。
   - SC-8: 当 runtime 以 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 启动时，Viewer Web 闭环应能稳定看到标准 `AgentSpoke` 事件，并将其汇入统一消息流。
+
+### 构建、动作与证据边界
+
+本专题按 [L4 构建/驱动合同](../prd.md#l4-build-driver)、[构建设计](../design.md#l4-build-selection)及[手册 QA 证据边界](web-ui-agent-browser-closure-manual.manual.md#qa-infrastructure-receiver-evidence-boundary)区分正式 UI 与显式 debug/test lane：release 不安装测试 API，`test_api=1` 不能改变构建类型；合法的显式测试 profile 仍可在其受控范围使用测试接口，但结果不能代签正式玩家输入、release UI 或自主试玩。是否执行 S6 取决于本次受影响范围与主手册触发矩阵，不扩大为所有文档 PR 必跑。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -48,7 +52,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 启动与自检 | `--live-bind`、`--web-bind`、viewer URL、端口监听 | 启动 launcher 并检查 4173/5011 与主页可达 | `booting -> ready` | 先端口后 URL，再进入采样 | 执行者可操作 |
 | 图形环境与验收范围 | 目标 scope、`renderMode`、headed、renderer/console、状态/截图 | 采样前按 S6 核对环境，保留诊断采样 | `gating -> limited_scope/blocked` | 软件 renderer 下仅已确认可用的 viewer DOM 最小闭环可继续；GPU/full 目标保留环境阻断 | 发布/测试按各自范围核验，有限通过不升级 |
-| agent-browser 采样 | `snapshot`、`eval`、`console`、`screenshot`、`getState` | 基于 `__AW_TEST__` 执行语义步骤 | `sampling -> evidence` | 至少 1 张截图 + state 字段完整 | 执行者产出，发布者审阅 |
+| agent-browser 采样 | `snapshot`、`eval`、`console`、`screenshot`、`getState` | 正式 UI/consumer 验收使用可见玩家输入；`__AW_TEST__` 仅作只读观测。显式测试 profile 的调试动作另记受控范围 | `sampling -> evidence` | 至少 1 张截图 + state 字段完整 | 执行者产出，发布者审阅 |
 | launcher 控制面驱动 | `/api/gui-agent/capabilities`、`/api/gui-agent/state`、`/api/gui-agent/action`、页面字段快照 | 先通过 GUI Agent 执行动作，再用浏览器页面校验结果 | `action_requested -> applied -> verified` | launcher 控制面默认优先，不得被 canvas 直点替代 | 执行者与发布负责人共同审阅 |
 | 会话隔离与回收 | worktree-scoped named session、`session id/info/list`、owned `close`、fail-fast 预检查 | 每轮创建并回收自身 session；共享 CDP tab 时显式 pin | `created -> opened -> stable -> closed` | 先 doctor/session info，再 open；只回收自身 session，避免跨任务干扰 | 执行者维护 |
 | 发行验收脚本 | `viewer-primary-web-entry-regression.sh`、`viewer-software-safe-step-regression.sh`、`viewer-software-safe-chat-regression.sh` | 一键执行当前 Web 门禁并输出总结 | `running -> summarized` | 先主入口，再 gameplay/blocker，再 prompt/chat | 发布负责人触发 |
@@ -57,7 +61,7 @@
 - Acceptance Criteria:
   - AC-1: 手册提供可直接复制的启动/采样/门禁命令。
   - AC-2: 与 S6 使用同一分流：viewer/compat software-safe 最小闭环可继续，其他 renderMode 或 GPU/完整视觉目标遇软件 renderer 仍阻断；headed、renderer、验收目的均有记录，有限闭环不等于发布通过。
-  - AC-3: 定义最小通过标准（canvas、`__AW_TEST__`、`console error=0`、截图）。
+  - AC-3: 定义按构建和验收目的区分的最小通过标准（canvas、状态/console、截图）；显式 debug/test profile 才要求 `__AW_TEST__`，release 不以该 API 存在为前提。
   - AC-4: 提供 F1~F4 分级与对应处置动作。
   - AC-5: 发布脚本产物路径与门禁规则可追溯到本手册。
   - AC-6: 本专题迁移后引用更新到新命名并通过治理检查。
@@ -72,7 +76,7 @@
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 使用并通过 `agent-browser 0.37.1` 的 `--version` 验证（二进制缺失时先安装；浏览器依赖用 `agent-browser install` 补齐），并先运行 `doctor --offline --quick --json`；Viewer 页面自动化的每条命令必须绑定 worktree-scoped named session，通过 `session info/list` 记录诊断并显式关闭本轮自有 session。默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径（可用 `AGENT_BROWSER_ARGS` 覆盖）；`oasis7_web_launcher` 的 GUI Agent 接口用于 launcher 控制面动作驱动；执行环境需保证两者均可直接调用。
-- Evaluation Strategy: 通过语义动作成功率（`__AW_TEST__` 可用性）、门禁通过率和故障分级命中率评估闭环质量。
+- Evaluation Strategy: 通过所选 driver 的实际动作结果、门禁通过率和故障分级命中率评估闭环质量；测试 API 可用性只评价显式测试 profile。
 
 ## 4. Technical Specifications
 - Architecture Overview: Web 闭环按 surface 分为两条路径：`oasis7_viewer_live` / Viewer 页面由 `web-ui-agent-browser-closure-manual.manual.md` 负责逐步执行与证据采样，PRD 负责约束与验收；`oasis7_web_launcher` / launcher Web 控制面由 GUI Agent 负责产品动作驱动，再由页面校验状态与字段；发布脚本承载标准化验收与总结。
@@ -85,7 +89,7 @@
   - `scripts/viewer-software-safe-chat-regression.sh`
   - `agent-browser 0.37.1` CLI（通过 `PATH` 调用并用 `--version` 验证）
   - `oasis7_web_launcher` GUI Agent 接口（`/api/gui-agent/*`）
-  - `window.__AW_TEST__`（`runSteps/setMode/focus/select/sendControl/getState`）
+  - `window.__AW_TEST__`（历史 debug/test 接口库存：`runSteps/setMode/focus/select/sendControl/getState`；仅显式测试构建/opt-in 范围适用，不作为 release UI 输入或验收前提）
 - Edge Cases & Error Handling:
   - F1 `ERR_CONNECTION_REFUSED`: launcher 未就绪或已退出；先确认端口监听再重试。
   - F2 渲染初始化崩溃（如 `RuntimeError: unreachable`、`CONTEXT_LOST_WEBGL`）：立即归档证据并标记失败。
@@ -116,6 +120,8 @@
   - 风险-3: 脚本与手册偏离，造成执行路径不一致。
   - 风险-4: 仅凭截图判定导致“有图但不可用”漏检。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
@@ -128,7 +134,7 @@
 | --- | --- | --- | --- |
 | DEC-WEB-001 | Viewer 页面默认走 agent-browser；launcher 控制面默认走 GUI Agent | 继续以 native 抓图为默认；或让 launcher 控制面也直接走纯 agent-browser/canvas | 不同 surface 已具备不同机器接口，按边界分流才能同时获得稳定动作驱动与可审计页面证据。 |
 | DEC-WEB-002 | 默认 headed；软件 renderer 按 S6 分流，限定最小 DOM 证据范围 | 无条件阻断所有 DOM 采样或用软件最小闭环代签完整验收 | 保留性能/视觉/发布要求，同时不误阻断 S6 明确允许的有限功能检查。 |
-| DEC-WEB-003 | 语义化 `__AW_TEST__` 操作优先 | 纯坐标点击脚本 | 减少 UI 变动导致的脆弱性。 |
+| DEC-WEB-003 | 历史 debug/test lane 优先语义化测试接口；正式 UI 验收使用可见玩家输入 | 用测试接口代签正式 UI 输入 | 保留受控调试用途；现行 release/test 与只读采样边界见下文。 |
 | DEC-WEB-004 | 失败分级 F1~F4 + 证据归档 | 仅记录通用失败日志 | 缩短定位时间并提升复盘质量。 |
 | DEC-WEB-005 | legacy 文档逐篇人工迁移 | 脚本批量改写 | 保证历史约束和执行语义完整。 |
 | DEC-WEB-006 | Viewer Web 默认固定硬件 WebGL 参数，并检查实际 renderer、renderMode 与验收目标 | 仅凭 headed 认定硬件可用 | headed 仍可能回退软件；按 S6 记录有限继续/环境阻断，不能把软件采样当作 GPU 证明。 |

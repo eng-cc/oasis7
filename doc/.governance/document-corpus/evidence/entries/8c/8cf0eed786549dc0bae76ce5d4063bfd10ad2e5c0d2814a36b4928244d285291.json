@@ -3,7 +3,7 @@
     "authority": "doc/p2p/network/mainnet-private-reachability-architecture.prd.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_provenance_only_not_current_finality_security_network_health_ux_or_readiness",
-    "content_sha256": "e0ead5b590d3564dc5edfd4f3e92efab6012c4a7a9c6b06b963f06c36253b7c0",
+    "content_sha256": "cae2d1a2f3a0d04b24a70c3264cda4c200b6dcfcc3a38176346d6063e88da924",
     "disposition": "retain",
     "domain_owner": "blockchain_ops_engineer",
     "evidence_window": "2026-04-to-2026-07-p2p-transition",

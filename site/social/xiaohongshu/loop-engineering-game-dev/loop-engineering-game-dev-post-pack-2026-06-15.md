@@ -8,7 +8,7 @@
 - Channel: `小红书`
 - Audience: `长期做游戏项目的人 / AI 协作实践者 / 独立开发者 / 工程师 / 产品与运营从业者`
 - Positioning: `结合 oasis7 当前项目实践，用外部读者能理解的语言分享 Loop Engineering 在游戏开发中的落地方式：先交代“一个人和一群 agent 队友做长期游戏项目”的语境，再讲作者为了让多个 agent 连续接力完成一件事而做了 harness / 多线程接力系统，随后发现 Loop Engineering 这个说法刚好概括了这套实践；重点是开发者复盘，不是流程宣言或 AI 全自动叙事`
-- Review Status: `draft_ready`
+- Review Status: `draft_ready`（素材版本 2026-06-15 的历史状态；实际审核时间未记载，不代表当前审核、发布许可或已经发布）
 
 ## 使用说明
 - 这篇是项目实践分享，不是概念科普，也不是对外发布承诺。

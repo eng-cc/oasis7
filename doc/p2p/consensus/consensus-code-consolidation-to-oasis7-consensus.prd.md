@@ -1,5 +1,7 @@
 # oasis7 Runtime：共识代码统一收敛到 oasis7_consensus
 
+历史编辑/阶段边界：原 MIG/T0/Phase 批次尚未逐项匹配唯一实施 Task，故原记录与约束映射保留；文档人工重写、章节/引用检查和完成日期只证明原编辑或测试窗口，不生成当前排期、不代签机制、部署或 QA readiness。当前技术与安全合同继续由本文及配对设计持有；后续治理 Task 不冒充全部原实施者。
+
 ## 共识收敛专业接受与设计分配
 
 Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。

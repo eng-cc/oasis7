@@ -7,11 +7,13 @@
 - 历史环境表 Last Verified 为 **2026-07-06**，节点表为 **2026-06-23**。读取摘要的日期不能代替部署、健康或可用性的核验日期。
 - 项目进度与待处理事项见[当前状态](../README.md#cc-status-attention)；本页的更新方法见[架构索引维护流程](../command-center.manual.md#cc-maintenance-architecture)。
 
+独立 ECS 技术预览的环境准备、构建尝试和部署验收由 [交付任务 #4671](https://github.com/eng-cc/oasis7/issues/4671) 承接。本页保留架构入口；该任务的技术预览不代表正式世界开放或原测试网恢复。
+
 ## 从问题进入
 
 Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) / `133d70e45b71bd062032a734d68be1e290692b2c` 将 native 生产 cognition 状态转换转接至 Harness，World readback 与 signed-service 校验仍由 Runtime 适配器承担，旧 DTO/checkpoint 兼容保留；不新增 Harness→Oasis 依赖。支持包 profile 隔离尚在分支验证，直接 Oasis wasm32 目标及部署不因本次局部摘要变为已验证。测试入口见[测试手册](../../../../testing-manual.md)。
 
-L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056`）：[testing 合同](../../../testing/prd.md#l4-build-driver)明确默认 release/正式 UI、同一实际 Hosted 执行会话、逐次 RunResult 与评审归属；[入口兼容设计](../../../world-simulator/viewer/viewer-web-entry-compatibility.design.md)保留 alias，并将测试 API 限于显式测试产物。[#4438](https://github.com/eng-cc/oasis7/issues/4438) 仍承担旧 runner/scaffold 的实现和运行验收；此处只更新设计导航，不表示新部署或试玩通过。
+L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056`）：[testing 合同](../../../testing/prd.md#l4-build-driver)明确默认 release/正式 UI、同一实际 Hosted 执行会话、逐次 RunResult 与评审归属；[入口兼容设计](../../../world-simulator/viewer/viewer-web-entry-compatibility.design.md)保留 alias，并将测试 API 限于显式测试产物。[#4438](https://github.com/eng-cc/oasis7/issues/4438) 已以 `not_planned` 关闭，仅保留为历史文档承接来源，不再承担旧 runner/scaffold 的实施或运行验收；此处只更新设计导航，不表示新部署或试玩通过。
 
 - 要开新环境、搬服务或调整节点：[环境与部署](#cc-architecture-deployment)。
 - 要决定首次开放、扩成多节点权威或改变恢复承诺：[世界权威与状态](#cc-architecture-authority)。
@@ -80,9 +82,11 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-06：局部双端持久证明不等于正式 CommitRef，若干原子发布切片不等于整个 World 的根事务；同机双目录不能证明独立故障域。
 - ARCH-07：已有 execution bridge v3、CAS、sidecar、retention/GC/replay 的实现合同；[本地恢复边界](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary)不证明分布式可得性或完整灾备。
 
+2026-10-15 候选实现增量：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。候选尚未合入，完整长历史与最终 CI 仍在核验；没有刷新真实部署或独立故障域事实。
+
 **实际部署核验：** 未验证正式 profile 激活、实际存储同步、故障域隔离、旧写者 fencing、备份可用性或恢复后的写服务。这些结论需要各自候选与环境证据，不能由代码数量汇总为完成率。
 
-[当前主线记录](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)仍保留正式激活、独立故障域恢复和人工交接等未完成义务；本页只链接，不新增一套验收台账。
+正式激活、独立故障域恢复和人工交接的能力边界由对应专业合同持有。[#4363 的旧规划](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)仅作历史来源；该 Issue 已停止独立跟踪，不据此恢复执行义务。
 
 <a id="cc-architecture-agents"></a>
 
@@ -106,7 +110,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-08 的新预览世界初始化按 [合同](../../../p2p/design.md#des-p2p-fresh-preview-bootstrap) 固定真实初始材料、CAS/提交证明和节点派生服务 signer，再为 Viewer 配置独立 public-read 身份。操作见 [手册](../../../testing/manual/fresh-world-preview-bootstrap.manual.md)；这些材料不授予 Agent 写权限或正式 activation/finality。
 - ARCH-09：[PR #4562](https://github.com/eng-cc/oasis7/pull/4562)交付 Game API 的发现合同和已实现签名读取；范围仍是显式开启的 loopback bootstrap。
 - [PR #4565](https://github.com/eng-cc/oasis7/pull/4565)增加持久、owner-signed task control；初态 suspended、没有 executor。配对、私有目标、完整 context 和 action admission 不在该切片内。
-- 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，私有 owner proof/盐独立密文保存、公共 canonical 目标发布与 owner/history 当前正文回读已交付；journal-tail 控制链恢复回归和最终 CI 已通过。[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，executor 控制、私有 Context 与 task-fenced 行动已交付；独立附着 Codex 的两目标移动记录绑定候选 `b59d0105`，最终源 `cd2976b7` 普通验证、独立评审与 required CI 已通过。[#4634](https://github.com/eng-cc/oasis7/pull/4634) 候选 `326189ecd` 补齐原生物流观察与转运，普通回归、独立权限评审及一次独立 Skill 转运/到账已通过。2026-10-13 局部核验：物流必要 CI 已通过并合入 `5e930fac`；原候选试玩来源保留。生产 [#4650](https://github.com/eng-cc/oasis7/pull/4650) 已通过最终必要 CI 并合入 `dbe03eda`；有界独立 Skill 复测保留原候选 `795944322` 来源。当前建厂到首产物候选在 native 建设边界重算完整内置规格，以 Context/base 签名报价并投影主体建设范围，普通连续链路及独立代码评审通过；本批有界独立试玩真实建成一座工厂并恢复原回执，但未执行投料/生产且报告晚于截止，整链结果 inconclusive，Stop/revoke 与世界清理完成。另获授权的最后复测在源 `52c136a7b` 用十九次调用完成整条建厂、投料、首产物链路，报告在 360 秒许可内写入，父侧已核对唯一事件、精确余额及原回应恢复，清理完成。当前 HEAD 的 CI 和合入仍待完成。[当前实施候选](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)不表示完整 TaskSnapshot、两 Runtime 首局或部署已完成；其他主题基线不变。
+- 2026-10-14 局部摘要（仅原生任务执行）：owner 私有目标控制、fenced executor/Context、物流、权威配方和 prepared claimed Agent 建厂到首产物的代码切片已交付。实际试玩源、失败与 targeted 范围从 [Game API 专业合同及证据入口](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)读取，逐次 CI/清理流水归原交付 PR。本摘要不证明完整 TaskSnapshot、两 Runtime 首局、GUI、稳定生产或部署；部署暂停保持，其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
 **实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合，也没有启动游戏/模型任务。
@@ -142,11 +146,14 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - [PR #4533](https://github.com/eng-cc/oasis7/pull/4533)：桌面基础、四视图、SQLite、真实 worktree 和有限 GitHub 窗口；记录了 macOS arm64 本地打包与原生交互验证。
 - [PR #4563](https://github.com/eng-cc/oasis7/pull/4563)：固定 Codex CLI 0.137.0 的可选实验执行、原请求身份、未知结果与退出管理；真实握手/receipt 有记录，但没有成功模型输出证明。
 - [PR #4572](https://github.com/eng-cc/oasis7/pull/4572)：读取显式规范后继、保留历史版本和来源理由；记录了原生界面与重启恢复验证。
+- 首页的[来源阅读降级入口](../../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)复用既有文档索引和来源详情，分别提示缺失摘要；不新增后台来源、执行动作或聚合判断。四区首页及完整用户任务仍未验收。
+- 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#3-des-cc-tree-001文件关系与树投影)。类别不推导实现状态，完整文档树与生命周期筛选仍待实施。
+- 2026-10-15 候选源码核对：[文件清单](../../../../tools/oasis7-command-center/core/src/document_inventory.rs)沿现有有界扫描保留逐文件读取/遗漏记录，使用独立版本化 cache key，与章节/搜索同事务发布；原 Snapshot shape 和数据库 schema 版本不变。有限 DTO 查询核对项目、来源版本/代次、章节摘要及分页筛选，规范视图可查阅缺口。独立树快照/attempt、固定提交及关系投影仍待实施，见[实施范围](../document-tree.design.md#111-验证映射表)；真实宿主与交互验证范围归实现 PR。
 - 个人决定、阅读记录和未决操作与可重建缓存分开；启用连接不代表授权任务，恢复不自动重发未知副作用。
 
-**当前候选补充（2026-10-12）：** [PR #4624](https://github.com/eng-cc/oasis7/pull/4624) 未合入；[普通本机工具设计](../local-tools.design.md)将内置资料、同构建可选 CLI、既有兼容 signer 的文件签名和显式私有会话输入接入客户端。私有资料仍由文件拥有，条件保存复用原 revision/写锁；资料 root、普通索引和私有会话持久标记分别约束传播。实际安装、准备请求和 worker 的提交结果分别核对，资料不能产生签名授权。管理员桥与 Apple 签名集成由用户明确暂停，本机用户尚未绑定 signer，真实签名提交未验收。
+**本机工具摘要（局部核对于 2026-10-14）：** [PR #4624](https://github.com/eng-cc/oasis7/pull/4624) 已合入；内置资料、同构建可选 CLI、既有兼容 signer 的文件签名与显式私有会话输入的专业合同见[普通本机工具设计](../local-tools.design.md)。资料 root、普通索引和私有会话标记约束传播，资料保存不产生签名授权；实际安装、准备请求和 worker 提交分别核对。
 
-**实际部署核验：** 历史原生验证仍属于对应 PR 的特定版本和机器。2026-10-12 本次仅在 `affa7d1` macOS arm64 同包原生 App 核对真实建库、条件保存冲突后的草稿保留及 CLI 安装；这些候选测试不证明 main 已交付、用户固定安装、部署或真实 signer 可用。公共分发、公证、其他系统/CLI 组合、管理员桥与全部产品验收仍未由这些结果证明。来源：[PR #4624](https://github.com/eng-cc/oasis7/pull/4624)、[验收映射](../local-tools.design.md#11-验收与验证)。
+候选 App 的建库、保存冲突和 CLI 安装观察只证明 PR 中记录的原候选/机器范围，不证明用户固定安装、部署、真实 signer 提交、公证或公共分发。管理员桥与 Apple 签名集成的暂停继续有效，本机用户 signer 绑定与真实签名提交仍未验收；过程记录见 [PR #4624](https://github.com/eng-cc/oasis7/pull/4624)，验收边界见[验收映射](../local-tools.design.md#11-验收与验证)。本次不刷新其他架构或环境状态。
 
 ## 下次刷新时
 

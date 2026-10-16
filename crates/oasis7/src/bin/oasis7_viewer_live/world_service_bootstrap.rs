@@ -52,6 +52,7 @@ mod tests {
     fn service() -> WorldServiceClientConfig {
         let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
         WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint: "http://127.0.0.1:5999".into(),
             trusted_service_public_key: hex::encode(key.verifying_key().to_bytes()),
             expected_world: oasis7_client_api::world_service::WorldIdentity {

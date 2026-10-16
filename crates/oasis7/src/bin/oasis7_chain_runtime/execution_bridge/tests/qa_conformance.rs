@@ -659,6 +659,7 @@ impl Fixture {
             );
         });
         let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint,
             trusted_service_public_key,
             expected_world: identity,
@@ -767,6 +768,8 @@ impl Fixture {
     }
     fn view(&self, min_commit: Option<CommitRef>) -> ReadWorldViewRequest {
         ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: self.client.config().expected_world.clone(),
             scope_id: "public".into(),

@@ -2,6 +2,23 @@ use super::*;
 use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peer;
 use std::net::IpAddr;
 
+pub(super) fn validate_chain_node_id(id: &str) -> Result<(), String> {
+    if id.is_empty()
+        || id.trim() != id
+        || matches!(id, "." | "..")
+        || id.contains('/')
+        || id.contains('\\')
+        || !std::path::Path::new(id)
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
+        || id.contains(':')
+        || id.chars().any(char::is_control)
+    {
+        return Err("--chain-node-id requires a safe single path component".into());
+    }
+    Ok(())
+}
+
 pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
     let mut options = CliOptions::default();
     let mut iter = args.peekable();
@@ -141,7 +158,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     parse_major_world_event_visibility(raw.as_str())?;
             }
             "--chain-node-id" => {
-                options.chain_node_id = parse_required_value(&mut iter, "--chain-node-id")?;
+                let raw = iter.next().ok_or("--chain-node-id requires a value")?;
+                if raw.starts_with("--") {
+                    return Err("--chain-node-id requires a value".into());
+                }
+                validate_chain_node_id(raw)?;
+                options.chain_node_id = raw.to_string();
             }
             "--chain-network-tier-manifest" => {
                 options.chain_network_tier_manifest =
@@ -358,12 +380,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 .to_string(),
         );
     }
+    validate_chain_node_id(&options.chain_node_id)?;
     if options.chain_enabled {
         let _ = parse_host_port(options.chain_status_bind.as_str(), "--chain-status-bind")?;
         let _ = parse_chain_link_policy(options.chain_link_policy.as_str())?;
-        if options.chain_node_id.trim().is_empty() {
-            return Err("--chain-node-id requires a non-empty value".to_string());
-        }
         if options.chain_local_standalone_test && options.chain_node_validators.is_empty() {
             options
                 .chain_node_validators

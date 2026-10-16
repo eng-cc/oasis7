@@ -48,9 +48,10 @@ mod url_encoding;
 mod viewer_live_command;
 #[path = "oasis7_game_launcher/viewer_runtime_config.rs"]
 mod viewer_runtime_config;
+#[cfg(test)]
+use chain_command::build_oasis7_chain_runtime_args;
 use chain_command::{
-    build_oasis7_chain_runtime_args, missing_execution_world_persistence_files,
-    resolved_chain_execution_world_dir,
+    missing_execution_world_persistence_files, resolved_chain_execution_world_dir,
 };
 use cli::{
     major_world_event_visibility_as_str, parse_host_port, parse_options, print_help,
@@ -501,7 +502,7 @@ fn spawn_oasis7_chain_runtime(
     trace_session_id: &str,
 ) -> Result<Child, String> {
     let mut command = Command::new(path);
-    command.args(build_oasis7_chain_runtime_args(options));
+    command.args(chain_command::prepare_oasis7_chain_runtime_args(options)?);
     command.env(TRACE_SESSION_ID_ENV, trace_session_id);
     command.spawn().map_err(|err| {
         format!(

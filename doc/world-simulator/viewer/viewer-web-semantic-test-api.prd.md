@@ -18,6 +18,8 @@
 
 ## 2. User Experience & Functionality
 
+<a id="viewer-web-semantic-test-api-current-contract"></a>
+
 ### 当前实现合同（Batch 22 回填）
 
 - `window.__AW_TEST__` 仅在测试模式启用。当前 control-action surface 是 `sendControl("play"|"pause"|"step", payload?)`、`runSteps(payload?)` 与 `getState()`；其他测试 helper 不扩大 live 控制集合，`seek`/`seek_event` 不得在 live profile 作为可提交动作出现。

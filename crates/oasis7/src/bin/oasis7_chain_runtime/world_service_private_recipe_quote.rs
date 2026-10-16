@@ -16,15 +16,15 @@ pub(super) fn process(
     let pinned = service.pin(None)?;
     let task = validate_pinned_task(service, &pinned, fence, &proof.subject_public_key, true)?;
     let pinned = task.pinned;
+    let captured = load_captured(service, store, context_proof, &task)?;
     if pinned
         .world
         .current_cognition_base_binding()
         .map_err(|_| PrivateError::Unavailable)?
         != proof.request.expected_base_binding
     {
-        return Err(PrivateError::Conflict);
+        return Err(PrivateError::QuoteBaseDrift);
     }
-    let captured = load_captured(service, store, context_proof, &task)?;
     let quote = pinned
         .world
         .builtin_recipe_quote(
@@ -47,14 +47,25 @@ pub(super) fn process(
     before_delivery();
     let fresh = service.pin(None)?;
     let fresh_task = validate_pinned_task(service, &fresh, fence, &proof.subject_public_key, true)?;
-    if fresh_task.pinned.commit != pinned.commit {
-        return Err(PrivateError::Conflict);
-    }
     fresh_task
         .history
         .validate_prefix_capture(&context_proof.request.context, &proof.subject_public_key)
-        .map_err(|_| PrivateError::Conflict)?;
-    check_record_live(fresh_task.pinned, &captured.prepared, None)?;
+        .map_err(|error| {
+            capture_validation_conflict(
+                &fresh_task.pinned.world,
+                &context_proof.request.context,
+                ReadCheckPoint::Delivery,
+                &error,
+            )
+        })?;
+    check_record_live(
+        fresh_task.pinned,
+        &captured.prepared,
+        Some(ReadCheckPoint::Delivery),
+    )?;
+    if fresh_task.pinned.commit != pinned.commit {
+        return Err(PrivateError::QuoteDeliveryDrift);
+    }
     service
         .signed(TASK_RECIPE_QUOTE_PATH, &proof, output)
         .map_err(PrivateError::from)

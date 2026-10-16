@@ -490,9 +490,6 @@ pub(super) fn process(
                 &proof.subject_public_key,
                 true,
             )?;
-            if fresh_task.pinned.commit.binding != task.pinned.commit.binding {
-                return Err(read_conflict(ReadConflictStage::DeliveryBindingChanged));
-            }
             fresh_task
                 .history
                 .validate_prefix_capture(&proof.request.context, &proof.subject_public_key)
@@ -509,6 +506,16 @@ pub(super) fn process(
                 &output.prepared,
                 Some(ReadCheckPoint::Delivery),
             )?;
+            if fresh_task.pinned.commit.binding != task.pinned.commit.binding {
+                return Err(PrivateError::ContextReadDeliveryDrift(Some(
+                    ReadConflictStage::DeliveryBindingChanged,
+                )));
+            }
+            // A dedicated retry category describes only a still-authorized,
+            // unexpired context whose read snapshot changed during delivery.
+            if fresh_task.pinned.commit != task.pinned.commit {
+                return Err(PrivateError::ContextReadDeliveryDrift(None));
+            }
             service
                 .signed(path, &proof, output)
                 .map_err(PrivateError::from)

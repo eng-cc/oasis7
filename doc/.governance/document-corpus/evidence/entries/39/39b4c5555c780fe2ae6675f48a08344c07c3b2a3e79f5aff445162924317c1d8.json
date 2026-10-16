@@ -3,7 +3,7 @@
     "authority": "doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "a540e6fa6879d500c3bedd98cb8a257b2c16ecd51a525673ed2f0ebef091262f",
+    "content_sha256": "d923d4210c80abac249112ef3a15615cf9b6e1a14ab0c13012d994ec4ee576c7",
     "disposition": "retain",
     "domain_owner": "qa_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

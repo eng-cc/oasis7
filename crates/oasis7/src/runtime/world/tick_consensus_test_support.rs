@@ -66,7 +66,7 @@ impl World {
             &tick_events,
             state_root,
         )?;
-        self.install_prepared_tick_consensus_record(refreshed);
+        self.install_prepared_tick_consensus_record(refreshed)?;
         Ok(())
     }
 }

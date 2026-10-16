@@ -1,0 +1,179 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
+import DocumentInventory from './DocumentInventory';
+import type { Snapshot, DocumentSection } from './types';
+import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
+const api = vi.hoisted(() => ({ documentInventory: vi.fn() }));
+vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => String(error), observedTime: () => '核验时间' }));
+const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
+const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
+  fileKey: path, path, title: path === section.path ? '设计文档' : path,
+  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, upstream: null, ...extra,
+});
+const snapshot = (id = 'project', generation = '1'): Snapshot => ({
+  project: { id, path: '/repo', head: 'head', branch: 'main', gitCommonDir: '/repo/.git', environment: 'local' },
+  sources: [{ kind: 'local', generation, state: 'partial', lastAttempt: '1', lastSuccess: '1', sourceRevision: 'head', coverage: '', error: null }],
+  sections: [section], decisions: [], preferences: { projectPath: '/repo', query: '', view: 'rules' }, associations: [], readingPositions: [], git: {status:'',worktrees:''},
+});
+const page = (files = [file()], extra: Partial<DocumentInventoryPage> = {}): DocumentInventoryPage => ({
+  schemaVersion: 1, projectId: 'project', snapshotId: 'snapshot', baselineOid: 'head', generatedAt: '1',
+  candidates: 3, read: 1, omitted: 2, readBytes: 10, totalMatches: files.length,
+  partial: true, stale: false, error: null, files, nextCursor: null, ...extra,
+});
+beforeEach(() => api.documentInventory.mockReset());
+afterEach(cleanup);
+it('shows per-file omissions and opens only chapters from the matching file revision', async () => {
+  api.documentInventory.mockResolvedValue(page([file(), file('doc/empty.md', {bytes:0}), file('doc/deleted.md', {state:'deleted',reason:'deleted',revision:null,bytes:null})]));
+  const showSource = vi.fn();
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={showSource} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  fireEvent.click(screen.getByRole('button', {name:'设计文档'}));
+  fireEvent.click(screen.getByRole('button', {name:'设计章节 · 第 1 行'}));
+  expect(showSource).toHaveBeenCalledWith(section, expect.any(HTMLElement));
+  fireEvent.click(screen.getByRole('button', {name:'doc/empty.md'}));
+  expect(screen.getByText('已读取，文件没有可展示的章节。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/deleted.md'}));
+  expect(screen.queryByRole('button', {name:/第 1 行/})).not.toBeInTheDocument();
+  expect(screen.getAllByText(/工作树文件已删除/).length).toBeGreaterThan(0);
+});
+it('binds paging to applied filters and snapshot, and preserves IME composition', async () => {
+  api.documentInventory.mockResolvedValueOnce(page()).mockResolvedValue(page([file()], {nextCursor:'next'}));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  const input = screen.getByRole('textbox', {name:'筛选文档文件'});
+  fireEvent.input(input, {target:{value:'设计'}});
+  fireEvent.compositionStart(input);
+  fireEvent.submit(input.closest('form')!);
+  expect(api.documentInventory).toHaveBeenCalledTimes(1);
+  fireEvent.compositionEnd(input);
+  fireEvent.change(screen.getByRole('combobox'), {target:{value:'omitted'}});
+  fireEvent.click(screen.getByRole('button', {name:'应用筛选'}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole('button', {name:/下一页/})).toBeEnabled());
+  // Unsubmitted edits must not silently change the next cursor's filter.
+  fireEvent.input(input, {target:{value:'未提交的新筛选'}});
+  fireEvent.click(screen.getByRole('button', {name:/下一页/}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(3));
+  expect(api.documentInventory).toHaveBeenLastCalledWith({ schemaVersion:1, projectId:'project', snapshotId:'snapshot', query:'设计', readFilter:'omitted', cursor:'next' });
+});
+it('rejects late responses after a project switch and after a same-project refresh', async () => {
+  let late!: (value: DocumentInventoryPage) => void;
+  api.documentInventory.mockImplementationOnce(() => new Promise(resolve => {late = resolve;})).mockResolvedValue(page([file('doc/new.md')]));
+  const [state, setState] = createSignal(snapshot());
+  render(() => <DocumentInventory snapshot={state()} showSource={vi.fn()} />);
+  setState(snapshot('other', '2'));
+  await screen.findByRole('button', {name:'doc/new.md'});
+  late(page([file('doc/old.md')]));
+  await Promise.resolve();
+  expect(screen.queryByRole('button', {name:'doc/old.md'})).not.toBeInTheDocument();
+  api.documentInventory.mockImplementationOnce(() => new Promise(resolve => {late = resolve;})).mockResolvedValue(page([file('doc/refreshed.md')]));
+  fireEvent.click(screen.getByRole('button', {name:'重新查询首页'}));
+  setState(snapshot('other', '3'));
+  await screen.findByRole('button', {name:'doc/refreshed.md'});
+  late(page([file('doc/obsolete.md')]));
+  await Promise.resolve();
+  expect(screen.queryByRole('button', {name:'doc/obsolete.md'})).not.toBeInTheDocument();
+});
+it('distinguishes cache failure from empty results and keeps stale coverage visible', async () => {
+  api.documentInventory.mockRejectedValueOnce(new Error('清单缺失')).mockResolvedValue(page([], {stale:true,error:'源读取失败',totalMatches:0}));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  await screen.findByRole('alert');
+  expect(screen.queryByText(/当前筛选没有匹配文件/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'重新查询首页'}));
+  await screen.findByText(/当前筛选没有匹配文件/);
+  expect(screen.getByText(/清单已过期/)).toBeInTheDocument();
+});
+
+it('preserves filters, page and file selection when only personal snapshot data changes', async () => {
+  api.documentInventory.mockResolvedValue(page([file()], {nextCursor:'next'}));
+  const [state, setState] = createSignal(snapshot());
+  render(() => <DocumentInventory snapshot={state()} showSource={vi.fn()} />);
+  await screen.findByRole('button', {name:'设计文档'});
+  const input = screen.getByRole('textbox', {name:'筛选文档文件'});
+  fireEvent.input(input, {target:{value:'设计'}});
+  fireEvent.click(screen.getByRole('button', {name:'应用筛选'}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole('button', {name:/下一页/})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', {name:/下一页/}));
+  await waitFor(() => expect(api.documentInventory).toHaveBeenCalledTimes(3));
+  fireEvent.click(await screen.findByRole('button', {name:'设计文档'}));
+  expect(screen.getByRole('region', {name:'文件读取详情'})).toBeInTheDocument();
+  setState({...snapshot(), preferences:{...snapshot().preferences, query:'个人偏好更新'}});
+  await Promise.resolve();
+  expect(api.documentInventory).toHaveBeenCalledTimes(3);
+  expect(input).toHaveValue('设计');
+  expect(screen.getByRole('region', {name:'文件读取详情'})).toBeInTheDocument();
+});
+
+it('distinguishes legacy pairing coverage, explicit absence and unresolved targets', async () => {
+  api.documentInventory.mockResolvedValue(page([file(), file('doc/none.md', {pairings:{targets:[],issue:null}}), file('doc/paired.md', {pairings:{targets:[{declarationLine:8,destination:'design.md#section',target:'doc/design.md#section',resolution:'fragment_unchecked',targetKind:null,targetSection:null,targetRevision:null}],issue:'incomplete'}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', {name:'设计文档'}));
+  expect(screen.getByText('旧清单尚未解析配对，请刷新本地事实。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/none.md'}));
+  expect(screen.getByText('本次范围未发现显式配对系统设计链接。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'doc/paired.md'}));
+  expect(screen.getByText(/第 8 行 · doc\/design.md#section · 文件已读取，章节锚点尚未核对/)).toBeInTheDocument();
+  expect(screen.getByText('配对解析不完整：incomplete')).toBeInTheDocument();
+});
+
+it('opens only the exact resolved pairing chapter and preserves its origin across personal updates', async () => {
+  const target = { ...section, path:'doc/target.md', id:'target', title:'配对章节', revision:'target-rev' };
+  const edge = {declarationLine:8,destination:'target.md#contract',target:'doc/target.md#contract',resolution:'resolved',targetKind:null,targetSection:target.id,targetRevision:target.revision};
+  api.documentInventory.mockResolvedValue(page([file('doc/prd.md', {pairings:{targets:[edge],issue:null}})], {nextCursor:'next'}));
+  const [state, setState] = createSignal({...snapshot(),sections:[section,target]});
+  const showSource = vi.fn();
+  render(() => <DocumentInventory snapshot={state()} showSource={showSource} />);
+  fireEvent.click(await screen.findByRole('button', {name:'doc/prd.md'}));
+  const open = screen.getByRole('button', {name:'打开配对章节：配对章节'});
+  fireEvent.click(open);
+  expect(showSource).toHaveBeenCalledWith(target, open);
+  setState({...state(),decisions:[]});
+  await Promise.resolve();
+  expect(screen.getByRole('button', {name:'打开配对章节：配对章节'})).toBe(open);
+  expect(api.documentInventory).toHaveBeenCalledTimes(1);
+  setState({...state(),sections:[section,{...target,revision:'other-revision'}]});
+  await waitFor(() => expect(screen.queryByRole('button', {name:'打开配对章节：配对章节'})).not.toBeInTheDocument());
+});
+
+it('keeps ambiguous, missing and legacy pairings informational without fallback jumps', async () => {
+  const base = {declarationLine:3,destination:'design.md#same',target:'doc/design.md#same',targetKind:null,targetSection:null,targetRevision:'rev'};
+  api.documentInventory.mockResolvedValue(page([file('doc/prd.md', {pairings:{targets:[
+    {...base,resolution:'ambiguous'}, {...base,resolution:'missing_fragment'},
+    {...base,resolution:'unread'}, {...base,resolution:'resolved',targetRevision:null},
+  ],issue:null}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', {name:'doc/prd.md'}));
+  expect(screen.getByText(/目标锚点重复，无法唯一定位/)).toBeInTheDocument();
+  expect(screen.getByText(/目标文件中未找到章节锚点/)).toBeInTheDocument();
+  expect(screen.getByText('旧清单尚无章节定位，请刷新本地事实。')).toBeInTheDocument();
+  expect(screen.queryByRole('button', {name:/打开配对章节/})).not.toBeInTheDocument();
+});
+
+it('shows explicit design upstream requirements separately from design references and keeps pairing navigation', async () => {
+  const target = {...section,path:'doc/prd.md',id:'REQ-1',title:'上游需求',revision:'req-rev'};
+  const edge = {declarationLine:7,destination:'prd.md#REQ-1',target:'doc/prd.md#REQ-1',resolution:'resolved',targetKind:'prd',targetSection:target.id,targetRevision:target.revision};
+  api.documentInventory.mockResolvedValue(page([file('doc/topic.design.md',{upstream:{targets:[edge,{...edge,destination:'parent.design.md',target:'doc/parent.design.md',targetKind:'design',resolution:'unread',targetSection:null,targetRevision:null}],issue:null}})]));
+  const showSource = vi.fn();
+  render(() => <DocumentInventory snapshot={{...snapshot(),sections:[section,target]}} showSource={showSource} />);
+  fireEvent.click(await screen.findByRole('button',{name:'doc/topic.design.md'}));
+  expect(screen.getByRole('region',{name:'显式上游声明'})).toBeInTheDocument();
+  expect(screen.getByText('目标类型：需求文档')).toBeInTheDocument();
+  expect(screen.getByText('目标类型：设计引用')).toBeInTheDocument();
+  const open = screen.getByRole('button',{name:'打开上游章节：上游需求'});
+  fireEvent.click(open);
+  expect(showSource).toHaveBeenCalledWith(target,open);
+  expect(screen.queryByRole('button',{name:'打开配对章节：上游需求'})).not.toBeInTheDocument();
+});
+
+it('distinguishes legacy upstream coverage from an empty parsed design header', async () => {
+  api.documentInventory.mockResolvedValue(page([file('doc/legacy.design.md'),file('doc/none.design.md',{upstream:{targets:[],issue:null}}),file('doc/partial.design.md',{upstream:{targets:[],issue:'pairing declaration has no explicit Markdown link'}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button',{name:'doc/legacy.design.md'}));
+  expect(screen.getByText('旧清单尚未解析上游，请刷新本地事实。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'doc/none.design.md'}));
+  expect(screen.getByText('本次文件头范围未发现显式上游链接。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'doc/partial.design.md'}));
+  expect(screen.getByText('上游解析不完整：声明中没有可识别的 Markdown 链接')).toBeInTheDocument();
+});

@@ -197,11 +197,23 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 <a id="req-agent-stage-001"></a>
 ### REQ-AGENT-STAGE-001：世界舞台必须先呈现目的与因果
 
+Trace ID: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616
+
+- 功能点：[REQ-AGENT-STAGE-001](#req-agent-stage-001)；适用范围沿本条原条件与 [AC-AGENT-STAGE-001](#ac-agent-stage-001)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-scene)保留四层架构与数据来源分层；[品牌阅读顺序](../../world-simulator/viewer/viewer-brand-system-2026-06-05.design.md#23-terminal-shell-brand-summary)与[视觉 HUD 层级](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#83-hud-dock-and-contextual-console-hierarchy)局部承接当前目的、blocker、下一步的主次顺序；[玩家因果与环境活动](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#62-player-leverage-before-ambient-activity)及[回执解释](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md#113-receipt)局部承接结果解释与环境活动不代签因果。各设计承接/验证表反链本要求；这些局部依据不证明完整 AC、实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；本轮文档与静态布局核对基线 `edf61e801e4888087c2e65a402011088bd1c50b2`；入口仅为上述局部条款，未执行真实 Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：目的/blocker/下一步已有局部阅读顺序、结果已有局部解释合同，但相关 Agent/地点/路线的完整承接、密度变化后的可读性、完整继续/纠正/中断/恢复路径及各正式 surface 的组合 AC 仍未闭合；token/CSS 数值和完整品牌状态字典不是本条要求。实现/验证：局部静态接线不证明完整适用入口、权威因果与真实体验验收，保持未核实。
+
 - 要求：正式玩家 surface 必须优先呈现当前目的、相关 Agent/地点/路线、关键 blocker、下一步和已接受行动的主要结果；环境装饰与诊断不能代替玩家因果。
 - 验收：AC-AGENT-STAGE-001
 
 <a id="ac-agent-stage-001"></a>
 ### AC-AGENT-STAGE-001：玩家能从舞台读到下一决策
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；承接[REQ-AGENT-STAGE-001](#req-agent-stage-001)。
 
 - 覆盖要求：REQ-AGENT-STAGE-001
 - 场景与结果：代表性目标、相关对象、阻塞和已接受行动结果在主舞台及密度变化后仍可读，并能到达继续、纠正、中断或恢复路径；视觉邻近、环境活动和诊断不会被误读为玩家行动结果。
@@ -210,11 +222,23 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 <a id="req-agent-stage-002"></a>
 ### REQ-AGENT-STAGE-002：动态观察必须保留来源、时效与未知
 
+Trace ID: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3
+
+- 功能点：[REQ-AGENT-STAGE-002](#req-agent-stage-002)；适用范围沿本条原条件与 [AC-AGENT-STAGE-002](#ac-agent-stage-002)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)已承接来源、last-known/unknown及过代读取；同文件需求承接/验证表反链本条AC。剩余：高后果重新权威确认/阻断和低后果不确定性预览尚未完整承接；view-query已覆盖来源/last-known/unknown和过代读取。 不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：高后果重新权威确认/阻断和低后果不确定性预览尚未完整承接；view-query已覆盖来源/last-known/unknown和过代读取。；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：当动态对象观察过期、冲突、范围外或尚未取得时，产品必须保留当前确认、最近已知、未知/冲突和来源时效的区别，并为影响行动的非当前信息提供刷新、等待、改道或停止路径。
 - 验收：AC-AGENT-STAGE-002
 
 <a id="ac-agent-stage-002"></a>
 ### AC-AGENT-STAGE-002：陈旧或冲突观察不会代签真值
+
+Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[REQ-AGENT-STAGE-002](#req-agent-stage-002)。
 
 - 覆盖要求：REQ-AGENT-STAGE-002
 - 场景与结果：旧响应晚到、刷新竞态或提交前信息失效时，surface 保留冲突/来源/时效语义；低后果动作最多是带不确定性预览，高后果动作重新取得当前权威确认或明确阻断。
@@ -223,11 +247,23 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 <a id="req-agent-stage-003"></a>
 ### REQ-AGENT-STAGE-003：大世界必须可多尺度探索
 
+Trace ID: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf
+
+- 功能点：[REQ-AGENT-STAGE-003](#req-agent-stage-003)；适用范围沿本条原条件与 [AC-AGENT-STAGE-003](#ac-agent-stage-003)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)覆盖多尺度浏览、授权搜索选择和回到主目标；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：玩家在有权观察的范围内能从世界总览逐级浏览区域/Fragment 与对象，平移/缩放、搜索定位、选择对象/事件并返回主目标；未知、过期或抽象位置不冒充权威即时坐标。
 - 验收：[AC-AGENT-STAGE-003](#ac-agent-stage-003)。
 
 <a id="ac-agent-stage-003"></a>
 ### AC-AGENT-STAGE-003：世界概览至对象再回到当前任务
+
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；承接[REQ-AGENT-STAGE-003](#req-agent-stage-003)。
 
 - 覆盖要求：[REQ-AGENT-STAGE-003](#req-agent-stage-003)。
 - 给定：多个区域/Fragment、可见 Agent/设施/路线与未加载或仅最近已知的对象。
@@ -237,11 +273,23 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 <a id="req-agent-stage-004"></a>
 ### REQ-AGENT-STAGE-004：网页和原生桌面客户端都要能实际探索世界
 
+Trace ID: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a
+
+- 功能点：[REQ-AGENT-STAGE-004](#req-agent-stage-004)；适用范围沿本条原条件与 [AC-AGENT-STAGE-004](#ac-agent-stage-004)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-native)已承接内嵌WebView容器、安全边界和各平台独立取证；同文件需求承接/验证表反链本条AC。剩余：浏览定位和重连恢复的跨条款组合仍须核对；view-native已覆盖内嵌容器/安全和平台独立取证。 不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：浏览定位和重连恢复的跨条款组合仍须核对；view-native已覆盖内嵌容器/安全和平台独立取证。；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：被声明支持的 Web 浏览器与桌面原生客户端必须分别完成交互式世界浏览、定位、对象检查与重连恢复；可嵌入 Web 实现，但单纯唤起外部浏览器或静态截图不算客户端拥有世界舞台。
 - 验收：[AC-AGENT-STAGE-004](#ac-agent-stage-004)。
 
 <a id="ac-agent-stage-004"></a>
 ### AC-AGENT-STAGE-004：两个 surface 分别有可交互世界证据
+
+Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；承接[REQ-AGENT-STAGE-004](#req-agent-stage-004)。
 
 - 覆盖要求：[REQ-AGENT-STAGE-004](#req-agent-stage-004)。
 - 给定：同一真实世界、Agent 生产结果、浏览器候选及受支持桌面客户端发行资产。
@@ -251,11 +299,23 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 <a id="req-agent-stage-005"></a>
 ### REQ-AGENT-STAGE-005：地图只能进入合法间接指导
 
+Trace ID: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096
+
+- 功能点：[REQ-AGENT-STAGE-005](#req-agent-stage-005)；适用范围沿本条原条件与 [AC-AGENT-STAGE-005](#ac-agent-stage-005)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-guidance)覆盖仅合法owner目标/审批入口、地图不直接行动及真实回执；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：选中自己合法控制的 Agent 后，地图须能关联其高层目标、活动、pending/committed 后果和既有 Prompt/委托入口；选中其他 Agent、点击地形或缩放不得直接生成世界行动。
 - 验收：[AC-AGENT-STAGE-005](#ac-agent-stage-005)。
 
 <a id="ac-agent-stage-005"></a>
 ### AC-AGENT-STAGE-005：选中对象不授予世界控制
+
+Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；承接[REQ-AGENT-STAGE-005](#req-agent-stage-005)。
 
 - 覆盖要求：[REQ-AGENT-STAGE-005](#req-agent-stage-005)。
 - 给定：有权 Agent、可见但无权的其他 Agent，以及 pending 与 committed 行动。

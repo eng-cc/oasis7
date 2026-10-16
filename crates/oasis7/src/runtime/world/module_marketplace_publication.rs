@@ -67,6 +67,9 @@ impl World {
                 first = false;
             }
         }
+        self.install_prepared_tick_consensus_record(
+            final_record.expect("marketplace batch includes its order"),
+        )?;
         state.install_routed(&mut self.state);
         self.next_event_id = next_event_id;
         self.next_event_id_era = next_event_id_era;
@@ -75,9 +78,7 @@ impl World {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(evicted);
-        self.install_prepared_tick_consensus_record(
-            final_record.expect("marketplace batch includes its order"),
-        );
+
         Ok(())
     }
 }

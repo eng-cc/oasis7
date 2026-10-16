@@ -15,7 +15,9 @@
 
 <a id="DES-CC-TOOLS-001"></a>
 
-## 2. 普通用户能力
+<a id="2-普通用户能力"></a>
+
+## 2. 普通用户能力与边界
 
 context 的 `application` 应用接口共享显式资料 root、完整原文校验、条件保存、历史恢复身份校验及原快照实现；CLI 不在 GUI 进程中运行。`info --json` 固定 schema 1，未知构建来源返回 null；它不打开资料库或 custody。caller 的 info 和其 context info 分别表示各自能力。
 
@@ -31,10 +33,10 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机资料、保存、历史、快照和同包 CLI | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | context 领域库、runtime_engineer | 不将落盘当作 Git 远端同步 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 已有兼容 signer 的普通文件签名 | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | signer caller、原 worker | 用户暂停特权初装/管理 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 未知操作、资源占位及冻结退出 | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | ToolJobs、原 context/signing 持久记录 | 不从进程消失推导回滚 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 显式私有输入和持久线程属性 | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 实验 runtime、agent_engineer | 不保证原 runtime/外部 CLI 全部转存追踪 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机资料、保存、历史、快照和同包 CLI；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=本机资料、保存、历史、快照和同包 CLI | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | context 领域库、runtime_engineer | 不将落盘当作 Git 远端同步 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 已有兼容 signer 的普通文件签名；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=已有兼容 signer 的普通文件签名 | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | signer caller、原 worker | 用户暂停特权初装/管理 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 未知操作、资源占位及冻结退出；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=未知操作、资源占位及冻结退出 | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | ToolJobs、原 context/signing 持久记录 | 不从进程消失推导回滚 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 显式私有输入和持久线程属性；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=显式私有输入和持久线程属性 | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 实验 runtime、agent_engineer | 不保证原 runtime/外部 CLI 全部转存追踪 |
 
 <a id="DES-CC-TOOLS-002"></a>
 
@@ -68,7 +70,9 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 事件写入及历史读取从独立私有来源表恢复标记，迟到 snapshot 不能清除。普通 runtime 投影只过滤属于私有线程的会话、请求及操作；无线程 ID 的普通管理操作仍保留，未知建会话回执不能误隐藏。专用运行界面保留必要批准详情。既有数据库可能包含由私有输入派生的请求内容；不能直接复制整份 SQLite 并称为普通配置备份。原运行时或外部 CLI 的转存不在本 App 完整追踪范围内。
 
-## 11. 验收与验证
+<a id="11-验收与验证"></a>
+
+## 11. 验收、验证与剩余风险
 
 | 合同 | 验证入口 | 仍需真实环境核对 |
 | --- | --- | --- |

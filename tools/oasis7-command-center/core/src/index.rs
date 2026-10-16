@@ -1,6 +1,20 @@
+#[path = "index_coverage.rs"]
+mod coverage;
+#[path = "document_fragments.rs"]
+mod document_fragments;
+#[path = "document_pairings.rs"]
+mod document_pairings;
+#[path = "document_read.rs"]
+mod document_read;
 #[path = "lifecycle_metadata.rs"]
 mod lifecycle_metadata;
-use crate::{Error, Result, domain::*, process::run};
+use crate::{
+    Error, Result,
+    document_inventory::{IndexedDocument, Inventory, sections_digest},
+    domain::*,
+    process::run,
+};
+use coverage::Coverage;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 pub fn digest(bytes: &[u8]) -> String {
@@ -38,15 +52,241 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     {
         return Err(Error::Invalid("document path must be relative".into()));
     }
-    let path = root.join(rel).canonicalize()?;
+    let mut candidate = root.to_path_buf();
+    for component in rel.components() {
+        candidate.push(component);
+        if std::fs::symlink_metadata(&candidate)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(Error::Invalid("document path contains a symlink".into()));
+        }
+    }
+    let path = candidate.canonicalize()?;
     if !path.starts_with(root) {
         return Err(Error::Invalid("document escapes project".into()));
     }
     Ok(path)
 }
-pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+#[cfg(test)]
+pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
+    read_candidate(project, || {})
+}
+pub(crate) struct IndexCandidate {
+    pub sections: Vec<DocumentSection>,
+    pub git: GitSnapshot,
+    pub coverage: String,
+    pub omitted: bool,
+    pub inventory: Inventory,
+}
+pub(crate) fn read_with_inventory(project: &Project) -> Result<IndexCandidate> {
+    scan(project, || {})
+}
+#[cfg(test)]
+fn read_candidate(
+    project: &Project,
+    after_read: impl FnOnce(),
+) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
+    let candidate = scan(project, after_read)?;
+    Ok((
+        candidate.sections,
+        candidate.git,
+        candidate.coverage,
+        candidate.omitted,
+    ))
+}
+fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> {
     let root = Path::new(&project.path);
-    let files = run(
+    let files = document_list(root)?;
+    let changed = dirty_paths(root)?;
+    let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
+    let mut sections = Vec::new();
+    let mut inventory_files = Vec::new();
+    let mut pairing_contents = std::collections::HashMap::new();
+    let mut metadata = std::collections::HashMap::new();
+    let mut total = 0;
+    let mut observed = Vec::new();
+    let mut omissions = Vec::new();
+    let mut names: Vec<&[u8]> = files
+        .split(|b| *b == 0)
+        .filter(|b| b.ends_with(b".md"))
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names.sort_by_key(|name| {
+        let name = String::from_utf8_lossy(name);
+        let priority = if name == "doc/core/prd.md" {
+            0
+        } else if name == "doc/engineering/workflow/source-of-truth.md" {
+            1
+        } else if name == "AGENTS.md"
+            || name == "skills/oasis7-command-center/references/project-map.md"
+            || (name.starts_with("doc/") && name.ends_with("/README.md"))
+        {
+            // Keep structural navigation available when body documents exhaust
+            // either the path count or total byte budget.
+            2
+        } else if name.starts_with("doc/product/") || name.ends_with("/prd.md") {
+            3
+        } else {
+            4
+        };
+        (priority, name.into_owned())
+    });
+    let mut coverage = Coverage::new(names.len());
+    for (position, name) in names.into_iter().enumerate() {
+        let name = std::str::from_utf8(name)
+            .map_err(|_| Error::Invalid("non UTF-8 document path".into()))?;
+        if !name.ends_with(".md") {
+            continue;
+        }
+        let mut file = IndexedDocument::new(&project.id, name, changed.contains(name.as_bytes()));
+        if position >= 3000 {
+            file.omit("file_count_budget");
+            inventory_files.push(file);
+            coverage.omit(name, "file_count_budget");
+            continue;
+        }
+        let remaining = 16 * 1024 * 1024 - total;
+        let content = match read_source(root, name, remaining) {
+            Ok(content) => content,
+            Err(reason) => {
+                file.omit(reason);
+                inventory_files.push(file);
+                coverage.omit(name, reason);
+                omissions.push((name.to_owned(), reason, remaining));
+                continue;
+            }
+        };
+        total += content.len();
+        coverage.read += 1;
+        let dirty = changed.contains(name.as_bytes());
+        let revision = digest(content.as_bytes());
+        observed.push((name.to_owned(), revision.clone()));
+        metadata.insert(name.to_owned(), lifecycle_metadata::parse(name, &content));
+        let parsed = document_sections(name, &content, &revision, dirty, project);
+        file.title = parsed
+            .iter()
+            .find(|section| section.title != name)
+            .map_or_else(|| name.to_owned(), |section| section.title.clone());
+        file.revision = Some(revision);
+        file.bytes = Some(content.len());
+        file.pairings = Some(document_pairings::parse(name, &content, "配对系统设计"));
+        if file.kind == "design" {
+            file.upstream = Some(document_pairings::parse(name, &content, "上游"));
+        }
+        inventory_files.push(file);
+        sections.extend(parsed);
+        pairing_contents.insert(name.to_owned(), content);
+    }
+    let indexed: std::collections::HashSet<String> =
+        sections.iter().map(|s| s.path.clone()).collect();
+    for value in metadata.values_mut().flatten() {
+        lifecycle_metadata::validate_indexed(value, &indexed);
+    }
+    document_pairings::resolve(&mut inventory_files, &sections, &pairing_contents);
+    for file in &mut inventory_files {
+        file.lifecycle = metadata.get(&file.path).cloned().flatten();
+    }
+    for section in &mut sections {
+        section.lifecycle = metadata.get(&section.path).cloned().flatten();
+    }
+    after_read();
+    let snapshot = GitSnapshot {
+        status: String::from_utf8_lossy(&run(
+            "git",
+            &["status", "--porcelain=v2", "-z", "--branch"],
+            root,
+        )?)
+        .into(),
+        worktrees: String::from_utf8_lossy(&run(
+            "git",
+            &["worktree", "list", "--porcelain", "-z"],
+            root,
+        )?)
+        .into(),
+    };
+    // HEAD alone cannot detect edits to already-dirty files or index-only additions.
+    // Reject the candidate instead of publishing sections from different observations.
+    let current_changed = dirty_paths(root)?;
+    let current_changed: std::collections::HashSet<&[u8]> =
+        current_changed.split(|b| *b == 0).collect();
+    if document_list(root)? != files || current_changed != changed {
+        return Err(Error::Invalid(
+            "document list or dirty state changed during indexing; refresh again".into(),
+        ));
+    }
+    for (name, revision) in observed {
+        let matches = read_source(root, &name, 1024 * 1024)
+            .is_ok_and(|content| digest(content.as_bytes()) == revision);
+        if !matches {
+            return Err(Error::Invalid(
+                "document content changed during indexing; refresh again".into(),
+            ));
+        }
+    }
+    for (name, reason, remaining) in omissions {
+        if read_source(root, &name, remaining).err() != Some(reason) {
+            return Err(Error::Invalid(
+                "document omission changed during indexing; refresh again".into(),
+            ));
+        }
+    }
+    if git(root, &["rev-parse", "HEAD"])? != project.head {
+        return Err(Error::Invalid(
+            "HEAD changed during indexing; refresh again".into(),
+        ));
+    }
+    inventory_files.sort_by(|a, b| a.path.cmp(&b.path));
+    let snapshot_id = digest(&serde_json::to_vec(&(
+        &project.id,
+        &project.head,
+        &inventory_files,
+    ))?);
+    let inventory = Inventory {
+        schema_version: 1,
+        project_id: project.id.clone(),
+        baseline_oid: project.head.clone(),
+        snapshot_id,
+        generated_at: crate::now(),
+        source_generation: String::new(),
+        sections_digest: sections_digest(&sections),
+        files: inventory_files,
+    };
+    Ok(IndexCandidate {
+        sections,
+        git: snapshot,
+        coverage: coverage.summary(total),
+        omitted: coverage.has_omissions(),
+        inventory,
+    })
+}
+fn read_source(
+    root: &Path,
+    name: &str,
+    remaining: usize,
+) -> std::result::Result<String, &'static str> {
+    document_read::read(root, name, remaining)
+}
+fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
+    run(
+        "git",
+        &[
+            "diff",
+            "HEAD",
+            "--name-only",
+            "-z",
+            "--",
+            "doc",
+            "AGENTS.md",
+            "skills/oasis7-command-center/references/project-map.md",
+        ],
+        root,
+    )
+    .map(markdown_paths)
+}
+fn document_list(root: &Path) -> Result<Vec<u8>> {
+    run(
         "git",
         &[
             "ls-files",
@@ -57,86 +297,19 @@ pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
             "skills/oasis7-command-center/references/project-map.md",
         ],
         root,
-    )?;
-    let changed = run("git", &["diff", "HEAD", "--name-only", "-z", "--"], root)?;
-    let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
-    let mut sections = Vec::new();
-    let mut metadata = std::collections::HashMap::new();
-    let mut total = 0;
-    let mut names: Vec<&[u8]> = files
+    )
+    .map(markdown_paths)
+}
+fn markdown_paths(paths: Vec<u8>) -> Vec<u8> {
+    let mut result = Vec::new();
+    for path in paths
         .split(|b| *b == 0)
-        .filter(|b| b.ends_with(b".md"))
-        .collect();
-    names.sort_by_key(|name| {
-        let name = String::from_utf8_lossy(name);
-        let priority = if name == "doc/core/prd.md" {
-            0
-        } else if name == "doc/engineering/workflow/source-of-truth.md" {
-            1
-        } else if name.starts_with("doc/product/")
-            || name.ends_with("/prd.md")
-            || name == "AGENTS.md"
-        {
-            2
-        } else {
-            3
-        };
-        (priority, name.into_owned())
-    });
-    for name in names.into_iter().take(3000) {
-        let name = std::str::from_utf8(name)
-            .map_err(|_| Error::Invalid("non UTF-8 document path".into()))?;
-        if !name.ends_with(".md") {
-            continue;
-        }
-        let path = match safe_path(root, name) {
-            Ok(path) => path,
-            Err(_) => continue,
-        };
-        if std::fs::metadata(&path)?.len() > 1024 * 1024 {
-            continue;
-        }
-        let content = std::fs::read_to_string(path)?;
-        total += content.len();
-        if total > 16 * 1024 * 1024 {
-            break;
-        }
-        let dirty = changed.contains(name.as_bytes());
-        let revision = digest(content.as_bytes());
-        metadata.insert(name.to_owned(), lifecycle_metadata::parse(name, &content));
-        sections.extend(document_sections(name, &content, &revision, dirty, project));
+        .filter(|path| path.ends_with(b".md"))
+    {
+        result.extend_from_slice(path);
+        result.push(0);
     }
-    let indexed: std::collections::HashSet<String> =
-        sections.iter().map(|s| s.path.clone()).collect();
-    for value in metadata.values_mut().flatten() {
-        lifecycle_metadata::validate_indexed(value, &indexed);
-    }
-    for section in &mut sections {
-        section.lifecycle = metadata.get(&section.path).cloned().flatten();
-    }
-    let current_head = git(root, &["rev-parse", "HEAD"])?;
-    if current_head != project.head {
-        return Err(Error::Invalid(
-            "HEAD changed during indexing; refresh again".into(),
-        ));
-    }
-    Ok((
-        sections,
-        GitSnapshot {
-            status: String::from_utf8_lossy(&run(
-                "git",
-                &["status", "--porcelain=v2", "-z", "--branch"],
-                root,
-            )?)
-            .into(),
-            worktrees: String::from_utf8_lossy(&run(
-                "git",
-                &["worktree", "list", "--porcelain", "-z"],
-                root,
-            )?)
-            .into(),
-        },
-    ))
+    result
 }
 fn document_sections(
     path: &str,
@@ -147,26 +320,45 @@ fn document_sections(
 ) -> Vec<DocumentSection> {
     use std::collections::HashMap;
     let lines: Vec<&str> = content.lines().collect();
-    let headings: HashMap<usize, usize> = pulldown_cmark::Parser::new(content)
-        .into_offset_iter()
-        .filter_map(|(event, range)| match event {
-            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Heading { level, .. }) => Some((
-                content[..range.start]
+    // Use rendered inline text; source lines retain Markdown syntax and miss
+    // multiline Setext headings. Keep the original lines for source display.
+    let mut headings = HashMap::new();
+    let mut heading: Option<(usize, usize, String)> = None;
+    for (event, range) in pulldown_cmark::Parser::new(content).into_offset_iter() {
+        use pulldown_cmark::{Event, Tag, TagEnd};
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                let line = content[..range.start]
                     .bytes()
                     .filter(|b| *b == b'\n')
-                    .count(),
-                level as usize,
-            )),
-            _ => None,
-        })
-        .collect();
+                    .count();
+                heading = Some((line, level as usize, String::new()));
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some((_, _, title)) = &mut heading {
+                    title.push_str(&text);
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                if let Some((_, _, title)) = &mut heading {
+                    title.push(' ');
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((line, level, title)) = heading.take() {
+                    headings.insert(line, (level, title.trim().to_owned()));
+                }
+            }
+            _ => {}
+        }
+    }
     let mut result = Vec::new();
     let mut parents: Vec<(usize, String)> = Vec::new();
     let mut title = path.to_string();
     let mut key = format!("{path}#preamble");
     let mut start = 0;
-    for (line, text) in lines.iter().enumerate() {
-        let Some(level) = headings.get(&line) else {
+    for line in 0..lines.len() {
+        let Some((level, heading_title)) = headings.get(&line) else {
             continue;
         };
         if line > start {
@@ -180,7 +372,10 @@ fn document_sections(
                 project,
             ));
         }
-        title = text.trim_start_matches('#').trim().to_string();
+        title = heading_title.clone();
+        // Keep the existing source-based key contract for personal records.
+        // Display normalization must not silently rebind an old reading position.
+        let identity_title = lines[line].trim_start_matches('#').trim().to_owned();
         while parents.last().is_some_and(|(old, _)| old >= level) {
             parents.pop();
         }
@@ -189,14 +384,14 @@ fn document_sections(
             .rev()
             .find(|l| !l.trim().is_empty())
             .and_then(|l| anchor(l));
-        let explicit = adjacent_anchor.or_else(|| clause_id(&title));
+        let explicit = adjacent_anchor.or_else(|| clause_id(&identity_title));
         key = match explicit {
             Some(id) => format!("{path}#{id}"),
             None => {
                 let context: Vec<&str> = parents
                     .iter()
                     .map(|(_, t)| t.as_str())
-                    .chain(std::iter::once(title.as_str()))
+                    .chain(std::iter::once(identity_title.as_str()))
                     .collect();
                 format!(
                     "{path}#heading-{}",
@@ -204,7 +399,7 @@ fn document_sections(
                 )
             }
         };
-        parents.push((*level, title.clone()));
+        parents.push((*level, identity_title));
         start = line;
     }
     if start < lines.len() {
@@ -276,3 +471,7 @@ fn make_section(
         lifecycle: None,
     }
 }
+
+#[cfg(test)]
+#[path = "index_consistency_tests.rs"]
+mod consistency_tests;

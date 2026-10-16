@@ -37,7 +37,7 @@ fn assert_consensus_counters(world: &World) {
     let snapshot = world.snapshot();
     assert_eq!(
         snapshot.tick_consensus_total_record_count,
-        world.tick_consensus_records().len()
+        world.tick_consensus_records().len() as u64
     );
     assert_eq!(snapshot.tick_consensus_archived_record_count, 0);
 }

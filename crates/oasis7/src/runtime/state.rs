@@ -13,6 +13,7 @@ use super::agent_cell::{AgentCell, AgentIntentV2};
 use super::error::WorldError;
 use super::events::ModuleProfileChanges;
 use super::events::{DomainEvent, IndustryStage, MaterialTransitPriority};
+use super::formal_retained_history::FormalRetainedHistoryRootV1;
 use super::gameplay_state::{
     AgentClaimState, AllianceState, CrisisState, EconomicContractState,
     GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
@@ -52,6 +53,7 @@ mod body_projection;
 mod command_projection;
 pub(crate) mod core_policy_transition;
 mod factory_authority;
+mod formal_retention_projection;
 mod governance_identity_projection;
 pub(crate) mod industry_history_transition;
 mod industry_state;
@@ -504,6 +506,11 @@ pub struct ModuleReleaseManifestMappingState {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct WorldState {
     pub time: WorldTime,
+    /// Independent authenticated archive index. It is committed by the
+    /// enclosing Snapshot's state bytes and is trusted only when those exact
+    /// bytes are verified under a qualified formal anchor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_history_root: Option<FormalRetainedHistoryRootV1>,
     pub agents: BTreeMap<String, AgentCell>,
     /// Latest durable intent disposition used for idempotency after replacement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

@@ -22,8 +22,8 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [RunnerMetrics 动作与窗口](prd.md#runner-metrics-action-window-contract) | 动作去重、终态与同范围分母，缺测/截断可识别 | [指标设计](#runner-metrics-action-window-design) | Simulator Runner/runtime-live/Metrics 消费者 | 不改变动作执行或业务结算，不把目标表达称为现行 wire |
-| [Kernel 规则成本兼容边界](prd.md#kernel-rule-cost-contract) | 保留历史 adapter 的决策聚合行为；不得由 `cost` 字段推导自动结算或持久成本记录。 | [cost 边界](design.md#kernel-rule-cost-boundary) | `runtime_engineer`；simulator hook 与正式 runtime 规则执行链。 | 不启用新的扣账规则，不扩展模块生命周期、WASM ABI 或持久化能力。 |
+| [professional_acceptance: runner-metrics-action-window-contract（RunnerMetrics 动作与窗口）](prd.md#runner-metrics-action-window-contract) | 动作去重、终态与同范围分母，缺测/截断可识别 | [指标设计](#runner-metrics-action-window-design) | Simulator Runner/runtime-live/Metrics 消费者 | 不改变动作执行或业务结算，不把目标表达称为现行 wire |
+| [professional_acceptance: kernel-rule-cost-contract（Kernel 规则成本兼容边界）](prd.md#kernel-rule-cost-contract) | 保留历史 adapter 的决策聚合行为；不得由 `cost` 字段推导自动结算或持久成本记录。 | [cost 边界](design.md#kernel-rule-cost-boundary) | `runtime_engineer`；simulator hook 与正式 runtime 规则执行链。 | 不启用新的扣账规则，不扩展模块生命周期、WASM ABI 或持久化能力。 |
 
 ## 3. 设计结构
 - 交互层：Viewer / Launcher / Web Console / UI 流程。
@@ -50,6 +50,8 @@
 
 ### 规则成本字段
 
+产品 N/A；reason=本条维护历史 simulator adapter 的决策数据兼容，聚合字段不产生新的余额检查、扣账或独立持久成本记录；scope=仅 KernelRuleDecision.cost 的合并与不自动结算边界。该适用性不覆盖动作自身资源变化、正式 runtime 的规则成本结算或其产品结果，亦不免除下列非零 cost、溢出与持久化证据的未证明边界。
+
 `KernelRuleDecision.cost` 是历史 adapter 保留的决策数据。`crates/oasis7/src/simulator/kernel/types.rs::merge_kernel_rule_decisions` 聚合 cost；`kernel/step.rs::execute_action_envelope_at_time` 随后只按 verdict、override 和拒绝 notes 决定动作执行，不使用 cost 进行余额检查或资源扣账，也不把聚合 cost 作为独立事件写入 journal。动作自己的资源变化由其实现负责，不能据此推断所有动作都无成本。
 
 正式 runtime 的 `RuleDecision` 与该 adapter 分属不同执行入口：`crates/oasis7/src/runtime/world/step.rs` 检查资源缺口并应用 `decision.cost`，成本应用失败形成结构化拒绝。保留 simulator 的兼容行为不改变正式 runtime 的结算合同。若以后让 simulator cost 生效，应明确付款主体、数值及原子性、事件/replay、旧决策与旧消费者兼容，并以针对该行为的回归验证替代对字段存在的推断。
@@ -64,6 +66,8 @@
 
 <a id="runner-metrics-action-window-design"></a>
 ## 7. 跨 Runner 的动作指标设计
+
+产品 N/A；reason=动作去重、终态关联和同范围聚合是跨 Runner 的工程统计机制，不单独新增玩家任务完成率、等待时延或结算承诺；scope=仅本节已有统计机制的专业归属，不覆盖实际 Metrics 消费者结果。消费者与验收摘要区分未测、partial、有效测量及统计范围的原义务仍适用；producer、兼容 wire 与各实际消费者的承接和验证仍是未闭合范围，不能以此 N/A、已有数值字段或文档检查代签。
 
 此处补齐 #4478 的统计合同；基准 `5e930face77dd284bbba6186fd997e7e63fa9164` 的 `runtime_live/support.rs::runtime_metrics` 仍取 `journal.len()`，普通 `simulator/runner.rs::metrics` 的 `success_rate` 仍是占位值。这些事实不能作为正确成功率的实现证据。
 
@@ -87,8 +91,8 @@
 - 索引入口：`doc/world-simulator/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+- 历史建档（2026-03-09，ROUND-006）：模块级 `design.md` 入口来源；原 Task 未唯一定位，记录保留，不作为当前排期。
+- 持续结构要求：高复杂度专题在对应 `*.design.md` 维护细化合同；不恢复旧 M2 任务。
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
@@ -100,5 +104,5 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [RunnerMetrics 动作与窗口](prd.md#runner-metrics-action-window-contract) | [指标设计](#runner-metrics-action-window-design) | 唯一动作、最终结果、同窗口分母与未测语义 | [runtime-live 基线](../../crates/oasis7/src/viewer/runtime_live/tests/runtime_live_core.rs)及本页多事件/拒绝/系统事件/空样本/截断/恢复/wire 七类待执行回归；普通 Runner 与 runtime-live 分别观察，不以一方代签另一方 | 实施 PR 的候选、输入 action/event、计数分母、序列化结果及实际命令 | 文档不修复当前代码；不证明玩家等待时延或 job 最终完成率 |
-| [Kernel 规则成本兼容边界](prd.md#kernel-rule-cost-contract) | [cost 边界](design.md#kernel-rule-cost-boundary) | 当前 cost 聚合不自动结算；已有 deny/modify 与事件后 hook 行为保持原义。 | 固定候选，回读 `kernel/types.rs::merge_kernel_rule_decisions` 与 `kernel/step.rs::execute_action_envelope_at_time`；[kernel_rule_decisions.rs](../../crates/oasis7/src/simulator/tests/kernel_rule_decisions.rs) 的 `kernel_pre_action_rule_deny_rejects_action`、`kernel_pre_action_rule_modify_overrides_action`、`post_action_hook_receives_event_after_modify_decision` 是相关 L1 hook 基线。文档修补核对源码和既有断言，行为改动时运行适用回归。 | PR 的候选、源码回读及实际运行结果，明确区分未运行的测试计划。 | 现有用例没有非零 cost 不扣账的专门断言；不能据此声称该行为已有自动回归、聚合溢出已验证或成本已持久记录。 |
+| [professional_acceptance: runner-metrics-action-window-contract（RunnerMetrics 动作与窗口）](prd.md#runner-metrics-action-window-contract) | [指标设计](#runner-metrics-action-window-design) | 唯一动作、最终结果、同窗口分母与未测语义 | [runtime-live 基线](../../crates/oasis7/src/viewer/runtime_live/tests/runtime_live_core.rs)及本页多事件/拒绝/系统事件/空样本/截断/恢复/wire 七类待执行回归；普通 Runner 与 runtime-live 分别观察，不以一方代签另一方 | 实施 PR 的候选、输入 action/event、计数分母、序列化结果及实际命令 | 文档不修复当前代码；不证明玩家等待时延或 job 最终完成率 |
+| [professional_acceptance: kernel-rule-cost-contract（Kernel 规则成本兼容边界）](prd.md#kernel-rule-cost-contract) | [cost 边界](design.md#kernel-rule-cost-boundary) | 当前 cost 聚合不自动结算；已有 deny/modify 与事件后 hook 行为保持原义。 | 固定候选，回读 `kernel/types.rs::merge_kernel_rule_decisions` 与 `kernel/step.rs::execute_action_envelope_at_time`；[kernel_rule_decisions.rs](../../crates/oasis7/src/simulator/tests/kernel_rule_decisions.rs) 的 `kernel_pre_action_rule_deny_rejects_action`、`kernel_pre_action_rule_modify_overrides_action`、`post_action_hook_receives_event_after_modify_decision` 是相关 L1 hook 基线。文档修补核对源码和既有断言，行为改动时运行适用回归。 | PR 的候选、源码回读及实际运行结果，明确区分未运行的测试计划。 | 现有用例没有非零 cost 不扣账的专门断言；不能据此声称该行为已有自动回归、聚合溢出已验证或成本已持久记录。 |

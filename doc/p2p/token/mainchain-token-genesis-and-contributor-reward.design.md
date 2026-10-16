@@ -96,3 +96,69 @@
 - limited preview 期间先按独立 reward reserve 多签执行。
 - 后续先绑定真实地址并跑 QA 最终审计，再决定是否进入 mint 准备。
 - 更后续根据真实奖励轮次与治理成熟度，再决定 early contributor reserve 的长期执行载体。
+
+
+## 6. 本次规范化范围、上下游与状态
+
+本次仅规范化既有经济合同的身份、需求接收和验证计划；原设计正文、参数、接口、签名策略、权限、计划和实现声明原样保留。产品结果由世界规则根定位，专业 PRD 继续拥有规则/数值；P2P/runtime、治理维护者与 QA 分别负责技术、治理和验收，涉及贡献奖励的资格/审批仍归 README reward governance。这里的设计关系和 planned 方法不启用资产、不授权交易，也不是本轮业务测试或生产证据。
+
+- 当前基线：2026-10-15，固定文档提交 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；本次只核对文档关系，当前实现与完整验收未核实。
+- 目标：原独立经济结果可从产品条款追至专业规则、有限设计和真实验证入口。
+- 差距：下列全部业务场景尚未在本次候选运行；已有源码、模板、局部夹具或历史结果不外推完整实现/生产安全。
+- 裁剪：不改变技术合同、协议/ABI、算法、权限或状态模型，仅追加有限承接和 planned 验证；原文未展开的技术细节仍由专业原条款与后续实现评审承担，不填空N/A或宣称十二段完整设计。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation) | 按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 | [冻结分配可核算到各bucket与recipient](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-allocation) | 原专业P2P/runtime与治理owner、QA；涉及奖励资格由README治理权威处理 | 不变更总量/比例/账户，不执行InitializeMainTokenGenesis |
+| Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control) | 项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 | [控制主体与个人受益及释放边界分别可审计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-control) | 原专业P2P/runtime与治理owner、QA；涉及奖励资格由README治理权威处理 | 不改控制人/vesting/释放额度，不把协议储备当团队库存 |
+| Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze) | slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 | [逻辑冻结不等于真实mint-ready](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-freeze) | 原专业P2P/runtime与治理owner、QA；涉及奖励资格由README治理权威处理 | 本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易 |
+| Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward) | 独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 | [独立reserve只消费最终复核的批准记录](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-reward) | 原专业P2P/runtime与治理owner、QA；涉及奖励资格由README治理权威处理 | 本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次 |
+
+## 7. 既有结果的有限设计承接
+
+<a id="des-economic-genesis-allocation"></a>
+### 冻结分配可核算到各bucket与recipient
+
+Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation) / [产品唯一声明](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-allocation)。
+
+按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 本节接受上述已采用结果；具体字段/公式/参数和执行前提仍按配对PRD第4章，不改变原第2至5章。失败/恢复仍按原专业规则拒绝、保留状态或显式降级，不新增自动修复、重发资产或外部许可。未覆盖边界：不变更总量/比例/账户，不执行InitializeMainTokenGenesis。
+
+<a id="des-economic-genesis-control"></a>
+### 控制主体与个人受益及释放边界分别可审计
+
+Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control) / [产品唯一声明](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-control)。
+
+项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 本节接受上述已采用结果；具体字段/公式/参数和执行前提仍按配对PRD第4章，不改变原第2至5章。失败/恢复仍按原专业规则拒绝、保留状态或显式降级，不新增自动修复、重发资产或外部许可。未覆盖边界：不改控制人/vesting/释放额度，不把协议储备当团队库存。
+
+<a id="des-economic-genesis-freeze"></a>
+### 逻辑冻结不等于真实mint-ready
+
+Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze) / [产品唯一声明](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-freeze)。
+
+slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 本节接受上述已采用结果；具体字段/公式/参数和执行前提仍按配对PRD第4章，不改变原第2至5章。失败/恢复仍按原专业规则拒绝、保留状态或显式降级，不新增自动修复、重发资产或外部许可。未覆盖边界：本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。
+
+<a id="des-economic-genesis-reward"></a>
+### 独立reserve只消费最终复核的批准记录
+
+Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward) / [产品唯一声明](../../product/world-rules-core-gameplay/prd.md#req-wr-economic-genesis-reward)。
+
+独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 本节接受上述已采用结果；具体字段/公式/参数和执行前提仍按配对PRD第4章，不改变原第2至5章。失败/恢复仍按原专业规则拒绝、保留状态或显式降级，不新增自动修复、重发资产或外部许可。未覆盖边界：本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。
+
+## 8. 验证设计
+
+### 11.1 验证映射表
+
+所有方法沿用原专业适用场景与层级，固定同一候选、配置、输入和环境后逐项保留实际结果；当前未运行。文档结构检查不能代替业务测试。
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation) | [冻结分配可核算到各bucket与recipient](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-allocation) | 按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 | planned；[该独立结果的QA输入/方法/oracle/失败边界](../../../testing-manual.md#qa-economic-genesis-allocation)；固定同一候选、配置与受控fixture，沿原专业适用层级，当前未运行；局部定义不代完整矩阵。 | 固定参数版本、七桶金额与rounding对账，按[主手册证据规范](../../../testing-manual.md#证据规范)记录实际版本/环境/结果 | 不变更总量/比例/账户，不执行InitializeMainTokenGenesis；结构检查不证明业务验收 |
+| Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control) | [控制主体与个人受益及释放边界分别可审计](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-control) | 项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 | planned；[该独立结果的QA输入/方法/oracle/失败边界](../../../testing-manual.md#qa-economic-genesis-control)；固定同一候选、配置与受控fixture，沿原专业适用层级，当前未运行；局部定义不代完整矩阵。 | 真实控制映射、受益拆分、释放计划与阻断依据，按[主手册证据规范](../../../testing-manual.md#证据规范)记录实际版本/环境/结果 | 不改控制人/vesting/释放额度，不把协议储备当团队库存；结构检查不证明业务验收 |
+| Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze) | [逻辑冻结不等于真实mint-ready](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-freeze) | slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 | planned；[该独立结果的QA输入/方法/oracle/失败边界](../../../testing-manual.md#qa-economic-genesis-freeze)；固定同一候选、配置与受控fixture，沿原专业适用层级，当前未运行；局部定义不代完整矩阵。 | 绑定证据、完整pre-mint清单与该次QA verdict，按[主手册证据规范](../../../testing-manual.md#证据规范)记录实际版本/环境/结果 | 本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易；结构检查不证明业务验收 |
+| Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；[专业接受](mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward) | [独立reserve只消费最终复核的批准记录](mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-reward) | 独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 | planned；[该独立结果的QA输入/方法/oracle/失败边界](../../../testing-manual.md#qa-economic-genesis-reward)；固定同一候选、配置与受控fixture，沿原专业适用层级，当前未运行；局部定义不代完整矩阵。 | canonical批准行、最终金额复核、审批及distribution引用，按[主手册证据规范](../../../testing-manual.md#证据规范)记录实际版本/环境/结果 | 本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次；结构检查不证明业务验收 |
+
+## 9. 既有决策、风险与未决
+
+原第4至5章及配对PRD的已采用决定、技术风险和计划完整保留。具体参数变化、经济安全结论、地址/控制绑定、签名治理、真实批准和执行许可不得由身份登记消除；有实质冲突时停止对应部分并由原owner裁决。本次不新增 Task 或冒用历史任务为当前交付；后续实际 PR 应引用本次适用身份与真实证据。

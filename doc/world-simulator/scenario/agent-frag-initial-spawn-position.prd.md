@@ -44,6 +44,30 @@
   - `first_recipe_relevance`: 该 frag 可能支持的第一工业目标或首个配方方向。
 - Edge case: 若首局推荐采集目标但缺少材质预期或第一工业目标关联，标记为 `starter_frag_hint_missing`；该问题属于玩家侧引导可读性，不改变出生或采矿规则。
 
+<a id="fsp-selection-contract"></a>
+### 既有专业条款身份：确定性出生选择
+
+Trace ID: O7-REQ-4d98352e-f146-4672-b159-b99545708c78
+
+仅标识 §1、§2、§4 已采用的初始化选择义务：有 `frag-` 候选时优先该集合，同 seed、同场景输入保持确定性；无 frag 的既有策略不在本专题大改。此行的工程范围是 `build_world_model` 候选选择，不授予玩家 Agent 或资源，也不决定正式首 Agent 的 seed/chain 位置身份。精确承接见[选择设计](agent-frag-initial-spawn-position.design.md#fsp-selection-design)。
+
+<a id="fsp-standoff-contract"></a>
+### 既有专业条款身份：初始化 standoff 与边界
+
+Trace ID: O7-REQ-3bef4fa6-57cd-41f6-baa3-74272ea8adcc
+
+仅标识 §2/§4 原初始化位置约束与降级：严格正上方、约 50m 表面间距、确定性递减与最终中心回退。此工程身份不包含 Viewer 消费保留或玩家可辨认结果。原数值、坐标轴、空间边界和配置不变；不是新增导航、碰撞求解或正式世界 fallback。精确承接见[站位设计](agent-frag-initial-spawn-position.design.md#fsp-standoff-design)。
+
+<a id="fsp-viewer-preservation-contract"></a>
+### Viewer 消费保留的独立产品关系
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；§2 原“Viewer 渲染阶段保留初始化 standoff，不将 Agent 强制贴回 frag 表面”保持不变，独立作为[舞台相关对象可读](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)的有限消费者关系，由[Viewer 保留设计](agent-frag-initial-spawn-position.design.md#fsp-viewer-preservation-design)承接，不纳入上面的纯坐标工程身份或其产品 N/A。该关系不反推所有 surface 固定坐标，不保证任意相机无遮挡，也不代签完整 stage001/AC 或改变其原状态。
+
+<a id="fsp-starter-reason-contract"></a>
+### 既有条件提示合同的来源
+
+Trace refs: O7-REQ-f6aebb85-7a07-4e0b-a3cf-f23655f293a2；唯一声明位于[产品 FS-7 原条件子义务](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#fs7-starter-resource-reason)。本专题 §2/§4 和 DEC-FSP-001 仅承接推荐首个 frag 时的粗粒度材质预期、当前可达性理由与第一工业目标关联，不承诺产出，也不把采矿增加为每个首局 profile 的前置。五个既有字段和 `starter_frag_hint_missing` 边界保持原义；[理由设计](agent-frag-initial-spawn-position.design.md#fsp-reason-design)不代签整个 FS-7 或完整首局体验。
+
 ## 5. Risks & Roadmap
 - FSP1：设计文档落地。
 - FSP2：初始化逻辑改造（frag 优先 + 站位偏移）。

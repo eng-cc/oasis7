@@ -3,7 +3,7 @@
 ## Purpose
 This evidence records the current operator-facing `public_testnet` deployment inventory after the 2026-06-23 package update and catch-up run.
 
-It does not replace the frozen governed bootstrap topology in `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`. That older evidence remains the bootstrap artifact truth for the two-validator / two-observer governed topology. This file records the current live managed fleet that operators must update and verify.
+It does not replace the frozen governed bootstrap topology in `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`. That older evidence remains the bootstrap artifact truth for the two-validator / two-observer governed topology. This file retains the managed-fleet inventory and package/recovery constraints. Its date does not establish current deployment or fleet health; operators must first capture fresh Phase A deployment truth through the [stable bootstrap runbook](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary).
 
 No secret values are recorded here.
 
@@ -37,6 +37,8 @@ The `Testnet Packages` workflow uses `package_scope`:
 Full managed-fleet packaging therefore requires coordinated `all_existing` plus `linux_macos_arm64` runs against the same requested ref/commit. Operators must verify each run's BUILDINFO/SHA256SUMS and record the two run IDs; one `all_existing` run is not evidence that the arm64 observer was packaged.
 
 ## Deployment-Closure Health Contract
+The [current Phase G authority](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#13-phase-g---final-health-verification) controls actual closure. Its signed 204 proof and proof-aware collector boundary must be satisfied first: the status-shaped collector cannot accept an unauthenticated 204 status URL or an unverified projection, and managed-five-node closure remains blocked until the approved proof-aware path exists. The identity/checkpoint checks below are necessary conditions, not evidence that this blocker is cleared.
+
 Use `p2p-public-testnet-fleet-health.py --managed-five-node` for this managed-fleet deployment closure. The preset requires exactly these logical identities, once each: `sequencer` (ECS 204 provider), `storage` (ECS 205 provider), `linux-lan-observer`, `windows-observer`, and `macos-observer`. It rejects omissions, duplicates, renamed identities, and unknown nodes before it writes health evidence. The collector's generic mode is for explicitly non-closure diagnostics only and cannot support a managed-fleet healthy conclusion.
 
 Managed closure additionally requires both canonical providers to expose `chain_proof.latest_execution_checkpoint` with `schema_version >= 2`, a non-empty `checkpoint_id`, a 64-hex `manifest_hash`, and positive `height`. The two providers must report the same checkpoint ID and manifest hash, with an absolute height delta no greater than one. Missing/null/v1/malformed/mismatched/incompatible provider evidence blocks the closure; generic collector output is not a substitute.
@@ -49,10 +51,12 @@ Managed closure additionally requires both canonical providers to expose `chain_
 5. Update observers one at a time. For the macOS arm64 observer, preflight the package/host/launchd target and back up runtime/config/provenance first; require the launchd plist `Label` to equal the label in its concrete target; stop the original service; then create and verify the persistent-state backup while it is stopped. State roots must be unique, non-nested, physically resolved directories strictly below the physically resolved node root with no symlink component, and must not overlap runtime, config, deployment provenance, or launchd plist paths. Binary or provenance mutation is forbidden until both backup phases pass; every bootstrap must re-confirm the exact launchd target before endpoint health acceptance.
 6. Generate the macOS operator script through `p2p-public-testnet-package-rollout.py`. A bootout error or stopped-state backup failure must restart the untouched original service and verify `/healthz` reports `{"ok":true}` while `/v1/chain/status` reports `{"running":true}`. Status remains the authority-failure inspection surface. Any post-mutation failure must first copy the failed state under the attempt root, then replace active state with the stopped pre-upgrade snapshot, restore runtime/config/provenance, bootstrap the validated launchd domain, and verify those endpoint-specific fields. Authority failure always emits state-sync escalation, including when rollback fails.
 7. If a validator reports `execution driver peer mismatch`, recover the validator pair first. Do not seed observers from a pre-recovery validator state.
-8. If observers were seeded before validator recovery, reseed those observers again from recovered storage/sequencer state.
+8. After validator recovery, follow the current runbook’s [recovery boundary](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#1-purpose): recovery consumes verified signed V2 checkpoint protocol artifacts. Direct copying from a running validator, including `seed-from-remote`, `cp`, `tar`, or `rsync`, is prohibited; the earlier reseed-from-validator-state wording is historical, not a current execution instruction.
 9. Finish with a five-node health snapshot using `--managed-five-node`; do not use one ready node as a proxy for fleet readiness.
 
 ## Reseed Triggers
+These symptoms trigger recovery assessment under the current runbook; they do not authorize old directory-copy seed procedures, a reset, or bypassing signed-checkpoint/closure verification.
+
 Reseed is required or strongly recommended when:
 
 1. The node is beyond the retained checkpoint/gap-sync recovery window.

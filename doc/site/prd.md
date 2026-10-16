@@ -19,6 +19,8 @@
 - 测试与发布参考: `testing-manual.md`
 
 ## 里程碑
+
+M1–M3 仅是 2026-03 的历史建档/同步记录，未核到唯一原执行 Task，原文保留，不视为当前进度；长期追踪按实际 PR、CI 与评审执行，Issue/Project 按需。
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
 - M2 (2026-03-07): 完成站点手册镜像语义同步与状态文档回写。
 - M3 (2026-03-07): 完成对外“可玩状态”口径与真实产品状态对齐。
@@ -44,6 +46,7 @@
   - SC-11: 移动端首页在脚本失效时仍保留可达导航入口，且键盘用户进入页面后可直接跳过顶栏进入正文。
   - SC-12: `site/doc/{cn,en}/index.html` 必须明确定位为首页之后的次级深读入口，不得继续充当第一次对外介绍项目的主宣传面，也不得指向缺失的首页锚点。
 
+<a id="site-page-requirements"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - 新访问者：需要快速理解项目价值与安装入口。
@@ -66,7 +69,11 @@
 - PRD-SITE-009: As a 新访问者, I want the homepage to explain the game genre, player role, and current availability before technical validation details, so that I can decide within the first screen whether oasis7 is worth following.
 - PRD-SITE-010: As a 新访问者, I want the homepage to separate current public entry, builder verification, and future platform direction, so that I do not mistake preview validation or roadmap language for a live player promise.
 - PRD-SITE-011: As a 技术用户或自动化代理, I want a stable public `oasis7` skill Markdown URL, so that I can fetch the Local Provider workflow without cloning the repo first.
+<a id="prd-site-012"></a>
 - PRD-SITE-012: As a `producer_system_designer` or external collaborator, I want a public HTML roadshow deck inside the site, so that I can present the project in a controlled sequence without rebuilding the public homepage into a slide script.
+
+Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；既有产品结果由 [接入发行 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011)唯一声明；本专业原文继续拥有静态发布、导航、维护权限及验收细节，不改变以下原要求或决策。
+
 - Critical User Flows:
   1. Flow-SITE-001: `访问首页 -> 理解价值与入口 -> 跳转安装/文档`
   2. Flow-SITE-002: `发布前执行链接检查 -> 处理断链 -> 复测通过`
@@ -87,7 +94,7 @@
 | 对外状态口径 | 产品状态（playable / preview）、禁用词列表、状态标识文案 | 发布前校验首页与文档入口文案是否匹配真实状态 | `draft -> aligned -> published` | 真实状态字段优先于营销文案 | 模块维护者可改，发布责任人复核 |
 | 首页入口分层与 claim gate | 首屏定位、默认公开访问面、builder 验证入口、未来方向、下载边界、中英镜像 claim | 发布前校验首页是否把当前公开能力/开发者路径/未来平台目标分层表达，并校验关键 claim 中英一致 | `draft -> aligned -> published -> gated` | 先公开访客入口，再 builder 验证，再 future roadmap；诊断路径不得进入 primary CTA | 模块维护者可改，发布责任人复核 |
 | 公开 skill 镜像 | skill 名称、摘要、raw Markdown 链接 | docs hub 直跳 raw skill Markdown；raw URL 可直接抓取 | `draft -> mirrored -> published -> refreshed` | 只保留 raw Markdown 分发入口；内容必须与 repo-local skill 真值一致 | 模块维护者可改，发布责任人复核 |
-| HTML 路演 Deck | deck 入口 URL、页面语言、固定 slide 顺序、当前状态提示、回链入口 | docs hub / 公开入口直跳 deck；键盘、触摸与 URL hash 导航可用 | `draft -> linked -> published -> revised` | deck 负责顺序化讲述项目，不替代首页公开边界，也不替代 PRD 真值 | 模块维护者可改，发布责任人复核 |
+| <a id="deck-functional-contract"></a>HTML 路演 Deck | deck 入口 URL、页面语言、固定 slide 顺序、当前状态提示、回链入口 | docs hub / 公开入口直跳 deck；键盘、触摸与 URL hash 导航可用 | `draft -> linked -> published -> revised` | deck 负责顺序化讲述项目，不替代首页公开边界，也不替代 PRD 真值 | 模块维护者可改，发布责任人复核 |
 | 首页游戏优先叙事 | 游戏定位、玩家角色、局势后果链、真实证据、预览边界、下载/深读路径 | 访客按单一阅读路径理解游戏，再按意图进入证据、下载或文档 | `dense -> compressed -> evidenced -> gated` | 首屏与后果链优先；builder、架构和信任链细节渐进披露；最多五个首要导航入口 | 模块维护者可改，视觉交互与对外口径角色复核 |
 - Acceptance Criteria:
   - AC-1: site PRD 定义页面层级、内容同步和发布链路。
@@ -104,11 +111,23 @@
   - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。
   - AC-13: `site/doc/cn/index.html` 与 `site/doc/en/index.html` 的 hero、primary CTA 与入口卡片必须明确说明“首页优先、docs hub 次级深读”，并且不允许继续链接到缺失的首页锚点。
   - AC-14: 公开站点必须新增可直接抓取的 `site/skills/oasis7.md`；docs hub 中英页都要能直接跳达这个 raw skill 入口。
+  <a id="ac-15"></a>
   - AC-15: 公开站点必须新增一个可直接访问的 HTML deck 页面，用固定 slide 顺序说明项目定位、玩法差异、当前阶段与后续路径，且不把首页改造成演示文稿模式。
+
+  Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[SC-11 原义接收](../product/player-entry-distribution/prd.md#sc-entry-011)，本 AC 原义与适用边界保持。
+
+  <a id="ac-16"></a>
   - AC-16: deck 实现必须适配当前 `site/**` 静态发布链路；允许引入浏览器端演示库，但不得要求新增 Node/Vite/SPA 构建步骤才能发布到 Pages。
+
+  Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[SC-11 原义接收](../product/player-entry-distribution/prd.md#sc-entry-011)，本 AC 原义与适用边界保持。
+
+  <a id="ac-17"></a>
   - AC-17: docs hub 或首页必须存在清晰 deck 入口；deck 页面本身必须保留回到首页 / docs hub 的导航，并显式标注当前仍为 `limited playable technical preview`，不是 closed beta 或正式玩家发布。
+
+  Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[SC-11 原义接收](../product/player-entry-distribution/prd.md#sc-entry-011)，本 AC 原义与适用边界保持。
+
   - AC-18: 中英首页必须按“游戏与玩家位置 -> 一局后果链 -> 当前真实证据与预览边界 -> 下载/深读/跟进”形成单一主阅读路径，减少重复解释，不得把 builder 术语重新前置。
-  - AC-19: 桌面首页首要导航入口不超过五个；次级文档、故事、架构和开发者路径通过页尾或渐进披露保持可达。
+  - AC-19: 桌面首页首要导航入口不超过五个，并按已有内容分配；当前采用玩法、开发进展、世界观、技术预览。世界观到明确标为小说的导读；空世界记录留在页尾或次级状态。文档、架构和开发者路径通过页尾或渐进披露保持可达。
   - AC-20: 首页使用真实 Viewer 截图时必须标注受控场景与证据边界，不得把截图表达成公开网页可玩入口或正式发布证明。
   - AC-21: 1440x900、390x844 与 360x800 的浏览器证据必须确认首屏层级、无横向溢出、移动端导航与 CTA 可达；既有 link/manual/download/homepage-claim gates 必须继续通过。
   - AC-22: 首页对 persistent 的表述必须限定为世界状态、历史与后果可持续/可回放；不得承诺 7x24 公共托管、在线 SLA，或本地 runtime 停止后仍后台推进。
@@ -151,7 +170,7 @@
   - `site/skills/oasis7.md`
 ### 当前 Pages、下载与镜像合同
 - `site/index.html` 与 `site/en/index.html` 是公开 CN/EN 首页；`site/assets/app.js` 和 `site/assets/styles.css` 是其静态交互与无脚本降级的实现面。它们必须继续把 `viewer` 表达为默认 Web 验证入口、把 `software_safe` 限定为兼容 alias，并保持 `limited playable technical preview` 的公开边界。
-- 首页的 Canvas、指针响应、滚动高亮和时间线筛选仅是渐进增强，不能改变无 JS、键盘或 reduced-motion 访问下的内容、导航、CTA 与公开 claim；共享架构图必须保留稳定 SVG 引用和可访问语义。具体视觉层级、响应式和页面覆盖规则以 `doc/site/design.md` 为准。
+- 首页不初始化已隐藏的 Canvas；保留的滚动高亮等交互仅是渐进增强，不能改变无 JS、键盘或 reduced-motion 访问下的内容、导航、CTA 与公开 claim；共享架构图必须保留稳定 SVG 引用和可访问语义。具体视觉层级、响应式和页面覆盖规则以 `doc/site/design.md` 为准。
 - Pages 发布在 `.github/workflows/pages.yml` 中先执行四个当前门禁：`scripts/site-link-check.sh`、`scripts/site-homepage-claim-check.sh`、`scripts/site-manual-sync-check.sh` 与 `scripts/site-download-check.sh`；任一失败都不应部署静态站点。前两个分别守本地资源可达性与 CN/EN claim/no-JS 导航，后两个分别守 Viewer 手册镜像和下载面。
 - 下载面只分发 `eng-cc/oasis7` GitHub Releases 的 Windows `.exe`、macOS `.dmg`、Linux `.deb` 与 checksum；Linux 运维恢复工具另以带 manifest/checksum 的 `oasis7-linux-x64-ops-tools.tar.gz` 独立资产提供。首页可按平台选择主 CTA，但必须在下载前保留版本、安装、信任与支持边界。资产存在或检查通过不构成普通用户广泛发行、Windows codesigning 或 macOS notarization 已就绪的声明。
 - 升级仅支持重新下载最新主包并手动覆盖/替换。`config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` 是需要用户先备份的相对路径状态；不得把该说明升级为应用内更新、自动迁移或跨目录状态保留承诺。
@@ -205,7 +224,7 @@
 | PRD-SITE-009 | homepage-game-explainer + public-copy-tightening | `test_tier_required` | 中英首页首屏与 docs hub 首段信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
 | PRD-SITE-010 | homepage-entry-claim-boundary-hardening + public-copy-tightening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、docs hub 角色定位检查、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
 | PRD-SITE-011 | public-oasis7-skill | `test_tier_required` | 中英 docs hub raw skill 入口核对、`site/skills/oasis7.md` 对 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh` 与 `oasis7_game_launcher` 当前公开命令的语义一致性检查 | 对外 skill 可获取性、自动化抓取稳定性 |
-| PRD-SITE-012 | html-roadshow-deck | `test_tier_required` | docs hub / deck 入口核对、静态链接检查、deck 页面导航与当前状态文案核对 | 对外顺序化讲述能力、静态发布兼容性 |
+| <a id="validation-site-012"></a>PRD-SITE-012 | html-roadshow-deck | `test_tier_required` | docs hub / deck 入口核对、静态链接检查、deck 页面导航与当前状态文案核对 | 对外顺序化讲述能力、静态发布兼容性 |
 | PRD-SITE-001/004/009/010 | github-pages-ui-content-refresh-20260717 | `test_tier_required` | 首页 claim/link/manual/download gates、CN/EN 结构核对、桌面与移动端浏览器截图及交互 smoke | 首访理解效率、公开口径、响应式视觉层级 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
@@ -221,6 +240,6 @@
 | DEC-SITE-009 | Pages 发布前新增 homepage claim/parity gate 与基础无脚本/a11y 约束 | 继续只依赖链接/手册/下载静态检查 | 首页承担最高风险的对外承诺，需要单独门禁而不是把口径漂移留给人工发现。 |
 | DEC-SITE-010 | docs hub 公开层只承担“深读/验证导航”，第一次对外介绍仍以首页为主 | 让 docs hub 与首页并列承担首次产品介绍 | docs hub 混入太多协作/验证语境时，陌生访客会更快把站点误读成工程入口而不是游戏公开面。 |
 | DEC-SITE-011 | 对外 `oasis7` skill 只保留站内 raw Markdown 直链，并在 docs hub 暴露入口 | 新增独立 HTML 说明页或只暴露 GitHub blob 路径 | 用户目标是直接获取 skill 内容；单一 raw 入口更短、更稳定，也减少公开镜像维护面。 |
-| DEC-SITE-012 | 路演材料以站内 HTML deck 形式挂在 `site/` 下，并复用静态 Pages 链路 | 继续只靠首页/长文档承担路演，或为 deck 单独引入 SPA 构建工程 | deck 需要的是顺序化讲述，不是新的前端系统；保持静态站发布可减少维护面并保留直接访问能力。 |
+| <a id="dec-site-012"></a>DEC-SITE-012 | 路演材料以站内 HTML deck 形式挂在 `site/` 下，并复用静态 Pages 链路 | 继续只靠首页/长文档承担路演，或为 deck 单独引入 SPA 构建工程 | deck 需要的是顺序化讲述，不是新的前端系统；保持静态站发布可减少维护面并保留直接访问能力。 |
 | DEC-SITE-013 | 首页采用游戏优先的叙事压缩，保留现有视觉语言、claim gate 与静态发布基础 | 只做表面样式微调，或改造成重动效沉浸式展示 | 当前主要问题是重复内容与同质卡片削弱层级；压缩信息架构能改善首访理解，同时避免概念图和新交互扩大承诺与回归风险。 |
 | DEC-SITE-014 | 将当前 Pages、下载、镜像、信任与手动升级合同收敛到 site root PRD/project，并把 dated 专题降为历史证据 | 继续让 dated release-pipeline 专题承担当前首读真值 | 可执行脚本、workflow 与 root authority 已是当前合同；保留旧专题为默认入口会把历史 CI/就绪记录误读为当前发布承诺。 |

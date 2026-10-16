@@ -22,8 +22,41 @@ export type PrivateInputRef = { bindingId: string, bindingVersion: number, entry
 export type PrivateInputPreview = { source: PrivateInputRef, text: string, attachmentBytes: number, maxInputBytes: number, };
 export type Project = { id: string, path: string, gitCommonDir: string, branch: string | null, head: string, environment: string, };
 export type SourceStatus = { kind: string, state: string, lastAttempt: string | null, lastSuccess: string | null, sourceRevision: string | null, generation: string, coverage: string, error: string | null, };
-export type DocumentLifecycle = { status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
+export type DocumentLifecycle = {
+/**
+ * Original declaration, including code delimiters and notes.
+ */
+rawStatus?: string, category?: string,
+/**
+ * Compatibility projection used by older clients; not a normalized category.
+ */
+status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
+export type DocumentPairing = { declarationLine: number, destination: string, target: string | null,
+/**
+ * resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
+ */
+resolution: string, targetSection: string | null, targetRevision: string | null,
+/**
+ * Candidate path classification, not proof of authority or implementation.
+ */
+targetKind: string | null, };
+export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
+export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
+/**
+ * None in pre-pairing caches; refresh is required before claiming absence.
+ */
+pairings: DocumentPairings | null,
+/**
+ * Explicit design-header upstream declarations; None means not yet parsed.
+ */
+upstream: DocumentPairings | null, };
+export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
+/**
+ * all / read / omitted
+ */
+readFilter: string, cursor: string | null, };
+export type DocumentInventoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, candidates: number, read: number, omitted: number, readBytes: number, totalMatches: number, partial: boolean, stale: boolean, error: string | null, files: Array<IndexedDocument>, nextCursor: string | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };

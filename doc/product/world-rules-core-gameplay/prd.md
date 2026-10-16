@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-001`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-10-12`
+- Last reviewed：`2026-10-15`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
@@ -100,6 +100,8 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 玩家在能力预览、报价或提交结果中必须能看见该 grant 的 owner/payer、目标能力与作用范围、是否需要预算、预算影响与可负担性（`affordable`/`insufficient`/`unknown`/`degraded`），以及结果 receipt 所支持的实际变化；产品层不冻结预算单位、公式、wire 字段或 metering schedule。预览、catalog/provider/Agent response、待定或未最终确定的授权、stale provider response、权限/版本/作用域/预算不足导致的拒绝，以及没有世界效果的失败，都不得产生玩家可见的 budget debit 或隐藏债务。runtime 可以在 staged transaction 中做内部 reservation，但它不是已扣费；拒绝或失败时必须与暂存效果一并释放。
 
 只有 fresh authorization 通过且世界效果实际提交的调用，才在同一原子结果中将预算扣减一次并生成关联 receipt；操作不收费时记录零变化。预算 debit、能力状态变化、世界 effect 与授权审计结果不能拆成可分别成功的步骤。相同 nonce/request 的重试、重连、snapshot restore 或 replay 只能返回原 receipt/待决结果，不得第二次扣费、凭 replay 产生 credit、复活已撤销 grant 或把预算转给其他 subject。预算未知、超限、owner 失配或授权证据不完整时，产品结果只能是有界 pending/deny，并明确下一次复查或修复路径，不能部分执行、隐式透支或自动 top-up。
+
+<a name="跨资源承诺、失效与重复提交边界"></a>
 
 ### 跨资源承诺、失效与重复提交边界
 
@@ -248,6 +250,8 @@ Power-dependent profile 必须为每个 stage/cycle/branch/terminal obligation �
 
 Renewal/extension 不能由重连、重试、Agent 推荐或 replay 隐式发生；必须从 fresh authoritative state 重新校验 owner、candidate、route/spec、容量与当前 lifecycle，并以链接 parent 的 continuation/new commitment identity 产生一次结果。Runtime replay 使用已记录的 world-time/order 与 expiry/renewal disposition，不能按恢复时墙钟重算；每项 expiry、release、renewal 与 fresh-snapshot re-evaluation 至多生效一次，也不能刷新共享容量顺位。稳定 `W` 与 terminal/delivery claim 只按已声明 window policy 计数，生产准时但 transit/terminal 迟到时保留 production receipt，却不能获得 on-time delivery receipt、奖励或里程碑。
 
+<a name="工业外部性与操作性缓释-profile（target-only）"></a>
+
 #### 工业外部性与操作性缓释 profile（target-only）
 
 工业运行目前已有输入、能源、物流、批次质量和终端结算的约束，但尚未定义某些工厂/配方持续运行是否会产生可归因的外部性，以及玩家何时应在吞吐与操作性缓释之间停下来作选择。本节只增加一个可选的产品承诺钩子：`industrial_externality` 由工厂/配方/operation 的专业 profile 声明，`operational_mitigation`（必要时也称 operational containment）是局部运行义务，不是新的 runtime 字段、污染模拟或系统性危机治理轨道。
@@ -381,6 +385,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该闭环的 `test_tier_required` 至少覆盖：同一三阶段 `join → stage → transit → buffer → terminal` 路径下四类读面的正向样例；缺料、批次不适用、工厂/配方不兼容、边容量不足、停电和终端失效各自保持正确 primary blocker 与下一动作；同一 production receipt 在 `production-only` profile 中可完成生产目标但保持 undelivered 且不减少交付需求，在 terminal-admission profile 中则必须等待匹配的 delivery/settlement receipt 才完成目标并打开交付型下一候选；因果换线从 `W=0` 开始，非因果恢复保留 root continuation；Viewer 与 pure API 的 `next_action`、`next_recheck`、`progression_effect` 同义，重复提交、重连、乱序、Agent retry、snapshot restore 与 replay 不复制 sink、交付、奖励或目标完成。
 
+<a name="工厂选址与网络拓扑决策（补齐-buildfactory-的地点选择产品缺口）"></a>
+
 #### 工厂选址与网络拓扑决策（补齐 BuildFactory 的地点选择产品缺口）
 
 现有工业路径已经定义了 `BuildFactory` 的 site/location/chunk 合法性和物流 path/edge 的执行规则，但如果玩家只看到“地点可建/不可建”，建厂就会退化为一次付款与前置检查，无法理解站点如何改变原料输入、产物输出、能源、容量和后续扩张。本文只补齐选址与网络拓扑的玩家决策语义，不新增地点、物流或迁移 runtime 能力。
@@ -434,6 +440,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 该档案的 `test_tier_required` 至少以同一 deterministic fixture 覆盖：两类输入齐套后只启动一个合法 cycle 并产生一次 bundle；其中一类 input 为 `unknown/not_applicable` 时无 sink/WIP；物流满时保持可读 blocked，容量释放后仅重评未决 edge；power 在报价后不足时原子拒绝或按声明 mode 延期；mandatory 副产物 destination 失效时遵守 atomic/split policy；production-only 与 terminal-admission 分别只在各自声明边界完成目标。Viewer 与 pure API 必须从同一档案读出 factory/recipe、两类输入、path/loss/capacity、cycle、bundle/branch、terminal、primary blocker、机会成本、`next_action` 和 `next_recheck`；重复提交、重连、arrival reorder、Agent retry、snapshot restore 与 replay 不复制材料消费、hold、产出、交付、稳定进度或奖励。`test_tier_full` 再扩展到三阶段、三个以上输入/输出分支、cutover、长期持久化恢复和跨窗口 lineage。
 
+<a name="原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）"></a>
+
 #### 原料替代、替代来源与换配方决策（补齐输入阻塞后的合法替代边界）
 
 现有合同已经禁止按材料名称推断适用、静默降级、隐藏混料和免费转换，却没有正面定义缺料、来源耗尽或批次不适用时何种“替代”可以进入玩家决策。产品必须区分三种不能互相冒充的选择：`替代来源` 是同一材料 profile 改用不同 source/ledger/path；`原料替代` 是不同材料 profile 经当前 pinned recipe 明确许可后满足同一 required input edge；`换配方` 则改变 recipe version、输入/输出因果或终端用途，属于新的配方候选。推荐、同名材料、相似品质、市场可买、Agent 判断或旧版本曾经接受都不能自动建立原料替代关系。
@@ -451,6 +459,8 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 这项合同保持 **world-first**：替代资格和效果来自 settled batch、profile 与权威 receipt，而非客户端或 Agent 猜测；保持 **emergence-first**：玩家在稀缺原料、转换损耗、物流/能源占用、产出质量与交付时机之间形成真实取舍；保持 **persistent / auditable**：所选批次、比例、损耗、owner、parent linkage 和 decision 跨恢复/replay 延续；保持 **extensible**：未来材料 profile 可以增加有限替代关系，但不能改写既有 recipe 或 settlement 历史。产品层拥有三类选择、确认与进度边界；`game` 拥有比例/损耗带来的节奏、价值和平衡；Recipe/Factory/M4/runtime 拥有 profile、批次、join、ledger、conversion 与 receipt 真值；Viewer/pure API/Agent 负责同义表达，QA 负责确定性与反套利验证。
 
 `test_tier_required` 至少以同一 blocked-input fixture 覆盖：默认禁止的异料替代无 sink；同料换来源、profile 许可的异料替代与换配方作为不同候选展示完整机会成本；preview 保持只读；fresh commit 只结算一次；ratio/rounding/residual 守恒；同名但不适用、错误 owner/quality/route、过期 profile 与 stale preview 原子拒绝；无因果变化的替代保持 pinned recipe 并只建立一个 child decision，有因果变化或换配方建立新 candidate 且 `W=0`。重复提交、切换、重连、Agent retry、restore 与 replay 不复制 sink、conversion、receipt、产出、稳定进度或奖励。`test_tier_full` 扩展到多阶段 join、并发 root 争用同一替代批次、品质/保管漂移、in-transit/buffer 状态、跨窗口 cutover 与持久化恢复；Viewer、pure API 与 Agent 对候选、blocker、成本/损耗、lineage、`next_action` 和 `next_recheck` 保持一致，并证明不能通过廉价替代、反复切换或拆分提交制造高价值产出、刷新顺位或重复成长。
+
+<a name="配方生命周期、版本兼容与受控退役"></a>
 
 #### 配方生命周期、版本兼容与受控退役
 
@@ -585,33 +595,58 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 ## 5. Done：成功标准与验收
 
+<a id="sc-1"></a>
 - SC-1：玩家在首局可识别当前目标、可执行动作、行动代价与下一步。
+<a id="sc-2"></a>
 - SC-2：核心循环完整呈现行动接受、推进、阻塞、反馈和结果。
+<a id="sc-3"></a>
 - SC-3：FirstSessionLoop 之后存在可达的 PostOnboarding 目标、压力与承接。
+<a id="sc-4"></a>
 - SC-4：世界规则、资源消耗与玩家结果可映射到专业 PRD-ID 和验证证据。
+<a id="sc-5"></a>
 - SC-5：玩家的间接战略动作具备授权资源因果、权威校验和可审计后果，界面或接口可读 target/action/cost/blocker/result/next/recovery；涌现关系与组织不绕过权限、治理或 anti-abuse。未支持细粒度请求的单个或多个 canonical 替代可比较其目标/范围、成本、风险、预计后果、可撤回性与推荐理由；确认前无世界效果，新增承诺或不可逆后果必须明确授权，拒绝、过期、权限变化、重连或重试不会静默执行、继承越界权限或产生重复结果，没有安全替代时明确停止。
+<a id="sc-6"></a>
 - SC-6：代表性间接控制流程证明玩家意图进入 Agent/策略决策，经权威规则与资源校验产生世界后果，并返回可解释结果与可执行的打断、纠正、下一步或恢复动作；任一专业域的局部 green 不能替代组合闭环。
+<a id="sc-7"></a>
 - SC-7：同一物理行动在 gameplay、runtime、Agent 与 Viewer 的粗粒度/表现映射中保持距离、顺序、成本和持久化结果一致，不产生第二条时间线或表现层真值；权威时间线在没有直接玩家输入时仍按当前世界规则继续推进，不冻结具体 tick 时长。
+<a id="sc-8"></a>
 - SC-8：同一条代表性 Data 路径可端到端证明：预览不授予访问或收益；owner、recipient / 使用主体、purpose、scope 与授权状态可读；提交到结算之间授权过期、撤销、变更或无法证明有效时，未结算请求原子拒绝或保持可读待决，不产生 Data sink、访问收益或隐性义务，并提供重新授权或替代路径；有效结算只产生一次 receipt 支持的授权使用或转移。重试、重连、重复提交和历史 receipt 重放不产生第二次结果或复活失效授权，后续撤销不抹除既有合法结果的 provenance。具体许可状态机、时钟、结算规则、幂等实现与副作用矩阵由专业域拥有。
+<a id="sc-9"></a>
 - SC-9：成熟世界样例证明小规模玩家在不立即依附 major power 的前提下，通过可归因贡献获得新选择、恢复弹性、议价位置或区域用途；失败保留 repair / rebuild / pivot，区域影响不越界为全局治理权。
+<a id="sc-10"></a>
 - SC-10：产品样例证明世界没有强制通关条件，但每个阶段成果具有完成边界、可归因世界后果与下一阶段方向；长期成果只在新增选择、恢复弹性、局部议价/协调位置或区域用途时成立，不能以库存、吞吐或重复次数冒充成长。
+<a id="sc-11"></a>
 - SC-11：代表性首局、后引导与成熟世界样例保持一个当前主目标与低负担的继续/分支/换向选择；作用域、canonical 转译、校验、治理、反支配与审计在后台执行，只有改变资源、权限、锁定、恢复或共同承诺时才以可读原因和替代路径进入前台。
+<a id="sc-12"></a>
 - SC-12：代表性首局、持续目标与成熟世界样例证明玩家可通过短命令/复盘和有边界的离线授权维持普通成长，同时可自愿进入较长的区域、外交或治理会话；玩家无需先掌握全部系统深度或保持持续在线，且高风险窗口、授权范围与恢复路径可读。
+<a id="sc-13"></a>
 - SC-13：代表性区域冲突与赛季样例证明攻击只在已声明的 charter 范围和登记参与者/暴露资产间发生，非参与者受保护；实体领地/战利品结算、可恢复损失、软赛季刷新和系统性恢复均保留同一世界时间线、身份与可审计因果。
+<a id="sc-14"></a>
 - SC-14：代表性协作样例证明直接人类沟通不自动绑定，而 Agent 代表在有效授权、接受与权威校验后可形成可审计合同；持续服务的违约/救济、随机无冲突本地争端程序、情境化可更新声誉和预声明 R&D 归因均不产生永久污点、隐性权力或对个人政治 credential 的转让。
+<a id="sc-15"></a>
 - SC-15：代表性组织解散与长期不活跃样例证明 charter 不越过个人资产、合同、退出、历史和 Agent 身份的保护底线；风险冻结、合同与托管处理、责任/成本、持续业务处置、剩余分配，以及通知、保护期、可恢复主张、申诉和有限后续处置均留在同一可审计世界因果链中，不产生静默没收、身份删除、历史重写或重复生效。受影响玩家与 Agent 能区分正常、保护、受限持续、待决 reclaim/申诉与已解决状态，并读到适用的异议、申诉、等待、重新规划或安全停止路径，不把未确认结果表示为已完成。
+<a id="sc-16"></a>
 - SC-16：代表性资源、资格或持续义务路径证明预览不产生世界效果；请求入队/pending 与资源/规则已校验的承诺明确分层，未决请求不产生 hold/sink 或生产顺位；已接受承诺可读出范围、未决后果和下一步；已结算结果有 receipt 支持。报价与提交之间发生竞争性状态变化时，提交按当前条件至多结算一次并产生 receipt，或原子拒绝且不产生 sink/义务；`electricity_after` 不被误读为运行 runway 或不停机保证。过期、撤销、失效、重连重试和历史 receipt 重放不会制造第二次 sink、免费资源、资格续期或隐藏欠费，且未结算部分与既有已发生后果按相应专业合同保留可读 provenance、拒绝/待决或恢复路径。
+<a id="sc-17"></a>
 - SC-17：代表性共同决策样例证明普通治理只受理明示的政策、公共财库与既有 charter 日常事项；宪制、基本权利与系统安全事项被原子拒绝或路由到独立轨道，不产生部分世界效果。治理主体聚合、控制人影响上限、最小数据公开审计、纠错/申诉与历史 receipt（GCB-7），以及 OC 外部转让、治理 snapshot/退出/解除绑定与单向额度桥的隔离（GCB-8）必须保持可审计、不可追溯改票/双投且不产生世界治理效果。普通提案、财库、charter、技术升级、局部多数、历史声望与紧急状态均不能绕过保护底线；其他宪制变更只有在公开影响说明、延迟/复核、适用超多数、跨区域或受影响主体确认、独立审计与程序申诉全部成立时才生效。
+<a id="sc-18"></a>
 - SC-18：代表性区域设施与受治理扩展样例证明玩家只能在可读压力、条件报价、有限作用域和维护/耗尽/退役边界内取得区域 leverage；创作者提案只有经治理审查和权威生效后才成为世界能力。报价后状态变化、重复/过期/重连或跨入口重试只产生一次权威结果或原子拒绝，待决请求不会被表达为已生效。
 <a id="sc-19"></a>
 - SC-19：代表性系统性危机样例证明 containment 仅限制扩散并保护基本连续性；恢复项目在同一权威世界时间线内由玩家、Agent、组织或区域参与，并按既有资源、权限、治理、反滥用和申诉边界结算。不存在 reset、历史重写、跳过申诉或选择性 bailout；受影响主体可读触发事实、作用范围、当前限制、恢复/申诉路径与下一步。
+<a id="sc-20"></a>
 - SC-20：代表性工业任务证明报价无世界效果，提交只会原子拒绝或创建一次可追溯承诺；任务在完成、阻塞或中止时按适用专业规则守恒处置投入、在制进度、产出与副产物。进入阻塞时，玩家能读懂最早根因、占用/消费、保留/损失、稳定窗口影响、下一次权威复查边界与真实可用的继续/等待、修复、改道、降载/拆分、重新规划或中止路径；每个展示候选逐项具备作用目标/范围、追加成本与仍占用、预计结果/复查时延、失败/损失风险、可撤回性及推荐理由，缺字段不得展示为可选；不存在安全路径时能明确停止并获得下一次可决策点。目标换向、停机、权限变化、重连、重试与 replay 不会静默取消/迁移任务、重复 sink/产出、释放或退款，或同时生成退款与完成结果；同一因果计划的恢复保持 root continuation，因果变更建立链接 revision/candidate 并从 `W=0` 重新计数。
+<a id="sc-21"></a>
 - SC-21：代表性多阶段流水线证明下游只能消费已经结算、实际到达适用账本且满足该阶段规格/品质适用范围的中间品；阶段/边身份、可用/预留/加工中/在途状态、批次适用结论与来源、有限缓冲及根因/派生 blocker 可追溯。来源未知、证据不足或不兼容的批次在下游 sink/进度前 fail closed，并让玩家区分适用、待验证/证据不足与不适用；不得静默推断、降级、混料、转换或免费 salvage。多输入阶段以 canonical join identity 绑定完整 parent-edge/receipt set；默认在同一快照齐套前无 input sink/WIP/进度，只有 profile 明示 staged intake 时才能逐 parent 单次消费并保留可读 remaining obligations，缺失/无效/过期/换线 parent 不得形成隐藏 partial kit 或复用 receipt。多个已接受意图争用同一阶段/边/buffer 时，基于同一权威快照产生完整/部分/延期/拒绝结果，不超额 hold、不靠提交顺序或重试插队；释放或过期只触发一次 fresh-snapshot 重评，仍有效意图不会被无说明地无限跳过。声明 end-to-end service window 时必须绑定 stage/edge/buffer/terminal reservation chain、权威时界与 none/soft/hard policy；各边界重验剩余义务，expiry/release/renewal 只生效一次且不靠重连/replay 延期，production on-time 不能冒充 late/expired delivery。声明 performance/diagnostic window 时必须绑定 candidate/config epoch 与 journal/state-root；submit/allocation 为每个 accepted outcome 原子冻结一次 immutable plan baseline，preview/atomic reject 不创建，后续 replan 只能创建 parent-linked revision，actual receipt 不跨 revision 或按新配置回填；计划/承诺/执行/生产/交付分层，backlog/join/WIP/transit/buffer/terminal buckets 互斥，receipt 对账损耗与补偿，primary root blocker 不与派生影响重复计数，cutover/replay 不混窗，缺证据显示 unknown 而非伪造。共享容量的 partial 不自动允许 partial recipe：每个 recipe/factory profile 声明合法执行单位、full-only/partial 策略、确定性量化与 residual 处置，结果可追溯 requested、committed、executed、unmet 及主/副产物总量；不足合法单位不扣料、不产半批、不计稳定进度。一个 cycle 的主产物与全部副产物必须属于同一 output bundle；默认在任何 output credit/progress 前原子预检并结算全部 branch，只有 profile 明示 split fan-out 时才能逐 branch 单次结算并保留 failed-leg pending/residual，不能因一条 branch 失败而丢失/复制另一条或伪造 bundle 完成。下游不可用或缓冲满时，上游按声明的背压规则保持、入缓冲或原子拒绝，不静默丢弃、瞬移、无限堆积或伪造完成。阶段/配方/设施/边的因果替换必须在单一 cutover 边界为旧 hold、在制、在途和缓冲批次产生一次显式处置，新候选不继承旧稳定进度、reservation、receipt 或里程碑；不支持的迁移 fail closed，支持的 handoff/conversion 保留父 receipt、数量与损耗。终端阶段必须把 production 与 delivery/settlement 分开：最终产物只进入 owner-bound 有限账本、明确交付承诺或受支持的 hold/quarantine，非 settlement receipt 不减少需求、不发放交付奖励或终端里程碑；终端失效保持有界 blocked/待交付或原子拒绝，不产生无限库存、隐式销毁/转卖或虚假交付。拆分/汇合、跨账本运输损耗、支持的隔离/复验/返工/替代去向、重连、重试、恢复与 replay 保持确定性资源守恒，每阶段至多一次 sink、产出和里程碑效果，并让玩家读懂吞吐、输入齐套、批量、输出 branch、批次用途、共享容量、服务窗口、诊断窗口、换线与终端交付机会成本及恢复选择。该标准还必须覆盖 extraction/replenishment→refinement→source-to-ledger handoff→首个 canonical consumable ledger input 的玩家路径：preview/source-settled/in-transit/arrived/applicable/blocked 各状态可读且不互相冒充；实际数量、损耗、owner/账本、parent provenance 与适用结论守恒可追溯；失败可按专业合同等待补充、补电、重报价、改道、隔离、返工、返还、补偿或放弃，不能自动退款/免费转化；重复 submit、arrival、重连、乱序与 replay 不复制 source effect、目的 credit、首个 input sink、稳定进度或奖励。产品承诺止于首个 canonical input，字段、公式、物流/账本算法、runtime/Viewer 实现由专业 authority 负责。
 
+<a id="sc-22"></a>
 - SC-22：代表性产线维护/计划停机样例证明排产前可比较 `maintain_before_run`、`run_at_risk`、`reduce_load` 与 `defer` 中真实支持的路径，并读到维护目标/范围、追加成本与仍占用、预计产出/复查时延、故障/损失风险、可撤回性与推荐理由；维护真值缺失时显示 `maintenance_not_tracked` 而不伪造安全继续。若 submit boundary 仍为 `unknown`，会产生 irreversible sink、停机/稳定影响或交付承诺的候选不得 selectable，必须 atomic reject 或保持有界 pending（不得产生隐式 hold）并给出下一次权威复查；只有专业合同真实支持且明确标注 `at-risk/unknown` 的路径可继续展示，preview 无 authority。报价无世界效果，提交按当前状态重验且前置漂移原子拒绝并保留原任务/未结算状态，成功只产生一次维护/排程结果，计划停机不伪造稳定/交付，重连、重试与 replay 不复制 sink、停机结果或里程碑。
+<a id="sc-23"></a>
 - SC-23：代表性 `BuildFactory` 路径证明建设报价只读且绑定 owner/site/kind/id、candidate/config/world revision 及稳定 quote correlation；玩家可比较 build-now、补料、移站、补电和延期，并逐项读到 owner-held electricity 与全部 construction inputs 的 kind/quantity/ledger/before/after、power mode、profile 选定的 output boundary、主要 blocker、下一复查点与首个工业目标关联。每个可选项都说明目标/范围、追加成本与仍占用、预计结果/复查时延、风险/损失、可撤回性与推荐理由，未实现或前置不可证明的选择不得 selectable。提交按当前权威状态重验，竞争性漂移只能产生一次当前条件 receipt 或无 sink 的原子拒绝；任一输入不足、地点/chunk/owner/kind/existing-or-pending ID、未知 authority 与未冻结 mode 不得伪装为可支付或已预留；四类 mode 各自的 sink/hold/revalidation/best-effort 和争用/unknown 边界可验证，重连、重试、重复提交、恢复与 replay 不复制 sink、设施、激活、发电或奖励。建设成本、配方电力、maintenance 与 battery runway 分层，PowerPlant 仅在 profile 声明的 output boundary 后生效；Viewer 与 pure API 对上述事实保持一致。该 SC 只冻结玩家承诺与验收，不冻结公式、字段、队列、UI 或当前实现完成声明。
+<a id="sc-24"></a>
 - SC-24：代表性配方生命周期证明 `pending_validation`、`validated_pending_admission`、`active`、`restricted`、`retiring`、`retired` 六状态及其转换条件可读，且生效前无世界效果；预览与本 SC 使用同一状态集，授权/兼容/证据问题作为 blocker reason 单独表达。每个 accepted 任务固定不可变 recipe version/authority，并与 factory capability、输入批次、物流路径、output bundle 和 terminal purpose 关联；`agent_engineer` 必须能验证 Agent 只能在授权作用域内提议/确认，不能以推荐或重试改变状态。改变输入/输出/副产物、规格/品质、阶段/边、power/logistics 或 terminal 资格等产出因果内容必须新建 parent-linked 版本/候选并从 `W=0` 开始，不能继承旧 receipt、reservation、队列优先级、进度或奖励；非因果元数据才可保留身份，无法证明则 fail closed。版本/授权/输入规格/factory fit/路线/容量/power/terminal 证据缺失或漂移时，在首个不可逆 sink 前原子拒绝或保持无效果待决，玩家可见 primary blocker、机会成本和复查点，不能同名替代、免费转换、静默降级或伪造退款。六状态动作矩阵必须分别覆盖新排程、accepted 未产生首个不可逆 sink、WIP、在途、buffer 和 terminal-pending：`active`/作用域内 `restricted` 才可 fresh revalidation 后排程；其余状态不可新排程；retiring/retired 不得自动迁移 successor。退役禁止新排程但保留历史；未开始、WIP、在途、buffer、terminal-pending 任务只能按 profile 各产生一次 finish/hold/rework/salvage/return/改道/handoff/reject/终止中的受支持处置；terminal-pending 必须保留 recipient、destination、admission、capacity obligation 与 provenance，不得提前 settlement、静默改绑或重复释放容量义务。兼容 successor 需 fresh revalidation、明确授权和 parent-linked conversion，重连/retry/replay 不复活旧版本或复制效果。权威追踪同时覆盖 `PRD-WORLD_SIMULATOR-047` / `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 的批次/适用性/处置语义，以及目标 `PRD-WORLD_RUNTIME-043` / `doc/world-runtime/prd.md` 的 identity、parent linkage、幂等 finality 与 replay 边界。`test_tier_required` 覆盖上述生命周期、转换、漂移、退役、兼容、六类动作和 terminal-pending 单次处置/settlement 边界，`test_tier_full` 覆盖多阶段在制/在途/缓冲/terminal-pending、持久化/replay、Agent 重试和 Viewer/pure API/Agent parity；产品层不冻结 recipe ratio、授权角色、兼容算法、runtime schema、UI 或当前实现声明。
+<a id="sc-25"></a>
 - SC-25：代表性已建成工厂能力生命周期证明，玩家能在工厂仍为当前能力候选时比较 `upgrade_existing_capability`、`reconfigure_recipe_fit`、`run_at_current_capability`、`reduce_or_defer`、专业合同支持的 `retire_and_rebuild` 与 `defer`；每个可选项必须说明目标/作用域、追加资源/维护成本、停机或容量机会成本、对吞吐/物流/终端承诺的影响、受影响的 accepted-unstarted/WIP/in-transit/buffer/terminal-pending 工作、风险、可撤回性与下一次权威复查点。预览只读且不产生 hold、队列、输入 sink、退款或能力效果；提交必须按最新 owner、factory fit、recipe/规格、power、logistics、capacity、terminal 与治理 authority 重新校验，未知或未追踪 authority 只能显示 `unknown/not_tracked`，不得按零成本、安全或可兼容处理，涉及不可逆 sink 的候选必须原子拒绝或保持有界待决。
+<a id="sc-26"></a>
 - SC-26：代表性 `BuildFactory → factory-ready/recipe-missing → recipe lifecycle decision/admission → ScheduleRecipe → join → stage → transit → buffer → terminal` 路径在展示为当前主推荐前，Starter Industrial Feasibility Gate 必须从同一 fresh authority snapshot 返回 `candidate_available` 或 `no_safe_starter_chain`；`candidate_available` 绑定 stable starter-chain/candidate identity 与 authority snapshot/version，`current-evidence-backed`、`target-contract`、`unknown/not_tracked` 分别保持当前可证、未来目标和 fail-closed 边界，`no_safe_starter_chain` 必须保留 blocker、恢复路径与复查边界；test tiers 是验收目标而非 current pass，只有 fresh composite runtime + QA evidence 才能支持 current claim；通过该闸门的路径证明产品读面能把 factory/capability、recipe version、原料批次适用性、物流边/容量、power/maintenance、output bundle 与 terminal purpose 收束为 `准备/待开工`、`运行中`、`产出待交付`、`已结算` 四类玩家决策；每类都显示 primary blocker、已占用/消费价值、`next_action`、`next_recheck` 与 `progression_effect`，且 `BuildFactory` receipt、recipe preview/admission、`accepted`、`produced`、`buffer-held`、`terminal-pending` 不被误报为生产、交付或成长。任何生产奖励/能力里程碑至少等待首次 production receipt；`production-only` 的匹配 production receipt 完成一次首产物目标并保持 produced/undelivered，稳定条件另行升级 production-stable 且不减少交付需求，terminal-admission 目标只有取得匹配的 delivery/terminal settlement receipt 才能完成并打开交付型下一候选；缺料、批次/配方/工厂不兼容、物流/电力/终端失效与 unknown authority 保持可读 blocked/fail-closed 及真实恢复路径。因果换线创建 parent-linked 新目标并将 `W` 归零；同一计划继续保持 root continuation；Viewer、pure API、Agent 与 replay 对状态、根因、下一步和一次性完成结果一致。产品层不冻结 runtime schema、队列、配方/产率/价格公式或 UI；`game` 拥有目标节奏与平衡，M4/runtime 拥有 lifecycle/receipt/守恒/幂等，QA 拥有组合验证。
   - 改变产出因果的能力、支持 recipe version、输入规格、阶段/边、output branch、power/logistics 或 terminal fit 必须创建 parent-linked 新 capability candidate，并在单一 canonical cutover 边界生效；cutover 前的 hold、accepted-unstarted、WIP、in-transit、buffer、terminal-pending 与 receipt 保留旧 candidate 身份，cutover 后的新意图只能归属新 candidate，且新 candidate 从 `W=0` 开始，不继承旧 queue 顺位、reservation、稳定窗口、receipt、里程碑或奖励。只改变非因果展示元数据才可保留身份，无法证明时 fail closed。
   - `upgrade/reconfigure` 或 `retiring/retired` 不能静默迁移既有工作：accepted-unstarted 只能按 profile `hold/release/replan/terminate`，WIP 只能按 profile `finish/pause/hold/rework/salvage/terminate`，in-transit 只能使用已声明的 `finish/hold/return/reroute/reject`，buffer 只能使用已声明的 `hold/handoff/conversion/reject`，terminal-pending 只能继续原合法 commitment 或使用已声明的 `hold/return/reroute/handoff/reject`，并保留 recipient/destination/admission/capacity obligation/provenance；每项旧工作至多一个处置 receipt。`retiring/retired` 禁止新排程并保留历史；successor 不能自动继承旧任务，只有在明确授权、fresh revalidation 和 parent-linked conversion 成立时才可转换。不得免费补发产出、隐式退款、销毁/瞬移/转卖库存，或同时产生退款与完成。
@@ -619,12 +654,19 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
    - `test_tier_required` 覆盖 preview 无效果、报价后 drift 的拒绝/重报价、上述五类旧工作 bucket 的逐项处置、升级/退役单次 cutover、recipe-fit 与 candidate/receipt/reservation/W 隔离、unknown authority、retired 不可复活，以及 Viewer 与 pure API 的状态/机会成本/下一动作一致性；其中 `terminal-pending` 必须验证 recipient/destination/admission/capacity obligation/provenance 保留、单次 disposition，且不得提前 settlement 或静默改绑。`test_tier_full` 覆盖并发工作与共享容量、连续升级、cutover 部分失败、crash/restore/replay、持久化、多阶段 WIP/transit/buffer/terminal-pending、Agent 重试和 successor conversion。产品承诺链接 `doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md` 与 `doc/testing/prd.md`，不复制其 runtime、WASM、物流算法或测试实现。
 
 
+<a id="sc-27"></a>
 - SC-27：代表性 `factory-ready/recipe-missing → recipe candidate discovery → recipe_selection_preview → ScheduleRecipe` 路径证明候选只从同一权威快照派生，并区分 `candidate_available`、`candidate_blocked` 与 `candidate_unknown`；候选能同时说明当前目标、recipe version/authority、factory fit、原料适用/缺口、物流/容量、power/maintenance、output bundle/终端、机会成本、主要风险、`next_action` 与 `next_recheck`。同名版本不合并；available/blocked/unknown 候选均可读取无副作用的 `ScheduleRecipe` 排程预览，blocked/unknown 只解释缺失前置与恢复。只有 `candidate_available` 且最终新鲜校验通过才能提交；选择 preview 不产生 activation、hold、input sink、queue、物流 reservation、产出、稳定进度或奖励；准入/原料/物流/电力/终端漂移必须重发现、重报价或原子拒绝，不能自动换配方。无候选时玩家获得明确原因与补料、补证、改路、改厂、等待或延期中的真实路径；选择、排程、生产、稳定与交付结果分层，重连、重试、恢复与 replay 不自动选择或复制效果，Viewer、pure API 与 Agent 对候选和下一步保持同义。产品层不冻结 recipe catalog、解锁树、兼容算法、runtime schema、UI 或当前实现完成声明。
+<a id="sc-28"></a>
 - SC-28：至少一份代表性配方执行档案把同一 candidate 的 factory capability、pinned recipe、两类 required raw-material inputs 及其 batch/quality/custody、effective logistics path/loss/capacity、canonical executable cycle、power mode、主/副产物 output bundle、terminal purpose 与 progression boundary 收成完整只读投影；缺失任一 authority 时为 `incomplete/unknown/blocked`，不宣称可排程、稳定或交付。单一 deterministic fixture 覆盖齐套成功、input 不适用、物流满后重评、power 漂移、mandatory output destination 失效以及 production-only/terminal-admission 两种完成边界；失败在首个不可逆 sink 前延期/原子拒绝，已发生 WIP/transit/branch effect 只按 profile 单次处置。未选路径不取得 hold/优先级/进度，因果改变建立 parent-linked 新 candidate 并从 `W=0` 开始；retry/reconnect/replay 不复制材料、容量、产出、交付或奖励，Viewer/pure API/Agent 对完整档案、blocker、机会成本和下一步保持同义；Agent 只可从同一权威候选与当前允许动作继续，unknown/blocked 不生成可提交动作，provider 建议不代替输入适用性或执行 receipt。产品层不新增 runtime schema，不冻结配比、产率、价格、容量、tick、队列或 UI。
+<a id="sc-29"></a>
 - SC-29：代表性 `BuildFactory` 选址路径证明同一工业目标下至少两个合法 site candidate 可比较原材料输入与产物/终端输出路径、容量/损耗、power 前置、终端适配、建设成本、交付风险和扩张机会成本，并区分 `site_available`、`site_blocked`、`site_unknown`。未固定 recipe 时，recipe-specific 输入/输出拓扑、容量/损耗与 terminal/power fit 仅为 advisory estimate，不得成为普遍建厂前置；只有 site-level facts 与 profile 明示的 construction prerequisite 进入 `BuildFactory` fresh revalidation，recipe 固定或进入 `ScheduleRecipe` 后再验证其余 topology。预览只读且不创建设施、扣资源、锁定 site/edge/buffer 或改变顺位；建设提交时只有 site-level facts、profile 明示的 construction prerequisite 或已固定 recipe 的建设前置发生漂移，才触发当前条件重报价或无副作用原子拒绝；未固定 recipe 的 advisory topology 漂移不阻断建厂，而在 recipe candidate discovery/`ScheduleRecipe` 时重读。改变产出因果的 site/topology 必须建立 parent-linked 新 factory/capability candidate 并从 `W=0` 开始，不得自动迁厂、改道、降级路线或迁移旧 accepted-unstarted/WIP/in-transit/buffer/terminal-pending 工作；terminal-pending 保留 recipient、destination、admission、capacity obligation 与 provenance 并只接受一次合法处置。玩家可读 primary blocker、机会成本、下一复查点与真实的等待容量、补料/补电、改路、改站点或延期路径，无合法恢复时明确停止。`test_tier_required` 覆盖双站点比较、上述建设前置报价后漂移、advisory topology 漂移不阻断建厂且在 recipe discovery/`ScheduleRecipe` 重读、因果换站点、五类旧工作不迁移及其 parity、无合法站点和 retry/reconnect/replay 单次效果；`test_tier_full` 覆盖拓扑争用、五类存量处置、恢复与 relocation/cutover profile。产品层不冻结选址/寻路算法、站点数值或 UI。
+<a id="sc-31"></a>
 - SC-31：代表性 demand goal 证明玩家在提交前能从同一权威快照比较目标量、已承诺/生产/交付量、canonical batch quantum、预计缺口/匹配/盈余、输入/电力/物流/buffer/terminal 占用、机会成本与下一复查点，并只看到专业合同真实支持的 full/reduced、补料/调运、持有盈余、停止/延期或 parent-linked 补产路径。Production receipt 不减少需求或发放交付奖励；profile 唯一声明的 matching delivery 或 terminal settlement 才更新目标满足量，非 matching settlement 不重复减少需求。目标已满足后不得由旧 schedule、后台循环或 Agent retry 静默追加生产；合法批量造成盈余时不得自动倾销、销毁、伪造成交或计为成长；matching settlement 不足时，选择补产形成一次可追溯 supplemental revision 并保留原 baseline、actual、损耗、已满足量与剩余缺口，选择停止或延期则保留 shortage 且不创建 revision。目标、库存、批量、产率或终端容量漂移触发重报价、无副作用原子拒绝或 profile 明示的有界 pending；重复 submit/delivery、重连、乱序、恢复与 replay 不复制生产、交付、需求减少、盈余处置、奖励或容量释放。Viewer、pure API 与 Agent 对 demand 状态、数量分层、blocker、动作与复查点保持同义；产品层不冻结预测、阈值、价格、自动补货/停机、订单簿、runtime schema、队列或 UI。 跨区市场还须把情报来源/新鲜度、报价与物理路线、到达、目的地存储接收、所有权及 escrow 里程碑分别表达；延误、损耗、拒收和争议不得凭前序状态结算，重连/replay 保留合法恢复与单次效果。
+<a id="sc-30"></a>
 - SC-30：代表性输入阻塞样例能区分同料换来源、profile 明示的异料替代与换配方，并比较等待/补料、合法替代、换配方、减量/延期或 pivot 的数量、比例/rounding/residual、损耗、power/物流/terminal 占用、已持有/消费价值、产出/value class、风险、`W` 影响与下一复查点。异料替代默认禁止；缺失 authority/provenance/ratio/适用性显示 `unknown/blocked` 或 `no_legal_substitute`，不会被 `degraded`、同名材料或 Agent 推荐包装为安全候选。预览无世界效果，明确确认后按新鲜权威状态只建立一次 decision；decision-only 样例无 sink/credit/conversion/`W`/奖励，只有 profile 明示且实际结算 conversion 时才另有一个 linked exactly-once settlement/provenance receipt。只有产出因果、质量、power、时间、副产物、terminal 与 value class 全部不变的 profile-declared substitute 才可保持 pinned recipe 并建立一个 child decision，其他替代或换配方建立 parent-linked 新 candidate 且 `W=0`。首个不可逆 sink 后只允许专业合同支持的单次 rework/conversion/return/hold/salvage；retry/reconnect/restore/replay 不复制 sink、conversion、receipt、产出、进度或奖励，也不能通过廉价替代、反复切换或拆分提交套利。
+<a id="sc-32"></a>
 - SC-32：代表性制度扩展样例必须使用本 PRD 的 canonical mapping，证明现有 native `Alliance`、`War`、`Governance`、`EconomicContract` 各自且仅各自落入一个 `Kernel keep`、`Module candidate`、`Compatibility keep` 或 `Defer` 分类；当前映射为 `Alliance=Compatibility keep`、`War=Defer`、`Governance=Kernel keep`、`EconomicContract=Compatibility keep`。未完成该互斥分类前不得新增 native 制度 action/state。`Alliance` 或 `EconomicContract` 只能择一在治理批准的 activation boundary 转为唯一 `Module candidate`，另一者保持 `Compatibility keep`；试点必须在不绕过 L0 物理守恒、L1 治理边界、CapabilityGrantV2 owner-bound budget 与 receipt/审计约束的情况下，保留旧快照、旧回放、既有玩家结果和单一权威时间线。玩家可见的预算 owner/payer、报价/可负担性与 `unknown/degraded` 状态必须可解释；preview、stale provider response、deny、无效果失败不扣预算，实际 effect 与预算 debit 必须随 receipt 原子且仅结算一次，retry/reconnect/restore/replay 不得重复扣费或发放 replay credit；预算单位、公式、wire/ABI 字段、runtime schema 与模块实现仍由专业 authority 定义。迁移验收覆盖 replay、snapshot、版本/ABI 兼容、单次结算、预算守恒与失败恢复；该验收只约束玩家可观察的连续性和跨域合同，不冻结 ECS、World Database、分片或模块 ABI。
+<a id="sc-33"></a>
 - SC-33：可选的 `industrial_externality` profile 必须把 `operational_mitigation` 限定为工厂/配方 operation 的局部、可审计义务；无 profile 的 legacy 路径不变，profile/作用范围/必要 authority 缺失或过期时为 `unknown/blocked`，不可选择不可逆运行。预览只读，提交必须 fresh revalidation；已支持的运行、减量/延期或 hold 路径只能至多产生一次 linked production 与 externality/mitigation disposition，且不改变 quality/custody、byproduct、maintenance、production/delivery settlement 或稳定窗口。WIP、in-transit、buffer、terminal-pending 均按原 root/revision 单次处置；terminal-pending 保留 quantity、recipient、destination、admission、capacity obligation 与 provenance，直到 matching settlement 或一次受支持处置，不得静默改绑或提前 settlement。玩家可读吞吐、缓释占用、机会成本、根因和复查点，但不能由此取得区域 credit、治理/claim 权利或改变共享环境真值；危机 containment、区域/系统性影响、污染/环境公式、积累/衰减/扩散、清理经济与 runtime/API/schema/UI/Agent 实现均另行定义。重复提交、重连、Agent retry、restore、乱序与 replay 不复制生产、外部性、progression 或 reward；Viewer、pure API 与 Agent 对状态、根因、成本、动作、旧工作处置和下一步同义。该标准是 target-only，只有 fresh M4/runtime + gameplay + QA composite evidence 才能支持 current claim。
 
 <a id="sc-34"></a>
@@ -683,3 +725,948 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 - 不在本阶段立即引入 Region/Partition/Shard 或多条世界时间线；单一 canonical world timeline 仍是产品承诺。
 - 不因模块化或 WASM 扩展而弱化 L0 物理不变量、L1 治理/反滥用边界、所有权权限校验、receipt 单次结算、snapshot/replay 连续性或历史审计。
 - 不把现有 native `Alliance`、`War`、`Governance`、`EconomicContract` 兼容基线误删、重置或包装成无限扩展先例；迁移未完成前，旧玩家结果和可玩路径必须保持可读。
+
+## 7. 根成功标准的语义归属与状态
+
+本节只为既有 SC-1 至 SC-34 补充追踪，不增删产品承诺。§1–5 的原文、适用条件及 §5.1 的专业 owner、证据和测试层级继续有效。组合要求复用既有叶子的唯一 Trace；同义的预览/漂移/幂等/恢复/多入口条件不因出现在多个 SC 而另发身份。只有未被现有叶子拥有的独立范围在 §7.2 声明一次 Trace；其验收仍是原 SC 中对应条件，不另造一套 AC。
+
+SC-25 的 capability/cutover/五类旧工作补充条款在排版上紧随 SC-26，语义仍归属工厂能力生命周期；不能当作首局叶子已覆盖它们。映射不等于设计、实现或组合验收完成。状态只对所列范围成立，不能用一个局部 green 代签其他义务或整个 SC。
+
+### 7.1 全部 SC 的主责与组合关系
+
+| 原成功标准 | 复用的既有要求 | 根独立范围与组合验收 |
+| --- | --- | --- |
+| [SC-1](#sc-1) | [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001)（Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502）；[REQ-FIRST-INDUSTRIAL-007](first-session-and-continuation.prd.md#req-first-industrial-007)（Trace refs: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812）；[REQ-WR-PE-001](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001)（Trace refs: O7-REQ-d2b0b0b0-51b3-4dc6-a6a5-de4c1a3ac4f3） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 首局/后引导/跨阶段概述及专业总纲继续适用，工业样本不外推所有场景。 |
+| [SC-2](#sc-2) | [REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004)（Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2）；[REQ-WR-IA-001](indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)（Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 首局/后引导/跨阶段概述及专业总纲继续适用，工业样本不外推所有场景。 |
+| [SC-3](#sc-3) | [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008)（Trace refs: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3）；[REQ-WR-MW-001](mature-world-progression.prd.md#req-wr-mw-001)（Trace refs: O7-REQ-bc53557b-b03d-465f-a11d-3b3a33ae29ce） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 首局/后引导/跨阶段概述及专业总纲继续适用，工业样本不外推所有场景。 |
+| [SC-4](#sc-4) | 没有将相邻叶子身份扩大为本条全部义务。 | 追踪验收判据：要求到专业 PRD-ID 与真实证据可回链，由 §5.1 owner 负责；不是新增玩法功能。 |
+| [SC-5](#sc-5) | [REQ-WR-IA-001](indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)（Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185）；[REQ-WR-IA-003](indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)（Trace refs: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376） | [canonical 替代比较](#root-sc5-altcompare)；[替代的明确授权与无效果预览](#root-sc5-altauth)；[替代失效与单次结果](#root-sc5-altrepeat)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-6](#sc-6) | [REQ-WR-IA-001](indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)（Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185）；[REQ-WR-IA-002](indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)（Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63）；[REQ-WR-IA-003](indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)（Trace refs: O7-REQ-b38abaf7-824d-47b7-a954-bcdb57897376）；[REQ-WR-PE-002](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002)（Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-7](#sc-7) | 没有将相邻叶子身份扩大为本条全部义务。 | [持续的单一权威时间线](#root-sc7-time)；[跨粒度物理真值一致](#root-sc7-scale)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-8](#sc-8) | 没有将相邻叶子身份扩大为本条全部义务。 | [Data 授权的可读预览](#root-sc8-dataread)；[Data 中途失效与合法结算](#root-sc8-datacommit)；[Data 重试与历史 provenance](#root-sc8-datareplay)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-9](#sc-9) | [REQ-WR-MW-001](mature-world-progression.prd.md#req-wr-mw-001)（Trace refs: O7-REQ-bc53557b-b03d-465f-a11d-3b3a33ae29ce）；[REQ-WR-MW-002](mature-world-progression.prd.md#req-wr-mw-002)（Trace refs: O7-REQ-5d55db85-0a00-4354-af2a-37c9f8d5b182）；[REQ-WR-MW-004](mature-world-progression.prd.md#req-wr-mw-004)（Trace refs: O7-REQ-33e8fa74-7e9d-45ae-82e9-93274f84f026） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-10](#sc-10) | [REQ-WR-MW-001](mature-world-progression.prd.md#req-wr-mw-001)（Trace refs: O7-REQ-bc53557b-b03d-465f-a11d-3b3a33ae29ce）；[REQ-WR-PE-001](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001)（Trace refs: O7-REQ-d2b0b0b0-51b3-4dc6-a6a5-de4c1a3ac4f3）；[REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008)（Trace refs: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-11](#sc-11) | [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001)（Trace refs: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1）；[REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002)（Trace refs: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3）；[REQ-WR-IA-002](indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)（Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 首局/后引导/跨阶段概述及专业总纲继续适用，工业样本不外推所有场景。 |
+| [SC-12](#sc-12) | [REQ-WR-IA-002](indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)（Trace refs: O7-REQ-ebb0248c-1dca-4d58-a283-8d198fb6cf63） | [普通成长不要求持续在线](#root-sc12-session)；[高风险响应与授权恢复可读](#root-sc12-window)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-13](#sc-13) | [REQ-WR-CC-001](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001)（Trace refs: O7-REQ-2e68a48f-4a44-4135-9268-e17c6f32d0b3）；[REQ-WR-CC-002](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-002)（Trace refs: O7-REQ-19ea1035-2d0a-43fc-a3a8-b0309030273c）；[REQ-WR-CC-003](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-003)（Trace refs: O7-REQ-eedaa5cf-e91e-48df-9c33-158774b40168）；[REQ-WR-CC-004](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-004)（Trace refs: O7-REQ-a2b47612-d2c2-4331-811e-58a61366b64d）；[REQ-WR-CC-005](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-005)（Trace refs: O7-REQ-ce9fbace-7fc6-4973-8bcf-8b58e11b3339） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-14](#sc-14) | [REQ-WR-CR-001](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-001)（Trace refs: O7-REQ-16ef3247-1587-4cd8-84ab-03a9bb18a17f）；[REQ-WR-CR-002](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-002)（Trace refs: O7-REQ-805fc92a-bbcb-4e77-b2d8-e40105522a0d）；[REQ-WR-CR-003](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)（Trace refs: O7-REQ-5197cd23-8409-4cea-860a-96d2048c7905） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-15](#sc-15) | [REQ-WR-OC-001](organization-continuity-dissolution-and-dormancy-protection.prd.md#req-wr-oc-001)（Trace refs: O7-REQ-366c9e94-4bd6-41f8-93dd-8d87f163f21a）；[REQ-WR-OC-002](organization-continuity-dissolution-and-dormancy-protection.prd.md#req-wr-oc-002)（Trace refs: O7-REQ-6e6d890d-c94d-4b43-9947-bfccf2f066e3）；[REQ-WR-OC-003](organization-continuity-dissolution-and-dormancy-protection.prd.md#req-wr-oc-003)（Trace refs: O7-REQ-b59a4fa5-9b5f-4119-abf6-7c0f2b4f4268） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-16](#sc-16) | [REQ-WR-IA-001](indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)（Trace refs: O7-REQ-e3193bfb-799b-4a55-bb9d-c7fa59e90185）；[REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48）；[REQ-WR-AOS-001](agent-ownership-and-stewardship.prd.md#req-wr-aos-001)（Trace refs: O7-REQ-612f4d3d-e831-48f9-9dfc-f0844690e6cf）；[REQ-WR-AOS-002](agent-ownership-and-stewardship.prd.md#req-wr-aos-002)（Trace refs: O7-REQ-8b94a27c-bbae-4349-94c1-f1f40f46e287）；[REQ-WR-CR-001](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-001)（Trace refs: O7-REQ-16ef3247-1587-4cd8-84ab-03a9bb18a17f）；[REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006)（Trace refs: O7-REQ-544d08be-9d56-4106-bd80-89c46786bfdf） | [通用 pending 不取得资源或生产顺位](#root-sc16-pending)；[报价余额与运行保障分离](#root-sc16-runway)。领域承诺、合同和需求漂移特例继续复用左列；通用接受/结算表达、重验和幂等不另发身份。 |
+| [SC-17](#sc-17) | [REQ-WR-GCB-001](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001)（Trace refs: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b）；[REQ-WR-GCB-002](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-002)（Trace refs: O7-REQ-79b6687e-3b8c-42a3-a266-df4d191fec06）；[REQ-WR-GCB-003](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-003)（Trace refs: O7-REQ-4f6597ff-8e34-4d12-bb60-060df0e09595）；[REQ-WR-GCB-004](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-004)（Trace refs: O7-REQ-b584b2ab-bc38-43a1-a8fd-1b89dc3d20cd）；[REQ-WR-GCB-005](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-005)（Trace refs: O7-REQ-4b64b7c5-9819-4932-a1ad-3cdb09fa82e5）；[REQ-WR-GCB-006](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-006)（Trace refs: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-18](#sc-18) | [REQ-WR-GR-001](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001)（Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8）；[REQ-WR-GR-002](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-002)（Trace refs: O7-REQ-ce8c31b1-5294-4acd-a65f-2012bcbef911）；[REQ-WR-GR-003](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-003)（Trace refs: O7-REQ-ac12295b-63a5-4440-9924-deaedafd7965） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-19](#sc-19) | [REQ-WR-CC-003](chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-003)（Trace refs: O7-REQ-eedaa5cf-e91e-48df-9c33-158774b40168）；[REQ-WR-GCB-006](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-006)（Trace refs: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8） | 复用 CC-003 的 [AC-6](chartered-conflict-soft-seasons-and-recovery.prd.md#ac-6)（containment、禁止 reset/历史重写/选择性 bailout）与 [AC-7](chartered-conflict-soft-seasons-and-recovery.prd.md#ac-7)（恢复结果与下一步），并保留 GCB-006 的高影响动作边界；不另发危机身份。 |
+| [SC-20](#sc-20) | [REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48） | [工业任务的投入与结果处置](#root-sc20-jobdispose)；[工业任务续接与因果换向](#root-sc20-jobcontinue)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-21](#sc-21) | [REQ-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#req-first-industrial-003)（Trace refs: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51）；[REQ-SC31-002](industrial-demand-goals-and-settlement.prd.md#req-sc31-002)（Trace refs: O7-REQ-3c8dcb96-cb2b-4ec8-824a-5cb50b75f060）；[REQ-SC31-003](industrial-demand-goals-and-settlement.prd.md#req-sc31-003)（Trace refs: O7-REQ-ebb96559-33a9-4029-af82-a709c71225e0）；[REQ-SC31-004](industrial-demand-goals-and-settlement.prd.md#req-sc31-004)（Trace refs: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3） | [批次适用与已到达输入](#root-sc21-batch)；[多输入 join 与 partial kit](#root-sc21-join)；[共享容量公平分配与重评](#root-sc21-capacity)；[端到端 service window](#root-sc21-service)；[冻结计划与实际诊断归因](#root-sc21-diagnostic)；[合法执行单位与 partial recipe](#root-sc21-quantum)；[同 cycle 多输出原子结算](#root-sc21-fanout)；[有限缓冲与背压](#root-sc21-backpressure)；[工业 cutover 的旧工作处置](#root-sc21-cutover)；[有限终端账本与失效处置](#root-sc21-terminal)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 source/refinement→handoff 的既有准备义务复用 FIRST-INDUSTRIAL-003；跨阶段组合仍须全部满足。 |
+| [SC-22](#sc-22) | 没有将相邻叶子身份扩大为本条全部义务。 | [维护与停机的受支持选择](#root-sc22-maintchoice)；[维护 unknown 的提交边界](#root-sc22-maintunknown)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-23](#sc-23) | [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002)（Trace refs: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95）；[REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48） | [建设报价身份与承诺包](#root-sc23-buildquote)；[四类建设 power mode 边界](#root-sc23-buildpower)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-24](#sc-24) | [REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48） | [六状态配方准入](#root-sc24-recipestate)；[任务不可变配方版本与绑定](#root-sc24-recipeversion)；[配方生命周期六类工作处置](#root-sc24-recipedispose)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-25](#sc-25) | 没有将相邻叶子身份扩大为本条全部义务。 | [已建成工厂能力选择](#root-sc25-factorychoice)；[工业任务续接与因果换向](#root-sc20-jobcontinue) + [工业 cutover 的旧工作处置](#root-sc21-cutover)（组合复用，未新发工厂 cutover 身份）；[五类存量工作合法处置](#root-sc25-factorydispose)；[工厂状态与单次变更](#root-sc25-factorystate)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-26](#sc-26) | [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001)（Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502）；[REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002)（Trace refs: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95）；[REQ-FIRST-INDUSTRIAL-003](first-session-and-continuation.prd.md#req-first-industrial-003)（Trace refs: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51）；[REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004)（Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2）；[REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48）；[REQ-FIRST-INDUSTRIAL-006](first-session-and-continuation.prd.md#req-first-industrial-006)（Trace refs: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3）；[REQ-FIRST-INDUSTRIAL-007](first-session-and-continuation.prd.md#req-first-industrial-007)（Trace refs: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812）；[REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008)（Trace refs: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-27](#sc-27) | [REQ-FIRST-INDUSTRIAL-001](first-session-and-continuation.prd.md#req-first-industrial-001)（Trace refs: O7-REQ-68214dc7-c00b-4c0d-8c3b-c1c24fb52502）；[REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48） | [同快照配方候选发现](#root-sc27-discover)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-28](#sc-28) | [REQ-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#req-first-industrial-002)（Trace refs: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95）；[REQ-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#req-first-industrial-004)（Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2）；[REQ-FIRST-INDUSTRIAL-005](first-session-and-continuation.prd.md#req-first-industrial-005)（Trace refs: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48）；[REQ-WR-PE-002](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002)（Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1）；[REQ-WR-PE-003](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003)（Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07） | [完整代表性执行档案](#root-sc28-profile)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 原 deterministic fixture 及正负情境为组合验收，未新发“测试样本功能”身份。 |
+| [SC-29](#sc-29) | 没有将相邻叶子身份扩大为本条全部义务。 | [同目标双站点比较](#root-sc29-sitecompare)；[advisory topology 与建造前置分离](#root-sc29-siteadvisory)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 因果换站点及五类旧工作还须满足本根的工业续接、能力cutover/存量保护；不因重连而绕过。 |
+| [SC-30](#sc-30) | 没有将相邻叶子身份扩大为本条全部义务。 | [合法替代与 no_legal_substitute](#root-sc30-subchoice)；[替代决定与实际 conversion 分离](#root-sc30-subsettle)；[替代因果与防套利](#root-sc30-subcause)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-31](#sc-31) | [REQ-SC31-001](industrial-demand-goals-and-settlement.prd.md#req-sc31-001)（Trace refs: O7-REQ-bfd4b2f4-6b21-4c4a-961d-387b220e762f）；[REQ-SC31-002](industrial-demand-goals-and-settlement.prd.md#req-sc31-002)（Trace refs: O7-REQ-3c8dcb96-cb2b-4ec8-824a-5cb50b75f060）；[REQ-SC31-003](industrial-demand-goals-and-settlement.prd.md#req-sc31-003)（Trace refs: O7-REQ-ebb96559-33a9-4029-af82-a709c71225e0）；[REQ-SC31-004](industrial-demand-goals-and-settlement.prd.md#req-sc31-004)（Trace refs: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3）；[REQ-SC31-005](industrial-demand-goals-and-settlement.prd.md#req-sc31-005)（Trace refs: O7-REQ-62129528-2238-4733-8b8e-d226dc40943d）；[REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006)（Trace refs: O7-REQ-544d08be-9d56-4106-bd80-89c46786bfdf）；[REQ-SC31-007](industrial-demand-goals-and-settlement.prd.md#req-sc31-007)（Trace refs: O7-REQ-1e60706a-d6b6-43e8-b3f9-86af391700fd）；[REQ-SC31-008](industrial-demand-goals-and-settlement.prd.md#req-sc31-008)（Trace refs: O7-REQ-34f477af-5903-48fd-8889-ceb8b1028ef3）；[REQ-SC31-009](industrial-demand-goals-and-settlement.prd.md#req-sc31-009)（Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 |
+| [SC-32](#sc-32) | 没有将相邻叶子身份扩大为本条全部义务。 | [native 制度互斥分类与冻结](#root-sc32-institution)；[唯一治理批准的制度试点](#root-sc32-pilot)；[owner-bound budget 玩家读面](#root-sc32-budgetread)；[预算与世界效果原子单次提交](#root-sc32-budgetcommit)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-33](#sc-33) | [REQ-WR-PE-002](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002)（Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1）；[REQ-WR-PE-003](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003)（Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07） | [可选外部性 profile 与 legacy 边界](#root-sc33-extscope)；[外部性处置与其他事实隔离](#root-sc33-extdispose)。其余通用重复、恢复和入口条件复用左列/原 SC，不重复分配身份。 |
+| [SC-34](#sc-34) | [REQ-WR-GCB-001](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001)（Trace refs: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b）；[REQ-WR-GCB-002](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-002)（Trace refs: O7-REQ-79b6687e-3b8c-42a3-a266-df4d191fec06）；[REQ-WR-GCB-003](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-003)（Trace refs: O7-REQ-4f6597ff-8e34-4d12-bb60-060df0e09595）；[REQ-WR-GCB-006](governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-006)（Trace refs: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8）；[REQ-WR-ES-003](market-normal-state-and-emergency-supply.prd.md#req-wr-es-003)（Trace refs: O7-REQ-51922b18-cc1e-4894-9c12-66c0a6def6d1）；[REQ-WR-ES-004](market-normal-state-and-emergency-supply.prd.md#req-wr-es-004)（Trace refs: O7-REQ-c17942de-f8ae-44fe-8525-88560dccf0a3）；[REQ-WR-MW-005](mature-world-progression.prd.md#req-wr-mw-005)（Trace refs: O7-REQ-65c69f9e-3752-4b41-b2de-ed99092994e5）；[REQ-WR-PE-002](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-002)（Trace refs: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1）；[REQ-WR-PE-003](playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-003)（Trace refs: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07）；[REQ-ENTRY-CANDIDATE-001](../player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001)（Trace refs: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b）；[REQ-ENTRY-CLAIM-001](../player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-001)（Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff）；[REQ-ENTRY-CLAIM-003](../player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003)（Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385） | 组合验收：按原 SC 的完整适用条件核对所列主责义务，不新造概括性身份；当前各叶子状态分别成立，不加总为完成。 原 AR-4、MW-10/MW-12 为组合来源；公开claim服从 entry 主责和同候选专业证据。 |
+
+### 7.2 既存根独立范围的状态卡
+
+以下状态仅表示实际核定深度。`未核实` 不等于 `未设计` 或 `未实现`，更不是技术豁免。相关专业 PRD、架构导航或目标合同的存在不单独证明设计已覆盖；专业 owner 后续补具体方案或核定既有精确双向承接时再更新对应状态。真实执行和组合验收另有固定候选/环境证据。
+
+<a id="root-sc5-altcompare"></a>
+#### 功能状态卡：canonical 替代比较
+
+Trace ID: O7-REQ-d76b49a6-01a7-46db-968b-23bfd35fc295
+
+- 主责范围：仅 [SC-5](#sc-5) 的“未支持细粒度请求的单个或多个安全 canonical 候选必须可比较目标/范围、成本、风险、后果、可撤回性与推荐理由；没有安全替代时停止”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [玩法总纲设计](../../game/gameplay/gameplay-top-level-design.design.md#2-设计结构)、[间接控制设计](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)。总纲是微/中/长循环与接线导航，间接控制设计提供意图/因果/恢复保证；这些存在性与局部叶子覆盖尚不能证明本独立范围具有精确分配、所有外部依赖与验证闭环。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定canonical 替代比较的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：未支持细粒度请求的单个或多个安全 canonical 候选必须可比较目标/范围、成本、风险、后果、可撤回性与推荐理由；没有安全替代时停止的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc5-altauth"></a>
+#### 功能状态卡：替代的明确授权与无效果预览
+
+Trace ID: O7-REQ-7326a105-57ef-4cf4-823c-2755c539671b
+
+- 主责范围：仅 [SC-5](#sc-5) 的“确认前无世界效果；新增承诺或不可逆后果取得对应范围明确授权，不能隐式继承越界权限”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [玩法总纲设计](../../game/gameplay/gameplay-top-level-design.design.md#2-设计结构)、[间接控制设计](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)。总纲是微/中/长循环与接线导航，间接控制设计提供意图/因果/恢复保证；这些存在性与局部叶子覆盖尚不能证明本独立范围具有精确分配、所有外部依赖与验证闭环。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定替代的明确授权与无效果预览的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：确认前无世界效果；新增承诺或不可逆后果取得对应范围明确授权，不能隐式继承越界权限的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc5-altrepeat"></a>
+#### 功能状态卡：替代失效与单次结果
+
+Trace ID: O7-REQ-ea9640b0-fb39-4fde-9ec1-69e25c448ba5
+
+- 主责范围：仅 [SC-5](#sc-5) 的“拒绝、过期、权限变化、并发确认、重连或重试不静默执行或重复结果；原请求、替代和结果保持可审计关联”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [玩法总纲设计](../../game/gameplay/gameplay-top-level-design.design.md#2-设计结构)、[间接控制设计](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)。总纲是微/中/长循环与接线导航，间接控制设计提供意图/因果/恢复保证；这些存在性与局部叶子覆盖尚不能证明本独立范围具有精确分配、所有外部依赖与验证闭环。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定替代失效与单次结果的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：拒绝、过期、权限变化、并发确认、重连或重试不静默执行或重复结果；原请求、替代和结果保持可审计关联的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc7-time"></a>
+#### 功能状态卡：持续的单一权威时间线
+
+Trace ID: O7-REQ-83d8d112-36ea-4481-9fcc-47ee0c0dcbd4
+
+- 主责范围：仅 [SC-7](#sc-7) 的“没有直接玩家输入时仍按世界规则推进；不冻结 tick 时长或产生第二条时间线”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)、[处置与幂等](../../world-runtime/design.md#622-disposition-and-idempotency-contract)、[M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)。现有事务与报价设计提供相关机制，但其上游分配不等于本条全跨域玩家结果的精确承接；Data 的 purpose/scope/撤销或跨粒度物理真值不能从通用事务原子性推导。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定持续的单一权威时间线的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：没有直接玩家输入时仍按世界规则推进；不冻结 tick 时长或产生第二条时间线的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc7-scale"></a>
+#### 功能状态卡：跨粒度物理真值一致
+
+Trace ID: O7-REQ-5514d066-856a-49e9-9c34-ad0ea3408c99
+
+- 主责范围：仅 [SC-7](#sc-7) 的“同一行动在 gameplay/runtime/Agent/Viewer 的粗粒度与表现映射保持距离、顺序、成本、持久化结果一致”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)、[处置与幂等](../../world-runtime/design.md#622-disposition-and-idempotency-contract)、[M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)。现有事务与报价设计提供相关机制，但其上游分配不等于本条全跨域玩家结果的精确承接；Data 的 purpose/scope/撤销或跨粒度物理真值不能从通用事务原子性推导。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定跨粒度物理真值一致的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：同一行动在 gameplay/runtime/Agent/Viewer 的粗粒度与表现映射保持距离、顺序、成本、持久化结果一致的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc8-dataread"></a>
+#### 功能状态卡：Data 授权的可读预览
+
+Trace ID: O7-REQ-6bd89114-455c-490b-9b21-425fa90df866
+
+- 主责范围：仅 [SC-8](#sc-8) 的“预览不授予访问或收益；owner、recipient/使用主体、purpose、scope、授权状态可读”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)、[处置与幂等](../../world-runtime/design.md#622-disposition-and-idempotency-contract)、[M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)。现有事务与报价设计提供相关机制，但其上游分配不等于本条全跨域玩家结果的精确承接；Data 的 purpose/scope/撤销或跨粒度物理真值不能从通用事务原子性推导。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定Data 授权的可读预览的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：预览不授予访问或收益；owner、recipient/使用主体、purpose、scope、授权状态可读的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc8-datacommit"></a>
+#### 功能状态卡：Data 中途失效与合法结算
+
+Trace ID: O7-REQ-ebcc34f8-5db5-46f7-85fb-30b44b8b797f
+
+- 主责范围：仅 [SC-8](#sc-8) 的“提交至结算间授权失效或不能证明有效时原子拒绝或可读待决，无 sink、收益或隐性义务；合法结算只产生一次 receipt 支持的使用/转移”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)、[处置与幂等](../../world-runtime/design.md#622-disposition-and-idempotency-contract)、[M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)。现有事务与报价设计提供相关机制，但其上游分配不等于本条全跨域玩家结果的精确承接；Data 的 purpose/scope/撤销或跨粒度物理真值不能从通用事务原子性推导。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定Data 中途失效与合法结算的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：提交至结算间授权失效或不能证明有效时原子拒绝或可读待决，无 sink、收益或隐性义务；合法结算只产生一次 receipt 支持的使用/转移的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc8-datareplay"></a>
+#### 功能状态卡：Data 重试与历史 provenance
+
+Trace ID: O7-REQ-c549ec3e-5dc6-4e27-9285-4e326b0fc5d3
+
+- 主责范围：仅 [SC-8](#sc-8) 的“重试、重连、重复提交、历史 receipt 重放不复活授权或复制结果；后续撤销保留既有合法 provenance，提供重新授权或替代路径”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)、[处置与幂等](../../world-runtime/design.md#622-disposition-and-idempotency-contract)、[M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)。现有事务与报价设计提供相关机制，但其上游分配不等于本条全跨域玩家结果的精确承接；Data 的 purpose/scope/撤销或跨粒度物理真值不能从通用事务原子性推导。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定Data 重试与历史 provenance的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：重试、重连、重复提交、历史 receipt 重放不复活授权或复制结果；后续撤销保留既有合法 provenance，提供重新授权或替代路径的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc12-session"></a>
+#### 功能状态卡：普通成长不要求持续在线
+
+Trace ID: O7-REQ-036e47a9-59dd-4ef7-a99b-a942544d723a
+
+- 主责范围：仅 [SC-12](#sc-12) 的“短命令/复盘和有界离线授权可维持普通成长；较长区域、外交、治理会话是自愿扩展，不要求先掌握全部系统”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [玩法总纲设计](../../game/gameplay/gameplay-top-level-design.design.md#2-设计结构)、[间接控制设计](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)。总纲是微/中/长循环与接线导航，间接控制设计提供意图/因果/恢复保证；这些存在性与局部叶子覆盖尚不能证明本独立范围具有精确分配、所有外部依赖与验证闭环。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定普通成长不要求持续在线的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：短命令/复盘和有界离线授权可维持普通成长；较长区域、外交、治理会话是自愿扩展，不要求先掌握全部系统的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc12-window"></a>
+#### 功能状态卡：高风险响应与授权恢复可读
+
+Trace ID: O7-REQ-890efa7a-b296-4d48-8b11-7199ad4e200e
+
+- 主责范围：仅 [SC-12](#sc-12) 的“高风险窗口可预期且有界，授权范围与恢复路径可读；不以持续在线换取基本成长、恢复或资格”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [玩法总纲设计](../../game/gameplay/gameplay-top-level-design.design.md#2-设计结构)、[间接控制设计](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md#agency-interruption-hooks)。总纲是微/中/长循环与接线导航，间接控制设计提供意图/因果/恢复保证；这些存在性与局部叶子覆盖尚不能证明本独立范围具有精确分配、所有外部依赖与验证闭环。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定高风险响应与授权恢复可读的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：高风险窗口可预期且有界，授权范围与恢复路径可读；不以持续在线换取基本成长、恢复或资格的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc16-pending"></a>
+#### 功能状态卡：通用 pending 不取得资源或生产顺位
+
+Trace ID: O7-REQ-67149303-7f84-47ad-830f-8d655b6a64c7
+
+- 主责范围：仅 [SC-16](#sc-16) 与[原跨资源阶段表/条件报价](#跨资源承诺、失效与重复提交边界) 的“尚未通过所属专业域当前资源/规则校验的请求送达、入队或 pending，不产生资源 hold、sink、设施、生产顺位或持续义务；不把 transport 的 accepted 命名当成领域承诺”。验收仍沿原 SC、原阶段表及报价段的成功/失败条件；不新增 AC、资源数值或运行保证。合同、需求漂移和首个认领的具体特例继续复用 §7.1 的叶子主责。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)及[报价计算](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)。M4 §6.4 区分预览、pending和Runtime颁发的承诺；现有分配只声明IA001/首局局部消费，不能据此证明所有资源/资格/设施路径的入队都没有hold/sink/生产顺位。
+- 实现与验证依据：尚未逐一核定通用 pending 不取得资源或生产顺位的完整生产调用链、当前候选实际结果及正式入口负例；不把其他领域的等待或报价测试外推为本范围全通过。本次未执行 runtime、浏览器、模型或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：由 §5.1 的 SC-16 专业 owner 补核上述独立边界的精确设计/反链、实际消费者和同候选验收；不改变已接受领域承诺的合法预留或首个认领的 upkeep 合同。
+
+<a id="root-sc16-runway"></a>
+#### 功能状态卡：报价余额与运行保障分离
+
+Trace ID: O7-REQ-84a63552-d68d-48eb-80dc-23cff7531242
+
+- 主责范围：仅 [SC-16](#sc-16) 与[原跨资源阶段表/条件报价](#跨资源承诺、失效与重复提交边界) 的“electricity_after 仅为当次报价预计扣减后余额，不等同 Agent 或设施运行 runway，也不能单独保证持续生产或不停机；两者影响当前决定时分别说明余额、runway/风险及真实恢复或暂缓路径”。验收仍沿原 SC、原阶段表及报价段的成功/失败条件；不新增 AC、资源数值或运行保证。合同、需求漂移和首个认领的具体特例继续复用 §7.1 的叶子主责。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 预览到承诺](../../world-simulator/m4/industrial-resource-flow-contract.design.md#64-预览到承诺的关联)及[报价计算](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)。M4报价设计可定位owner电力与账本计算，产品根已区分余额/runway；尚未核定所有适用quote消费者、专业runway来源及风险/恢复解释的精确设计和验证关系。
+- 实现与验证依据：尚未逐一核定报价余额与运行保障分离的完整生产调用链、当前候选实际结果及正式入口负例；不把其他领域的等待或报价测试外推为本范围全通过。本次未执行 runtime、浏览器、模型或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：由 §5.1 的 SC-16 专业 owner 补核上述独立边界的精确设计/反链、实际消费者和同候选验收；不改变已接受领域承诺的合法预留或首个认领的 upkeep 合同。
+
+<a id="root-sc20-jobdispose"></a>
+#### 功能状态卡：工业任务的投入与结果处置
+
+Trace ID: O7-REQ-eacc6e2c-a75b-4c2b-b32b-f24e15832f95
+
+- 主责范围：仅 [SC-20](#sc-20) 的“报价无效果、提交单次承诺或原子拒绝；完成/阻塞/中止按专业规则守恒处置投入、在制、产物和副产物，不同时退款与完成”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定工业任务的投入与结果处置的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：报价无效果、提交单次承诺或原子拒绝；完成/阻塞/中止按专业规则守恒处置投入、在制、产物和副产物，不同时退款与完成的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc20-jobcontinue"></a>
+#### 功能状态卡：工业任务续接与因果换向
+
+Trace ID: O7-REQ-15abc2d8-2dc7-43ed-bb20-895dc11e8452
+
+- 主责范围：仅 [SC-20](#sc-20) 的“同因果恢复保持 root continuation，因果变更建立链接 revision/candidate 且 W=0；换向/停机/权限变化/重连/replay 不静默迁移取消或重复效果”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定工业任务续接与因果换向的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：同因果恢复保持 root continuation，因果变更建立链接 revision/candidate 且 W=0；换向/停机/权限变化/重连/replay 不静默迁移取消或重复效果的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-batch"></a>
+#### 功能状态卡：批次适用与已到达输入
+
+Trace ID: O7-REQ-93f437ea-48eb-4f07-9af2-751faac09ec7
+
+- 主责范围：仅 [SC-21](#sc-21) 的“下游只消费已结算且到达适用账本、满足规格/品质的中间品；未知/不兼容在 sink/进度前 fail closed，不推断、降级、混料或免费 salvage”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定批次适用与已到达输入的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：下游只消费已结算且到达适用账本、满足规格/品质的中间品；未知/不兼容在 sink/进度前 fail closed，不推断、降级、混料或免费 salvage的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-join"></a>
+#### 功能状态卡：多输入 join 与 partial kit
+
+Trace ID: O7-REQ-6e7590d6-923d-407a-93df-eef373cccaea
+
+- 主责范围：仅 [SC-21](#sc-21) 的“canonical join 绑定完整 parent-edge/receipt set；默认齐套前无 sink/WIP/进度；显式 staged intake 逐 parent 单次消费并保留 remaining obligations，缺失/换线不得隐藏 partial kit 或复用 receipt”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定多输入 join 与 partial kit的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：canonical join 绑定完整 parent-edge/receipt set；默认齐套前无 sink/WIP/进度；显式 staged intake 逐 parent 单次消费并保留 remaining obligations，缺失/换线不得隐藏 partial kit 或复用 receipt的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-capacity"></a>
+#### 功能状态卡：共享容量公平分配与重评
+
+Trace ID: O7-REQ-7f40ee7a-192f-4579-a69d-9946a6e4d5bf
+
+- 主责范围：仅 [SC-21](#sc-21) 的“同一权威快照为争用意图给完整/部分/延期/拒绝；不超额 hold、不靠提交/重试插队，释放/过期单次重评且有效意图不被无说明无限跳过”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定共享容量公平分配与重评的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：同一权威快照为争用意图给完整/部分/延期/拒绝；不超额 hold、不靠提交/重试插队，释放/过期单次重评且有效意图不被无说明无限跳过的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-service"></a>
+#### 功能状态卡：端到端 service window
+
+Trace ID: O7-REQ-a3562631-35fa-4581-86e3-589e530ad253
+
+- 主责范围：仅 [SC-21](#sc-21) 的“绑定 stage/edge/buffer/terminal reservation chain、权威时界与 none/soft/hard；每边界重验，expiry/release/renewal 不重复或靠 replay 延长，production on-time 不冒充 delivery”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定端到端 service window的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：绑定 stage/edge/buffer/terminal reservation chain、权威时界与 none/soft/hard；每边界重验，expiry/release/renewal 不重复或靠 replay 延长，production on-time 不冒充 delivery的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-diagnostic"></a>
+#### 功能状态卡：冻结计划与实际诊断归因
+
+Trace ID: O7-REQ-3373ec45-3ce8-4539-8bdd-f85acca2c252
+
+- 主责范围：仅 [SC-21](#sc-21) 的“diagnostic window 绑定 candidate/config epoch 与 journal/state-root；accepted 原子冻结 baseline，replan 链接 revision，actual 不跨 revision 回填，互斥 bucket、损耗补偿和主/派生 blocker 不重计，缺证据 unknown”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定冻结计划与实际诊断归因的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：diagnostic window 绑定 candidate/config epoch 与 journal/state-root；accepted 原子冻结 baseline，replan 链接 revision，actual 不跨 revision 回填，互斥 bucket、损耗补偿和主/派生 blocker 不重计，缺证据 unknown的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-quantum"></a>
+#### 功能状态卡：合法执行单位与 partial recipe
+
+Trace ID: O7-REQ-baa1e6b2-1a46-47a3-b75c-a0e9cf8b154c
+
+- 主责范围：仅 [SC-21](#sc-21) 的“recipe/factory profile 明示执行单位、full/partial、量化和 residual；requested/committed/executed/unmet 可追溯，不足合法单位不扣料、产半批或计稳定进度”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定合法执行单位与 partial recipe的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：recipe/factory profile 明示执行单位、full/partial、量化和 residual；requested/committed/executed/unmet 可追溯，不足合法单位不扣料、产半批或计稳定进度的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-fanout"></a>
+#### 功能状态卡：同 cycle 多输出原子结算
+
+Trace ID: O7-REQ-885f0bc7-d049-49f2-bff4-a372ee06489c
+
+- 主责范围：仅 [SC-21](#sc-21) 的“主/副产物属于同 output bundle，默认全部 branch 原子预检/结算；只有显式 split fan-out 可逐 branch 单次结算并保留 failed-leg pending/residual，不丢失复制或伪造完成”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定同 cycle 多输出原子结算的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：主/副产物属于同 output bundle，默认全部 branch 原子预检/结算；只有显式 split fan-out 可逐 branch 单次结算并保留 failed-leg pending/residual，不丢失复制或伪造完成的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-backpressure"></a>
+#### 功能状态卡：有限缓冲与背压
+
+Trace ID: O7-REQ-65e2849e-3b51-4440-a5dd-78cdd7c0692a
+
+- 主责范围：仅 [SC-21](#sc-21) 的“下游不可用或缓冲满按声明规则保持、入缓冲或原子拒绝，不静默丢弃、瞬移、无限堆积或伪造完成”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定有限缓冲与背压的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：下游不可用或缓冲满按声明规则保持、入缓冲或原子拒绝，不静默丢弃、瞬移、无限堆积或伪造完成的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-cutover"></a>
+#### 功能状态卡：工业 cutover 的旧工作处置
+
+Trace ID: O7-REQ-38521519-d028-4768-abc5-723e239192c4
+
+- 主责范围：仅 [SC-21](#sc-21) 的“单一 cutover 为旧 hold、在制、在途和缓冲批次产生一次显式处置；不支持的迁移 fail closed，支持的 handoff/conversion 保留父 receipt、数量与损耗”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 共同因果条件：[工业任务续接与因果换向](#root-sc20-jobcontinue)（Trace refs: O7-REQ-15abc2d8-2dc7-43ed-bb20-895dc11e8452）；这里不重复声明其身份。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定工业 cutover 的旧工作处置的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：单一 cutover 为旧 hold、在制、在途和缓冲批次产生一次显式处置；不支持的迁移 fail closed，支持的 handoff/conversion 保留父 receipt、数量与损耗的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc21-terminal"></a>
+#### 功能状态卡：有限终端账本与失效处置
+
+Trace ID: O7-REQ-012b7904-2468-48c6-996d-14698aa7f798
+
+- 主责范围：仅 [SC-21](#sc-21) 的“最终产物仅进入 owner-bound 有限账本、明确交付承诺或受支持的 hold/quarantine；终端失效保持有界 blocked/待交付或原子拒绝，不产生无限库存”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定有限终端账本与失效处置的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：最终产物仅进入 owner-bound 有限账本、明确交付承诺或受支持的 hold/quarantine；终端失效保持有界 blocked/待交付或原子拒绝，不产生无限库存的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc22-maintchoice"></a>
+#### 功能状态卡：维护与停机的受支持选择
+
+Trace ID: O7-REQ-cfbe031b-99ce-419b-a3b4-bc63e066e085
+
+- 主责范围：仅 [SC-22](#sc-22) 的“排产前比较 maintain_before_run/run_at_risk/reduce_load/defer 中实际支持者，并说明成本/占用、产出/复查、风险、可撤回性与推荐理由”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定维护与停机的受支持选择的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：排产前比较 maintain_before_run/run_at_risk/reduce_load/defer 中实际支持者，并说明成本/占用、产出/复查、风险、可撤回性与推荐理由的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc22-maintunknown"></a>
+#### 功能状态卡：维护 unknown 的提交边界
+
+Trace ID: O7-REQ-2684e207-9424-41df-93a5-80bd8f541251
+
+- 主责范围：仅 [SC-22](#sc-22) 的“maintenance_not_tracked 不伪造安全；unknown 时不可逆候选不得 selectable，原子拒绝或无隐式 hold 的有界 pending；只有明确 profile 支持的 at-risk/unknown 路径可显示”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定维护 unknown 的提交边界的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：maintenance_not_tracked 不伪造安全；unknown 时不可逆候选不得 selectable，原子拒绝或无隐式 hold 的有界 pending；只有明确 profile 支持的 at-risk/unknown 路径可显示的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc23-buildquote"></a>
+#### 功能状态卡：建设报价身份与承诺包
+
+Trace ID: O7-REQ-4507fa71-95c4-404a-969a-c15c08dbeccc
+
+- 主责范围：仅 [SC-23](#sc-23) 的“报价只读绑定 owner/site/kind/id、candidate/config/world revision、quote correlation；比较真实建造/补料/移站/补电/延期，公开全部输入、电力、boundary、blocker 和目标关联”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定建设报价身份与承诺包的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：报价只读绑定 owner/site/kind/id、candidate/config/world revision、quote correlation；比较真实建造/补料/移站/补电/延期，公开全部输入、电力、boundary、blocker 和目标关联的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc23-buildpower"></a>
+#### 功能状态卡：四类建设 power mode 边界
+
+Trace ID: O7-REQ-8931e5de-af90-4c6a-8c2e-d21930e1a4ef
+
+- 主责范围：仅 [SC-23](#sc-23) 的“各 mode 的 sink/hold/revalidation/best-effort/争用/unknown 分别验证；建设、配方、维护和 battery runway 分层，PowerPlant 仅 profile output boundary 后生效，入口事实同义”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定四类建设 power mode 边界的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：各 mode 的 sink/hold/revalidation/best-effort/争用/unknown 分别验证；建设、配方、维护和 battery runway 分层，PowerPlant 仅 profile output boundary 后生效，入口事实同义的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc24-recipestate"></a>
+#### 功能状态卡：六状态配方准入
+
+Trace ID: O7-REQ-e912cdd3-0222-4a88-b920-983a4118a6d1
+
+- 主责范围：仅 [SC-24](#sc-24) 的“pending_validation/validated_pending_admission/active/restricted/retiring/retired 及转换可读；blocker reason 不新增状态，生效前无效果，Agent 只在授权内提议确认”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定六状态配方准入的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：pending_validation/validated_pending_admission/active/restricted/retiring/retired 及转换可读；blocker reason 不新增状态，生效前无效果，Agent 只在授权内提议确认的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc24-recipeversion"></a>
+#### 功能状态卡：任务不可变配方版本与绑定
+
+Trace ID: O7-REQ-70481f2f-9b55-4b99-afde-b4d451843d1d
+
+- 主责范围：仅 [SC-24](#sc-24) 的“每个 accepted 任务固定不可变 recipe version/authority，并与 factory capability、输入批次、物流路径、output bundle 和 terminal purpose 关联”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 共同因果条件：[工业任务续接与因果换向](#root-sc20-jobcontinue)（Trace refs: O7-REQ-15abc2d8-2dc7-43ed-bb20-895dc11e8452）；这里不重复声明其身份。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定任务不可变配方版本与绑定的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：每个 accepted 任务固定不可变 recipe version/authority，并与 factory capability、输入批次、物流路径、output bundle 和 terminal purpose 关联的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc24-recipedispose"></a>
+#### 功能状态卡：配方生命周期六类工作处置
+
+Trace ID: O7-REQ-df2f1a58-f435-4e86-b6c1-810f13f8267d
+
+- 主责范围：仅 [SC-24](#sc-24) 的“新排程、accepted未sink、WIP、transit、buffer、terminal-pending 分别按状态和 profile 处置；retiring/retired 禁止新排程保留历史，successor 不自动迁移，terminal义务不静默改绑或提前结算”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定配方生命周期六类工作处置的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：新排程、accepted未sink、WIP、transit、buffer、terminal-pending 分别按状态和 profile 处置；retiring/retired 禁止新排程保留历史，successor 不自动迁移，terminal义务不静默改绑或提前结算的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc25-factorychoice"></a>
+#### 功能状态卡：已建成工厂能力选择
+
+Trace ID: O7-REQ-8a215d9f-cefc-4d06-82f3-935c44454558
+
+- 主责范围：仅 [SC-25](#sc-25) 的“比较真实 upgrade/reconfigure/run_current/reduce_or_defer/retire_and_rebuild/defer，明确成本、占用、产出、时延、风险、可撤回性及推荐理由”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定已建成工厂能力选择的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：比较真实 upgrade/reconfigure/run_current/reduce_or_defer/retire_and_rebuild/defer，明确成本、占用、产出、时延、风险、可撤回性及推荐理由的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc25-factorydispose"></a>
+#### 功能状态卡：五类存量工作合法处置
+
+Trace ID: O7-REQ-aa02140c-4e3d-411e-97ba-28ad19830c5b
+
+- 主责范围：仅 [SC-25](#sc-25) 的“accepted-unstarted/WIP/transit/buffer/terminal-pending 各仅 profile支持的单次处置；retiring/retired 禁新排程，successor需授权fresh conversion，不静默退款/销毁/复制或提前terminal settlement”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定五类存量工作合法处置的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：accepted-unstarted/WIP/transit/buffer/terminal-pending 各仅 profile支持的单次处置；retiring/retired 禁新排程，successor需授权fresh conversion，不静默退款/销毁/复制或提前terminal settlement的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc25-factorystate"></a>
+#### 功能状态卡：工厂状态与单次变更
+
+Trace ID: O7-REQ-df369b38-4338-4207-b6e0-60cfba3f12cb
+
+- 主责范围：仅 [SC-25](#sc-25) 的“operational/reconfiguration_pending/reconfiguring/degraded/retiring/retired 产品状态可读；degraded 新工作须 profile at-risk；upgrade/retire/release/cutover/replay 不重复或复活旧candidate”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定工厂状态与单次变更的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：operational/reconfiguration_pending/reconfiguring/degraded/retiring/retired 产品状态可读；degraded 新工作须 profile at-risk；upgrade/retire/release/cutover/replay 不重复或复活旧candidate的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc27-discover"></a>
+#### 功能状态卡：同快照配方候选发现
+
+Trace ID: O7-REQ-d0c8d71e-dae0-405f-8b01-c6d573eaf719
+
+- 主责范围：仅 [SC-27](#sc-27) 的“factory-ready/recipe-missing 后候选来自同权威快照，available/blocked/unknown 互异且同名版本不合并；目标、fit、输入、物流、电力、maintenance、output/terminal、风险/下一步可读”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定同快照配方候选发现的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：factory-ready/recipe-missing 后候选来自同权威快照，available/blocked/unknown 互异且同名版本不合并；目标、fit、输入、物流、电力、maintenance、output/terminal、风险/下一步可读的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc28-profile"></a>
+#### 功能状态卡：完整代表性执行档案
+
+Trace ID: O7-REQ-6951ebb2-04c7-4a7e-a3af-338856dce117
+
+- 主责范围：仅 [SC-28](#sc-28) 的“同 candidate 的 factory/pinned recipe、两类原料batch/quality/custody、物流、cycle、power、主副产物bundle、terminal与progression完整只读投影；缺authority显示incomplete/unknown/blocked”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定完整代表性执行档案的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：同 candidate 的 factory/pinned recipe、两类原料batch/quality/custody、物流、cycle、power、主副产物bundle、terminal与progression完整只读投影；缺authority显示incomplete/unknown/blocked的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc29-sitecompare"></a>
+#### 功能状态卡：同目标双站点比较
+
+Trace ID: O7-REQ-982fc046-c8dc-43d1-bc0c-8b6bd3e0244b
+
+- 主责范围：仅 [SC-29](#sc-29) 的“至少两个合法site比较输入/输出路径、容量损耗、电力、terminal、建设成本、交付风险和扩张机会成本，available/blocked/unknown可分”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定同目标双站点比较的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：至少两个合法site比较输入/输出路径、容量损耗、电力、terminal、建设成本、交付风险和扩张机会成本，available/blocked/unknown可分的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc29-siteadvisory"></a>
+#### 功能状态卡：advisory topology 与建造前置分离
+
+Trace ID: O7-REQ-328d5c5c-24d4-4bf6-bfd5-d1f968c9fdd2
+
+- 主责范围：仅 [SC-29](#sc-29) 的“未固定recipe的特定topology仅advisory；只有site facts/profile construction prerequisite进入BuildFactory重验，advisory漂移不阻断建厂而在recipe discovery/ScheduleRecipe重读”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定advisory topology 与建造前置分离的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：未固定recipe的特定topology仅advisory；只有site facts/profile construction prerequisite进入BuildFactory重验，advisory漂移不阻断建厂而在recipe discovery/ScheduleRecipe重读的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc30-subchoice"></a>
+#### 功能状态卡：合法替代与 no_legal_substitute
+
+Trace ID: O7-REQ-8a79f47e-f132-4467-8d09-d0ceacaac868
+
+- 主责范围：仅 [SC-30](#sc-30) 的“区分同料换来源、显式异料替代、换配方；比较数量/ratio/rounding/residual、损耗、power/物流/terminal、value、风险/W/复查；默认禁止异料，未知不伪装degraded安全”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定合法替代与 no_legal_substitute的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：区分同料换来源、显式异料替代、换配方；比较数量/ratio/rounding/residual、损耗、power/物流/terminal、value、风险/W/复查；默认禁止异料，未知不伪装degraded安全的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc30-subsettle"></a>
+#### 功能状态卡：替代决定与实际 conversion 分离
+
+Trace ID: O7-REQ-300c6cbb-49f5-4858-a749-309991d5a5d0
+
+- 主责范围：仅 [SC-30](#sc-30) 的“preview无效果，确认fresh后一次decision；decision-only无sink/credit/conversion/W/reward；实际conversion须profile支持且有linked exactly-once settlement/provenance”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定替代决定与实际 conversion 分离的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：preview无效果，确认fresh后一次decision；decision-only无sink/credit/conversion/W/reward；实际conversion须profile支持且有linked exactly-once settlement/provenance的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc30-subcause"></a>
+#### 功能状态卡：替代因果与防套利
+
+Trace ID: O7-REQ-84ea0d88-f33b-4ac1-9722-ca4892df9152
+
+- 主责范围：仅 [SC-30](#sc-30) 的“仅全产出因果不变的profile替代保留pinned recipe并建child decision，其余新candidate W=0；首sink后仅支持的单次处置，重试/切换/拆分不复制或套利”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [M4 工业设计 §6](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)、[方案绑定](../../world-simulator/m4/industrial-resource-flow-contract.design.md#starter-quote-submit-binding)与[恢复映射](../../world-simulator/m4/industrial-resource-flow-contract.design.md#request-outcome-observation-separation)。这些设计精确承接的是报价净缺口/消费账本、首局同参数提交和未知结果恢复；其分配表显式排除完整工业执行系统。对应 M4 专业 PRD 有更广目标，不能据此将本独立义务的系统设计判为完整。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定替代因果与防套利的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：仅全产出因果不变的profile替代保留pinned recipe并建child decision，其余新candidate W=0；首sink后仅支持的单次处置，重试/切换/拆分不复制或套利的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc32-institution"></a>
+#### 功能状态卡：native 制度互斥分类与冻结
+
+Trace ID: O7-REQ-90614e34-bbc7-42df-b355-7ce0b34ccdc3
+
+- 主责范围：仅 [SC-32](#sc-32) 的“Alliance=Compatibility keep、War=Defer、Governance=Kernel keep、EconomicContract=Compatibility keep；未完成互斥分类不得新增native制度action/state”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定native 制度互斥分类与冻结的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：Alliance=Compatibility keep、War=Defer、Governance=Kernel keep、EconomicContract=Compatibility keep；未完成互斥分类不得新增native制度action/state的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc32-pilot"></a>
+#### 功能状态卡：唯一治理批准的制度试点
+
+Trace ID: O7-REQ-f081f96d-f95a-4538-b0b7-3edf23ff772a
+
+- 主责范围：仅 [SC-32](#sc-32) 的“Alliance或EconomicContract择一于合法activation转Module candidate，另一保持兼容；不绕过L0/L1，旧snapshot/replay/玩家结果/单世界连续，版本ABI和失败恢复须验证”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定唯一治理批准的制度试点的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：Alliance或EconomicContract择一于合法activation转Module candidate，另一保持兼容；不绕过L0/L1，旧snapshot/replay/玩家结果/单世界连续，版本ABI和失败恢复须验证的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc32-budgetread"></a>
+#### 功能状态卡：owner-bound budget 玩家读面
+
+Trace ID: O7-REQ-96cb1655-2ca3-445f-af2e-9f113e6f3e8e
+
+- 主责范围：仅 [SC-32](#sc-32) 的“owner/payer、quote、affordability、unknown/degraded可解释；执行预算与Electricity/Data等资源分离，不隐式转移payer或预算”。这里的 execution budget 是能力执行计量，不替代玩家委托给 Agent 的授权累计额度。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定owner-bound budget 玩家读面的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：owner/payer、quote、affordability、unknown/degraded可解释；执行预算与Electricity/Data等资源分离，不隐式转移payer或预算的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc32-budgetcommit"></a>
+#### 功能状态卡：预算与世界效果原子单次提交
+
+Trace ID: O7-REQ-70e55a1f-7087-41e8-918d-7d1989c0155a
+
+- 主责范围：仅 [SC-32](#sc-32) 的“preview/stale/deny/无效果失败不debit，actual effect+debit+receipt原子一次；retry/replay不重复扣费/credit，owner失配或unknown不能透支”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定预算与世界效果原子单次提交的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：preview/stale/deny/无效果失败不debit，actual effect+debit+receipt原子一次；retry/replay不重复扣费/credit，owner失配或unknown不能透支的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc33-extscope"></a>
+#### 功能状态卡：可选外部性 profile 与 legacy 边界
+
+Trace ID: O7-REQ-e6f4ffa7-0b1b-4d0e-b7a3-8ca38c8d0244
+
+- 主责范围：仅 [SC-33](#sc-33) 的“只适用明确industrial_externality/operational_mitigation profile；legacy无profile不变，scope/authority缺失或过期unknown/blocked不可选不可逆动作，不能获得区域或治理权”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [外部性专业合同](../../game/gameplay/gameplay-industrial-externality-contract.prd.md#4-currenttarget-evidence-cutline)、[M4 工业设计](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)。专业合同明确是 target-contract，并说明当前证据没有 factory/recipe externality profile、mitigation ledger 或 industrial impact receipt；M4 报价设计不是这些机制的系统设计。尚不能断言全仓无实现，也不能将专业 PRD 充作完整技术设计。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定可选外部性 profile 与 legacy 边界的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：只适用明确industrial_externality/operational_mitigation profile；legacy无profile不变，scope/authority缺失或过期unknown/blocked不可选不可逆动作，不能获得区域或治理权的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+<a id="root-sc33-extdispose"></a>
+#### 功能状态卡：外部性处置与其他事实隔离
+
+Trace ID: O7-REQ-bd83785c-d414-4bd7-b291-41a4d7272aa3
+
+- 主责范围：仅 [SC-33](#sc-33) 的“preview只读，submit fresh，linked production/externality disposition一次；quality/custody/byproduct/maintenance/settlement/W不被改写，WIP/transit/buffer/terminal保持root/revision及义务单次处置”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
+- 系统设计状态：未核实
+- 实现状态：未核实
+- 系统设计依据：已核对 [外部性专业合同](../../game/gameplay/gameplay-industrial-externality-contract.prd.md#4-currenttarget-evidence-cutline)、[M4 工业设计](../../world-simulator/m4/industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)。专业合同明确是 target-contract，并说明当前证据没有 factory/recipe externality profile、mitigation ledger 或 industrial impact receipt；M4 报价设计不是这些机制的系统设计。尚不能断言全仓无实现，也不能将专业 PRD 充作完整技术设计。本卡不将相关设计的存在表述为本要求已完整覆盖。
+- 实现与验证依据：尚未核定外部性处置与其他事实隔离的完整生产调用链、固定候选实际执行及适用负例；既有叶子的局部静态事实不外推本独立范围。本次未执行 runtime、浏览器、模型、多人或真人验收。
+- 核对日期与基线：2026-10-15；文档源 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；新增追踪身份不表示实现变化。
+- 剩余范围：preview只读，submit fresh，linked production/externality disposition一次；quality/custody/byproduct/maintenance/settlement/W不被改写，WIP/transit/buffer/terminal保持root/revision及义务单次处置的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+
+
+## 8. 既有节点经济合同的结果接收
+
+本节只为已经由下列 P2P 专业 SC/AC/DEC 采用的节点贡献、受限资产兑电和创世控制结果登记产品位置与唯一身份，不新增经济功能或面向所有玩家的收益承诺。原适用角色、阶段、前提、成功与拒绝条件、局部 PRD-ID、历史记录和演进计划全部保留。经济参数、公式、预算、额度、recipient/controller、vesting、签名规则、approved ledger、actual-value review、QA 和执行 authority 仍分别由原 P2P/runtime、README reward governance 与 QA 拥有；本根与 game 不取得新的调参、批准、发放或执行权。根只引用参数真值，不复制数值表。
+
+消费/组合说明：[参与与权益分离](../player-entry-distribution/participation-and-recognition-boundaries.prd.md#req-entry-part-001)与[同候选发行门禁](../player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001)继续拥有各自结果，本节不重复声明其身份。基础设施只提供[同输入确定性与原子拒绝](../world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)子范围，不能代替以下经济结果；epoch/node幂等不等同互斥intent lineage。PowerCredit路径不改starter支持、liquid starter OC或任何原有资源反补贴限制。下列条款不声称当前兑付、mint、奖励发放或生产可用；未取得完整证据前保持未核实。
+
+<a id="req-wr-economic-points-eligibility"></a>
+### REQ-WR-ECONOMIC-POINTS-ELIGIBILITY：基础义务与合格额外贡献分离
+
+Trace ID: O7-REQ-118e8c96-669b-4b11-bbec-a32831803e16
+
+适用范围与成功标准：为自身 Agent 模拟是基础义务，不直接获奖励；代跑离线节点、世界维护、有效存储和合格在线仅按原专业规则进入积分计算。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[基础义务与合格额外贡献分离](#req-wr-economic-points-eligibility)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ELIGIBILITY](#ac-wr-economic-points-eligibility)。
+- 系统设计状态：未核实
+- 系统设计依据：[基础义务与合格额外贡献分离有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-eligibility)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不能推出所有玩家获益、实际采样可信或公开网络安全。
+
+<a id="ac-wr-economic-points-eligibility"></a>
+### AC-WR-ECONOMIC-POINTS-ELIGIBILITY：基础义务与合格额外贡献分离的原验收
+
+Trace refs: O7-REQ-118e8c96-669b-4b11-bbec-a32831803e16；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ELIGIBILITY](#req-wr-economic-points-eligibility)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-eligibility)适用的固定候选中逐项核验：为自身 Agent 模拟是基础义务，不直接获奖励；代跑离线节点、世界维护、有效存储和合格在线仅按原专业规则进入积分计算。 原验收成功/拒绝条件及层级不变，实际证据至少保留原贡献画像、输入、资格与得分对账；没有对应完整证据时保持未核实。不能推出所有玩家获益、实际采样可信或公开网络安全。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-allocation"></a>
+### REQ-WR-ECONOMIC-POINTS-ALLOCATION：固定双池的确定性且不重复分配
+
+Trace ID: O7-REQ-1bd30efb-22b7-403e-94f6-fe0a2efde4a2
+
+适用范围与成功标准：两个固定 epoch 池分别按原合格正得分分配，独立存储池启用时主池排除存储权重；允许未分配余额，保持守恒、排序、惩罚效果和累计单调。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[固定双池的确定性且不重复分配](#req-wr-economic-points-allocation)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ALLOCATION](#ac-wr-economic-points-allocation)。
+- 系统设计状态：未核实
+- 系统设计依据：[固定双池的确定性且不重复分配有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-allocation)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不调整预算/权重/阈值，不证明实际数值平衡。
+
+<a id="ac-wr-economic-points-allocation"></a>
+### AC-WR-ECONOMIC-POINTS-ALLOCATION：固定双池的确定性且不重复分配的原验收
+
+Trace refs: O7-REQ-1bd30efb-22b7-403e-94f6-fe0a2efde4a2；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ALLOCATION](#req-wr-economic-points-allocation)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-allocation)适用的固定候选中逐项核验：两个固定 epoch 池分别按原合格正得分分配，独立存储池启用时主池排除存储权重；允许未分配余额，保持守恒、排序、惩罚效果和累计单调。 原验收成功/拒绝条件及层级不变，实际证据至少保留逐epoch/node得分、两池分配及预算差额；没有对应完整证据时保持未核实。不调整预算/权重/阈值，不证明实际数值平衡。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-recovery"></a>
+### REQ-WR-ECONOMIC-POINTS-RECOVERY：epoch结算与恢复不重复入账
+
+Trace ID: O7-REQ-54617172-fa9b-4efe-a058-b327ce348407
+
+适用范围与成功标准：同一 epoch/node 结算幂等；采样或快照写入不直接增加奖励，恢复、重复tick与replay只能复现结果；不可读collector状态须可观测降级，不是资产对账成功。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[epoch结算与恢复不重复入账](#req-wr-economic-points-recovery)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-RECOVERY](#ac-wr-economic-points-recovery)。
+- 系统设计状态：未核实
+- 系统设计依据：[epoch结算与恢复不重复入账有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-recovery)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；runtime closure草案未完整吸收；不证明已结算资产安全恢复或生产custody。
+
+<a id="ac-wr-economic-points-recovery"></a>
+### AC-WR-ECONOMIC-POINTS-RECOVERY：epoch结算与恢复不重复入账的原验收
+
+Trace refs: O7-REQ-54617172-fa9b-4efe-a058-b327ce348407；覆盖要求：[REQ-WR-ECONOMIC-POINTS-RECOVERY](#req-wr-economic-points-recovery)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-recovery)适用的固定候选中逐项核验：同一 epoch/node 结算幂等；采样或快照写入不直接增加奖励，恢复、重复tick与replay只能复现结果；不可读collector状态须可观测降级，不是资产对账成功。 原验收成功/拒绝条件及层级不变，实际证据至少保留恢复前后ledger、settlement及降级记录；没有对应完整证据时保持未核实。runtime closure草案未完整吸收；不证明已结算资产安全恢复或生产custody。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-points-asset-gates"></a>
+### REQ-WR-ECONOMIC-POINTS-ASSET-GATES：积分与独立资产路径保持门禁
+
+Trace ID: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5
+
+适用范围与成功标准：积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。 仅接收[既有专业义务](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[积分与独立资产路径保持门禁](#req-wr-economic-points-asset-gates)；验收沿[原专业接受关系](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)。
+- 对应验收：[AC-WR-ECONOMIC-POINTS-ASSET-GATES](#ac-wr-economic-points-asset-gates)。
+- 系统设计状态：未核实
+- 系统设计依据：[积分与独立资产路径保持门禁有限设计](../../p2p/node/node-contribution-points.design.md#des-economic-points-asset-gates)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness。
+
+<a id="ac-wr-economic-points-asset-gates"></a>
+### AC-WR-ECONOMIC-POINTS-ASSET-GATES：积分与独立资产路径保持门禁的原验收
+
+Trace refs: O7-REQ-45b12bd9-9d07-4bbf-86bc-2a85af07d5f5；覆盖要求：[REQ-WR-ECONOMIC-POINTS-ASSET-GATES](#req-wr-economic-points-asset-gates)。
+
+在[原专业条件与场景](../../p2p/node/node-contribution-points.prd.md#economic-contract-points-asset-gates)适用的固定候选中逐项核验：积分进入PowerCredit与主链Token bridge是两条独立受治理路径，不是自动兑换或同一池；多激励并用仍需独立审查重复奖励。 原验收成功/拒绝条件及层级不变，实际证据至少保留每条路径预算/授权/拒绝与独立审查记录；没有对应完整证据时保持未核实。不启用资产，不调整兑换比例或发行分桶，不证明兑付readiness。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-ledger"></a>
+### REQ-WR-ECONOMIC-POWER-LEDGER：贡献形成受限协议资产账本
+
+Trace ID: O7-REQ-c0f136a1-3baf-497e-a0ec-622e745024d0
+
+适用范围与成功标准：PowerCredit保持不可直接转账的受限协议资产；按原积分换算和mint记录形成可追溯余额，不扩展通用交易市场。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[贡献形成受限协议资产账本](#req-wr-economic-power-ledger)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-LEDGER](#ac-wr-economic-power-ledger)。
+- 系统设计状态：未核实
+- 系统设计依据：[贡献形成受限协议资产账本有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-ledger)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不更改兑换率，不新增转账/市场或当前可兑现承诺。
+
+<a id="ac-wr-economic-power-ledger"></a>
+### AC-WR-ECONOMIC-POWER-LEDGER：贡献形成受限协议资产账本的原验收
+
+Trace refs: O7-REQ-c0f136a1-3baf-497e-a0ec-622e745024d0；覆盖要求：[REQ-WR-ECONOMIC-POWER-LEDGER](#req-wr-economic-power-ledger)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-ledger)适用的固定候选中逐项核验：PowerCredit保持不可直接转账的受限协议资产；按原积分换算和mint记录形成可追溯余额，不扩展通用交易市场。 原验收成功/拒绝条件及层级不变，实际证据至少保留积分/credits换算与mint/balance/record对账；没有对应完整证据时保持未核实。不更改兑换率，不新增转账/市场或当前可兑现承诺。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-redemption"></a>
+### REQ-WR-ECONOMIC-POWER-REDEMPTION：全部条件成立才燃烧资产并增加目标电力
+
+Trace ID: O7-REQ-a061488d-5b14-489a-af77-ed3f6f75f1bb
+
+适用范围与成功标准：兑换沿原余额、nonce、最小量、epoch储备与上限条件；成功须扣资产、扣储备与增加指定Agent电力一致，失败不得伪装兑付成功。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[全部条件成立才燃烧资产并增加目标电力](#req-wr-economic-power-redemption)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-REDEMPTION](#ac-wr-economic-power-redemption)。
+- 系统设计状态：未核实
+- 系统设计依据：[全部条件成立才燃烧资产并增加目标电力有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-redemption)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不改额度、目标、权限或承诺当前服务可用。
+
+<a id="ac-wr-economic-power-redemption"></a>
+### AC-WR-ECONOMIC-POWER-REDEMPTION：全部条件成立才燃烧资产并增加目标电力的原验收
+
+Trace refs: O7-REQ-a061488d-5b14-489a-af77-ed3f6f75f1bb；覆盖要求：[REQ-WR-ECONOMIC-POWER-REDEMPTION](#req-wr-economic-power-redemption)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-redemption)适用的固定候选中逐项核验：兑换沿原余额、nonce、最小量、epoch储备与上限条件；成功须扣资产、扣储备与增加指定Agent电力一致，失败不得伪装兑付成功。 原验收成功/拒绝条件及层级不变，实际证据至少保留credits/reserve/electricity与拒绝原因；没有对应完整证据时保持未核实。不改额度、目标、权限或承诺当前服务可用。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-signature"></a>
+### REQ-WR-ECONOMIC-POWER-SIGNATURE：签名治理条件不足必须拒绝
+
+Trace ID: O7-REQ-85c5baeb-e05a-4924-9024-e05f1903bd2a
+
+适用范围与成功标准：v1仅历史可重算摘要；v2与兑换签名依既有治理策略和绑定执行，缺少密钥、绑定或所需策略条件时fail closed。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[签名治理条件不足必须拒绝](#req-wr-economic-power-signature)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-SIGNATURE](#ac-wr-economic-power-signature)。
+- 系统设计状态：未核实
+- 系统设计依据：[签名治理条件不足必须拒绝有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-signature)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不接触密钥，不证明HSM/KMS或跨组织custody。
+
+<a id="ac-wr-economic-power-signature"></a>
+### AC-WR-ECONOMIC-POWER-SIGNATURE：签名治理条件不足必须拒绝的原验收
+
+Trace refs: O7-REQ-85c5baeb-e05a-4924-9024-e05f1903bd2a；覆盖要求：[REQ-WR-ECONOMIC-POWER-SIGNATURE](#req-wr-economic-power-signature)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-signature)适用的固定候选中逐项核验：v1仅历史可重算摘要；v2与兑换签名依既有治理策略和绑定执行，缺少密钥、绑定或所需策略条件时fail closed。 原验收成功/拒绝条件及层级不变，实际证据至少保留版本化载荷、绑定/策略与拒绝结果；没有对应完整证据时保持未核实。不接触密钥，不证明HSM/KMS或跨组织custody。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-power-audit"></a>
+### REQ-WR-ECONOMIC-POWER-AUDIT：审计与恢复检测异常而不自动修复
+
+Trace ID: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5
+
+适用范围与成功标准：mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。 仅接收[既有专业义务](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[审计与恢复检测异常而不自动修复](#req-wr-economic-power-audit)；验收沿[原专业接受关系](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)。
+- 对应验收：[AC-WR-ECONOMIC-POWER-AUDIT](#ac-wr-economic-power-audit)。
+- 系统设计状态：未核实
+- 系统设计依据：[审计与恢复检测异常而不自动修复有限设计](../../p2p/node/node-redeemable-power-asset.design.md#des-economic-power-audit)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不证明mainnet或生产恢复，不恢复历史viewer flags入口。
+
+<a id="ac-wr-economic-power-audit"></a>
+### AC-WR-ECONOMIC-POWER-AUDIT：审计与恢复检测异常而不自动修复的原验收
+
+Trace refs: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5；覆盖要求：[REQ-WR-ECONOMIC-POWER-AUDIT](#req-wr-economic-power-audit)。
+
+在[原专业条件与场景](../../p2p/node/node-redeemable-power-asset.prd.md#economic-contract-power-audit)适用的固定候选中逐项核验：mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。 原验收成功/拒绝条件及层级不变，实际证据至少保留快照前后状态、invariant report与策略复核；没有对应完整证据时保持未核实。不证明mainnet或生产恢复，不恢复历史viewer flags入口。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-allocation"></a>
+### REQ-WR-ECONOMIC-GENESIS-ALLOCATION：冻结分配可核算到各bucket与recipient
+
+Trace ID: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4
+
+适用范围与成功标准：按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[冻结分配可核算到各bucket与recipient](#req-wr-economic-genesis-allocation)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-ALLOCATION](#ac-wr-economic-genesis-allocation)。
+- 系统设计状态：未核实
+- 系统设计依据：[冻结分配可核算到各bucket与recipient有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-allocation)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不变更总量/比例/账户，不执行InitializeMainTokenGenesis。
+
+<a id="ac-wr-economic-genesis-allocation"></a>
+### AC-WR-ECONOMIC-GENESIS-ALLOCATION：冻结分配可核算到各bucket与recipient的原验收
+
+Trace refs: O7-REQ-585609e7-ee93-4315-b9c7-fe58857164b4；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-ALLOCATION](#req-wr-economic-genesis-allocation)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-allocation)适用的固定候选中逐项核验：按既有冻结总量和七桶参数核算分配及recipient vested_balance；采用原runtime rounding，创世custody account不等于treasury bucket。 原验收成功/拒绝条件及层级不变，实际证据至少保留固定参数版本、七桶金额与rounding对账；没有对应完整证据时保持未核实。不变更总量/比例/账户，不执行InitializeMainTokenGenesis。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-control"></a>
+### REQ-WR-ECONOMIC-GENESIS-CONTROL：控制主体与个人受益及释放边界分别可审计
+
+Trace ID: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9
+
+适用范围与成功标准：项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[控制主体与个人受益及释放边界分别可审计](#req-wr-economic-genesis-control)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-CONTROL](#ac-wr-economic-genesis-control)。
+- 系统设计状态：未核实
+- 系统设计依据：[控制主体与个人受益及释放边界分别可审计有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-control)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；不改控制人/vesting/释放额度，不把协议储备当团队库存。
+
+<a id="ac-wr-economic-genesis-control"></a>
+### AC-WR-ECONOMIC-GENESIS-CONTROL：控制主体与个人受益及释放边界分别可审计的原验收
+
+Trace refs: O7-REQ-2ee6964f-7c70-453c-958d-616b07c5d9d9；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-CONTROL](#req-wr-economic-genesis-control)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-control)适用的固定候选中逐项核验：项目战略控制、协议储备、个人直接受益与外部流通分别核算；原vesting、claim、genesis_liquid与首年释放门槛继续独立约束。 原验收成功/拒绝条件及层级不变，实际证据至少保留真实控制映射、受益拆分、释放计划与阻断依据；没有对应完整证据时保持未核实。不改控制人/vesting/释放额度，不把协议储备当团队库存。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-freeze"></a>
+### REQ-WR-ECONOMIC-GENESIS-FREEZE：逻辑冻结不等于真实mint-ready
+
+Trace ID: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15
+
+适用范围与成功标准：slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[逻辑冻结不等于真实mint-ready](#req-wr-economic-genesis-freeze)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-FREEZE](#ac-wr-economic-genesis-freeze)。
+- 系统设计状态：未核实
+- 系统设计依据：[逻辑冻结不等于真实mint-ready有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-freeze)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。
+
+<a id="ac-wr-economic-genesis-freeze"></a>
+### AC-WR-ECONOMIC-GENESIS-FREEZE：逻辑冻结不等于真实mint-ready的原验收
+
+Trace refs: O7-REQ-6ca62d73-1934-4a80-bb18-1c21e35e2a15；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-FREEZE](#req-wr-economic-genesis-freeze)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-freeze)适用的固定候选中逐项核验：slot逻辑冻结与public signer规则不代替真实recipient/controller绑定、个人受益表和最终QA pass；pending或conditional状态不授予mint许可。 原验收成功/拒绝条件及层级不变，实际证据至少保留绑定证据、完整pre-mint清单与该次QA verdict；没有对应完整证据时保持未核实。本轮不绑定地址/账户、不运行ceremony、不改变signer set或执行交易。本验收不授权执行经济操作。
+
+<a id="req-wr-economic-genesis-reward"></a>
+### REQ-WR-ECONOMIC-GENESIS-REWARD：独立reserve只消费最终复核的批准记录
+
+Trace ID: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa
+
+适用范围与成功标准：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 仅接收[既有专业义务](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)，原角色与原验收不变；具体原条款由该专业接受关系列明。
+
+- 功能点：[独立reserve只消费最终复核的批准记录](#req-wr-economic-genesis-reward)；验收沿[原专业接受关系](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)。
+- 对应验收：[AC-WR-ECONOMIC-GENESIS-REWARD](#ac-wr-economic-genesis-reward)。
+- 系统设计状态：未核实
+- 系统设计依据：[独立reserve只消费最终复核的批准记录有限设计](../../p2p/token/mainchain-token-genesis-and-contributor-reward.design.md#des-economic-genesis-reward)提供对应定位，未核清其全部技术义务；存在链接不等于覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验收](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)与设计planned验证不是本次实际执行证据，未核定完整同候选实现与运行。
+- 核对日期与基线：2026-10-15；文档基线 `cde57786e711b03a9c9fa2a5174aba357e8350d5`；只核对文档关系，实际环境未核实。
+- 剩余范围：完整专业技术承接和适用验收仍待核实；本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。
+
+<a id="ac-wr-economic-genesis-reward"></a>
+### AC-WR-ECONOMIC-GENESIS-REWARD：独立reserve只消费最终复核的批准记录的原验收
+
+Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-REWARD](#req-wr-economic-genesis-reward)。
+
+在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)适用的固定候选中逐项核验：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 原验收成功/拒绝条件及层级不变，实际证据至少保留canonical批准行、最终金额复核、审批及distribution引用；没有对应完整证据时保持未核实。本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。本验收不授权执行经济操作。

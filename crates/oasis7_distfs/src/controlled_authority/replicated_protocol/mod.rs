@@ -7,11 +7,28 @@
 
 mod coordinator;
 mod crypto;
+mod frozen;
+#[cfg(test)]
+mod frozen_tests;
+pub use frozen::{
+    FrozenCertificate, FrozenInputBody, FrozenOutcome, FrozenReceipt, FrozenReservation,
+    FrozenStatus, SignedFrozenInput,
+};
+mod archive;
+#[cfg(test)]
+mod archive_tests;
+mod archive_trie;
 mod endpoint;
+#[cfg(test)]
+mod fencing_tests;
+mod journal;
+#[cfg(test)]
+mod journal_tests;
 mod package;
 mod storage;
 #[cfg(test)]
 mod tests;
+pub mod transport;
 
 use super::LocalRequestIdentity;
 pub use coordinator::ReplicatedCoordinator;
@@ -63,6 +80,8 @@ pub struct ProposalBody {
     pub parent_hash: String,
     pub request: LocalRequestIdentity,
     pub record: ClosedRecord,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen_input_digest: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,12 +110,14 @@ pub struct DurableReceipt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DurabilityEvidence {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen_certificate: Option<FrozenCertificate>,
     pub proposal: SignedProposal,
     pub replica_prepare: DurableReceipt,
     pub primary_receipt: DurableReceipt,
     pub replica_receipt: DurableReceipt,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolOutcome {
     DurabilityQualified(Box<DurabilityEvidence>),
     Pending {
@@ -107,14 +128,14 @@ pub enum ProtocolOutcome {
         request: LocalRequestIdentity,
     },
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EndpointStatus {
     NotRecorded,
     Prepared(Box<SignedProposal>),
     DecisionUnqualified(Box<SignedProposal>),
     Qualified(Box<DurabilityEvidence>),
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReceiptRepairOutcome {
     Durable(Box<DurableReceipt>),
     /// Local absence only; never a global abort or non-execution assertion.
@@ -123,7 +144,7 @@ pub enum ReceiptRepairOutcome {
         request: LocalRequestIdentity,
     },
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolError {
     Invalid(String),
     Io(String),

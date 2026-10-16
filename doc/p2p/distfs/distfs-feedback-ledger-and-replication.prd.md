@@ -13,6 +13,7 @@
 
 本专题覆盖 feedback store、签名与基础 anti-abuse、announce/fetch 复制和其受限 NodeRuntime 接线；不改变共识、finality、state-sync 或恢复机制。
 
+<a id="feedback-interface-data"></a>
 ## 接口 / 数据
 
 - 账本布局为 `feedback/records/<feedback_id>/root.json`、`events/<event_id>.json`、`feedback/nonces/<pubkey>/<nonce>.json` 和 `feedback/audit/<audit_id>.json`。root 和 event 只追加；删除写 tombstone 事件，不物理删除历史记录。

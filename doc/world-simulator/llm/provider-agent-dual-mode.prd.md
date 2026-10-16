@@ -149,6 +149,8 @@
   - 风险-3: 双模式若共享动作但不共享失败签名，会造成 QA 分诊断层。
   - 风险-4: 若 Viewer 仍隐式承担控制责任，名义上双轨、实际上仍被 GUI 单点耦合。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
 

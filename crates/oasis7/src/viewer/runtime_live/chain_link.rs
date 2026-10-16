@@ -412,11 +412,14 @@ impl ViewerRuntimeLiveServer {
             }
         }
         if let (Some(current), Some(next)) = (&self.verified_world_view, &prepared.verified_view) {
-            let caught_up = next
-                .version()
-                .commit
-                .satisfies_minimum(&current.version().commit)
-                .map_err(|e| ViewerRuntimeLiveServerError::Init(e.to_string()))?;
+            let caught_up = if next.formal_commit().is_some() || current.formal_commit().is_some() {
+                next.formally_satisfies_view(current)
+            } else {
+                next.version()
+                    .commit
+                    .satisfies_minimum(&current.version().commit)
+                    .map_err(|e| ViewerRuntimeLiveServerError::Init(e.to_string()))?
+            };
             if !caught_up {
                 return Ok(ChainLinkedRuntimeDispatch {
                     advanced: false,

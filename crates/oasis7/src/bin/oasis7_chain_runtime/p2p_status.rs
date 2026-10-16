@@ -6,6 +6,10 @@ use oasis7_node::{
 };
 use oasis7_proto::distributed_dht::PeerReachabilityClass;
 
+#[cfg(test)]
+#[path = "p2p_status_tests.rs"]
+mod tests;
+
 pub(super) fn build_node_network_policy(options: &CliOptions) -> NodeNetworkPolicy {
     if options.p2p_deployment_mode_explicit || options.p2p_node_role_explicit {
         return NodeNetworkPolicy {

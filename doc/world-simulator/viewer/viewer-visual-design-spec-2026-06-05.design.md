@@ -250,9 +250,10 @@ and three-column tools, but it still follows data honesty and hierarchy rules.
 Director is not the default and is not permission to make every surface equal.
 
 ### 8.3 HUD, Dock, and Contextual Console Hierarchy
-- HUD: desktop fullscreen uses compact `Objective / Next Move / Player Leverage`
-  cards in one row; mobile uses `Objective + Player Leverage` in the first compact
-  row and `Next Move` in the second row, with blocker/receipt kept readable.
+- HUD placement follows the [shell's current implementation boundary](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary):
+  one primary Next Move region and subordinate Objective / Player Leverage context.
+  Narrow screens place Next Move first and supporting context second; blocker and
+  receipt remain readable. The former three-peer-card layout is not a current requirement.
 - Edge dock: `World / Targets / Command` first; Search remains inside Targets,
   while `Diagnostics` is secondary.
 - Contextual console: primary command/chat, selected target context, gameplay
@@ -439,16 +440,37 @@ or release-readiness claim.
   release-blocking judgment, or `liveops_community` public messaging ownership.
 
 
+## 目标、范围与设计边界
+
+本轮只整理既有阅读顺序与视觉证据合同，不新增布局、交互、状态或产品承诺。
+产品阅读义务来自 [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)；
+具体 shell 布局继续由 [当前实现边界](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
+拥有，终态/后续目标不得替代当前实现。品牌 token、固定 CSS 数值与完整状态字典仍是专业设计选择，
+不从该产品 REQ 推导；下面的产品映射只适用于明确列出的局部条款。
+
+## 风险与未覆盖范围
+
+本次仅建立文档与静态源码的局部关系，不能证明产品 AC 已完成。相关 Agent/地点/路线的完整
+呈现、所有正式 surface、密度变化后的可读性、完整继续/纠正/中断/恢复路径及真实玩家理解
+仍需对应专业实现与验收证据。静态 JSX/CSS 不证明浏览器视觉、输入、a11y、renderer、
+生产 Director 成功路径或发布通过；历史截图和 visual cards 不升级为本候选证据。
+
 ## Visual review traceability
 
 ### 2.1 需求承接与分配表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 四入口 verdict/confidence 一致；首轮 watch、medium/low 及独立条件升级 | [本设计条款](#visual-review-escalation-design) | QA 与视觉 owner；实际截图和自动化摘要由对应执行者提供 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
+| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；仅承接当前目的、blocker 与下一步的首读层级：单一 Next Move 主区、Objective / Player Leverage 从属；具体布局沿专业 shell authority，窄屏主区优先 | [本设计布局条款](#83-hud-dock-and-contextual-console-hierarchy) | viewer_engineer；game_visual_interaction_designer | 仅阅读顺序局部承接；不证明相关对象/路线全覆盖、密度变化可读性、完整恢复路径或产品 AC 完成；不扩展 target 合同 |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 四入口 verdict/confidence 一致；首轮 watch、medium/low 及独立条件升级 | [本设计条款](#visual-review-escalation-design) | QA 与视觉 owner；产品 N/A：理由=本行只规定专业截图取证与评审处置机制，不新增玩家舞台义务；范围=本行 visual-review 机制，不能排除上述真实产品阅读关系 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
+| [REQ-AGENT-STAGE-001：玩家结果与环境活动分离](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；环境活动、装饰与诊断不能代签玩家因果；仅承接 §6.2 的 player-caused / ambient 区分，沿 §6.1/§6.3 的诊断次级边界 | [玩家因果与环境活动](#62-player-leverage-before-ambient-activity) | viewer_engineer / runtime_engineer；因果真值来自权威 receipt | 不从世界繁忙、renderer 正常或诊断可见推断成功；不证明所有 surface 的真实理解与产品 AC 完成 |
+| [REQ-AGENT-STAGE-001：已接受行动主要结果的解释](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；已接受行动主要结果须可理解：仅承接 action/result/reason/next 解释；accepted 不等于 completed | [回执解释](#113-receipt) | viewer_engineer / runtime_engineer；沿 terminal receipt authority | next 文案不等于完整继续/纠正/中断/恢复已实现；不证明 runtime 接受或实际世界变化 |
 
 ### 11.1 验证映射表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [本设计布局条款](#83-hud-dock-and-contextual-console-hierarchy) | 逐句核对产品目的/blocker/下一步子义务与专业主合同；不恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`、`crates/oasis7_viewer/viewer_terminal_shell.css` 做静态对照；未来可见改动另按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md) 的视觉矩阵取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
 | [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-review-escalation-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |
+| [REQ-AGENT-STAGE-001：玩家结果与环境活动分离](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [玩家因果与环境活动](#62-player-leverage-before-ambient-activity) | 逐句审读仅有 ambient activity、无 receipt、diagnostics 可见的负例不得表达玩家结果 | 本次核对文档与 `pixel_world_host.jsx` 的独立 `commercial_surface.action_receipt` 读取、CSS receipt/feed 独立区域；后续按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md#最小通过标准) 对同候选、指定 surface/renderer 取得页面 state、截图和 console，并以权威结果对账 | 本次 source/diff 静态记录；未来另留同候选因果/无回执负例 | 未执行浏览器；host 接线不证明上游因果生成正确、环境投影全链路或真实玩家理解 |
+| [REQ-AGENT-STAGE-001：已接受行动主要结果的解释](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [回执解释](#113-receipt) | 对 action/result/reason/next 逐项核对解释合同；未接受、等待、已完成无进展与无回执不互相代签 | 本次静态审读回执字段消费与条款；未来按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md#qa-infrastructure-receiver-evidence-boundary) 固定候选/world/window，用 before/action/pending/final 页面证据 join 权威结果；文案相似不足以证明世界结果 | 文档字段对应与未覆盖列表；未来同候选接受/阻断/结果记录 | 未验证 runtime 因果、密度变化、全 surface 或完整继续/纠正/中断/恢复路径 |

@@ -52,218 +52,58 @@ pub fn derive_correlation(
     world: WorldIdentity,
     payload: &WorldServicePayloadV1,
 ) -> Result<RequestCorrelation, String> {
-    if let WorldServicePayloadV1::GameExecutorControl(signed) = payload {
-        game_task::verify_executor_control(signed)?;
-        let f = &signed.request.fence;
-        if f.world_id != world.world_id || f.genesis_digest != world.genesis_digest {
-            return Err("executor world identity mismatch".into());
-        }
-        let correlation = RequestCorrelation {
-            key: RequestKey {
-                world,
-                verified_subject: signed.subject_public_key.clone(),
-                operation_domain: oasis7_agent_api::game::GAME_EXECUTOR_CONTROL_DOMAIN.into(),
-                nonce_scope: format!("task:{}", f.task_id),
-                request_id_or_nonce: signed.request.client_operation_id.clone(),
-            },
-            payload_digest: request_digest("intent", payload)?,
-        };
-        correlation.validate().map_err(|e| e.to_string())?;
-        return Ok(correlation);
-    }
-    if let WorldServicePayloadV1::GameGoalPublish(signed) = payload {
-        game_task::verify_publish(signed)?;
-        if signed.request.world_id != world.world_id
-            || signed.request.genesis_digest != world.genesis_digest
-        {
-            return Err("goal publish world identity mismatch".into());
-        }
-        let correlation = RequestCorrelation {
-            key: RequestKey {
-                world,
-                verified_subject: signed.subject_public_key.clone(),
-                operation_domain: oasis7_agent_api::game::GAME_GOAL_PUBLISH_DOMAIN.into(),
-                nonce_scope: format!("task:{}", signed.request.task_id),
-                request_id_or_nonce: signed.request.client_operation_id.clone(),
-            },
-            payload_digest: request_digest("intent", payload)?,
-        };
-        correlation.validate().map_err(|e| e.to_string())?;
-        return Ok(correlation);
-    }
-    if let WorldServicePayloadV1::GameTaskCreate(signed) = payload {
-        verify_read_request(oasis7_agent_api::game::GAME_TASK_CREATE_DOMAIN, signed)?;
-        signed.request.validate()?;
-        if signed.request.world_id != world.world_id
-            || signed.request.genesis_digest != world.genesis_digest
-        {
-            return Err("Game task world identity mismatch".into());
-        }
-        let correlation = RequestCorrelation {
-            key: RequestKey {
-                world,
-                verified_subject: signed.subject_public_key.clone(),
-                operation_domain: oasis7_agent_api::game::GAME_TASK_CREATE_DOMAIN.into(),
-                nonce_scope: format!("agent:{}", signed.request.agent_id),
-                request_id_or_nonce: signed.request.client_operation_id.clone(),
-            },
-            payload_digest: request_digest("intent", payload)?,
-        };
-        correlation.validate().map_err(|e| e.to_string())?;
-        return Ok(correlation);
-    }
-    let (subject, domain, scope, id) = match payload {
-        WorldServicePayloadV1::GameTaskCreate(_)
-        | WorldServicePayloadV1::GameGoalPublish(_)
-        | WorldServicePayloadV1::GameExecutorControl(_) => {
-            unreachable!("handled above")
-        }
-        WorldServicePayloadV1::GameplayJson(bytes) => {
-            if let Ok(request) =
-                serde_json::from_slice::<crate::viewer::GameplayActionRequest>(bytes)
-            {
-                let proof = request.auth.as_ref().ok_or("missing gameplay proof")?;
-                let verified = crate::viewer::verify_gameplay_action_auth_proof(&request, proof)?;
-                (
-                    verified.public_key,
-                    "gameplay",
-                    "player_auth",
-                    verified.nonce.to_string(),
-                )
-            } else {
-                let command: crate::viewer::CollectDataCommand =
-                    serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
-                let crate::viewer::CollectDataCommand::Submit { request } = &command else {
-                    return Err("unsupported collect_data operation".into());
-                };
-                let proof = request.auth.as_ref().ok_or("missing collect_data proof")?;
-                let verified = crate::viewer::verify_collect_data_auth_proof(&command, proof)?;
-                (
-                    verified.public_key,
-                    "collect_data",
-                    "collect_data_submit",
-                    verified.nonce.to_string(),
-                )
-            }
-        }
-        WorldServicePayloadV1::AgentChat(request) => {
-            let proof = request
-                .auth
-                .as_ref()
-                .ok_or("missing canonical chat proof")?;
-            let verified = crate::viewer::verify_agent_chat_auth_proof(request, proof)?;
-            (
-                verified.public_key,
-                "agent_chat",
-                "canonical_owner_chat",
-                verified.nonce.to_string(),
-            )
-        }
-        WorldServicePayloadV1::Cognition(signed) => {
-            verify_read_request("cognition", signed)?;
-            if let Some(fence) = &signed.request.task_fence {
-                if signed.request.causal_proposal.is_some() {
-                    return Err("task cognition does not publish private reasoning".into());
+    oasis7_client_api::world_service_correlation::derive_correlation_with_legacy(
+        world,
+        payload,
+        |payload| {
+            Ok(match payload {
+                WorldServicePayloadV1::GameplayJson(bytes) => {
+                    if let Ok(request) =
+                        serde_json::from_slice::<crate::viewer::GameplayActionRequest>(bytes)
+                    {
+                        let proof = request.auth.as_ref().ok_or("missing gameplay proof")?;
+                        let verified =
+                            crate::viewer::verify_gameplay_action_auth_proof(&request, proof)?;
+                        (
+                            verified.public_key,
+                            "gameplay",
+                            "player_auth",
+                            verified.nonce.to_string(),
+                        )
+                    } else {
+                        let command: crate::viewer::CollectDataCommand =
+                            serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+                        let crate::viewer::CollectDataCommand::Submit { request } = &command else {
+                            return Err("unsupported collect_data operation".into());
+                        };
+                        let proof = request.auth.as_ref().ok_or("missing collect_data proof")?;
+                        let verified =
+                            crate::viewer::verify_collect_data_auth_proof(&command, proof)?;
+                        (
+                            verified.public_key,
+                            "collect_data",
+                            "collect_data_submit",
+                            verified.nonce.to_string(),
+                        )
+                    }
                 }
-                fence.validate()?;
-                private_goal_prepare::verify_owner_signature_strict(
-                    "cognition",
-                    &signed.request,
-                    &signed.subject_public_key,
-                    &signed.signature_hex,
-                )?;
-            }
-            let request = &signed.request.request;
-            request.validate().map_err(|e| e.to_string())?;
-            signed
-                .request
-                .response_artifact
-                .validate_for_request(request)
-                .map_err(|e| e.to_string())?;
-            (
-                signed.subject_public_key.clone(),
-                "cognition",
-                "agent_request",
-                request.request_digest.clone(),
-            )
-        }
-        WorldServicePayloadV1::FeedbackAck(signed) => {
-            verify_read_request("feedback_ack", signed)?;
-            signed.request.validate()?;
-            (
-                signed.subject_public_key.clone(),
-                "feedback_ack",
-                "agent_feedback_ack",
-                signed.request.feedback_id.clone(),
-            )
-        }
-        WorldServicePayloadV1::Delegation(signed) => {
-            verify_read_request("delegation", signed)?;
-            (
-                signed.subject_public_key.clone(),
-                "delegation",
-                "owner_delegation",
-                signed.request.nonce.to_string(),
-            )
-        }
-        WorldServicePayloadV1::Scheduler(signed) => {
-            verify_read_request("scheduler", signed)?;
-            if let SchedulerOperationV1::TaskProviderPrefix { context }
-            | SchedulerOperationV1::TaskProviderFailure { context, .. } =
-                &signed.request.operation
-            {
-                context.validate()?;
-                if matches!(
-                    &signed.request.operation,
-                    SchedulerOperationV1::TaskProviderPrefix { .. }
-                ) {
-                    context.validate_capture_deadline(
-                        signed.request.captured_base_binding.base_tick,
-                    )?;
-                }
-
-                if let SchedulerOperationV1::TaskProviderFailure { reason, .. } =
-                    &signed.request.operation
-                    && !matches!(
-                        reason.as_str(),
-                        "provider_failed"
-                            | "transport_exhausted"
-                            | "context_expired"
-                            | "executor_aborted"
+                WorldServicePayloadV1::AgentChat(request) => {
+                    let proof = request
+                        .auth
+                        .as_ref()
+                        .ok_or("missing canonical chat proof")?;
+                    let verified = crate::viewer::verify_agent_chat_auth_proof(request, proof)?;
+                    (
+                        verified.public_key,
+                        "agent_chat",
+                        "canonical_owner_chat",
+                        verified.nonce.to_string(),
                     )
-                {
-                    return Err("task failure requires bounded public code".into());
                 }
-                private_goal_prepare::verify_owner_signature_strict(
-                    "scheduler",
-                    &signed.request,
-                    &signed.subject_public_key,
-                    &signed.signature_hex,
-                )?;
-            }
-            if signed.request.request_id.trim().is_empty() {
-                return Err("missing scheduler request identity".into());
-            }
-            (
-                signed.subject_public_key.clone(),
-                "scheduler",
-                "agent_scheduler",
-                signed.request.request_id.clone(),
-            )
-        }
-    };
-    let correlation = RequestCorrelation {
-        key: RequestKey {
-            world,
-            verified_subject: subject,
-            operation_domain: domain.into(),
-            nonce_scope: scope.into(),
-            request_id_or_nonce: id,
+                _ => return Err("legacy verifier received non-browser payload".into()),
+            })
         },
-        payload_digest: request_digest("intent", payload)?,
-    };
-    correlation.validate().map_err(|e| e.to_string())?;
-    Ok(correlation)
+    )
 }
 
 /// Register the intent inside the existing opaque RuntimeAction node frame.

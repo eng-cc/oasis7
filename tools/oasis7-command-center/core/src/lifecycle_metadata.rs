@@ -146,9 +146,7 @@ pub fn parse(path: &str, content: &str) -> Option<DocumentLifecycle> {
             break;
         }
         match key {
-            "生命周期" | "状态" => {
-                store(&mut statuses, value.trim_matches('`').trim(), &mut issue)
-            }
+            "生命周期" | "状态" => store(&mut statuses, value, &mut issue),
             "后继文档" | "superseded_by" => store(&mut successors, value, &mut issue),
             "替代理由" | "后继理由" => store(&mut reasons, value, &mut issue),
             _ => {}
@@ -167,7 +165,9 @@ pub fn parse(path: &str, content: &str) -> Option<DocumentLifecycle> {
     let status = if statuses.len() > 1 {
         Some("unknown".into())
     } else {
-        raw(&statuses)
+        statuses
+            .first()
+            .map(|s| s.trim_matches('`').trim().to_owned())
     };
     let successor_declaration = raw(&successors);
     let successor_reason = raw(&reasons);
@@ -181,13 +181,58 @@ pub fn parse(path: &str, content: &str) -> Option<DocumentLifecycle> {
             Err(error) => append_issue(&mut issue, &error),
         }
     }
+    let category = if statuses.is_empty() {
+        Some("unknown".into())
+    } else if statuses.len() > 1 {
+        None
+    } else {
+        match status_token(&statuses[0]) {
+            Some(token) => Some(
+                match token.to_ascii_lowercase().as_str() {
+                    "proposed" => "proposed",
+                    "draft" => "draft",
+                    "active" => "active",
+                    "superseded" => "superseded",
+                    "retired" => "retired",
+                    _ => "other",
+                }
+                .into(),
+            ),
+            None => {
+                append_issue(&mut issue, "empty or malformed lifecycle declaration");
+                None
+            }
+        }
+    };
     Some(DocumentLifecycle {
+        raw_status: raw(&statuses),
+        category,
         status,
         successor_declaration,
         successor_targets,
         successor_reason,
         issue,
     })
+}
+
+fn status_token(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.starts_with('`') {
+        // Use the same CommonMark parser as the document index: internal runs of
+        // different lengths are content, not an early closing delimiter.
+        return Parser::new(value)
+            .into_offset_iter()
+            .find_map(|(event, range)| match event {
+                Event::Code(token) if range.start == 0 && !token.trim().is_empty() => {
+                    Some(token.trim().to_owned())
+                }
+                _ => None,
+            });
+    }
+    let token = value
+        .split(|c: char| c.is_whitespace() || "；;,，()（）".contains(c))
+        .next()?;
+    (!token.is_empty()).then(|| token.to_owned())
 }
 
 fn targets(source: &str, value: &str) -> Result<Vec<String>, String> {
@@ -254,7 +299,7 @@ fn decode(value: &str) -> Result<String, String> {
     }
     String::from_utf8(result).map_err(|_| "invalid UTF-8 successor path".into())
 }
-fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
+pub(super) fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     let (path, fragment) = target
         .split_once('#')
         .map_or((target, None), |(p, f)| (p, Some(f)));
@@ -267,7 +312,12 @@ fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     {
         return Err("successor target is external, absolute, or unsafe".into());
     }
-    if fragment.is_some_and(|f| f.chars().any(|c| c.is_control() || c.is_whitespace())) {
+    // Decode URL fragments once before validating and resolving the anchor.
+    let fragment = fragment.map(decode).transpose()?;
+    if fragment
+        .as_deref()
+        .is_some_and(|f| f.chars().any(|c| c.is_control() || c.is_whitespace()))
+    {
         return Err("unsafe successor fragment".into());
     }
     let parent = source.rsplit_once('/').map_or("", |(p, _)| p);
@@ -293,7 +343,7 @@ fn normalize(source: &str, target: &str, code: bool) -> Result<String, String> {
     if !(path.starts_with("doc/") || path == "AGENTS.md") || !path.ends_with(".md") {
         return Err("successor target is outside indexed document scope".into());
     }
-    Ok(match fragment.filter(|f| !f.is_empty()) {
+    Ok(match fragment.as_deref().filter(|f| !f.is_empty()) {
         Some(f) => format!("{path}#{f}"),
         None => path,
     })

@@ -127,6 +127,7 @@ pub(super) fn assert_delayed_factory_quote_retry_reuses_original(
         requests
     });
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key,
         expected_world,

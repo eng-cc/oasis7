@@ -38,6 +38,8 @@ pub struct AgentIntentV2 {
     pub summary: String,
     pub target_id: Option<String>,
     /// Effect intent whose committed receipt may complete this intent.
+    /// Formal births use `EffectIntent::identity_key()` (including birth era).
+    /// A legacy raw reference matches only a legacy birth-None receipt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_intent_id: Option<String>,
     /// Authenticated client authority position, when supplied by the transport.

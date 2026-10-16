@@ -11,7 +11,8 @@
   - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 
-## 1. 设计定位
+<a id="1-设计定位"></a>
+## 1. 目标与设计定位
 
 `micro_depot` 是第一版可编程区域设施，用来验证一件事：
 
@@ -45,6 +46,14 @@ WASM proposes, runtime validates / applies / signs.
 - 大概要用几次、覆盖多少后续 blocker，才抵过 install + upkeep？
 - 它改变了哪一次 repair / logistics 行动？
 - 还有什么 blocker 没解决？
+
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-WR-GR-001](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8 | micro_depot 的报价无预留、明确提交、有限库存服务、维护/耗尽与回收恢复切片。 | [有限库存生命周期](#micro-depot-measured-lifecycle) | gameplay / Simulator / runtime / Viewer / QA | 不承接全部区域设施；区域压力引用仍是 opaque，非真实 provenance 认证；不承诺补货、epoch reset 或独立吞吐耗尽玩法。 |
+| [AC-WR-GR-001](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-001) Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8 | 受支持 micro_depot 同步服务按当前 owner、upkeep、库存、范围及 module proposal 校验，拒绝不得部分扣减。 | [有限库存生命周期](#micro-depot-measured-lifecycle) | Simulator/runtime effect 与玩家读面 | 不证明独立 preview-confirm 并发协议、其他设施或完整区域资格。 |
 
 ## 3. 解锁阶段与准入流程
 
@@ -119,7 +128,8 @@ regional pressure card
 - 不让设施直接提供 global governance 权力。
 - 不把 starter funding 扩成无限补贴。
 
-## 5. 一步到位 WASM-backed 架构
+<a id="5-一步到位-wasm-backed-架构"></a>
+## 5. 一步到位 WASM-backed 架构边界
 
 第一版不做 runtime-only stub。`micro_depot` 从第一版开始就是 WASM-backed，但 WASM 只参与 proposal。
 
@@ -283,6 +293,7 @@ RegionalInfrastructure {
 }
 ```
 
+<a id="micro-depot-measured-lifecycle"></a>
 ### 7.1.1 Measured Supply Contract
 
 - `available_units_by_kind[resource_kind]` 是设施内可服务库存；缺失 key 等价于 `0`。每个值和总量都必须是非负整数，且不得超过 runtime 配置的 per-kind / facility capacity。
@@ -417,6 +428,14 @@ Runtime 必须：
    - Gate: every applied service records module hash, proposal hash, before / after quote, world change summary.
 7. gameplay smoke
    - Gate: reachable lifecycle runs end to end: fresh install (`10 = 2 sink + 8 inventory`) -> measured repair/logistics service(s) -> stock reaches zero -> further service and upkeep both reject without charge or mutation -> destructive reclaim -> optional fresh full-cost reinstall. Receipts reconcile stock/throughput before/after; throughput remains an internal ceiling, not a separately claimed reachable gameplay blocker.
+
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC | 本设计条款 | 独立 obligation 与适用条件 | 准确验证方法、source / scenario / layer | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-WR-GR-001](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8 | [有限库存生命周期](#micro-depot-measured-lifecycle) | micro_depot 单次 commissioning、有限服务、耗尽、upkeep 拒绝及 destructive reclaim/reinstall 的真实成本。 | 以 [measured supply 回归](../../../crates/oasis7/src/simulator/tests/micro_depot_measured_supply.rs) 的 service debit/receipt 为局部基础，按本设计 §11–12 在固定候选执行 install→库存耗尽→upkeep 无收费拒绝→reclaim→全额新装并对账。 | 实施 PR 的同候选事件、库存与资源前后值、实际玩家入口结果。 | 本映射为验证方法；本次文档审查未运行测试，不证明 refill、长期可玩性或全部设施。 |
+| [AC-WR-GR-001](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-001) Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8 | [有限库存生命周期](#micro-depot-measured-lifecycle) | 当前同步服务失效时无部分库存/吞吐扣减；quote 不 reserve/debit。 | [同一 measured supply 回归](../../../crates/oasis7/src/simulator/tests/micro_depot_measured_supply.rs)中的 insufficient inventory 负例与本设计 §7.1.1/§10 的 owner、range、upkeep、module/schema/proposal 各自负例；按 §8 分别核 Viewer/API。 | 实施 PR 的拒绝前后状态、receipt 与各入口 captures。 | fixture 注入的 throughput exhaustion 只是内部防御，不是自然可达玩家 blocker；独立 preview-confirm 并发合同不在当前切片。 |
 
 ## 12. Post-first-capability 10 分钟验证切片
 

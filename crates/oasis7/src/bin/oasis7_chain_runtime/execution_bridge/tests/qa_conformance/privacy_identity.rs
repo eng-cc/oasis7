@@ -54,6 +54,8 @@ fn real_tcp_cross_subject_lookup_and_protected_cursor_are_denied() {
     config.scope_id = "agent:agent-a".into();
     let owner = RemoteWorldServiceClient::new(config.clone()).unwrap();
     let protected_view = ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: config.expected_world.clone(),
         scope_id: config.scope_id,

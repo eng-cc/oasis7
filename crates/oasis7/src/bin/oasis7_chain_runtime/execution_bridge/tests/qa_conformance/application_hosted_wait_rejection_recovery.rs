@@ -196,6 +196,8 @@ pub(super) fn assert_original_terminal(fixture: &Fixture, root: &Path) {
     assert_eq!(receipt.refunded_amount, 0);
     client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),

@@ -13,10 +13,31 @@
 
 用 Git 提交、PR、真实 CI 运行和评审记录定位实际版本及结果。失败只阻塞依赖动作，Project 同步失败不改变已合入事实。历史 Issue、本地资料和用户记忆保留为可读材料，不生成身份、packet、receipt 或终态证明链。
 
+## 记录位置与持续更新
+
+信息分类统一见[开发流程规范：长期文档与过程记录的归属](../workflow/source-of-truth.md#information-record-placement)。目标、阻塞、逐次尝试、候选/CI/评审与剩余安排写在对应 Task/PR；已有 Issue 承接其真实范围，普通变更直接使用 PR，不为保存记录强制建 Issue。
+
+正文概括范围和当前情况，时间线保存变化、失败与原始证据定位。原始材料按其证据保留要求保存，不能只依赖可能过期的 CI 链接；未核到唯一接收方时保留固定源，不倒入任意新 Task。长期合同与允许的派生摘要按各自职责维护，不复制整份任务台账。
+
+## 跨层要求关联
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)的适用写作/引用约定。
+
+涉及稳定要求的任务，按[跨层追踪规范](cross-layer-requirements-traceability.design.md)在原有说明中写 `Trace refs: <完整 ID>`，逐项链接产品或专业要求声明处与适用的系统设计条款，并说明本次实现/验证范围。产品、设计和 Task 共用要求的 ID；Task 本身不另领全局 ID。一个任务可以承接多项要求，一项要求也可以由多个任务交付。
+
+Task 可以直接是当前 PR，Issue/Project 仍按需使用。纯工程工作链接专业要求并说明产品层不适用；简单编辑不为补齐三层而编造需求或设计。新增引用时保留已有局部 REQ/AC、真实 path#fragment 和 Git/PR/CI 证据，不生成第二份状态台账。
+
+当前可用[只读追踪工具](../../../scripts/requirement-trace.README.md)聚合其支持范围内的关系，也可按完整 ID 搜索并人工追链；工具不判定实现状态或验收完成。搜索覆盖、未形成或不适用的层级和未完成义务应如实说明，找到相关 PR 不等于要求已经满足。
+
+产品功能点的[设计/实现状态摘要](product-documentation-standard.design.md#feature-design-implementation-status)回链本 Task 的实际范围和证据；Task 不复制产品要求正文。交付或验收依据改变时同步重核受影响摘要；部分交付列清剩余义务，已验证结论写明固定基线、环境、入口和验收范围。PR 合入或 Issue 关闭只说明对应记录状态，不能替代功能验收；详细执行过程仍留在这里。
+
 ## 可选说明模板
+
+模板填在当前 PR 或按需 Issue，作为该工作的说明；不将每次实填结果新增为仓库 Markdown 文件。
 
 - 问题与目标：
 - 范围及重要限制：
+- Trace refs、要求声明及适用设计链接（涉及跨层要求时）：
 - 必要依赖与验收：
 - 实际版本、结果及链接：
 - 剩余工作和风险：

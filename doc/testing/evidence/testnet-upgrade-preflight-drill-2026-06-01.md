@@ -1,5 +1,7 @@
 # Testnet Upgrade Preflight Drill Evidence
 
+历史演练边界：以下真实节点 preflight、synthetic checkpoint 和本地 fake restore/rollback 属于 2026-06-01 的固定窗口；`height 9769` 等旧输入不是当前恢复下限或执行授权。原 Required next operator inputs 仅说明当时为何未执行 ECS 恢复；任何新运行须从[现行 governed bootstrap runbook](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md)取得当前合同、证据与适用授权，不能复用该历史演练放行。
+
 - Date: 2026-06-01 12:28 CST
 - Owner role: `runtime_engineer`
 - Scope: non-destructive testnet rehearsal for the new P2P smooth-upgrade preflight and recovery-plan guardrails.

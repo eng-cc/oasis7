@@ -9,6 +9,7 @@ use oasis7_agent_api::game::{
     GameExecutorOperationV1, GameGoalPrepareV1, GameTaskFenceV1, GoalContentV1,
     game_goal_version_digest,
 };
+use oasis7_client_api::world_service::task_context::TASK_CONTEXT_READ_DELIVERY_DRIFT;
 use std::sync::{Arc, Mutex};
 
 struct ActiveContextReadFixture {
@@ -238,8 +239,9 @@ fn advance_driver_past_context_deadline(
 }
 
 #[test]
-fn private_task_context_read_tolerates_benign_head_advance_but_rejects_stop() {
+fn private_task_context_read_retries_same_get_after_benign_head_advance_but_rejects_stop() {
     let mut fixture = active_context_read_fixture();
+    let original_get_bytes = serde_json::to_vec(&fixture.get).unwrap();
     let pin = || {
         super::super::world_service_read::pin(
             &fixture.dir.join("records"),
@@ -251,7 +253,7 @@ fn private_task_context_read_tolerates_benign_head_advance_but_rejects_stop() {
     };
     let before = pin();
     let before_tick = before.world.state().time;
-    let (status, body) = http_with_hook(
+    let (status, body, stage) = http_with_diagnostic_hook(
         &fixture.dir,
         &fixture.runtime,
         &fixture.signer,
@@ -278,9 +280,41 @@ fn private_task_context_read_tolerates_benign_head_advance_but_rejects_stop() {
                 .unwrap();
         },
     );
+    assert_eq!(status, 409);
+    assert_eq!(body["error"], TASK_CONTEXT_READ_DELIVERY_DRIFT);
+    assert!(body.get("payload").is_none());
     assert_eq!(
-        status, 200,
-        "a benign head advance rejected an immutable read"
+        stage, None,
+        "a same-binding commit advance should reach the typed delivery-drift fence"
+    );
+    let after = pin();
+    assert_ne!(after.commit, before.commit);
+    assert_eq!(after.commit.position, before.commit.position + 1);
+    assert_eq!(after.commit.binding, before.commit.binding);
+    assert!(
+        after.world.state().time > before_tick,
+        "empty runtime commit must advance simulation time"
+    );
+    assert_ne!(after.world.state(), before.world.state());
+
+    assert!(
+        serde_json::to_vec(&fixture.get).unwrap() == original_get_bytes,
+        "retry must preserve the exact original signed GET"
+    );
+    let (status, body) = http_with_hook(
+        &fixture.dir,
+        &fixture.runtime,
+        &fixture.signer,
+        Some(&fixture.store),
+        TASK_CONTEXT_READ_PATH,
+        &fixture.get,
+        "",
+        || {},
+    );
+    assert_eq!(status, 200);
+    assert!(
+        serde_json::to_vec(&fixture.get).unwrap() == original_get_bytes,
+        "successful retry must use the unchanged original signed GET"
     );
     let response: SignedServiceResponse<CapturedTaskContextV1> =
         serde_json::from_value(body).unwrap();
@@ -293,18 +327,9 @@ fn private_task_context_read_tolerates_benign_head_advance_but_rejects_stop() {
     .unwrap();
     response.payload.validate_against(&fixture.get).unwrap();
     assert_eq!(
-        response.payload.current_public_context.read_commit, before.commit,
-        "the signed result must retain the exact world snapshot used to build it"
+        response.payload.current_public_context.read_commit, after.commit,
+        "the retry response must be signed for its current pinned world"
     );
-    let after = pin();
-    assert_ne!(after.commit, before.commit);
-    assert_eq!(after.commit.position, before.commit.position + 1);
-    assert_eq!(after.commit.binding, before.commit.binding);
-    assert!(
-        after.world.state().time > before_tick,
-        "empty runtime commit must advance simulation time"
-    );
-    assert_ne!(after.world.state(), before.world.state());
 
     let stop = request(
         &fixture.world,

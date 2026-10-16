@@ -52,4 +52,4 @@ lane_id<TAB>owner<TAB>status<TAB>evidence_path<TAB>note
 - 是否所有 evidence path 都可达。
 - 是否 track 对应 required lanes 已全部填写。
 - 是否 `pass/partial/block` 与证据内容一致。
-- 是否已回写 `doc/p2p/blockchain/PR、实际 CI 与评审记录（Issue 按需）`、`testing-manual.md` 与对应 PR、实际 CI 与评审记录（Issue 按需）。
+- 本次运行结果是否记录在对应 PR 或已使用的 Task，并链接原始证据；只有稳定方法、接口或证据字段改变时才同步 `testing-manual.md` 与相关专业合同，不将逐次运行结论写回手册。

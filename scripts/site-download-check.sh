@@ -126,13 +126,13 @@ for forbidden in \
 done
 
 for required in \
-  'if (!tagName || !Number.isFinite(publishedAt)) {' \
+  'window.oasis7Release.fromRelease(release)' \
   'releaseRefreshCallbacks.forEach((refresh) => refresh());' \
-  'return `${RELEASE_ASSET_BASE}/${encodeURIComponent(tagName)}/${filename}`;'; do
+  'setDownloadLink(linkNode, releaseAssetUrl(next.url));'; do
   if ! contains_fixed_pattern "${required}" "${REPO_ROOT}/site/assets/app.js"; then
-    echo "error: missing release metadata/download fallback guard in site/assets/app.js: ${required}" >&2
+    echo "error: missing coherent release/download guard: ${required}" >&2
     exit 1
   fi
 done
-
-echo "ok: site download entry and release links are present"
+node "${REPO_ROOT}/scripts/site-release-candidate.test.cjs"
+echo "ok: site download entry and candidate-bound assets are present"

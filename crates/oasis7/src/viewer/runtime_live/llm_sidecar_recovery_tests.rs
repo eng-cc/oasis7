@@ -8,6 +8,18 @@ use recovery_fixture::{
     restart_wake_handoff_recovery_fixture, setup_wake_handoff_recovery_fixture,
 };
 
+fn provider_wake_stack_diag(message: &str) {
+    use std::io::Write as _;
+
+    if std::env::var_os("CI").is_none() && std::env::var_os("OASIS7_STACK_DIAG").is_none() {
+        return;
+    }
+
+    let mut stderr = std::io::stderr().lock();
+    let _ = writeln!(stderr, "[stack-diag:provider-wake] {message}");
+    let _ = stderr.flush();
+}
+
 #[test]
 fn provider_terminal_marker_requires_complete_identity() {
     let agent_id = "agent-terminal-identity";
@@ -983,10 +995,16 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
             .as_nanos()
     ));
     let mut server = setup_wake_handoff_recovery_fixture(&lineage_path);
+    provider_wake_stack_diag(&format!(
+        "fixture-ready server_size={} world_size={}",
+        std::mem::size_of::<ViewerRuntimeLiveServer>(),
+        std::mem::size_of::<RuntimeWorld>()
+    ));
 
     let trace = server
         .enqueue_llm_action_from_sidecar()
         .expect_err("wake authority failure must return a terminal trace");
+    provider_wake_stack_diag("first-enqueue-returned");
     assert!(
         trace
             .llm_error
@@ -1018,6 +1036,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
             .is_some_and(|values| values.contains_key("agent-wake-recovery")),
         "wake recovery marker must be persisted for restart: {checkpoint:?}"
     );
+    provider_wake_stack_diag("first-checkpoint-verified");
 
     // An unresolved wake belongs only to its own Agent. A completed sibling
     // response in the queue must still make progress in the next control
@@ -1031,6 +1050,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
         .world
         .install_test_provider_capability_fixture("agent-wake-sibling")
         .expect("install sibling Runtime capability and cognition provision");
+    provider_wake_stack_diag("sibling-world-ready");
     let sibling_cognition =
         super::lineage_tests::queued_wait_cognition(&mut server.world, "agent-wake-sibling");
     let fenced_provider = crate::simulator::MockDecisionProvider::new("wake-recovery-fenced");
@@ -1070,6 +1090,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
         });
     server.llm_sidecar.request_decision();
     let sibling_result = server.enqueue_llm_action_from_sidecar();
+    provider_wake_stack_diag("sibling-enqueue-returned");
     assert!(
         sibling_result.is_ok(),
         "an unresolved Agent A wake must not block sibling B: {sibling_result:?}"
@@ -1083,6 +1104,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
     );
 
     let mut restarted = restart_wake_handoff_recovery_fixture(&server, &lineage_path);
+    provider_wake_stack_diag("restart-restored");
     assert!(
         restarted
             .llm_sidecar
@@ -1090,8 +1112,10 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
             .is_some(),
         "restart must retain the exact wake recovery identity"
     );
+    let retry = restarted.retry_provider_wake_recovery();
+    provider_wake_stack_diag("restart-retry-returned");
     assert!(
-        restarted.retry_provider_wake_recovery().is_err(),
+        retry.is_err(),
         "retry must expose the same Runtime wake authority error"
     );
     assert!(

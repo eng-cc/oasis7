@@ -41,10 +41,7 @@
 4. 再次运行 `./scripts/check-rust-file-size.sh`；只有 oversized code、test、
    structural slice 与 include target 四项均为零才满足本治理门禁。
 
-紧急修复也不得静默绕过门禁。若修复暴露更大的领域边界问题，由 TPM 派发
-对应 runtime、viewer、WASM、agent、blockchain ops 或其他专业 owner；领域
-owner 对拆分后的语义边界负责，QA 对验证充分性与放行结论负责。repository
-health 只判断仓库结构与治理契约，不替代领域正确性或 QA 放行。
+紧急修复也不得静默绕过门禁。若修复暴露更大的领域边界问题，由当前负责人按实际问题组织对应 runtime、viewer、WASM、agent、blockchain ops 或其他专业能力的复核；复杂协调按需由 TPM 协助。领域复核负责拆分后的语义边界，QA 关注验证充分性与适用放行风险；这些是专业职责，不要求额外人员、固定角色组合或独立审批流程。必要验证、按风险独立评审和合入条件遵循[开发流程规范](../workflow/source-of-truth.md#3-验证与评审)。repository health 只判断仓库结构与治理契约，不替代领域正确性和必要验证。
 
 ## 维护规则
 

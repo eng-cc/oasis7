@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "f7047c02e4264247d6926613e3387c42e15d2e0f59c7bb1a3ceffb5ced6fedb7",
+    "content_sha256": "8c84f05011a1a6b7603bfe14a462e924e57b2708bf01066c5c600638d498d85c",
     "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_current_companion_authority",

@@ -69,6 +69,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 ### 2.2.1 产品功能清单（Feature Catalog）
 
+清单各功能的设计/实现状态及适用 Trace 由本行链接的 REQ 状态摘要拥有；同一要求下的功能共同消费该范围，不以某个子功能完成代签其余义务。后续候选仍不是首期承诺。
+
 本清单是 §1 产品目标与 §4 产品要求之间的**稳定功能范围索引**，按[产品文档功能清单维护原则](../../engineering/doc-governance/product-documentation-standard.design.md#product-feature-catalog-principles)更新。**阶段不是实现状态**：标为“首期闭环”的功能是本文承诺要验收的组成部分，不代表当前已交付；每项由链接的 REQ/AC 判定，版本、支持矩阵和实际进度沿专业 authority 与 GitHub 记录查询。当前仅列用户或外部 Runtime 能实际感知的能力，不将 HTTP/MCP/CLI、API 字段、辅助脚本或测试步骤定为产品功能。
 
 首期范围共 **62 项，分成十一组**（原有 53 项 + 新增大世界可视化/操作 9 项）。不同条目可共同满足一组 REQ/AC；单个 REQ/AC 下的负例和恢复边界仍由其完整正文约束，不能只检查功能名称。
@@ -267,6 +269,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-001"></a>
 ### REQ-EXT-001：Runtime 支持必须有独立、可复现的使用路径
 
+Trace ID: O7-REQ-b3e367c3-c72d-4959-b599-613ac652dab8
+
+- 功能点：[REQ-EXT-001](#req-ext-001)；适用范围沿本条原条件与 [AC-EXT-001](#ac-ext-001)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-drivers)覆盖独立driver、版本manifest、resume/cancel与未知运行禁止重启；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：每个声明受支持的 Runtime 组合必须提供可复现的接入、就绪、启动和恢复路径；实际承担决策的 Runtime 与所声明对象一致，能力限制在开始委托前可知。
 - 理由：用户能够使用已有 Runtime，并明确区分 Runtime 适配与模型服务接通。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)。专业权威：[Local Provider](../../world-simulator/llm/provider-loopback-http-contract.prd.md#local-provider-user-flows)。
@@ -274,6 +286,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-002"></a>
 ### REQ-EXT-002：连接身份、Agent 资格与委托必须分别成立
+
+Trace ID: O7-REQ-d30925fe-d798-4056-9641-062255931a61
+
+- 功能点：[REQ-EXT-002](#req-ext-002)；适用范围沿本条原条件与 [AC-EXT-002](#ac-ext-002)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-auth)覆盖连接认证、设备配对、有效委托与撤销隔离；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L295)：原生设备签名、当前task fence与完整context验证；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余Game API配对/token、全部费用路由及入口组合，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：Game API配对/token、全部费用路由及入口组合。
 
 - 要求：开始任务前必须核对连接身份、目标 Agent 与有效委托；更换 Runtime、模型或支付路由不得取得别人的 Agent 权限或费用承担资格。接入不得创建额外游戏实体或绕过既有认领与维护条件。
 - 理由：用户知道谁在替哪个 Agent 执行、谁承担哪类成本。
@@ -283,6 +305,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-003"></a>
 ### REQ-EXT-003：观察和公布能力必须足以支持声明的玩法
 
+Trace ID: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb
+
+- 功能点：[REQ-EXT-003](#req-ext-003)；适用范围沿本条原条件与 [AC-EXT-003](#ac-ext-003)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-context)覆盖授权观察、完整目标、合法目录与过期上下文拒绝；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L114)：原生capabilities、industry有界观察与完整目标context；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余完整首局catalog、所有声明能力和失败表面，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整首局catalog、所有声明能力和失败表面。
+
 - 要求：Runtime 必须能理解授权视角下的观察、当前目标、可用能力、必要输入和失败含义；声明支持的玩法所需能力必须可经同一权威路径执行。能力或前置条件变化时，接入层必须明确反映限制，不把无法解析或不允许的能力公布成可用。
 - 理由：Runtime 能自主选择有意义的行动，并在世界变化后纠正决策。
 - 上位承诺：[根 SC-6 / SC-7 / SC-14](prd.md#external-runtime-play)。专业权威：[Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md#4-technical-specifications)、[双轨观察](../../world-simulator/llm/provider-agent-dual-mode.prd.md#provider-execution-user-flows)。
@@ -290,6 +322,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-004"></a>
 ### REQ-EXT-004：接入必须支持 Runtime 自主推进多轮任务
+
+Trace ID: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1
+
+- 功能点：[REQ-EXT-004](#req-ext-004)；适用范围沿本条原条件与 [AC-EXT-004](#ac-ext-004)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-loop)覆盖实际Runtime控制/决策循环、上下文与旧目标失效；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[交付 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定静态源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L505)核实原生完整Context读取及客户端行动/结果接口。历史prepared-world固定候选 `b59d010556e39beaf1928eb1e95aa9aad099e180` 的两次真实目标决策、正式Skill使用及原结果回放只由[历史运行记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)支持；其中原cleanup失败保持不变，不能外推当前main或完整首局。剩余双Runtime自主首局、长期会话与工具编排，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：双Runtime自主首局、长期会话与工具编排。
 
 - 要求：在有效授权内，Runtime 必须能够利用其声明保留的规划、会话上下文和工具编排能力自主形成后续决策；接入方式及能力裁剪必须明示，不能要求用户逐动作重新输入任务。世界事实与 Runtime 的计划、推测和私有记忆必须可区分。
 - 理由：接入保留已有 Runtime 的使用价值，任务能跨多轮连贯推进。
@@ -299,6 +341,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-005"></a>
 ### REQ-EXT-005：权威结果必须进入后续认知
 
+Trace ID: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7
+
+- 功能点：[REQ-EXT-005](#req-ext-005)；适用范围沿本条原条件与 [AC-EXT-005](#ac-ext-005)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-actions)已承接原操作查询、受理/结算、同键冲突和读取权限；同文件需求承接/验证表反链本条AC。剩余：结果进入后续认知与玩家反馈的跨专业精确承接仍须核对；api-actions已覆盖原操作/结算/幂等。 不代表实现或发布。[loopback反馈关联](../../world-simulator/llm/provider-loopback-http-contract.design.md#41-harness-contract-alignment)补充target/legacy路由隔离与Runtime receipt关联边界，未覆盖各真实Runtime结果进入后续认知和玩家反馈的全链路。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L389)：原签名缓存、lookup/replay及同回执恢复；历史两次实际移动；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余全部拒绝/失败组合及玩家反馈端到端，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。 新增loopback局部关系审读基线为2026-10-15的`4e94163a3dff9ba69f6959b406ca3fcedf8aa097`及本次文档候选；未新增行为验证。
+- 剩余范围：设计：结果进入后续认知与玩家反馈的跨专业精确承接仍须核对；api-actions已覆盖原操作/结算/幂等。；实现/验证：全部拒绝/失败组合及玩家反馈端到端。
+
 - 要求：行动结果必须关联到正确 Agent 与任务，已结算成功、拒绝、失败和待决的真实含义必须进入后续决策及玩家反馈；模型自报、请求接受或超时不能代替世界结算，也不能隐式触发另一轮重复执行。
 - 理由：Runtime 能根据真实后果继续，玩家能确认成果和安全下一步。
 - 上位承诺：[根 SC-2 / SC-5 / SC-14](prd.md#external-runtime-play)。专业权威：[反馈隔离](../../world-simulator/llm/continuous-agent-harness.prd.md#7-feedback-correlation-与-isolation)、[世界恢复规则](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#42-recovery-rules)。
@@ -306,6 +358,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-006"></a>
 ### REQ-EXT-006：高层目标调整必须可确认生效
+
+Trace ID: O7-REQ-091d6c22-fca5-4284-91dd-2edce9ef440b
+
+- 功能点：[REQ-EXT-006](#req-ext-006)；适用范围沿本条原条件与 [AC-EXT-006](#ac-ext-006)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-goal)覆盖目标保存/激活/采纳/用于决策分层及旧版本阻断；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[交付 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定静态源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L505)核实当前目标关联Context读取与验证。历史prepared-world固定候选 `b59d010556e39beaf1928eb1e95aa9aad099e180` 的两次真实目标决策、正式Skill使用及原结果回放只由[历史运行记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)支持；其中原cleanup失败保持不变，不能外推当前main或完整首局。剩余完整UI草稿/受理/应用、delivery/adoption与停止交错，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整UI草稿/受理/应用、delivery/adoption与停止交错。
 
 - 要求：玩家必须能够对合法绑定的 Agent 调整持续目标或提示词，并区分草稿、已接受、已应用和被阻塞；后续决策必须消费当时有效的目标与委托。停止后续委托不自动取消或抹去已有待决行动。
 - 理由：玩家能持续引导自主 Agent，并知道系统何时采用了新的方向。
@@ -315,6 +377,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-007"></a>
 ### REQ-EXT-007：执行与观战的在线状态必须分开
 
+Trace ID: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e
+
+- 功能点：[REQ-EXT-007](#req-ext-007)；适用范围沿本条原条件与 [AC-EXT-007](#ac-ext-007)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-liveness)已承接心跳过期、执行诊断及本机权限/停止边界；同文件需求承接/验证表反链本条AC。剩余：独立于GUI的持续执行设计与loop之间的精确承接仍须核对；adapter-liveness已覆盖心跳/本机权限与停止诊断。 不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：独立于GUI的持续执行设计与loop之间的精确承接仍须核对；adapter-liveness已覆盖心跳/本机权限与停止诊断。；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：无 GUI 的 Runtime 执行路径必须可用；关闭或断开观战界面时，只要 Runtime、所需连接、预算和独立委托仍有效，任务应继续。Runtime 停止或执行资格失效时必须如实表达，不能承诺继续产生新决策，也不能暂停世界或伪造既有行动取消。
 - 理由：用户能够离开界面，并准确理解持续运行所需条件。
 - 上位承诺：[根 SC-4 / SC-14](prd.md#external-runtime-play)。专业权威：[双轨执行](../../world-simulator/llm/provider-agent-dual-mode.prd.md#1-executive-summary)；消费主责：[玩家接入与发行中的会话与委托连续性](../player-entry-distribution/prd.md)。
@@ -322,6 +394,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-008"></a>
 ### REQ-EXT-008：断连和重启必须在原世界历史上恢复
+
+Trace ID: O7-REQ-4a8be58c-bcda-4efe-b199-1cf9bd9b3330
+
+- 功能点：[REQ-EXT-008](#req-ext-008)；适用范围沿本条原条件与 [AC-EXT-008](#ac-ext-008)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-recovery)已承接协作原子控制、恢复切点、游标缺口和旧fence拒绝；同文件需求承接/验证表反链本条AC。剩余：Runtime私有上下文不可恢复时的明示和可信重规划跨专业关系仍须核对；collab-recovery已覆盖世界任务恢复。 不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L322)：持久原prepare/行动与未知结果只查询原请求；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余完整断连/重启、私有记忆丢失提示和旧授权负例，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：Runtime私有上下文不可恢复时的明示和可信重规划跨专业关系仍须核对；collab-recovery已覆盖世界任务恢复。；实现/验证：完整断连/重启、私有记忆丢失提示和旧授权负例。
 
 - 要求：受支持的断连/Runtime 重启恢复必须重新核对世界、Agent、权限、有效目标与未决结果；已结算结果不得重做，未知提交先核对，失效授权不得自动复活。无法恢复的 Runtime 私有上下文必须明示，并提供从可信世界事实重新规划的路径。
 - 理由：玩家可以继续已有任务，恢复不会复制成果或悄悄丢失重要义务。
@@ -331,6 +413,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-009"></a>
 ### REQ-EXT-009：持续执行的成本和预算边界必须可理解
 
+Trace ID: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43
+
+- 功能点：[REQ-EXT-009](#req-ext-009)；适用范围沿本条原条件与 [AC-EXT-009](#ac-ext-009)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-budget)已承接模型/工具共享预算、有限deadline与中断能力；同文件需求承接/验证表反链本条AC。剩余：世界资源成本区分归因及失去授权后原结果查询尚需组合承接；不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：世界资源成本区分归因及失去授权后原结果查询尚需组合承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：开始和持续执行时必须区分外部推理/工具开销与世界资源成本，说明可执行的预算限制、估计值和未知值；达到可执行限制或授权失效后停止新的受限请求或提交，并保留已有结果的处理路径。无法保证的下游硬上限不得被显示为已强制生效，未知开销不得按零处理。
 - 理由：玩家能够判断是否继续委托，并理解 Runtime 内部调用对开销的影响。
 - 上位承诺：[根 SC-7 / SC-12 / SC-14](prd.md#external-runtime-play)。专业权威：[Harness 有界调用预算](../../world-simulator/llm/continuous-agent-harness.prd.md#request-bound-call-budget)；世界经济与固定节奏消费[长期主责](provider-learning-intelligence-and-cadence.prd.md#21-认证-provider-与固定权威-cadence)。
@@ -338,6 +430,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-010"></a>
 ### REQ-EXT-010：首期完成必须由真实 Runtime 的完整游戏任务证明
+
+Trace ID: O7-REQ-7283b901-ea06-49e3-956d-2bad46b6c89d
+
+- 功能点：[REQ-EXT-010](#req-ext-010)；适用范围沿本条原条件与 [AC-EXT-010](#ac-ext-010)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-composition)已承接Game API部署及模块分工；同文件需求承接/验证表反链本条AC。剩余：两Runtime分别完成产品§2.2首局及目标调整/阻塞/恢复的组合设计仍须核对；api-composition仅覆盖部署及模块分工。 不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[交付 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定静态源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L428)核实原生签名行动提交与原结果查询接口。历史prepared-world固定候选 `b59d010556e39beaf1928eb1e95aa9aad099e180` 的两次真实目标决策、正式Skill使用及原结果回放只由[历史运行记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)支持；其中原cleanup失败保持不变，不能外推当前main或完整首局。剩余OpenClaw及Codex各自完整首局、工业链与组合恢复，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：两Runtime分别完成产品§2.2首局及目标调整/阻塞/恢复的组合设计仍须核对；api-composition仅覆盖部署及模块分工。；实现/验证：OpenClaw及Codex各自完整首局、工业链与组合恢复。
 
 - 要求：OpenClaw 与 Codex 必须分别在声明组合内完成 §2.2 的首局闭环，并提供可追溯的权威结果、目标调整、阻塞与恢复证据。旧 P0 smoke、单次调用、累计动作数量或另一 Runtime 的成功均不能代签。
 - 理由：产品完成对应用户能持续玩起来，而支持范围可以准确评估。
@@ -347,6 +449,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-011"></a>
 ### REQ-EXT-011：官方 Skill 必须让真实外部 Runtime 独立上手
 
+Trace ID: O7-REQ-a5bbf6e4-3e71-4d48-9eba-68c50867c95c
+
+- 功能点：[REQ-EXT-011](#req-ext-011)；适用范围沿本条原条件与 [AC-EXT-011](#ac-ext-011)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-skill)覆盖可信Skill分发、适用版本、安装和不兼容失败；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[交付 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定静态源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L46)核实普通签名客户端配置加载和受控连接入口。历史prepared-world固定候选 `b59d010556e39beaf1928eb1e95aa9aad099e180` 的两次真实目标决策、正式Skill使用及原结果回放只由[历史运行记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)支持；其中原cleanup失败保持不变，不能外推当前main或完整首局。剩余两个Runtime的公开安装、版本兼容和冷启动接入，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：两个Runtime的公开安装、版本兼容和冷启动接入。
+
 - 要求：首批 OpenClaw、Codex 均必须有来源和适用版本可核对的官方 Skill 使用路径，能指导 Runtime 发现受授权游戏 API、完成接入和首个合法游戏动作，并提供版本不兼容、安装/调用失败的修复说明；不能将仓库内部 Bridge、静态假能力或原始脚本维护经验当作用户必要前置。
 - 理由：用户可以带来已有 Runtime，不需要先理解 oasis7 内部 Provider 工程。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)。消费主责：[现有公开 Skill](../../../site/skills/oasis7.md)、[Runtime 支持范围](../../world-simulator/llm/decision-provider-contract.prd.md)。
@@ -354,6 +466,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-012"></a>
 ### REQ-EXT-012：对外游戏网络 API 必须独立形成完整行动闭环
+
+Trace ID: O7-REQ-8120dffe-17cc-458a-9c70-8121217e6f7b
+
+- 功能点：[REQ-EXT-012](#req-ext-012)；适用范围沿本条原条件与 [AC-EXT-012](#ac-ext-012)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-wire)已承接Game API目标路由和DTO；同文件需求承接/验证表反链本条AC。剩余：首局合法行动的可发现、可调用与玩法目录的组合承接尚需核对；不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L271)：独立原生签名HTTP客户端的context、行动、lookup和工业观察；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余完整/v1/game写路由、配对及可恢复增量闭环，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：首局合法行动的可发现、可调用与玩法目录的组合承接尚需核对；实现/验证：完整/v1/game写路由、配对及可恢复增量闭环。
 
 - 要求：无需特定 Provider Bridge 或内置模型进程，具有有效游戏权限的普通网络客户端必须能够协商版本、读取授权世界观察、查询对象和合法能力、提交意图、区分受理与结算、追读权威 receipt/状态并以可恢复增量方式继续。首局工业链需要的合法行动必须在此通道上可发现且实际可调用；MCP/CLI 包装不得改变业务语义。
 - 理由：Agent Runtime 可以主动使用游戏能力，而非被迫伪装成被调用的模型 Provider。
@@ -363,6 +485,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-013"></a>
 ### REQ-EXT-013：直接网络调用必须守住认证、幂等与安全恢复
 
+Trace ID: O7-REQ-7d6cef7f-9419-49ed-b445-663382383458
+
+- 功能点：[REQ-EXT-013](#req-ext-013)；适用范围沿本条原条件与 [AC-EXT-013](#ac-ext-013)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-auth)已承接认证、有效委托及当前权限校验；同文件需求承接/验证表反链本条AC。剩余：幂等、并发、未知提交及限流的多条设计关系仍须核对；api-auth已覆盖认证/有效委托和当前权限。 不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L389)：原请求持久化、同Context异动作冲突及签名context验证；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余完整Game API token/限流/远程部署与权限竞态验收，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：幂等、并发、未知提交及限流的多条设计关系仍须核对；api-auth已覆盖认证/有效委托和当前权限。；实现/验证：完整Game API token/限流/远程部署与权限竞态验收。
+
 - 要求：本地与远程 Game API 都必须基于可信身份、明确的游戏 Agent 委托和适用读写范围授予能力；不接受仅凭公开身份/路由字符串、模型密钥或 Skill 内容取得其他主体的权限。延迟、重试、并发、预算/限流、权限变化及未知提交必须有结构化可恢复结果；已结算行动只能被核对，不能通过新连接产生第二次世界效果。
 - 理由：开放网络入口不能以方便为名制造越权或重复世界效果。
 - 上位承诺：[根 SC-5 / SC-11 / SC-14](prd.md#external-runtime-play)。专业权威：[Agent 自治委托](agent-authority-ownership-and-accountability.prd.md)、[Runtime 最终性](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)、[玩家身份与会话](../player-entry-distribution/prd.md)。
@@ -370,6 +502,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="req-ext-014"></a>
 ### REQ-EXT-014：外部 Runtime 产品完成不得依赖旧 Provider Bridge 的兼容
+
+Trace ID: O7-REQ-68ffc843-8679-4ad9-8cef-10a239a29c73
+
+- 功能点：[REQ-EXT-014](#req-ext-014)；适用范围沿本条原条件与 [AC-EXT-014](#ac-ext-014)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-game-api.design.md#api-cutover)覆盖新主路径独立、旧Bridge迁移和历史保留；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L428)：原生Game客户端经World Service而非旧Provider callback提交；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余完整Skill首局及关闭旧Bridge后的独立组合验收，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整Skill首局及关闭旧Bridge后的独立组合验收。
 
 - 要求：首期默认体验和代表性首局的实际运行证据必须由 Skill 引导并经独立 Game API 完成；旧 Provider callback、mock/直接模型调用、旧 CLI 兼容名或共享 DTO 存在不能替代。若新路径满足功能与权威前置，可废弃旧 Bridge 的非必要业务/文档/脚本，不把兼容负担强加给新产品；必须保留仍有真实依赖的世界历史、委托与其他主责能力。
 - 理由：目标是让外部 Runtime 自己玩游戏，不是永久维护多套难理解的代理通道。
@@ -379,6 +521,16 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-015"></a>
 ### REQ-EXT-015：网页和桌面客户端必须真实可视化大世界
 
+Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；本条在外部 Runtime 首期范围消费[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004)，不重复声明世界舞台要求。
+
+- 功能点：[REQ-EXT-015](#req-ext-015)；适用范围沿本条原条件与 [AC-EXT-015](#ac-ext-015)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-native)已承接内嵌WebView容器、安全边界和各平台独立取证；同文件需求承接/验证表反链本条AC。剩余：浏览定位和重连恢复的跨条款组合仍须核对；view-native已覆盖内嵌容器/安全和平台独立取证。 不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：浏览定位和重连恢复的跨条款组合仍须核对；view-native已覆盖内嵌容器/安全和平台独立取证。；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：外部 Runtime 首期必须有 Web 浏览器和受支持桌面客户端各自可交互的世界视图；客户端可嵌入 Web 技术，但只有 API/日志、静态截图或外部浏览器跳转不能替代客户端内世界体验。
 - 上位承诺：[根 SC-13/14](prd.md)。消费主责：[世界舞台双表面](player-readable-world-stage.prd.md#req-agent-stage-004)。
 - 验收：[AC-EXT-015](#ac-ext-015)。
@@ -386,12 +538,32 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-016"></a>
 ### REQ-EXT-016：用户可在大世界中浏览定位和检查
 
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；本条在外部 Runtime 首期范围消费[REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003)，不重复声明世界舞台要求。
+
+- 功能点：[REQ-EXT-016](#req-ext-016)；适用范围沿本条原条件与 [AC-EXT-016](#ac-ext-016)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)覆盖多尺度浏览、授权搜索选择和回到主目标；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：用户应能从有权观看的世界总览进入区域/Fragment，平移/缩放、搜索定位 Agent/设施/路线，选中对象或事件并查看身份、来源时效及下一步；未知/权限外的世界不能伪装全图实时情报。
 - 上位承诺：[根 SC-13/14](prd.md)。消费主责：[世界探索](player-readable-world-stage.prd.md#req-agent-stage-003)。
 - 验收：[AC-EXT-016](#ac-ext-016)。
 
 <a id="req-ext-017"></a>
 ### REQ-EXT-017：可视化关联 Agent 指导和权威结果
+
+Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；本条在外部 Runtime 首期范围消费[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005)，不重复声明世界舞台要求。
+
+- 功能点：[REQ-EXT-017](#req-ext-017)；适用范围沿本条原条件与 [AC-EXT-017](#ac-ext-017)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-guidance)已承接合法高层指导与权威回执；同文件需求承接/验证表反链本条AC。剩余：renderer失败可信文本与安全恢复尚需精确承接；不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：renderer失败可信文本与安全恢复尚需精确承接；实现/验证：完整适用入口与验收尚未闭合。
 
 - 要求：选中自己有权的 Agent 可查看目标、行为、主要 blocker、pending/committed 并进入合法高层 Prompt/目标/委托；选中其他 Agent、点击工厂/地形或拖移地图不直接执行世界动作。Renderer 失败时提供可信文本与安全恢复。
 - 上位承诺：[根 SC-9/11/14](prd.md)。消费主责：[世界舞台间接指导](player-readable-world-stage.prd.md#req-agent-stage-005)。
@@ -404,6 +576,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-001"></a>
 ### AC-EXT-001：从已有 Runtime 完成接入
 
+Trace refs: O7-REQ-b3e367c3-c72d-4959-b599-613ac652dab8；承接[REQ-EXT-001](#req-ext-001)。
+
 - 覆盖要求：[REQ-EXT-001](#req-ext-001)。
 - 给定：一份声明版本和适配方式的 OpenClaw 或 Codex 环境及其使用说明。
 - 当：用户按推荐路径接入并启动任务。
@@ -411,6 +585,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-002"></a>
 ### AC-EXT-002：错误绑定和越权成本路由被拒绝
+
+Trace refs: O7-REQ-d30925fe-d798-4056-9641-062255931a61；承接[REQ-EXT-002](#req-ext-002)。
 
 - 覆盖要求：[REQ-EXT-002](#req-ext-002)。
 - 给定：一个合法委托，以及他人 Agent、失效委托或不属于当前身份的费用路由作为负例。
@@ -420,6 +596,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-003"></a>
 ### AC-EXT-003：公布能力与首局执行一致
 
+Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb；承接[REQ-EXT-003](#req-ext-003)。
+
 - 覆盖要求：[REQ-EXT-003](#req-ext-003)。
 - 给定：首局代表链所需的合法观察和能力，以及前置条件已变化的负例。
 - 当：Runtime 根据公布的语义和输入要求选择行动。
@@ -427,6 +605,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-004"></a>
 ### AC-EXT-004：目标驱动的多轮自主推进
+
+Trace refs: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1；承接[REQ-EXT-004](#req-ext-004)。
 
 - 覆盖要求：[REQ-EXT-004](#req-ext-004)。
 - 给定：有效目标、委托与声明的 Runtime 会话能力。
@@ -436,6 +616,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-005"></a>
 ### AC-EXT-005：成功、拒绝和未知结果均形成闭环
 
+Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7；承接[REQ-EXT-005](#req-ext-005)。
+
 - 覆盖要求：[REQ-EXT-005](#req-ext-005)。
 - 给定：分别成功结算、被拒绝、仍待决以及投递后超时的关联请求。
 - 当：世界返回结果，或执行方恢复查询原结果。
@@ -443,6 +625,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-006"></a>
 ### AC-EXT-006：目标调整与停止后续委托可读
+
+Trace refs: O7-REQ-091d6c22-fca5-4284-91dd-2edce9ef440b；承接[REQ-EXT-006](#req-ext-006)。
 
 - 覆盖要求：[REQ-EXT-006](#req-ext-006)。
 - 给定：正在执行的任务、一个有效新目标，以及一个尚未结算的旧请求。
@@ -452,6 +636,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-007"></a>
 ### AC-EXT-007：断开观战与停止 Runtime 产生不同结果
 
+Trace refs: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e；承接[REQ-EXT-007](#req-ext-007)。
+
 - 覆盖要求：[REQ-EXT-007](#req-ext-007)。
 - 给定：一个可无 GUI 运行、独立委托有效的 Runtime 会话及其声明的 primary mode。
 - 当：先按声明入口断开观战并恢复，再停止 Runtime 或使执行资格失效；`viewer` 验证关闭/回访，`pure_api` 验证断开观察客户端/重新读取观察。
@@ -459,6 +645,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-008"></a>
 ### AC-EXT-008：断连和进程重启后安全继续
+
+Trace refs: O7-REQ-4a8be58c-bcda-4efe-b199-1cf9bd9b3330；承接[REQ-EXT-008](#req-ext-008)。
 
 - 覆盖要求：[REQ-EXT-008](#req-ext-008)。
 - 给定：同时存在已结算成果和未决请求的任务。
@@ -468,6 +656,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-009"></a>
 ### AC-EXT-009：预算耗尽与未知开销如实表达
 
+Trace refs: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43；承接[REQ-EXT-009](#req-ext-009)。
+
 - 覆盖要求：[REQ-EXT-009](#req-ext-009)。
 - 给定：一组可执行预算限制和一组下游内部开销不可完全观测的组合。
 - 当：持续执行达到限制，或成本数据缺失。
@@ -475,6 +665,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-010"></a>
 ### AC-EXT-010：两个 Runtime 分别完成首局闭环
+
+Trace refs: O7-REQ-7283b901-ea06-49e3-956d-2bad46b6c89d；承接[REQ-EXT-010](#req-ext-010)。
 
 - 覆盖要求：[REQ-EXT-010](#req-ext-010)。
 - 给定：对 OpenClaw、Codex 分别声明的实际运行组合，以及同一玩法版本下可比较、满足既有首局可行性条件的初始场景。
@@ -485,6 +677,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-011"></a>
 ### AC-EXT-011：Skill 在两个 Runtime 中分别完成自助引导
 
+Trace refs: O7-REQ-a5bbf6e4-3e71-4d48-9eba-68c50867c95c；承接[REQ-EXT-011](#req-ext-011)。
+
 - 覆盖要求：[REQ-EXT-011](#req-ext-011)。
 - 给定：一个新的受支持 OpenClaw 环境和一个独立的 Codex 环境，以及对应世界 API 和合法游戏 Agent。
 - 当：两者分别通过官方 Skill 阅读接入说明、完成认证/能力发现并选择第一项合法动作；另以 Skill 版本错误或未授权为负例。
@@ -492,6 +686,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-012"></a>
 ### AC-EXT-012：普通网络客户端可独立完成可恢复游戏 API 闭环
+
+Trace refs: O7-REQ-8120dffe-17cc-458a-9c70-8121217e6f7b；承接[REQ-EXT-012](#req-ext-012)。
 
 - 覆盖要求：[REQ-EXT-012](#req-ext-012)。
 - 给定：有适用凭据和合法游戏 Agent 委托的普通 HTTP(S)/JSON 客户端（不启动 OpenClaw、Codex 或 Provider Bridge），以及可达首局所需动作的世界。
@@ -501,6 +697,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-013"></a>
 ### AC-EXT-013：API 授权、远程访问及重试负例
 
+Trace refs: O7-REQ-7d6cef7f-9419-49ed-b445-663382383458；承接[REQ-EXT-013](#req-ext-013)。
+
 - 覆盖要求：[REQ-EXT-013](#req-ext-013)。
 - 给定：两个不同身份/Agent 的委托，以及本地和受保护远程 API 路径，另有错误身份标签、伪造费用路由、过期委托、重复提交、请求超时和限流/预算负例。
 - 当：请求读取私有状态、提交行动、重连后查询原意图或在资格失效后重试。
@@ -508,6 +706,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-014"></a>
 ### AC-EXT-014：主路径不依赖旧桥且可独立裁撤
+
+Trace refs: O7-REQ-68ffc843-8679-4ad9-8cef-10a239a29c73；承接[REQ-EXT-014](#req-ext-014)。
 
 - 覆盖要求：[REQ-EXT-014](#req-ext-014)。
 - 给定：已声明的两个外部 Runtime 组合和新的 Skill + Game API，另将旧 `provider_loopback_http` / `oasis7_provider_local_bridge` 视为不可用。
@@ -517,6 +717,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-015"></a>
 ### AC-EXT-015：真实 Web 与桌面客户端分别能看和操作世界
 
+Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；承接[REQ-EXT-015](#req-ext-015)。
+
 - 覆盖要求：[REQ-EXT-015](#req-ext-015)。
 - 给定：真实世界、合法 Agent 及权威工业结果、一个浏览器和一个受支持原生客户端。
 - 当：在各自界面进入世界、缩放定位、选择查看并离开回访。
@@ -525,6 +727,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="ac-ext-016"></a>
 ### AC-EXT-016：世界总览到局部再回到任务
 
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；承接[REQ-EXT-016](#req-ext-016)。
+
 - 覆盖要求：[REQ-EXT-016](#req-ext-016)。
 - 给定：跨区域/Fragment 的世界、若干合法可见对象与未知/最近已知对象。
 - 当：玩家缩放平移、搜索 Agent、选中工厂/事件并返回主任务。
@@ -532,6 +736,8 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 <a id="ac-ext-017"></a>
 ### AC-EXT-017：地图选择不成为直接世界行动
+
+Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；承接[REQ-EXT-017](#req-ext-017)。
 
 - 覆盖要求：[REQ-EXT-017](#req-ext-017)。
 - 给定：自己与其他人的可见 Agent、pending 与 committed 行动及一次视图故障。

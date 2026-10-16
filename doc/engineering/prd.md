@@ -3,19 +3,21 @@
 审计轮次: 8
 
 ## 目标
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本页的现行流程与跨层引用承接[全局要求追踪](doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)，Task 可以直接是 PR。
 - 建立 engineering 模块设计主文档，统一需求边界、技术方案与验收标准。
 - 确保 engineering 模块后续改动可追溯到 PRD-ID、任务和测试。
 
 ## 范围
 - 覆盖 engineering 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/engineering/prd.md` 的任务映射。
+- 覆盖产品或专业要求、适用设计与 PR 任务的关联，保留局部 PRD-ID。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/engineering/prd.md`
-- 项目管理入口: `doc/engineering/prd.md`
+- 项目执行记录: PR、实际 CI 与评审记录；Issue/Project 按需使用
 - 文件级索引: `doc/engineering/prd.index.md`
-- 追踪主键: `PRD-ENGINEERING-xxx`
+- 专业条款标识: `PRD-ENGINEERING-xxx`；跨层要求的稳定键按全局 Trace ID 规范维护
 - 测试与发布参考: `testing-manual.md`
 
 ## 里程碑
@@ -33,18 +35,18 @@
   - SC-1: Rust 单文件超 1200 行新增违规数为 0。
   - SC-2: Markdown 长度只作编辑提示，不因超过 1000 行阻断验证或要求豁免；缺失引用、结构错误等真实检查继续生效，Rust 体量规则不变。
   - SC-3: `scripts/doc-governance-check.sh` 在 required gate 连续通过。
-  - SC-4: 工程类任务 100% 映射到 PRD-ENGINEERING-ID。
+  - SC-4: 新增或实质修改的稳定工程要求按全局 Trace ID 关联原文、适用设计和任务；保留专业 PRD-ID，不为简单编辑新建要求或任务身份。
   - SC-5: `doc/` 根目录与模块根目录平铺文档新增违规数为 0（allowlist 冻结机制）。
   - SC-6: 重点模块的当前主责入口和活跃引用保持可达、语义一致；已停止的历史平铺专题迁移不作为当前开发或交付前置。
   - SC-8: 治理按当前明确缺口有界交付，不恢复固定人数、冻结迁移批次或每日燃尽台账；历史执行安排仅供追溯。
   - SC-9: 活跃文档 `doc/...*.md` 依赖路径断链数为 0。
   - SC-12: 文档-代码偏差在同批次回写闭环率 100%。
-  - SC-14: 角色职责入口统一收敛到 `.agents/roles/*.md`，根 `AGENTS.md` 仅保留 7 个组合角色入口与协作规则。
-  - SC-15: 角色协作交接统一使用 `.agents/roles/templates/` 模板，确保 handoff 信息完整、可执行、可追溯。
-  - SC-16: `AGENTS.md` 的开发工作流已升级为角色协作版，明确 owner role、handoff 触发条件、QA 与 LiveOps 回流路径。
+  - SC-14: 专业职责按需参考 `.agents/roles/*.md`；根 `AGENTS.md` 保留必要规则与导航，不规定固定角色数量。
+  - SC-15: 角色协作按需参考 `.agents/roles/templates/`，交接说明问题、上下文、允许范围和期望结果，不强制模板或回执。
+  - SC-16: `AGENTS.md` 与开发流程规范一致，负责人按实际问题选用专业角色和 subagent，不要求固定角色组合。
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-24D: 同一 PR 内的 review comment follow-up 必须存在 repo-owned helper，用于统一盘点 unresolved review threads、执行显式 resolve，并在每轮操作后分别报告 `reviewDecision`、`mergeStateStatus` 与 unresolved thread 数，避免把“thread 已关”误报成“PR 可合并”。
-  - SC-24G: branch 跟进最新 `main` 时若命中 `.pm/**` rebase 冲突，仓库必须存在 repo-owned helper 统一分类冲突类别；`.pm/inbox/signals.jsonl` 已退休，命中时只能提示删除退休文件或人工归档，git-ignored 本地视图只能提示“保留 `main` 删除并重建”，canonical task/memory/stage 冲突仍需人工处理。
+  - SC-24G（历史）：旧 `.pm/**` 冲突分类与 canonical task/memory/stage 模型仅保留历史含义。当前冲突按 Git 真实改动处置，保留用户资料，不恢复退休文件或任务身份；main 前进本身不要求 rebase 或重测。
   - SC-29: 文档体量治理必须具备正式专题口径，明确 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型；高密度模块的默认阅读面只保留“what / where / next / risk”所需入口，不再把审计与归档材料直接暴露为主入口。
   - SC-29A: 当文档治理债已从“默认阅读面混乱”转向“文档存量维护成本”时，engineering 必须存在一份正式 follow-up 专题，提供可复算的库存报告入口，并明确 `历史压缩 / 路径级治理 / 近限文件拆分 / 季度复核` 四类后续动作。
   - SC-29B: 当某个热点子域进入后仍缺少 canonical 首读入口时，engineering 必须允许继续拆出路径级治理 follow-up；首条子域治理需至少为该热点路径补齐一个子目录 landing page，并把上游模块入口改成先命中该 landing page，而不是继续让 operator 手册或完整索引单独承担全部分流职责。
@@ -55,7 +57,7 @@
   - 贡献开发者：需要清晰区分普通提交与 authoritative verification gates。
   - 评审者：需要可量化判断变更是否合规。
 - User Scenarios & Frequency:
-  - 日常提交：不执行本地验证；冻结 HEAD 的 PR-ready 验证与 CI required gate 负责拦截回归。
+  - 日常提交：先做最小有效局部验证，再由 CI 执行必要检查；不要求额外 PR-ready 身份或完成回执。
   - CI 失败排查：每个异常流水线触发后执行，定位脚本与规则来源。
   - 规范迭代评审：每周至少 1 次，评估误报率和治理收益。
   - 季度治理复盘：每季度 1 次，回看违规趋势与修复效率。
@@ -65,10 +67,10 @@
   - PRD-ENGINEERING-005 (historical): legacy migration collaboration principles were completed and retired; current doc topology rules live in `doc/engineering/doc-governance/doc-structure-standard.design.md`.
   - PRD-ENGINEERING-007 (historical): legacy migration closure review was completed and retired; current workflow gates live in `doc/engineering/workflow/source-of-truth.md`.
   - PRD-ENGINEERING-008: As a 文档维护者, I want per-module file-level PRD indexes, so that active docs are reachable from the root doc tree.
-  - PRD-ENGINEERING-009: As a 治理维护者, I want bidirectional PRD<->project references enforced by gate, so that traceability never drifts.
-  - PRD-ENGINEERING-010: As a 评审者, I want explicit `test_tier_required/full` on module task items, so that task-to-test review is deterministic.
+  - PRD-ENGINEERING-009: As a 治理维护者, I want accurate requirement/design links and PR verification records, so that traceability does not require a separate project ledger.
+  - PRD-ENGINEERING-010: As a 评审者, I want the selected tests, actual version, results and uncovered scope recorded in the PR, so that verification can be reviewed without extra task fields.
   - PRD-ENGINEERING-011: As a 文档维护者, I want doc path references validated in gate, so that migration-induced broken links are blocked before merge.
-  - PRD-ENGINEERING-012: As a 文档治理维护者, I want a per-document read checklist for all PRDs, so that review coverage is auditable.
+  - PRD-ENGINEERING-012（历史）: 2026-03 全量 PRD 审读清单保留为历史覆盖证据，不作为当前修改的必需台账。
   - PRD-ENGINEERING-013: As a 模块负责人, I want code-first discrepancy handling, so that PRD behavior remains aligned with implementation.
   - PRD-ENGINEERING-014: As a 评审者, I want duplicate and upstream/downstream alignment checks, so that the PRD tree stays clear and non-conflicting.
   - PRD-ENGINEERING-015: As a 文档作者/评审者, I want one canonical document topology and role split, so that I can place new docs without guessing and keep detailed design discoverable.
@@ -81,7 +83,7 @@
   - PRD-ENGINEERING-029: As a 项目经理/Testing owner, I want a canonical `doc/testing/evidence/` path entrypoint, so that I can navigate the densest testing hotspot path by intent instead of scanning nearly 50 evidence files blindly.
   - PRD-ENGINEERING-030: As a 项目经理/README owner, I want a canonical `doc/readme/governance/` path entrypoint, so that I can navigate the densest readme hotspot path by intent instead of scanning nearly 100 governance docs blindly.
   - PRD-ENGINEERING-033: As a 项目经理/文档治理评审者, I want follow-up canonical entrypoints for newly re-identified hotspot paths, so that `doc/world-simulator/launcher/` and `doc/game/gameplay/` can be navigated by intent without expanding a full-corpus rewrite round.
-  - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation without replacing `.pm`, owner roles, or GitHub PR review.
+  - PRD-ENGINEERING-031: As a `producer_system_designer`, I want external agent workflow patterns benchmarked against oasis7's repo-native execution chain, so that we only adopt the parts that strengthen evidence, workflow verification, or UI ideation while preserving actual Git/PR/CI facts and applicable professional review, without restoring retired `.pm` task authority.
   - PRD-ENGINEERING-032: As a repo workflow owner, I want the current local skill inventory frozen into keep/replace/retire/defer buckets, so that role cards and engineering docs no longer recommend low-value or workflow-conflicting skill surfaces.
 - Critical User Flows:
   1. Flow-ENG-001: 明确问题与验收 → 独立分支实现 → 局部验证 → 同一目的 PR → 实际 CI 与按风险评审 → 修复阻断问题 → 绑定预期 HEAD 正常合入。
@@ -99,22 +101,22 @@
 | 文档治理检查 | allowlist、模块根目录规则、根目录规则 | 执行 `doc-governance-check.sh` | `pass/fail` | 按违规严重度输出 | 所有人可执行，治理维护者可更新基线 |
 | 工程趋势统计 | 违规率、修复时长、回归率 | 周期性生成报表并复盘 | `collecting -> reported -> actioned` | 按模块与时间排序 | 评审者与维护者可读写 |
 | 有界并行治理 | 明确负责人、当前缺口、实际写入范围和验证结果 | 围绕当前有效缺口协作，不恢复已退役迁移排程 | 按 PR 和实际验证记录进展 | 写入范围避免重叠，必要上下文按需交接 | 负责人协调，适用评审复核 |
-| PRD 文件级索引 | 模块名、专题PRD路径、专题project路径 | 生成/更新模块索引并回写入口引用 | `missing -> indexed -> verified` | 活跃文档优先，按路径稳定排序 | 维护者可更新，所有贡献者可读 |
+| PRD 文件级索引 | 模块名、专题 PRD/design 路径、相关 PR 与验证记录 | 生成/更新模块索引并回写入口引用 | `missing -> indexed -> verified` | 活跃文档优先，按路径稳定排序 | 维护者可更新，所有贡献者可读 |
 | 依赖路径可达门禁 | 引用文档路径、引用来源、豁免列表 | 校验 `doc/...*.md` 引用目标是否存在 | `pass/fail` | 默认全量校验，通配符/模板与白名单文件豁免 | 维护者维护豁免，提交者必须修复断链 |
-| 文档分工与组织规范 | 对象层级（模块/专题/分册）、职责后缀（PRD/Design/Project/Runbook/Manual） | 为新主题选择落点并按规则建档 | `unclassified -> classified -> indexed -> reviewed` | 目录按领域/专题，文件按职责，优先同名三件套 | 作者可建档，评审者可裁定例外 |
+| 文档分工与组织规范 | 对象层级（模块/专题/分册）、职责后缀（PRD/Design/Runbook/Manual） | 为新主题选择落点并按规则建档 | `unclassified -> classified -> indexed -> reviewed` | 目录按领域/专题，文件按职责，PRD/design 按长期主题配对，任务直接使用 PR 或按需 Issue | 作者可建档，评审者可裁定例外 |
 | 文档体量治理 | 文档总量、模块/子目录密度、消费层类型（活跃真值/审计留痕/历史归档/兼容跳转）、默认入口面 | 先冻结默认阅读面，再决定哪些文档只保留可检索性与定向引用，不再进入根入口/模块入口的主列表 | `unbounded -> classified -> reduced -> monitored` | 默认优先压缩阅读面而不是立即迁移文件；高密度模块优先按 `world-simulator -> p2p -> testing -> readme/core` 排查 | `producer_system_designer` 裁定消费层，模块 owner 回写入口与索引，评审者复核 |
 | 历史 PRD 审读留痕 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 历史 round logs / deleted snapshot prose 仅用于追溯；当前偏差回写到模块 truth | `historical -> traced -> current_truth_updated` | 入口优先、风险优先 | 维护者与评审者可追溯，当前 truth 由模块 owner 维护 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 12 张专业关注点供按需参考 | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 模板按实际需要使用，不要求传递协议 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
-  - AC-2: engineering project 文档维护任务拆解与状态。
+  - AC-2: 任务范围、实际状态和剩余义务由当前 PR 描述、实际 CI 与评审承载；Issue/Project 按需使用，不创建 engineering project 台账或本地状态副本。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 的口径一致。
-  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并进入主项目追踪。
+  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并在当前 PR 或按需 Issue 记录本次范围；复杂协调按需使用 Issue/Project，不作为普通 PR 准入。
   - AC-6: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
   - AC-8: 每次迁移任务需附“原文关键约束点 -> 新文档章节”对照，确保内容不丢失。
   - AC-9: 并行治理按实际修改范围避免重叠并保留必要交接；旧迁移分工表、冻结批次和每日燃尽不作为当前交付条件。
-  - AC-11: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
+  - AC-11: 专题需求、设计、当前导航与真实要求引用应可达且互相追溯；不要求独立 project 文档，不恢复 PRD/project 双向互链门禁。适用检查以现行文档治理入口为准，现有检查只证明其实际能力。
   - AC-13: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
   - AC-14: 2026-03 全量 PRD 审读留痕必须可通过 historical round logs / deleted snapshot prose 追溯；当前不再要求存在旧 checklist 目录活跃清单面。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -175,25 +177,25 @@
   - 误报场景：规则误伤时保留失败证据并通过任务流程修订规则，不直接绕过。
   - 本地/CI 不一致：本地通过但 CI 失败时以 CI 结果为准并补环境对齐说明。
   - 脚本不可执行：缺依赖时给出明确安装建议与最小复现命令。
-  - 并发修改冲突：同一规则多分支更新时以最新主干基线重放验证。
+  - 并发修改冲突：同一规则发生实际冲突或相关集成风险时，更新受影响内容并验证真实组合；main 前进本身不要求重测。
   - 新旧格式并存：迁移中允许 legacy 与 strict 共存，但每个迁移批次必须标注边界并回写追踪状态。
   - 批量迁移回归风险：结构改写可能造成引用断链，需附带路径扫描与脚本复核。
   - 索引覆盖不足：专题文档未被入口索引时，必须在当批修复并补回链路。
-  - 互链缺失：若 PRD 与 project 仅单向引用，会导致追溯断链，门禁需直接阻断。
+  - 引用缺失：修复实际要求、设计与验证记录的链接；尚未形成的层级如实说明，不为补链新建 project 台账。
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
-  - 审读进度漂移：若已读清单不随批次更新，会导致“已完成”状态失真，必须在同提交更新清单。
-  - 运行态真值冲突：若 `.pm/` 与正式 `doc/` 对同一阶段/任务给出不同口径，必须以正式文档为准并把 `.pm/` 记录标成待裁决。
+  - 审读范围漂移：在已有 PR 或评审记录中注明实际审阅范围和版本，不把未读内容写为已审；历史清单不重签。
+  - 事实与规范冲突：正式文档拥有相应要求，实际交付状态以 Git、PR、CI 和评审记录核实；历史 `.pm/` 资料不再定义任务或阶段真值。
 - Non-Functional Requirements:
   - NFR-ENG-1: required 门禁平均执行时长 <= 10 分钟。
   - NFR-ENG-2: 文档治理误报率 <= 5%（按周统计）。
-  - NFR-ENG-3: 新增工程任务 PRD-ID 映射覆盖率 100%。
+  - NFR-ENG-3: 新增或实质修改的相关要求按全局 Trace ID 维护本次跨层关系，不要求未触达存量回填。
   - NFR-ENG-4: 工程治理脚本在 Windows、Linux/macOS 环境均可执行。
   - NFR-ENG-5: 规则变更需附带可追溯说明与回归证据。
-  - NFR-ENG-6: 活跃文档迁移任务必须包含“原文约束点清单 + 新文档章节映射 + 回归验证结果”三件套证据。
+  - NFR-ENG-6: 活跃文档语义迁移在当前 PR 或已有记录说明原条款去向、未接收语义与实际验证结果；复用现有内容，不另建三件套证明链。
   - NFR-ENG-7: 治理收益按当前规则冲突、失效入口和实际消费者缺口的消除判定；不规定固定人数或每日迁移篇数。
   - NFR-ENG-8: 全部模块文件级索引应在 1 次 `doc-governance-check` 执行内完成可达性校验。
-  - NFR-ENG-9: 活跃专题 PRD/project 双向互链覆盖率 100%。
-  - NFR-ENG-10: 模块主项目任务测试分层显式标注覆盖率 100%。
+  - NFR-ENG-9: 活跃专题的真实要求、设计与 authority 链接保持可达，不要求 project ledger。
+  - NFR-ENG-10: PR 验证记录能说明所选测试、实际版本、结果与未覆盖范围，不新增模块主项目字段。
   - NFR-ENG-11: 活跃文档 `doc/...*.md` 引用路径可达性覆盖率 100%。
   - NFR-ENG-13: 根 `AGENTS.md` 与 `.agents/roles/*.md` 的角色映射一致率 100%，不得出现无入口角色或悬空引用。
   - NFR-ENG-14: 角色交接模板字段命名稳定，默认模板在 5 分钟内可完成填写并可被他人直接执行。
@@ -216,8 +218,12 @@
   - 风险-4: 多人并行对同一目录写入造成冲突与重复迁移。
 
 ## 6. Validation & Decision Record
+
+下表保留历史任务与当时验证、决策的追溯关系；旧 TASK 编号、project 三件套、pm-lint、固定角色与旧门禁决定不构成当前执行要求。现行开发规则以 workflow source of truth 为准，未执行的验证不得因保留旧表而宣称通过。
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+
+旧 TASK-ENGINEERING 编号、Owner-B 115 篇与旧迁移/aftercare 记录只作原版本来源，不是当前队列或完成证明；未定位原 Task 的过程保留在固定 Git 历史与本表，不批量代配到总体治理 Task。当前验证仍按有效方法列及 workflow source of truth 选择。
+| PRD-ID | 历史来源或验证入口 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-001 | TASK-ENGINEERING-001/005/006/007 | `test_tier_required` | 文档结构检查、平铺治理脚本执行 | 文档组织一致性、工程可维护性 |
 | PRD-ENGINEERING-002 | TASK-ENGINEERING-002/003/007 | `test_tier_required` + `test_tier_full` | `commit` baseline 与 required/full CI 门禁联动校验 | 提交流程稳定性、回归拦截能力 |
@@ -227,8 +233,8 @@
 | PRD-ENGINEERING-006 | TASK-ENGINEERING-011/012/013/013A/013B/013C/013D/014 | historical-only | 迁移批次已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-007 | TASK-ENGINEERING-015 | historical-only | 全量迁移收尾复核已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-008 | TASK-ENGINEERING-016 | `test_tier_required` | 12 模块文件级索引覆盖扫描、入口可达性检查 | 文档树可达性与导航一致性 |
-| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | `doc-governance-check` 双向互链门禁验证 | PRD/project 追溯完整性 |
-| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 模块主项目任务项 tier 显式标注检查 | 任务到测试分层可审计性 |
+| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | 现行 `doc-governance-check` 的入口/引用核验，不恢复 project 投影 | PRD/project 追溯完整性 |
+| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 适用 PR 的实际测试范围、tier 和 CI 结果核对；Issue 按需 | 任务到测试分层可审计性 |
 | PRD-ENGINEERING-011 | TASK-ENGINEERING-019 | `test_tier_required` | 活跃文档引用路径可达性门禁与断链修复验证 | 文档树引用完整性与迁移稳定性 |
 | PRD-ENGINEERING-012 | TASK-ENGINEERING-020/024 | `test_tier_required` | 历史审读留痕与入口文档已读率检查 | PRD 审读可追溯性 |
 | PRD-ENGINEERING-013 | TASK-ENGINEERING-021/022 | `test_tier_required` | 代码一致性抽样与偏差回写核验 | 文档行为与实现一致性 |
@@ -270,6 +276,8 @@
 | DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
 | DEC-ENG-023 | 先冻结“阅读面分层”而不是立刻重组目录树；`活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的差异先体现在 root README、模块 README、`prd.index.md` 与专题互链上 | 立即重引入 `archive/` 树或直接批量移动 `reviews/governance/evidence` 文件 | 当前问题首先是默认阅读面过宽，而不是路径本身不可存放；先压缩入口和消费层，风险最小，也不破坏现有引用稳定性。 |
+
+<a id="PRD-ENGINEERING-035"></a>
 
 ## PRD-ENGINEERING-035 私有资料管理工具
 

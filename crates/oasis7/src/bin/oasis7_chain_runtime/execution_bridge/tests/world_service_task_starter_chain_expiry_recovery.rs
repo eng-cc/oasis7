@@ -65,6 +65,7 @@ fn starter_context_live_conflict_fails_closed_then_expiry_aborts_and_reprepares(
         };
         let delegate = hex::encode([73; 32]);
         let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint: metadata["endpoint"].as_str().unwrap().into(),
             trusted_service_public_key: config["service_public_key"].as_str().unwrap().into(),
             expected_world: world.clone(),

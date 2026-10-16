@@ -55,6 +55,8 @@
 
 ## 3. 产品功能清单
 
+清单各功能的设计/实现状态及适用 Trace 由本行链接的 REQ 状态摘要拥有；同一要求下的功能共同消费该范围，不以某个子功能完成代签其余义务。后续候选仍不是首期承诺。
+
 <a id="collaboration-feature-catalog"></a>
 清单按[功能清单维护原则](../../engineering/doc-governance/product-documentation-standard.design.md#product-feature-catalog-principles)维护，阶段不代表实现状态。下列局部功能细化外部 Runtime 主清单已有的目标、授权、持续运行和反馈承诺，不将其重复计为 14 个新的独立顶层产品；主清单编号保持稳定，开发进度与实际支持结论仍查询 PR/QA 记录。
 
@@ -120,6 +122,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-001"></a>
 ### REQ-COLLAB-001：协作必须关联同一游戏任务和有效执行方
 
+Trace ID: O7-REQ-62007da5-b12a-4b8c-98bb-82ab53a35069
+
+- 功能点：[REQ-COLLAB-001](#req-collab-001)；适用范围沿本条原条件与 [AC-COLLAB-001](#ac-collab-001)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-binding)覆盖唯一任务/执行方、旧fence隔离和私有受众；同文件需求承接/验证表反链本条AC。剩余：Web/桌面共享可恢复任务、当前执行方显示与快照/恢复的双表面消费尚需精确组合承接；不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L295)：原生TaskControl/executor fence与私有context主体绑定；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余Web/native协作显示、完整TaskSnapshot与跨客户端隐私，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：Web/桌面共享可恢复任务、当前执行方显示与快照/恢复的双表面消费尚需精确组合承接；实现/验证：Web/native协作显示、完整TaskSnapshot与跨客户端隐私。
+
 - 要求：Web/桌面玩家与外部 Runtime 必须共享可恢复的世界、Agent、任务及执行绑定，显示当前合法执行方；未经授权的其他客户端、Agent 或旧执行方不能读取私有协作内容、修改目标或提交新行动。
 - 理由：跨设备继续不依赖原聊天窗口，也不能因此扩大权限。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[外部 Runtime 绑定要求](external-agent-runtime-play.prd.md#req-ext-002)。
@@ -127,6 +139,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-001"></a>
 ### AC-COLLAB-001：跨设备同一任务与执行方隔离
+
+Trace refs: O7-REQ-62007da5-b12a-4b8c-98bb-82ab53a35069；承接[REQ-COLLAB-001](#req-collab-001)。
 
 - 覆盖要求：[REQ-COLLAB-001](#req-collab-001)。
 - 给定：一个合法 Agent/任务、Web 与桌面登录，以及另一身份、另一个 Agent 和已被替换的执行方作为负例。
@@ -136,6 +150,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-002"></a>
 ### REQ-COLLAB-002：目标发布到用于决策必须有版本化确认
 
+Trace ID: O7-REQ-edd52061-73c0-433c-9531-30d86b1db459
+
+- 功能点：[REQ-COLLAB-002](#req-collab-002)；适用范围沿本条原条件与 [AC-COLLAB-002](#ac-collab-002)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-goal)覆盖目标版本、采纳自报与真实context/decision证据分离；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L505)：完整激活目标进入context、固定goal revision的真实模型决策；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余received/adoption报告和多窗口/迟到确认的完整UI，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：received/adoption报告和多窗口/迟到确认的完整UI。
+
 - 要求：系统必须区分目标保存、执行方读取、采纳声明和实际用于新决策，并将后续提交关联当前有效目标及委托；过期编辑、旧规划和迟到确认不能覆盖新目标或绕过已生效约束。
 - 理由：玩家知道指导传到了哪里，而非把保存成功当作 Agent 执行成功。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[目标应用](external-agent-runtime-play.prd.md#req-ext-006)。
@@ -143,6 +167,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-002"></a>
 ### AC-COLLAB-002：离线发布、并发更新与旧版本拒绝
+
+Trace refs: O7-REQ-edd52061-73c0-433c-9531-30d86b1db459；承接[REQ-COLLAB-002](#req-collab-002)。
 
 - 覆盖要求：[REQ-COLLAB-002](#req-collab-002)。
 - 给定：执行方离线时发布的新目标，以及另一表面的旧草稿和按旧目标启动的推理。
@@ -152,6 +178,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-003"></a>
 ### REQ-COLLAB-003：计划汇报与权威成果必须分别可读
 
+Trace ID: O7-REQ-b100c55e-5c35-46dc-aaf6-e66c02b323d8
+
+- 功能点：[REQ-COLLAB-003](#req-collab-003)；适用范围沿本条原条件与 [AC-COLLAB-003](#ac-collab-003)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-content)覆盖报告来源/更新时间/证据、真实完成判定；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：Runtime 必须可汇报任务相关计划摘要、阶段状态、阻塞及需要谁处理，并关联适用目标和证据；玩家能区分 Runtime 报告、估计、最后更新时间与世界已确认结果，不得仅凭自报完成标记游戏目标完成。
 - 理由：让玩家理解进展而不泄露模型内部思维或伪造成果。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[权威反馈](external-agent-runtime-play.prd.md#req-ext-005)。
@@ -159,6 +195,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-003"></a>
 ### AC-COLLAB-003：自报成功、陈旧报告和世界结果冲突
+
+Trace refs: O7-REQ-b100c55e-5c35-46dc-aaf6-e66c02b323d8；承接[REQ-COLLAB-003](#req-collab-003)。
 
 - 覆盖要求：[REQ-COLLAB-003](#req-collab-003)。
 - 给定：计划/阻塞报告、自报完成但缺少成果的任务，以及实际 committed 与 pending 回执。
@@ -168,6 +206,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-004"></a>
 ### REQ-COLLAB-004：问答必须可恢复且不隐式升级为指令
 
+Trace ID: O7-REQ-2f463269-c3c0-4da1-95f8-90011c35799a
+
+- 功能点：[REQ-COLLAB-004](#req-collab-004)；适用范围沿本条原条件与 [AC-COLLAB-004](#ac-collab-004)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-content)已承接问答ID、版本关联和旧回答不授权；同文件需求承接/验证表反链本条AC。剩余：接收/后续处理确认、断连可恢复的snapshot/增量组合尚需核对；不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：接收/后续处理确认、断连可恢复的snapshot/增量组合尚需核对；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：玩家与 Runtime 必须能围绕同一任务提出问题、回复并核对接收/后续处理；回答绑定原问题及适用目标，已过时问题或普通聊天不得自动改写目标、批准权限或产生世界动作。
 - 理由：异步协作不依赖玩家与模型同时在线，也不把自然语言回复当作授权凭据。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[对话与目标区分](agent-conversation-and-prompt-control.prd.md#23-agent-prompt-与目标调整)。
@@ -175,6 +223,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-004"></a>
 ### AC-COLLAB-004：跨设备回复、重复回复与过时问题
+
+Trace refs: O7-REQ-2f463269-c3c0-4da1-95f8-90011c35799a；承接[REQ-COLLAB-004](#req-collab-004)。
 
 - 覆盖要求：[REQ-COLLAB-004](#req-collab-004)。
 - 给定：Runtime 提问后离线、玩家从另一表面回复，以及目标已变更的问题和无权回复者。
@@ -184,6 +234,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-005"></a>
 ### REQ-COLLAB-005：关键选择必须通过可追踪的有效授权协作
 
+Trace ID: O7-REQ-f5341eef-d8f6-42ae-b7b6-751803abd588
+
+- 功能点：[REQ-COLLAB-005](#req-collab-005)；适用范围沿本条原条件与 [AC-COLLAB-005](#ac-collab-005)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-approval)覆盖精确申请、明确owner决定、累计授权和执行时重验；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：未核实
+- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+
 - 要求：Runtime 必须能提出符合既有授权规则的申请，玩家能够批准、拒绝或调整范围；只有当前有权主体对适用目标、对象、累计额度、风险和有效期的明确决定可用于后续行动，拒绝、超时、撤销和条件漂移不能默认为继续。
 - 理由：避免逐动作遥控，同时保留重大选择与成本控制。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[累计授权与责任](agent-authority-ownership-and-accountability.prd.md#req-agent-auth-001)。
@@ -191,6 +251,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-005"></a>
 ### AC-COLLAB-005：审批生效、拒绝与失效负例
+
+Trace refs: O7-REQ-f5341eef-d8f6-42ae-b7b6-751803abd588；承接[REQ-COLLAB-005](#req-collab-005)。
 
 - 覆盖要求：[REQ-COLLAB-005](#req-collab-005)。
 - 给定：一次超范围投入申请，另有重复批准、拒绝、超时、owner/目标变化及额度已消耗的负例。
@@ -200,6 +262,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-006"></a>
 ### REQ-COLLAB-006：协作补送与恢复不得重演旧意图
 
+Trace ID: O7-REQ-6044cb04-5fbb-4c68-81a6-fc57cfdd608a
+
+- 功能点：[REQ-COLLAB-006](#req-collab-006)；适用范围沿本条原条件与 [AC-COLLAB-006](#ac-collab-006)，不扩大入口或阶段。
+- 系统设计状态：已覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-recovery)覆盖原操作恢复、快照分页与增量切点、旧授权不复活；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[实现任务 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定实现源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L322)：原prepare及原签名行动安全恢复；[历史prepared-world真实模型记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)仅证明其固定候选的targeted切片，包含原cleanup失败。剩余未答问题/待决审批的快照分页、补送与重复批准，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：未答问题/待决审批的快照分页、补送与重复批准。
+
 - 要求：双方断线后必须能恢复当前目标、委托、未答问题、待决申请及世界结果，并识别重复、迟到、过时和历史缺口；消息补送不得导致重复批准、旧目标复活或第二次世界效果。
 - 理由：持续协作需要可信的当前状态，而不是机械重放所有历史消息。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[断连恢复](external-agent-runtime-play.prd.md#req-ext-008)。
@@ -207,6 +279,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-006"></a>
 ### AC-COLLAB-006：断线、游标缺口与未知提交对账
+
+Trace refs: O7-REQ-6044cb04-5fbb-4c68-81a6-fc57cfdd608a；承接[REQ-COLLAB-006](#req-collab-006)。
 
 - 覆盖要求：[REQ-COLLAB-006](#req-collab-006)。
 - 给定：双方先后断线、消息补送、失效游标、同标识不同内容以及结果未知的提交。
@@ -216,6 +290,16 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 <a id="req-collab-007"></a>
 ### REQ-COLLAB-007：持续协作必须有真实执行方与明确停止边界
 
+Trace ID: O7-REQ-8dad5caa-d064-4ac8-8c98-40a702b13685
+
+- 功能点：[REQ-COLLAB-007](#req-collab-007)；适用范围沿本条原条件与 [AC-COLLAB-007](#ac-collab-007)，不扩大入口或阶段。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-runtime-journey)已承接同任务真实Runtime组合验收场景；同文件需求承接/验证表反链本条AC。剩余：实际driver启动/等待唤醒/恢复与协作fence的运行设计组合仍须核对；collab-runtime-journey为同任务验收设计，不代替完整运行合同。 不代表实现或发布。
+- 实现状态：部分实现
+- 实现与验证依据：[交付 PR #4628](https://github.com/eng-cc/oasis7/pull/4628)；[固定静态源码](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_game_client/client.rs#L295)核实原生当前executor fence读回/校验及消费。历史prepared-world固定候选 `b59d010556e39beaf1928eb1e95aa9aad099e180` 的两次真实目标决策、正式Skill使用及原结果回放只由[历史运行记录](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)支持；其中原cleanup失败保持不变，不能外推当前main或完整首局。剩余每个Runtime持续运行、等待/唤醒、离线更新和组合恢复，不推导端到端完成。
+- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 剩余范围：设计：实际driver启动/等待唤醒/恢复与协作fence的运行设计组合仍须核对；collab-runtime-journey为同任务验收设计，不代替完整运行合同。；实现/验证：每个Runtime持续运行、等待/唤醒、离线更新和组合恢复。
+
 - 要求：每个受支持 Runtime 组合必须提供实际启动、接收更新、等待/唤醒与恢复路径，准确区分观战连接、执行方可用性、任务状态和世界状态；执行方停止后不得承诺新决策，停止或替换执行方必须保留世界历史并重新核验资格。
 - 理由：Skill 是说明而非常驻进程，关闭 GUI 与关闭执行方是不同操作。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)；消费[独立运行](external-agent-runtime-play.prd.md#req-ext-007)。
@@ -223,6 +307,8 @@ Runtime 重启或交接先校验当前执行方资格，取最新目标与未决
 
 <a id="ac-collab-007"></a>
 ### AC-COLLAB-007：两个 Runtime 的真实异步协作经历
+
+Trace refs: O7-REQ-8dad5caa-d064-4ac8-8c98-40a702b13685；承接[REQ-COLLAB-007](#req-collab-007)。
 
 - 覆盖要求：[REQ-COLLAB-007](#req-collab-007)。
 - 给定：分别声明的 OpenClaw 与 Codex 执行组合及有权任务。

@@ -256,8 +256,11 @@ fn identity_penalty_resolution_missing_profile_rejects_without_mutation() {
         .governance_identity_profiles
         .remove("identity-resolution-agent");
     // The retained consensus record commits the pre-mutation canonical root;
-    // clear it so this deliberately malformed snapshot can reach the reducer.
+    // remove the unarchived test records and their count together so this
+    // deliberately missing-profile snapshot can reach the reducer.
+    assert_eq!(snapshot.tick_consensus_archived_record_count, 0);
     snapshot.tick_consensus_records.clear();
+    snapshot.tick_consensus_total_record_count = 0;
     let mut world = World::from_snapshot(snapshot, world.journal().clone())
         .expect("restore malformed identity penalty state");
     let snapshot_before = world.snapshot();

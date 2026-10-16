@@ -176,6 +176,7 @@ fn private_task_starter_chain_prepared_world_live_service() {
 #[test]
 fn private_task_starter_chain_build_feed_first_product_and_restart() {
     let _scenario_permit = super::private_task_resource_permit();
+    let _probe_slot = super::prepared_world_probe_slot();
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-starter-chain-ready-{}-{}.json",
         std::process::id(),
@@ -229,6 +230,7 @@ fn private_task_starter_chain_build_feed_first_product_and_restart() {
             scope_id: "agent:agent-a".into(),
             read_private_key_hex: delegate.clone(),
             timeout: Duration::from_secs(5),
+            formal_read_trust: None,
             max_response_bytes: 2 * 1024 * 1024,
         })
         .unwrap();

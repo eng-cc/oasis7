@@ -19,6 +19,9 @@
 5. 下钻 `nonviewer/` 等专题目录
 
 ## 3. 设计结构
+
+### 组件职责与分层
+
 - 运行形态层：定义 headless/nonviewer 模式与运行约束。
 - 稳定性层：定义长时运行、内存、归档与恢复策略。
 - 安全边界层：定义认证、协议与线上约束。
@@ -34,8 +37,13 @@
 
 ## 6. 鉴权与恢复边界
 
+### 鉴权主链路与拒绝流程
+
 - ingress 使用版本化 canonical payload 与 ed25519 proof；payload 绑定动作、业务字段、player、公钥与 nonce，校验顺序是格式/字段绑定、验签、严格单调 nonce、防重放消费，最后才进入 Agent 绑定等业务授权。
 - 缺失 proof、签名篡改、player/key 不匹配与 nonce replay 都是不同的显式拒绝；不得只记录日志后继续执行。
+
+### nonce 状态流与恢复边界
+
 - `player_auth_last_nonce` 属于可恢复状态，snapshot/restore 后继续阻止旧请求；journal replay 不重新授权或再次执行业务动作。
 
 ## 7. 长稳与冷归档边界
@@ -57,8 +65,8 @@
 - 索引入口：`doc/headless-runtime/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+- 历史建档（2026-03-09，ROUND-006）：模块级 `design.md` 入口来源；原 Task 未唯一定位，记录保留，不作为当前排期。
+- 持续结构要求：高复杂度专题在对应 `*.design.md` 维护细化合同；不恢复旧 M2 任务。
 
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。

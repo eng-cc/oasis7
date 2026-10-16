@@ -366,7 +366,7 @@ NODE_ROLE=sequencer
 STORAGE_PROFILE=dev_local
 NODE_GOSSIP_PEERS_CSV=39.104.205.67:6732
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp
-REPLICATION_REMOTE_WRITERS_CSV=aa,bb
+REPLICATION_FETCH_REQUESTERS_CSV=aa,bb
 POS_SLOT_CLOCK_GENESIS_UNIX_MS=1779068751846
 POS_ADAPTIVE_TICK_SCHEDULER=0
 NODE_TICK_MS=200
@@ -388,7 +388,7 @@ NODE_ROLE=storage
 STORAGE_PROFILE=dev_local
 NODE_GOSSIP_PEERS_CSV=39.104.204.172:6731
 REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj
-REPLICATION_REMOTE_WRITERS_CSV=bb,cc
+REPLICATION_FETCH_REQUESTERS_CSV=bb,cc
 POS_SLOT_CLOCK_GENESIS_UNIX_MS=1779068751846
 POS_ADAPTIVE_TICK_SCHEDULER=0
 NODE_TICK_MS=200
@@ -519,7 +519,25 @@ grep -Eq '^RUNTIME_ROOT=.*/runtime-root$' "$rendered_env"
 grep -Eq '^REPLICATION_ROOT=.*/replication-root$' "$rendered_env"
 grep -q '^NODE_GOSSIP_PEERS_CSV=39.104.204.172:6731,39.104.205.67:6732$' "$rendered_env"
 grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj,/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp$' "$rendered_env"
-grep -q '^REPLICATION_REMOTE_WRITERS_CSV=bb,cc,aa$' "$rendered_env"
+grep -q '^REPLICATION_FETCH_REQUESTERS_CSV=bb,cc,aa$' "$rendered_env"
+# Existing deployed env files use the old spelling; render canonical output.
+sed 's/REPLICATION_FETCH_REQUESTERS_CSV=/REPLICATION_REMOTE_WRITERS_CSV=/' "$tmp_dir/storage.env" >"$tmp_dir/old-storage.env"
+./scripts/p2p-public-testnet-local-observer-sync.sh render \
+  --local-env "$tmp_dir/local.env" --sequencer-env "$tmp_dir/sequencer.env" \
+  --storage-env "$tmp_dir/old-storage.env" --manifest-path "$manifest_path" \
+  --out "$tmp_dir/legacy-rendered.env" 2>"$tmp_dir/requester-warning"
+grep -q '^REPLICATION_FETCH_REQUESTERS_CSV=bb,cc,aa$' "$tmp_dir/legacy-rendered.env"
+grep -q 'deprecated REPLICATION_REMOTE_WRITERS_CSV' "$tmp_dir/requester-warning"
+printf 'REPLICATION_FETCH_REQUESTERS_CSV=dd\n' >>"$tmp_dir/old-storage.env"
+if ./scripts/p2p-public-testnet-local-observer-sync.sh render \
+  --local-env "$tmp_dir/local.env" --sequencer-env "$tmp_dir/sequencer.env" \
+  --storage-env "$tmp_dir/old-storage.env" --manifest-path "$manifest_path" \
+  --out "$tmp_dir/conflict-rendered.env" >"$tmp_dir/requester-conflict" 2>&1; then
+  echo "observer sync must reject conflicting requester names" >&2
+  exit 1
+fi
+grep -q 'conflicting replication fetch requester names' "$tmp_dir/requester-conflict"
+
 grep -q "^GENESIS_VALIDATOR_REGISTRY_PATH=$authority_registry_path$" "$rendered_env"
 grep -q "^GENESIS_VALIDATOR_REGISTRY_SHA256=$authority_registry_sha$" "$rendered_env"
 grep -q "^GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=$authority_registry_semantic_sha$" "$rendered_env"

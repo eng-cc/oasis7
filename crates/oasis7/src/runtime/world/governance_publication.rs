@@ -361,7 +361,7 @@ impl PreparedGovernanceProposalApply {
         } else {
             None
         };
-        self.install(world);
+        self.install(world)?;
         instance.install_infallible(&mut world.state);
         if let Some(release) = release {
             release.install_routed(&mut world.state);
@@ -371,7 +371,7 @@ impl PreparedGovernanceProposalApply {
         Ok(())
     }
 
-    pub(super) fn install(self, world: &mut World) -> String {
+    pub(super) fn install(self, world: &mut World) -> Result<String, WorldError> {
         let Self {
             applied_hash,
             manifest,
@@ -388,6 +388,7 @@ impl PreparedGovernanceProposalApply {
             consensus_record,
         } = self;
 
+        world.install_prepared_tick_consensus_record(consensus_record)?;
         world.manifest = manifest;
         world.module_registry = module_registry;
         world.module_artifacts = module_artifacts;
@@ -400,14 +401,14 @@ impl PreparedGovernanceProposalApply {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(journal_events_evicted);
-        world.install_prepared_tick_consensus_record(consensus_record);
+
         for record_key in cache_invalidations {
             let prefix = format!("{record_key}|");
             world
                 .prepared_subscription_cache
                 .retain(|key, _| !key.starts_with(prefix.as_str()));
         }
-        applied_hash
+        Ok(applied_hash)
     }
 }
 

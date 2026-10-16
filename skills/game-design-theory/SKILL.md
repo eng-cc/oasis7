@@ -14,10 +14,11 @@ bond_type: PRIMARY_BOND
 In oasis7, this is a domain-triggered, non-default specialist aid. It does not
 own gameplay, product, liveops, visual, or agent conclusions by itself.
 
-Use it only inside an already-bound task/worktree and route professional
-conclusions through the matching role slice, such as `gameplay_designer`,
-`producer_system_designer`, `game_visual_interaction_designer`,
-`agent_engineer`, or `liveops_community`.
+Follow `doc/engineering/workflow/source-of-truth.md`. The responsible person or
+main Agent may use this aid directly; involve the matching professional role
+when needed, such as `gameplay_designer`, `producer_system_designer`,
+`game_visual_interaction_designer`, `agent_engineer`, or `liveops_community`.
+This skill does not require a pre-existing task or worktree for analysis.
 
 ## When to Use
 
@@ -26,7 +27,7 @@ Use this skill when:
 - a role slice needs MDA, motivation, progression, balance, retention, or player
   psychology framing for an oasis7 decision
 - a design discussion needs reusable theory language tied to current
-  `doc/game/*`, PRD/project truth, task evidence, or playtest observations
+  `doc/game/*`, current product/professional authority, actual PR/Task evidence, or playtest observations
 - a `producer_system_designer` or `gameplay_designer` slice is turning the
   current `doc/game` tree into a design-bible-grade topic map and needs to
   separate player promise, player verbs, loops, progression pressure, feedback,
@@ -44,8 +45,8 @@ Do not use this skill when:
 
 ## Core Workflow
 
-1. Start from current repo truth: GitHub-backed task, relevant PRD/project docs, role
-   card, and any playtest or community evidence.
+1. Start from the relevant current PRD/design, actual PR or existing Task when
+   applicable, and any playtest or community evidence.
 2. Pick the smallest useful theory lens, such as core loop, motivation,
    progression pressure, balance tradeoff, or player feedback timing.
 3. For detailed game design documentation, express the lens as concrete doc
@@ -67,7 +68,7 @@ Do not use this skill when:
 - Letting this skill replace the `gameplay_designer` or
   `producer_system_designer` role boundary.
 - Expanding a root PRD into a giant manual instead of routing details to
-  topic-level PRD/design/project triplets and indexed evidence.
+  topic-level PRD/design and indexed evidence; mutable task records belong in the actual PR or existing Task.
 - Making liveops or player-facing claims from theory without
   `liveops_community` review.
 
@@ -75,13 +76,14 @@ Do not use this skill when:
 
 - Keep the entrypoint tied to oasis7 repo truth; generic theory belongs in the
   supporting reference only.
-- Do not produce final gameplay, product, agent, visual, or liveops conclusions
-  without the owning professional role slice.
+- Keep gameplay, product, agent, visual and liveops conclusions within the
+  relevant authority; use professional review where the task risk and current
+  workflow require it, rather than making a fixed role slice a prerequisite.
 - Do not treat player psychology frameworks as validation evidence unless they
   are paired with task-specific acceptance, playtest, or community evidence.
 
 ## Verification
 
-- Record the owning role, theory lens, evidence, and residual risk in GitHub
-  task issue evidence comments.
+- Record the theory lens, evidence and residual risk in the requested analysis
+  deliverable or actual PR/existing Task; read-only analysis needs no remote comment.
 - Run `./scripts/lint-skills.sh` after skill-surface edits.

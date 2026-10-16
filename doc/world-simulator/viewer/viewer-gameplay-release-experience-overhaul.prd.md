@@ -205,6 +205,9 @@ journal identity/source、opaque canonical crisis subtype、显式 freshness/per
   冒充 severity。新增类别必须重新提供 runtime/producer、viewer、visual 与 QA 合同和证据。
 
 ### Current implementation boundary
+
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：本段仅由当前单一 Next Move、从属 Objective / Player Leverage 和窄屏主区优先的 shell 布局承接目的、blocker 与下一决策的阅读主次；不改变以下默认模式、Director 能力或历史证据状态，不代签全部 surface 与恢复路径。
+
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
 - 当前 `main` 已交付的 Player shell 是 fullscreen、world-first 的单舞台：世界棋盘 覆盖首屏，HUD 以单一 `Next Move` 主动作区与从属 `Objective / Player Leverage` 上下文区叠加， `World / Targets / Command` 通过按需 drawer 进入。旧的“左侧/中间/右侧”三栏 Player IA 不属于当前默认入口；密集三栏只保留给显式、能力门控的 Director 工具视图， 不能与 Player shell 混写。
@@ -419,31 +422,9 @@ completed action. Action Receipt remains the sole player-causality surface.
 
 ### Previously reported feed/readout defects — resolved by #3315
 
-These implementation findings are now resolved on the current branch; the target
-contract above remains the authority, and the tests below are the evidence for the
-bounded fixes:
+历史实施、测试与 headed 观察见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/3315#issuecomment-6162410991)。该窗口只复核 GPU-unavailable fallback 的 `1440x1000` / `390x844`；不覆盖 `ready=true` WebGL2/Cinematic、probe 后异步 GPU failure、tablet `641–1240`，不构成发行放行。#3248 的浏览器结果仍是自己的历史窗口。
 
-- **P1 initial-page cursor continuation — resolved:** `world_feed_transport.js` now
-  schedules a deferred request with the returned cursor and refreshes once after world
-  activity, without overlapping an in-flight request. This historical #3315 result does
-  not cover the reconnect case recorded in the current follow-up backlog below. Coverage is in
-  `crates/oasis7_viewer/software_safe_src/world_feed_transport.test.js`, tests
-  `continues an initial page asynchronously from the returned cursor` and
-  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`.
-- **P2 gap/reorg event retention — resolved:** `consumeWorldFeed()` clears the prior
-  `events` array when `status === "gap"` before authoritative snapshot reload. Coverage is
-  in `crates/oasis7_viewer/software_safe_src/world_feed_state.test.js`, test
-  `stops appending on gap/reorg and requires authoritative snapshot reload`.
-- **P2 multi-resource readout fallback — resolved:** the selected-resource formatter now
-  parses each host entry joined by ` · ` and formats every structured resource instead of
-  returning raw serialized text. Coverage is in
-  `crates/pixel_world_bridge/src/render_selected_resource_readout.rs`, test
-  `resource_readout_formats_each_structured_entry_without_raw_json`.
-
-Task #3248 browser screenshots and headed runs remain historical evidence. For #3315,
-external Chrome freshly verified only the GPU-unavailable fallback at headed `1440x1000`
-and `390x844`; this does not verify the `ready=true` WebGL2/Cinematic path, post-probe
-async GPU failure, or tablet widths `641–1240`, and is not a release-readiness claim.
+持续验收分别核对 initial-page cursor continuation、gap/reorg 后清空旧 events 再 reload，以及多资源逐项格式化，不能将 reconnect 连续性外推为已覆盖。测试定位为 `world_feed_transport.test.js`、`world_feed_state.test.js` 和 `render_selected_resource_readout.rs`；当前合同和后续验证要求继续由本文件持有。
 
 ### Current cleanup and bounded optimization backlog (2026-08-25)
 
@@ -766,6 +747,7 @@ required after the corresponding implementation slice.
   evidence 提供。
 
 ## Phase 8~10 增量记录（ROUND-002 物理合并）
+- VRI8/9/10 原 Task 与旧截图的长期可取回性尚未唯一核实，故完整保留该历史区段；不重建其 M1–M4 排期，也不以文档存在证明截图可用。
 - 原阶段文档已合并并删除，以下段落仅为历史实施证据摘要，不是当前运行时、
   shell、mode/env、layout、receipt 或发行状态 authority。当前真值只读本文
   `Terminal Viewer Authority`、`Current implementation boundary` 与 GitHub task

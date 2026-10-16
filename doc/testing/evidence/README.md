@@ -1,9 +1,9 @@
 # `testing/evidence` 热点子域入口
 
-更新时间: 2026-08-02
+更新时间: 2026-10-15
 
 ## 从这里开始
-- 想确认当前 release readiness 或测试层级：先读 [`../testing-manual.md`](../testing-manual.md) 与 [`../README.md`](../README.md)；`release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 和 `gameplay-ten-minute-trust-gate-2026-04-09.md` 仅作为对应窗口的历史/待领域复核证据
+- 想确认当前 release readiness 或测试层级：先读 [`../../../testing-manual.md`](../../../testing-manual.md) 与 [`../README.md`](../README.md)；`release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 和 `gameplay-ten-minute-trust-gate-2026-04-09.md` 仅作为对应窗口的历史/待领域复核证据
 - 想确认当前 hosted access、托管身份与签名安全边界：先读 [`../../p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`](../../p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md) 与 [`../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`](../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md)；2026-03 的 hosted/browser/mainchain 文件仅作历史验证窗口
 - 想确认当前 public-testnet 机制与 readiness：先读 [`../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)，再把 `public-testnet-current-required-lanes-2026-07-03.md` 与 `public-testnet-claims-boundary-review-2026-07-06.md` 作为其采集窗口观测；candidate、triad、shared-network 和 incident 文件只作为历史 provenance
 - 想确认当前治理与 finality 合同：先读 [`../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`](../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md) 与 [`../../world-runtime/runtime/chain-pos-control-plane.prd.md`](../../world-runtime/runtime/chain-pos-control-plane.prd.md)；2026-03-24 的 governance registry/live-world drill 文件只作为历史 diagnostic provenance
@@ -16,6 +16,12 @@
 - `../README.md` 是 `testing` 模块级 landing page，负责跨 `evidence / ci / longrun / launcher / governance / templates / performance / manual` 分流。
 - `../prd.index.md` 是 `testing` 模块完整文件级索引，适合已知主题后按文件名查找。
 - `testing-manual.md` 与 `manual/*.manual.md` 仍是 operator 手册层，不由本页替代。
+
+## 原始证据与当前工作的边界
+- 日期化运行、incident、closeout、矩阵和 manifest 保留其候选、source/build/Skill、环境、窗口、hash、结果、失败及未执行范围。正文中的“当前”“下一步”、owner 行动与 Task/PR 关闭建议默认只描述原窗口；它们不维护当前任务进度，也不恢复已关闭任务的义务。
+- 后续 CI、重跑、交付和跟踪写入对应 Task/PR；新验证生成新窗口，不能通过改写旧失败、旧候选或历史计数制造通过。当前能力与安全限制仍回到专业 authority 核对，不因旧任务结束而自动解除。
+- 本目录的历史原件不因出现日期、SHA、执行经过或旧路径就必须迁出、删除或强套产品 PRD/系统设计章节；按[信息归属规范](../../engineering/workflow/source-of-truth.md#information-record-placement)保留审计事实。当前导航、误导性边界和敏感值可作必要更正，并说明编辑不等于新的运行证据。
+- [五节点清单](public-testnet-five-node-inventory-2026-06-23.md)是带历史来源的 operator inventory，须先按现行 runbook 重新捕获 deployment truth；[Token 创世模板](token-genesis-allocation-audit-template.md)是未填充模板。这两类都不能当作已执行验收。
 
 ## 逐对象语义清单与新鲜度边界
 - [`inventory.json`](inventory.json) 是 v3 的静态委托入口，声明本子域逐对象覆盖范围；每个证据源对应的机器快照和 semantic/evidence review 记录存于 `doc/.governance/document-corpus/` 分片。定位和维护方式见 [`Document Corpus Inventory v3`](../../engineering/doc-governance/document-corpus-inventory-v3.design.md)。
@@ -39,7 +45,7 @@
 - 适合问题:
   - closed beta / trust gate 的历史判定留痕在哪
   - 某个旧 evidence bundle 在其采集窗口记录了什么
-  - 当前 release readiness 必须回到 `../testing-manual.md` 与 `../README.md`，不得由本簇旧文件单独推出
+  - 当前 release readiness 必须回到 `../../../testing-manual.md` 与 `../README.md`，不得由本簇旧文件单独推出
 
 ### 2. Hosted access、浏览器与 Web surface 历史验证
 - 当前 authority:
@@ -74,7 +80,7 @@
   - mixed-topology、observer gap sync 或 blob root cause 的历史 incident chain 在哪组 evidence
   - legacy shared-network ECS triad 与 shared-devnet 相关留痕怎么进入
 - 归档边界:
-  - `public-testnet-claims-boundary-review-2026-05-21.md` 是旧 live-candidate packet 的 historical claims-boundary evidence；当前 claims boundary 以 `public-testnet-claims-boundary-review-2026-07-06.md` 为首读入口。
+  - `public-testnet-claims-boundary-review-2026-05-21.md` 是旧 live-candidate packet 的 historical claims-boundary evidence；2026-07 的 successor window 见 `public-testnet-claims-boundary-review-2026-07-06.md`；当前 claims boundary 仍需 formal runbook 与 fresh evidence。
   - `public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`p2p-public-testnet-faucet-service-2026-05-19.md`、`public-testnet-live-candidate-lanes-2026-05-21.tsv` 与 2026-05-22 live-candidate bundle / manifest / bootstrap-peers / lanes 文件保留为 public-testnet 演进链证据；其中 endpoint、faucet、signer、peer 与 reset 只描述历史窗口。当前 readiness 结论仍以 formal `public_testnet` runbook、正式 lanes TSV 与 `network-tier-public-testnet-readiness.sh` 汇总为准。
   - 2026-06 governed-bootstrap 的 bundle、manifest、genesis、validator registry、bootstrap peers、signer manifests 与 `public-testnet-governed-bootstrap-world-2026-06-06/` 六件套构成不可拆分的历史 replay bundle。不得改写其 payload、hash、路径或身份绑定；当前部署/恢复从 `../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md` 生成新 evidence window。
   - shared-network / shared-devnet 文件只作为 legacy rehearsal provenance，不作为当前 test 环境、formal `public_testnet` readiness、`mainnet` readiness 或公开统一大世界上线证据。先读 `legacy-shared-devnet-provenance-2026-07-26.md`；它保留 replay identity、最终 lane disposition 和底层记录索引。
@@ -113,7 +119,7 @@
   - `provider-agent-dual-mode-recertification-evidence-2026-04-07.md`
   - `software-safe-primary-web-entry-evidence-2026-04-07.md`
   - `post-onboarding-headless-smoke-2026-03-19.md`
-  - `p2p-user-mode-launcher-ux-2026-04-07.md`（历史 P2PARCH-9 UX 自动化证据；当前行为回到 `../../p2p/network/mainnet-private-reachability-architecture.prd.md` 与 `../testing-manual.md` S9C）
+  - `p2p-user-mode-launcher-ux-2026-04-07.md`（历史 P2PARCH-9 UX 自动化证据；当前行为回到 `../../p2p/network/mainnet-private-reachability-architecture.prd.md` 与 `../../../testing-manual.md` S9C）
 - 适合问题:
   - provider dual-mode、旧 `software_safe` alias、headless smoke 或 launcher UX 的历史验证在哪
   - 某条 evidence 是局部 supporting artifact 还是历史 provenance

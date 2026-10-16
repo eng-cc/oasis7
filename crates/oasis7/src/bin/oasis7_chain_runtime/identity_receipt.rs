@@ -9,14 +9,33 @@ use super::derive_node_libp2p_identity_keypair_config;
 use super::node_keypair_config;
 
 pub(super) fn dispatch<'a>(mut args: impl Iterator<Item = &'a str>) -> Option<Result<(), String>> {
-    match args.next()? {
-        "initialize-preview-world" => Some(super::preview_world_init::run(args)),
-        "provision-identity" => Some(super::identity_provision::run(args)),
-        "identity-receipt" => Some(run(args)),
-        "verify-rebuild-proof" => Some(super::rebuild_status::run_verify(args)),
-        "verify-controlled-history" => Some(super::controlled_history_cli::run(args)),
-        "verify-controlled-bootstrap" => Some(super::controlled_bootstrap_cli::run(args)),
-        _ => None,
+    let command = args.next()?;
+    if command == "initialize-preview-world" {
+        return Some(super::preview_world_init::run(args));
+    }
+    use super::cli::cli_contract::{CommandKind, offline_command};
+    match offline_command(command)? {
+        CommandKind::Inspect => Some(super::inspect_cli::run(args)),
+        CommandKind::Dev => Some(super::dev_cli::run(args)),
+        CommandKind::ProvisionIdentity => Some(super::identity_provision::run(args)),
+        CommandKind::IdentityReceipt => Some(run(args)),
+        CommandKind::RebuildProof => {
+            Some(super::inspect_cli::run_compatibility("rebuild-proof", args))
+        }
+        CommandKind::ControlledHistory => {
+            Some(super::inspect_cli::run_compatibility("history", args))
+        }
+        CommandKind::ControlledBootstrap => {
+            Some(super::inspect_cli::run_compatibility("bootstrap", args))
+        }
+        CommandKind::ValidatorMembership => Some(super::membership_cli::run(args)),
+        CommandKind::NodeLifecycle => Some(super::node_lifecycle::run(args)),
+        CommandKind::Operation => Some(super::node_operations::run(args)),
+        CommandKind::LegacyMigration => Some(super::node_lifecycle::legacy_migration::run(args)),
+        CommandKind::LegacyRuntime => {
+            Some(super::node_lifecycle::legacy_migration::run_legacy(args))
+        }
+        CommandKind::DurableSetControl => Some(super::formal_durable_set_cli::run(args)),
     }
 }
 

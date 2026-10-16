@@ -11,15 +11,15 @@ This skill assists in the **documentation phase** of game project development. I
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
+In oasis7, this skill is a specialist architecture-planning aid, not a second project workflow. Follow `doc/engineering/workflow/source-of-truth.md`: the responsible person or main Agent may analyze, design and implement directly, using professional roles when needed. Keep architecture conclusions within the relevant professional authority; this skill adds no task, worktree, TPM or handoff prerequisite.
 
-- If `architect/` documents are created or updated, record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments.
-- Architecture documents may supplement `prd.md`, GitHub task issue evidence comments, and handoff truth, but they do not replace GitHub-backed task truth.
-- Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks` before code changes.
+- Keep durable requirements and design in the relevant existing product or professional authority; record execution and review in the actual PR or an existing Task. Issue and Project are optional.
+- The paths and phases below are generic templates, not mandatory oasis7 files, a second source of truth or development admission requirements.
+- Implementation, when authorized, follows the development workflow and its applicable verification and independent-review rules; no separate router skill or TPM handoff is required.
 
 ## Output Documents
 
-All documents are placed in an `architect/` directory (create if needed). The pipeline produces:
+For a standalone architecture deliverable, the generic template uses an `architect/` directory. In oasis7, prefer the existing authority and requested output location; do not create parallel requirement/design or mutable task records solely to follow this template. The example pipeline is:
 
 ```
 requirement.md  --->  technical_design.md  --->  implementation.md
@@ -39,7 +39,7 @@ requirement.md  --->  technical_design.md  --->  implementation.md
 
 - **Question**: "Do you want to review the output document after every phase?"
 - **Answer**: "Yes" or "No"
-- **Default**: "Yes"
+- **Default**: No extra phase approval unless the user requests it or the action requires confirmation under the applicable authorization rules.
 - **Output**: User Review Flag
 
 **User Review Workflow**:

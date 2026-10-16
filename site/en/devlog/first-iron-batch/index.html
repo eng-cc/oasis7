@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" data-locale-zh="../../../devlog/first-iron-batch/index.html" data-locale-en="index.html">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="description" content="An Agent recovers from a denied first attempt and completes its first iron batch, confirmed by world records." />
+<title>The first iron batch: from a denied quote to real output | oasis7</title>
+<link rel="canonical" href="https://oasis7.tech/en/devlog/first-iron-batch/" />
+<link rel="icon" href="../../../assets/images/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="../../../assets/styles.css?v=20261015-entry-alignment" />
+<link rel="alternate" type="application/rss+xml" title="oasis7" href="../../../en/feed.xml" />
+<script defer src="../../../assets/app.js?v=20261015-entry-alignment">
+</script>
+<meta property="og:type" content="article" />
+<meta property="og:title" content="The first iron batch: from a denied quote to real output" />
+<meta property="og:description" content="An Agent recovers from a denied first attempt and completes its first iron batch, confirmed by world records." />
+<meta property="og:url" content="https://oasis7.tech/en/devlog/first-iron-batch/" />
+<meta property="og:image" content="https://oasis7.tech/assets/images/social/first-iron-batch-en.png" />
+<meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="First iron batch story card, a graphic summary, not a gameplay screenshot" />
+<meta name="twitter:image:alt" content="First iron batch graphic summary, not a gameplay screenshot" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="The first iron batch: from a denied quote to real output" />
+<meta name="twitter:description" content="An Agent recovers from a denied first attempt and completes its first iron batch, confirmed by world records." /><meta name="twitter:image" content="https://oasis7.tech/assets/images/social/first-iron-batch-en.png" />
+<meta name="oasis7-site-build" content="20261015-entry-alignment" />
+</head>
+<body class="discovery-page content-page">
+<a class="skip-link" href="#top">Skip to content</a>
+<header class="topbar">
+<a class="brand" href="../../../en/">
+<span class="brand-mark">
+</span>oasis7</a>
+<nav class="nav">
+<a href="../../../en/#proof">Gameplay</a>
+<a href="../../../en/devlog/">Development</a>
+<a href="../../../en/#download">About the preview</a>
+<a href="../../../devlog/first-iron-batch/">中文</a>
+</nav>
+</header>
+<main id="top" class="content-main" tabindex="-1" data-content-id="first-iron-batch" data-content-kind="devlog" data-content-status="published" data-content-locale="en" data-translation-of="first-iron-batch" data-published-at="2026-10-15" data-updated-at="2026-10-15" data-source-version="52c136a7b0c628b551ab169594a19b0b55198d0b">
+<p class="eyebrow">DEVLOG</p>
+<h1>The first iron batch: from a denied quote to real output</h1>
+<p class="content-meta">Published <time datetime="2026-10-15">2026-10-15</time></p>
+<p data-content-description>An Agent recovers from a denied first attempt and completes its first iron batch, confirmed by world records.</p>
+<article data-content-body>
+<h2>A clear goal, with a prepared starting point</h2>
+<p class="content-lead">The goal was to build a smelter at starter-site, produce the first three iron ingots from starting inventory, and verify the industrial milestone. The world and claimed Agent were prepared in advance; this test did not begin with installation or identity enrollment.</p>
+<p>The Agent inspected its task, what it was allowed to do, and factory state before taking concrete actions. The sequence below comes from the public report. It is not a transcript or a tutorial guaranteed to work in every environment.</p>
+<h2>A denied quote: check the grant before continuing</h2>
+<p>The first factory choice was outside the grant. Its quote was denied without creating a build action. A later lookup found no record of that action either. There was no completed construction to count as a result.</p>
+<p>The Agent read the industrial information again, checked its actual grant, and chose an allowed smelter. After the build entered the world, a separate query recovered the same operation receipt. Later observation confirmed that construction had finished.</p>
+<h2>A built factory still needs its inputs</h2>
+<p>Building the smelter was not the first-product finish line. Preparation for the next action was rejected because of a state conflict. The Agent read the available state again, retained the rejection record, and continued. It did not count the rejection as success.</p>
+<p>Two real transfers then moved eight iron ore and two fuel from the Agent to starter-site. The Agent scheduled one iron-ingot batch on the allowed smelter. World events recorded construction starting at tick 27 and finishing at 28, then the recipe starting at 45 and finishing at 46.</p>
+<h2>Reconcile inputs, output and what remains</h2>
+<ul>
+<li><strong>Construction inputs:</strong>12 structural frames, four heat coils, six refractory bricks and six electricity.</li>
+<li><strong>Batch inputs:</strong>four iron ore, one fuel and eight electricity.</li>
+<li><strong>Actual batch output:</strong>three iron ingots and one slag, settled into the site inventory.</li>
+<li><strong>Final readback:</strong>the site held four iron ore, one fuel and the output above. The Agent’s material inventory was empty, electricity was 86, and no construction or recipe jobs remained pending.</li>
+</ul>
+<p>An independent check of world events and inventory confirmed the output and industrial milestone at tick 46. Completion meant that output and ledgers had changed, rather than just a request being accepted. Call counts and verification methods are in the details below.</p>
+<h2>What this batch did not prove</h2>
+<p>The test stopped after the first output. It did not go on to validate sustained production, expansion or cooperation. Remaining inputs were real, but they do not mean another batch was scheduled or an expansion path was unlocked.</p>
+<p>This process shows how goals, grants, attempts and actual results can be checked separately. It proves only this controlled prepared-world CLI run on 2026-10-13. GUI, cold entry, the recommended installer and public deployment were outside its acceptance scope.</p>
+<details class="case-verification"><summary>Verification, test version and uncovered scope</summary><dl><div><dt>Date and versions</dt><dd>2026-10-13; test source 52c136a7, with Runtime/Skill equivalent to 0a97ad64. Redacted reports are retained at 06fb5ee9.</dd></div><div><dt>Conditions and operations</dt><dd>Prepared world, claimed Agent and instruction-only isolation. An independent Agent used the formal Skill in 19 real client calls. The first ungranted factory quote was denied without an action; a separate context conflict was retained before continuing with a fresh context.</dd></div><div><dt>Result verification</dt><dd>Construction ran at ticks 27–28. Eight ore and two fuel were supplied. One recipe ran at ticks 45–46, consuming four ore, one fuel and eight electricity and producing three ingots and one slag. World readback showed four ore and one fuel remaining, electricity 86, no pending jobs, and the industrial milestone settled at tick 46. The original build receipt was recovered identically across processes.</dd></div><div><dt>Uncovered scope and materials</dt><dd>This proves only that prepared-world CLI process, not GUI, cold entry, the recommended installer, sustained multi-factory operation or public deployment. The temporary world and private raw output were removed; redacted reports, events and hashes remain. The historical Viewer reference is from a different run.</dd></div></dl><p class="content-source"><a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md">Original verdict and scope</a> · <a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/player-report.json">player-report.json</a> · <a href="https://github.com/eng-cc/oasis7/blob/06fb5ee9d10c8bb2a21cc6d29611b82f1800b339/doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/oracle-summary.json">oracle-summary.json</a></p></details><p><a href="../../../en/#download">Check what the current preview supports →</a></p></article>
+<a class="text-link" href="../">Back to all devlogs</a>
+</main>
+<footer class="footer">
+<div class="footer-links">
+<a href="../../../en/">Home</a>
+<a href="../../../en/feed.xml">RSS</a>
+<a href="../../../story/">Novel · Chinese</a>
+<a href="https://github.com/eng-cc/oasis7">GitHub</a>
+</div>
+<p>limited playable technical preview · not public web join</p>
+</footer>
+</body>
+</html>

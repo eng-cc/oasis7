@@ -1,5 +1,7 @@
 # P2P Builtin Wasm 身份共识与跨平台构建方案
 
+历史编辑/阶段边界：原 MIG/T0/Phase 批次尚未逐项匹配唯一实施 Task，故原记录与约束映射保留；文档人工重写、章节/引用检查和完成日期只证明原编辑或测试窗口，不生成当前排期、不代签机制、部署或 QA readiness。当前技术与安全合同继续由本文及配对设计持有；后续治理 Task 不冒充全部原实施者。
+
 - 对应设计文档: `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md`
 - 交付事实：Git、PR、实际 CI 与评审记录；Issue / Project 按需跟踪，遵循[开发流程规范](../../engineering/workflow/source-of-truth.md)。
 

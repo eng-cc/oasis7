@@ -24,6 +24,9 @@ fn audit_filter_by_kind_and_cause() {
     assert_eq!(intent.intent_id, intent_id);
 
     let receipt = EffectReceipt {
+        birth_era: None,
+        world: None,
+        intent_payload_digest: None,
         intent_id: intent_id.clone(),
         status: "ok".to_string(),
         payload: json!({ "status": 200 }),

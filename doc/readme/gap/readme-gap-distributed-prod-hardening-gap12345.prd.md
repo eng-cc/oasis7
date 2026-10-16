@@ -1,15 +1,38 @@
 # README 分布式计算与存储生产级收口（Gap 1/2/3/4/5）设计文档
 
-- 对应设计文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md`
+- 历史设计承接：[本文件的保留边界与现行去向](#historical-retention-and-routing)；原同名 design 仅作兼容跳转。
 - 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
 
 审计轮次: 4
 
 ## ROUND-002 主从口径
-- 本文件为 readme/gap 主文档。
-- 其余 gap 专题文档为增量子文档。
+- 本文件为原 readme/gap 收口的历史主文档；其余原 gap 专题是当时的增量关系，不定义当前专业权威。
 
-- 对应标准执行入口: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`
+- 当前操作请使用本页“历史保留边界与现行去向”的专业入口；本文件不提供现行启动命令。
+
+<a id="historical-retention-and-routing"></a>
+## 历史保留边界与现行去向
+
+本文件保留原专题的需求、数值、兼容和失败约束，不是当前节点部署或 Viewer 参数手册。
+下方原有“目标/范围/接口/里程碑”均属于原方案窗口；不因其使用现在时就重新成为当前实施排期。
+特别是 Viewer Live 的 `--topology`、`--node-*`、历史 UDP 自动学习和旧 Triad 操作不能按本文复制执行；
+当前节点职责由 chain runtime 及其正式启动入口承担，具体参数回到现行专业文档及源码。
+
+| 原内容 | 处置 | 现行专业去向／未接收范围 |
+| --- | --- | --- |
+| 共识算法与阈值归属 | 保留原要求；不重做旧迁移 | [共识整合](../../p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md) |
+| 复制请求/handler、重试与玩家节点身份 | 保留原合同与失败条件 | [身份与复制](../../p2p/node/node-identity-replication-contract.prd.md)；逐条机制验收仍须对应实现证据 |
+| 多样本阈值、拓扑观测 | 保留阈值和原采样窗口；旧 Viewer CLI 不再适用 | [Triad 运维与观测](../../p2p/node/node-triad-operations-observability.prd.md)；采样不代签正式拓扑就绪 |
+| DistFS 审计字段及恢复失败 | 原字段、失败和回退记录原样保留 | [DistFS 加固](../../p2p/distfs/distfs-production-hardening.prd.md)；未逐项接收者继续留在本文 |
+| 默认 WASM、兼容与回归 | 不按旧 crate/版本重做一次性迁移 | [WASM 执行器](../../world-runtime/wasm/wasm-executor.prd.md) |
+
+同名旧设计的独有约束在此接收：统一术语与主路径，不扩大对外承诺，不在本次文档治理中
+重构实现；README 不承载实现级配置，也不增加拓扑角色。现行专业去向是阅读路由，
+不是“所有历史要求均已实现或验收”的声明。缺少逐项接收或当前证据时继续保留，不取消目标。
+
+长 PRD、原任务、数值与历史失败不删除；旧 design URL 暂留兼容。进一步删除须先核清全部引用、
+配对、动态/外部分发与 corpus 消费者。原版本见
+[固定 Git 来源](https://github.com/eng-cc/oasis7/blob/2adfc08706f1905c131adc0597a9ae5e99ceb2dd/doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md)。
 
 ## 目标
 - 收口 Gap 1：将 `oasis7_node` 的 PoS 主循环关键算法与阈值判定下沉到 `oasis7_consensus`，避免双轨共识语义漂移。

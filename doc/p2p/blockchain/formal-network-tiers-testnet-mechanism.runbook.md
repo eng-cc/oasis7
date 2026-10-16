@@ -18,19 +18,18 @@
   - `qa_engineer`
   - `liveops_community`
 - Scope: formal `public_testnet` 从 skeleton / governed-bootstrap rehearsal 进入 controlled `ready_for_live_candidate` 前的最小执行闭环
-- Current Verdict: controlled `ready_for_live_candidate` evidence is present for the current 11-lane packet; not a public launch, mainnet, production OC settlement, or public validator admission claim.
+- 历史验收入口：[Task #2059 最终验证](https://github.com/eng-cc/oasis7/issues/2059#issuecomment-4890065749)（2026-07-06）；当前窗口 verdict 必须由同候选输入重新验证，不能沿用历史 PASS。
 
 ## 1. 适用范围
 - 本 runbook 只定义 formal `public_testnet` 的 live-candidate checklist。
-- 当前仓库已经具备：
+- 本 checklist 使用的仓库能力与证据入口：
   - `network_tier_manifest` schema / validate / smoke
   - `public_testnet` readiness review 脚本
   - live-candidate lane scaffold
   - governed-bootstrap rehearsal evidence
-  - live `public_testnet` public RPC / explorer / guarded faucet / reset evidence
-  - formal all-pass 11-lane TSV / readiness verdict
-  - controlled `ready_for_live_candidate` evidence for the current packet
-- 当前仓库还不具备：
+  - `public_testnet` public RPC / explorer / guarded faucet / reset 的历史证据
+  - 11-lane TSV 与 readiness verdict 验证入口（历史结果不证明当前节点健康）
+- 上述能力与历史证据不授予：
   - live public launch go-ahead
   - public validator admission / onboarding
   - mainnet or production OC settlement authorization
@@ -178,8 +177,12 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
-## 7. 当前状态（2026-07-06）
-- 历史 `specified_skeleton_only` 只能说明早期 skeleton 状态；当前还必须同时参考候选输入与 governed-bootstrap 证据集：
+<a id="7-当前状态2026-07-06"></a>
+## 7. 证据入口与历史验收
+
+2026-07-06 的 11-lane PASS、实际命令输出和当轮 residual risk 已由 [Task #2059 最终验证评论](https://github.com/eng-cc/oasis7/issues/2059#issuecomment-4890065749)承接。该记录仅证明当时 controlled / resettable / non-mainnet `public_testnet` live-candidate 的证据窗口，不证明当前 readiness、节点健康或 public launch。原 runbook 段落可从[固定来源](https://github.com/eng-cc/oasis7/blob/38144f7df49f72d9f1c863ef04758352b57fcec7/doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md#L181-L246)追溯。
+
+候选输入与 governed-bootstrap 原始证据继续保留在仓库；下列路径是历史证据索引，实际验证按 §2 固定当轮输入，并按 §6 执行命令：
   - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
   - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
@@ -195,50 +198,26 @@
   - `doc/testing/evidence/public-testnet-api-viewer-projection-2026-07-05.json`
   - `doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05.json`
   - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`
-- 当前 11 条 required lanes 已全部 `pass`：
-  - `public_rpc_ready`
-  - `explorer_public_ready`
-  - `faucet_guard_ready`
-  - `reset_policy_announced`
-  - `runtime_bootstrap`
-  - `world_resource_provenance_ready`
-  - `provider_resource_provenance_ready`
-  - `resource_delta_replay_ready`
-  - `api_viewer_projection_ready`
-  - `same_world_hosted_entry_ready`
-  - `claims_boundary_review`
-- 当前 canonical readiness 命令：
-  - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json --lanes-tsv doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
-- 2026-07-06 fresh verification output:
-  - `missing_required_lanes=[]`
-  - `blocking_lanes=[]`
-  - `partial_lanes=[]`
-  - `manifest_blockers=[]`
-  - `gate_result=pass`
-  - `readiness_verdict=ready_for_live_candidate`
-  - `live_candidate_allowed=true`
-- 该结论只允许 controlled / resettable / non-mainnet `public_testnet` live-candidate 口径；它不等于 live public launch、mainnet readiness、production OC settlement、public validator admission/open onboarding、full light-client security 或 multi-client consensus equivalence。
-  - governed-bootstrap manifest 仍记录 `status="rehearsal"`；这不阻止当前脚本给出 controlled `ready_for_live_candidate`，但禁止把结论扩写为 public launch、mainnet 或 no-reset release。
-  - bundle provenance 仍记录 `git_worktree_dirty=true`；更高 release tier 或对外发布前应重新生成 clean bundle。
-  - guarded faucet 只证明 testnet faucet 的 root/health/guarded claim/cooldown/transfer confirmation；不得扩写为无限制 public faucet、durable anti-abuse、TLS/WAF 或 production-grade faucet 运营保证。
-  - `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes
-  - 后续若任一 lane 变成 `partial` / `block`，或 evidence 变成 template / placeholder / private-only ref，就必须降回 `block` / `partial`，不得继续沿用本轮 `ready_for_live_candidate` 结论。
-- 当前 governed-bootstrap manifest 的 `promotion_policy.required_gates` 已同步到 11 条 active required lanes；`shared_devnet_pass` 只保留为 legacy/rehearsal provenance，不再作为目标 `public_testnet` 的 active required gate。
-- 当前 example manifest 仍只能作为 skeleton/template 使用：
-  - `network_id=oasis7-public-testnet-example`
-  - `chain_id=oasis7-public-testnet-example`
-  - `rpc/explorer/faucet = example.invalid`
+
+判读与降级规则：
+- readiness 只允许 controlled / resettable / non-mainnet `public_testnet` live-candidate 口径；不等于 live public launch、mainnet readiness、production OC settlement、public validator admission/open onboarding、full light-client security 或 multi-client consensus equivalence。
+- manifest 若记录 `status="rehearsal"`，即使脚本给出 controlled `ready_for_live_candidate`，也不得扩写为 public launch、mainnet 或 no-reset release。
+- bundle 若记录 `git_worktree_dirty=true`，更高 release tier 或对外发布前应重新生成 clean bundle。
+- guarded faucet evidence 只证明其实际记录的 root/health/guarded claim/cooldown/transfer confirmation；不得扩写为无限制 public faucet、durable anti-abuse、TLS/WAF 或 production-grade faucet 运营保证。
+- `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes。
+- 任一 required lane 变成 `partial` / `block`，或 evidence 变成 template / placeholder / private-only ref，必须降回 `block` / `partial`，不得沿用历史 `ready_for_live_candidate` 结论。
+- `promotion_policy.required_gates` 必须与 §4 的 11 条 active required lanes 一致；`shared_devnet_pass` 只作 legacy/rehearsal provenance，不作为目标 `public_testnet` 的 active required gate。
+- example manifest 只作 skeleton/template：`network_id` / `chain_id` 为 `oasis7-public-testnet-example`，`rpc/explorer/faucet` 为 `example.invalid`，不得用于 readiness 放行。
 
 ## 8. 对外口径边界
-- 现在允许说：
-  - `formal public_testnet mechanism is documented`
+- 本 runbook 承载 `formal public_testnet mechanism is documented` 的文档化事实；`legacy shared_devnet evidence is not a target test environment` 是历史证据分类边界。
+- 涉及 readiness 的以下表述须有同候选、同窗口的实际 evidence 与 readiness review 支持；历史 Task 的 PASS 不替代当轮验证：
   - `current required-lane packet is complete`
   - `all 11 formal public_testnet required lanes have pass evidence`
   - `controlled public_testnet live-candidate claim is allowed by the script-generated readiness review`
   - `the public_testnet remains resettable, non-mainnet, and guarded-faucet bounded`
-  - `legacy shared_devnet evidence is not a target test environment`
   - `WorldHeadProofV1 can be externally verified as light-client-lite sampled evidence when the optional verifier lane passes`
-- 现在不允许说：
+- 本 checklist 与 controlled live-candidate 验证不允许推出：
   - `live public testnet is already online`
   - `unrestricted public faucet is open`
   - `public validator admission is open`

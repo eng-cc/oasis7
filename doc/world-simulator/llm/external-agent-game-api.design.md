@@ -44,9 +44,10 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 
 私有服务在读取前及交付前重验当前控制和分支；owner 失效为 403，操作或版本竞态为 409，恢复问题为 503。query、Origin、Authorization 与转发 header 均拒绝，响应禁止缓存。私有存储需独立备份密钥、验证记录与密文；不声明跨节点私有恢复。该切片交付 owner 目标控制与回读，仍不提供完整 TaskSnapshot、executor/Context、采纳确认或目标驱动的实际决策，也不表示首局/真实 Runtime 实玩已经通过。
 
-### 当前实施候选：原生任务执行链
+<a id="当前实施候选原生任务执行链"></a>
+### 已实施切片：原生任务执行链
 
-[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，在同一 PR 实现 executor binding → 完整私有目标 Context → canonical 捕获 → task-fenced cognition → 原始结果恢复。独立附着 Codex 的两目标移动实玩绑定候选 `b59d0105`；最终源 `cd2976b7` 的普通验证、独立评审与 required CI 通过。详细失败与范围见[原生执行证据](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)。本段不代表部署或完整产品验收。
+原生 executor 控制、完整私有 Context 捕获、task-fenced 行动及原结果恢复的交付过程见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4628#issuecomment-6162407180)；实际模型候选、失败和清理边界见[原生执行证据](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)。本节维护支持范围，不代表部署或完整产品验收。
 
 Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 `/v1/world/submit` 提交 Bind/替换/Stop。Bind 必须指向真实当前 delegation，推进 task revision 与 executor epoch，使任务 Active；Stop 推进 fence、清空 binding 并 Suspended。目标发布推进目标/task revision，保留现有 executor binding。全部控制由既有 canonical receipt 链恢复；新变体启用前执行、验证及恢复节点必须同步升级，旧 binary 不能读取新历史。
 
@@ -60,6 +61,14 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
 
+### 共享原生客户端与 JSON 观察 profile
+
+`oasis7_game_client` 包同时提供共享 Rust 客户端和同名 CLI；构建入口为 `cargo build -p oasis7_game_client --bin oasis7_game_client`，设备配置、原操作缓存和命令参数保持兼容。公共 Action/报价与纯 cognition 合同由 `oasis7_agent_api` 唯一定义；World Service wire/纯验证由 `oasis7_client_api` 唯一定义；主应用仅保留兼容导出和权威执行。SDK 不依赖主应用、World/Viewer 或模型 SDK。API、存储和使用边界见 [SDK](../../../crates/oasis7_game_client/README.md)。Trace refs: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6；O7-REQ-70188c23-ddbf-49ca-8a70-3fa05c152ba5。
+
+原生 SDK 的公共观察使用显式 POST `/v1/world/view-json`。它与 `/v1/world/view` 复用 `ReadWorldViewRequest`、pin/minimum/fixed commit 和主体授权逻辑，但以自身路径为读签名及回应签名 domain；服务在授权投影转为 JSON 后签署 `ReadWorldViewResponse<serde_json::Value>`。旧路径继续签署原类型化投影，两者不能互换签名。新路径没有额外权限，public 及 executor 不因此取得 owner 私有目标；未知执行证据 scope、错误世界/切点、主体不符或篡改响应均拒绝。JSON 中的完整投影参与签名，客户端不能先裁掉未知字段再验签。服务签名仍只证明交付内容，不证明独立共识最终性。
+
+旧 Provider/内置执行器保留其明确的原 profile。共享库和独立 CLI 的拆分不代表内置已迁移、所有能力已统一，或真实 Runtime/首局/部署验收已经通过；整体范围由 [#4726](https://github.com/eng-cc/oasis7/issues/4726) 承接。
+
 <a id="当前实施候选原生物流执行"></a>
 
 ### 已实施切片：原生物流执行
@@ -68,23 +77,25 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 `capabilities` 分开描述客户端支持的原生提案、实际模块命令 catalog 和当前 Agent 的 native action/object electricity grants。World Service 授权 Agent 投影返回该 Agent 的委托预算读模型；generic projection 和其他 Agent 的 grants 不进入该字段。revoked、expired、not_yet_valid、exhausted 与 current 是读取时状态，不代替 Runtime 的最终 admission。无 native grant 不表示已获权，signer delegation 也不替代业务预算授权。
 
-`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。候选 `326189ecd` 的 library/client/native 回归为 66/6/35 通过，独立正式 Skill 试玩自主提交一次转运并核对真实到账、原 lookup 与匹配运输事件；严格 Clippy 和独立权限评审通过。详细来源与未覆盖范围见[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)。物流 [PR #4634](https://github.com/eng-cc/oasis7/pull/4634) 已于 2026-10-13（Asia/Shanghai）通过必要 CI 并合入，squash 为 `5e930face77dd284bbba6186fd997e7e63fa9164`；既有试玩证据保留其原候选来源。配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
+`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。[历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4634#issuecomment-6162407791) 与[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)分别承载交付过程和实际试玩候选。配对、完整 Game HTTP 写路由、完整首局及客户端自动 stale-context abort 刷新缺口继续保留；部署暂停。
 
+<a id="当前实施候选原生权威配方报价与排产"></a>
 ### 已实施切片：原生权威配方报价与排产
 
 普通客户端的 `quote-schedule` / `schedule` 只接收当前 Context、工厂、规范 built-in recipe ID 和正 u32 批次。共享目录提供十一种内置配方的完整计划；native grant-backed `ScheduleRecipe` admission 按 ID 与批次重算并比较完整计划，预算使用规范电费。trusted 无 native grant 与模块生成的自定义计划保留既有路径，历史回执不按当前目录重算。
 
 签名 POST `/v1/world/private-task/recipe-quote` 同时绑定原 Context 读取证明、当前 fence、主体与预期 base。服务在当前 canonical pin 的私有 clone 上复用实际授权和生产准入，返回规范 action、电费扣除预览、有效输入/输出账本、材料、耗时或拒绝原因；交付前再验当前 pin 与授权。报价不步进世界、不预留库存、不扣预算，电费账本预览不表示电池续航变化。
 
-首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。真实 TCP 的报价、首产物、重复和驱动重启回归已通过，客户端九项回归与严格 Clippy 通过。独立正式 Skill 试玩在 `005415753` 实际产出三铁锭并恢复原回执，但报告 347 秒超过 240 秒许可，整体实玩保留 inconclusive；详见[生产候选证据](../../testing/evidence/native-task-production-2026-10-13/README.md)。人类明确批准的第二轮在 `795944322` 完成七次真实客户端调用，报告于 233.34 秒写入，独立硬截止在 240 秒关闭世界；父侧核对唯一生产、匹配首产物、原响应字节一致及 Stop/revoke 清理，详见[有界复测证据](../../testing/evidence/native-task-production-2026-10-13/bounded-retry/README.md)。[PR #4650](https://github.com/eng-cc/oasis7/pull/4650) 已通过最终源必要 CI，并于 2026-10-13 合入 `dbe03eda6e60444a69d57655a15709830660d288`；上述试玩保留其原候选来源。这不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
+首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。[历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4650#issuecomment-6162408442)；[首轮证据](../../testing/evidence/native-task-production-2026-10-13/README.md)与[有界复测](../../testing/evidence/native-task-production-2026-10-13/bounded-retry/README.md)保留各自候选、预算失败和原结果。这不证明完整 starter chain、稳定生产、交付、两 Runtime parity 或部署；部署暂停。
 
-### 当前实施候选：建厂到首批生产
+<a id="当前实施候选建厂到首批生产"></a>
+### 已实施切片：建厂到首批生产
 
 本批从已有 claimed Agent、建设材料和显式世界授权开始，补齐没有工厂到建厂、转运投料、首批内置配方产物的连续链路。普通客户端增加 `quote-build` / `build`，只接收 Context、site、factory 与规范 kind ID；builder 固定为配置 Agent。共享目录提供 Smelter/Assembler 的完整内置建设规格。native grant-backed `BuildFactory` 按可信建设电力 profile 的 kind 重算完整规格，预算使用当前建设电力义务，不以工厂运行耗电或 WASM 最低门槛替代。trusted 无 native grant 和历史回放保留既有语义。
 
 签名 POST `/v1/world/private-task/factory-quote` 绑定主体、原 Context 证明、当前 fence 和预期 base，在 canonical pin 的私有 clone 上复用真实建设准入，返回规范 action、材料账本、耗时、site/location revision、电力义务及拒绝原因；交付前再核对 pin 与授权。报价不预留材料或扣预算。首次提交先保存原签名；已有缓存先核对完整业务选择并恢复原结果，Unknown 不替换请求。
 
-`industry` 增加有界 pending build、建设场地、Agent 位置和建设电力授权观察。新增投影只交付该 Agent 的建设和位置范围，场地不泄露其他主体 owner/allowlist。既有公共 anchor 与工厂电力观察边界沿用原合同。建设开始须关联唯一完成事件，再核对投料到账和真实首产物；客户端 13 项、委托授权 24 项、签名 DTO 与主体投影回归已通过；真实 TCP 连续链路单独在 76.91 秒通过，相关私有任务回归 8 项通过、5 个显式试玩/诊断入口保持 ignored。严格全目标 Clippy 与冻结源 `0a97ad641` 独立代码评审已通过。本批获准的一轮正式 Skill 试玩在 360 秒限内转发九次调用，真实建成唯一 Smelter 并恢复原回应，但未执行投料和生产，报告也晚于截止；整链独立实玩保留 inconclusive，详见[本批有界试玩证据](../../testing/evidence/native-task-starter-chain-2026-10-13/README.md)。首轮 Stop/revoke 与一次性世界清理完成。人类另行批准的最后一次复测先完成玩家初始化，再启动世界和 360 秒计时；源 `52c136a7b` 的十九次调用在 219.72 秒前结束，报告于约 253.55 秒写入。父侧核对唯一建设、两次投料、匹配 recipe job 6、三铁锭一炉渣、精确余额、工业里程碑及逐字节原回应恢复，整链目标通过；Stop/revoke 和世界清理完成，详见[最后有界复测](../../testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md)。当前 [PR #4662](https://github.com/eng-cc/oasis7/pull/4662) 的 CI 和合入尚未完成。身份注册、配对/token、多工厂完整 starter chain、稳定生产与两 Runtime 完整首局仍在后续范围；部署暂停。
+`industry` 增加有界 pending build、建设场地、Agent 位置和建设电力授权观察。新增投影只交付该 Agent 的建设和位置范围，场地不泄露其他主体 owner/allowlist。既有公共 anchor 与工厂电力观察边界沿用原合同。建设开始须关联唯一完成事件，再核对投料到账和真实首产物；[历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4662#issuecomment-6162409087)；[首轮证据](../../testing/evidence/native-task-starter-chain-2026-10-13/README.md)与[最后有界复测](../../testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md)分别保存 inconclusive 和 targeted 结果，不以合入源冒充实际试玩源。身份注册、配对/token、多工厂完整 starter chain、稳定生产与两 Runtime 完整首局仍未由该切片证明；部署暂停。
 
 ## 1. 问题、目标与非目标
 
@@ -100,13 +111,13 @@ Agent owner 负责协议与能力投影；Runtime owner 负责最终裁决、授
 
 | 上游条款 | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 排除与未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [AC-EXT-002](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-002) | 合法绑定、身份隔离与费用路由不能授予游戏权力 | [api-auth](#api-auth) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-003](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-003) | 首局能力目录、参数和实际执行一致 | [api-context](#api-context) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-005) | 成功、拒绝、未知结果可恢复且不重复世界效果 | [api-actions](#api-actions) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | 两个真实 Runtime 分别完成首局与组合恢复 | [api-composition](#api-composition) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-012](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-012) | 普通客户端不依赖旧 Bridge 完成完整协议闭环 | [api-wire](#api-wire) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-013](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-013) | 鉴权、越权、限流与授权撤销在服务端生效 | [api-auth](#api-auth) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-014](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-014) | 关闭旧 Provider Bridge 后新主路径仍可运行 | [api-cutover](#api-cutover) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-d30925fe-d798-4056-9641-062255931a61；[AC-EXT-002](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-002) | 合法绑定、身份隔离与费用路由不能授予游戏权力 | [api-auth](#api-auth) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb；[AC-EXT-003](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-003) | 首局能力目录、参数和实际执行一致 | [api-context](#api-context) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7；[AC-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-005) | 成功、拒绝、未知结果可恢复且不重复世界效果 | [api-actions](#api-actions) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-7283b901-ea06-49e3-956d-2bad46b6c89d；[AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | 两个真实 Runtime 分别完成首局与组合恢复 | [api-composition](#api-composition) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-8120dffe-17cc-458a-9c70-8121217e6f7b；[AC-EXT-012](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-012) | 普通客户端不依赖旧 Bridge 完成完整协议闭环 | [api-wire](#api-wire) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-7d6cef7f-9419-49ed-b445-663382383458；[AC-EXT-013](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-013) | 鉴权、越权、限流与授权撤销在服务端生效 | [api-auth](#api-auth) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-68ffc843-8679-4ad9-8cef-10a239a29c73；[AC-EXT-014](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-014) | 关闭旧 Provider Bridge 后新主路径仍可运行 | [api-cutover](#api-cutover) | agent_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -295,13 +306,13 @@ HTTP 普通请求客户端 deadline 初值 10 秒；事件 long-poll 服务端�
 
 | 上游条款 | 本设计条款 | 独立 obligation 与适用条件 | 准确验证方法与场景 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [AC-EXT-002](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-002) | [api-auth](#api-auth) | 合法绑定、身份隔离与费用路由不能授予游戏权力 | [api-auth](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-auth)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-003](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-003) | [api-context](#api-context) | 首局能力目录、参数和实际执行一致 | [api-catalog](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-catalog)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-005) | [api-actions](#api-actions) | 成功、拒绝、未知结果可恢复且不重复世界效果 | [api-idempotency](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-idempotency)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | [api-composition](#api-composition) | 两个真实 Runtime 分别完成首局与组合恢复 | [api-first-session](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-first-session)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-012](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-012) | [api-wire](#api-wire) | 普通客户端不依赖旧 Bridge 完成完整协议闭环 | [api-wire](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-wire)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-013](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-013) | [api-auth](#api-auth) | 鉴权、越权、限流与授权撤销在服务端生效 | [api-safety](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-safety)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| [AC-EXT-014](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-014) | [api-cutover](#api-cutover) | 关闭旧 Provider Bridge 后新主路径仍可运行 | [api-cutover](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-cutover)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-d30925fe-d798-4056-9641-062255931a61；[AC-EXT-002](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-002) | [api-auth](#api-auth) | 合法绑定、身份隔离与费用路由不能授予游戏权力 | [api-auth](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-auth)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb；[AC-EXT-003](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-003) | [api-context](#api-context) | 首局能力目录、参数和实际执行一致 | [api-catalog](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-catalog)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7；[AC-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-005) | [api-actions](#api-actions) | 成功、拒绝、未知结果可恢复且不重复世界效果 | [api-idempotency](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-idempotency)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-7283b901-ea06-49e3-956d-2bad46b6c89d；[AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | [api-composition](#api-composition) | 两个真实 Runtime 分别完成首局与组合恢复 | [api-first-session](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-first-session)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-8120dffe-17cc-458a-9c70-8121217e6f7b；[AC-EXT-012](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-012) | [api-wire](#api-wire) | 普通客户端不依赖旧 Bridge 完成完整协议闭环 | [api-wire](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-wire)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-7d6cef7f-9419-49ed-b445-663382383458；[AC-EXT-013](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-013) | [api-auth](#api-auth) | 鉴权、越权、限流与授权撤销在服务端生效 | [api-safety](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-safety)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
+| Trace refs: O7-REQ-68ffc843-8679-4ad9-8cef-10a239a29c73；[AC-EXT-014](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-014) | [api-cutover](#api-cutover) | 关闭旧 Provider Bridge 后新主路径仍可运行 | [api-cutover](../../testing/manual/external-agent-runtime-contract-validation.manual.md#api-cutover)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
 
 ## 12. 决策、长期风险与未决问题
 

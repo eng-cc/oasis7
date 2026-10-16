@@ -195,73 +195,8 @@ pub fn task_cognition_intent(
     )
 }
 
-pub fn task_cognition_intent_from_public_context(
-    context: &oasis7_agent_api::game::TaskContextIdentityV1,
-    binding: crate::runtime::RuntimeCognitionBaseBindingV1,
-    authority: &projection::WorldServiceAgentContext,
-    actor_observation: &serde_json::Value,
-    action: crate::runtime::Action,
-) -> Result<CognitionIntentV1, String> {
-    context.validate()?;
-    binding.validate().map_err(|e| e.to_string())?;
-    if authority.agent_id != context.fence.agent_id
-        || binding.world_id != context.fence.world_id
-        || binding.branch_id != context.fence.branch_id
-        || binding.reorg_epoch != context.fence.reorg_epoch.0
-    {
-        return Err("task action public authority mismatch".into());
-    }
-    let request = crate::runtime::RuntimeCognitionCommitRequestV1 {
-        agent_id: context.fence.agent_id.clone(),
-        agent_session_id: context.agent_session_id.clone(),
-        agent_turn_id: context.agent_turn_id.clone(),
-        decision_request_id: context.decision_request_id.clone(),
-        retry_seq: context.retry_seq,
-        transport_attempt: context.transport_attempt,
-        request_digest: context.request_commitment.clone(),
-        observation_digest: request_digest("game-task-public-observation/v1", actor_observation)?,
-        context_digest: context.context_commitment.clone(),
-        capability_snapshot_hash: authority.capability_snapshot_hash.clone(),
-        authority_context_hash: authority.authority_context_hash.clone(),
-        captured_base_binding: binding,
-    };
-    let mut response_artifact = crate::runtime::RuntimeCognitionResponseArtifactV1 {
-        schema_version: 1,
-        context_discriminator:
-            crate::runtime::RuntimeCognitionResponseArtifactV1::CONTEXT_DISCRIMINATOR.into(),
-        context_version: 1,
-        agent_session_id: context.agent_session_id.clone(),
-        agent_turn_id: context.agent_turn_id.clone(),
-        decision_request_id: context.decision_request_id.clone(),
-        retry_seq: context.retry_seq,
-        transport_attempt: context.transport_attempt,
-        request_digest: context.request_commitment.clone(),
-        response_digest: request_digest(
-            "game-task-public-action/v1",
-            &(&context.request_commitment, &action),
-        )?,
-        artifact_digest: String::new(),
-    };
-    response_artifact.refresh_artifact_digest();
-    request.validate().map_err(|e| e.to_string())?;
-    response_artifact
-        .validate_for_request(&request)
-        .map_err(|e| e.to_string())?;
-    Ok(CognitionIntentV1 {
-        request,
-        action,
-        response_artifact,
-        delegation_generation: context
-            .fence
-            .executor_binding
-            .as_ref()
-            .ok_or("task executor unavailable")?
-            .delegation_generation
-            .0,
-        causal_proposal: None,
-        task_fence: Some(context.fence.clone()),
-    })
-}
+pub use oasis7_client_api::world_service::task_context::task_cognition_intent_from_public_context;
+
 pub fn validate_task_commit_context(
     world: &World,
     request: &crate::runtime::RuntimeCognitionCommitRequestV1,

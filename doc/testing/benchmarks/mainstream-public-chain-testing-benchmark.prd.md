@@ -20,10 +20,16 @@
 - Problem Statement: 在原始 2026-03-24 基准窗口，oasis7 已有签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已开始治理 registry import/audit/runbook；团队仍缺一份能说明主流公链测试分层、该窗口覆盖到哪一层及剩余缺口的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
 - Proposed Solution: 由 testing 专业域维护测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> network rehearsal / release-train readiness` 六层，再把 oasis7 可追溯的命令、证据与缺口映射为带日期的 benchmark snapshot；producer 只据此决定后续 execution workstreams 的优先级，不由本 benchmark 维护当前网络状态或成熟度。
 - Success Criteria:
+<a id="bench-layer-model"></a>
+
   - SC-1: 明确给出不少于 6 层的“主流公链测试体系”分层模型，并区分“单客户端项目的等价替代要求”与“多客户端公链的原生做法”。
+<a id="bench-historical-snapshot"></a>
+
   - SC-2: 明确给出 oasis7 在基准窗口的 `已有 / 部分具备 / 缺失` 测试矩阵，而不是只给抽象建议；该快照不代表当前运行状态。
   - SC-3: 明确指出原始基准窗口的强项至少包括：`required/full 基础门禁`、`分布式子系统库测试`、`Web-first UI 闭环`、`长跑套件`、`governance registry audit + drill runbook`。
   - SC-4: 明确指出原始基准窗口的缺口至少包括：`fuzz/property-based gate 缺失`、formal `public_testnet` / `mainnet` readiness 需要独立 gate、`governance / ceremony evidence 未充分`；后续窄范围 drill evidence 与当前 tier status 分别按 design 和正式 network-tier authority 解读。
+<a id="bench-producer-priority"></a>
+
   - SC-5: 形成 producer 可直接使用的后续顺序：`补齐剩余治理 drill / ceremony evidence -> 扩充 fault/chaos/negative gate -> 再补 network rehearsal / release-train readiness`；已记录的窄范围 finality drill 不能当作整体治理或 release-train 收口。
 
 ## 2. User Experience & Functionality
@@ -34,7 +40,7 @@
   - `liveops_community`：需要知道对外为何仍不能说“对标主流公链安全/测试成熟度”。
 - User Scenarios & Frequency:
   - 每次有人提“现在是不是已经接近主流主链测试体系”时，先对照本专题。
-  - 每次 `MAINNET-1~3` execution workstream 完成一个阶段时，回填本专题矩阵。
+  - 需要更新测试成熟度评估时，新增带日期、范围和来源的比较；当前 `MAINNET-1~3` 执行进度留在相应 PR/Task，不回填覆盖原始基准窗口。
   - 每次准备做更高安全口径或创世前评审时，先复查 network rehearsal、drill、chaos、QA 证据是否到位。
 - User Stories:
   - PRD-P2P-BENCH-001: As a `producer_system_designer`, I want one explicit benchmark for mainstream public-chain testing systems, so that oasis7 phase decisions are grounded in testing reality rather than intuition.
@@ -44,7 +50,7 @@
 - Critical User Flows:
   1. Flow-P2P-BENCH-001: `读取 testing-manual 与安全/readiness 专题 -> 提炼 oasis7 当前测试层 -> 对照主流公链分层模型 -> 形成 gap matrix`
   2. Flow-P2P-BENCH-002: `有人提出“接近主流公链测试体系” -> 检查 benchmark layers -> 若关键层仍缺失则直接 block 该口径`
-  3. Flow-P2P-BENCH-003: `execution workstream 完成一次 drill/chaos/network-rehearsal 里程碑 -> 回填 benchmark 状态 -> producer 重新排序下一步`
+  3. Flow-P2P-BENCH-003: `读取 drill/chaos/network-rehearsal 的固定窗口证据 -> 比较测试成熟度及剩余边界 -> 当前执行排序回到相应 PR/Task`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -61,6 +67,8 @@
   - AC-5: 本专题必须保留原始基准窗口对 drill / ceremony 缺口的记录，并引用后续窄范围 default/live finality drill 的 pass/block/restore evidence；这组 evidence 不等于 signer custody、genesis ceremony、广泛 failover 覆盖或整体 QA 收口。详见 design 的历史补充证据节。
 <a id="ac-p2p-bench-006"></a>
   - AC-6: 本专题必须输出一份带日期的 `已有/部分具备/缺失/下一步` 矩阵，可供 producer 排序；动态 task 与网络状态不由此矩阵维护。
+<a id="bench-manual-entry"></a>
+
   - AC-7: `testing-manual.md` 必须能找到本专题入口，避免测试分层与对标口径继续分离。
 - Non-Goals:
   - 不在本专题内直接实现 fuzz 框架、legacy shared_devnet rehearsal / formal test environment 或新的 chaos 平台。
@@ -79,6 +87,8 @@
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `GitHub Issue / GitHub Project`
+<a id="bench-evidence-limits"></a>
+
 - Edge Cases & Error Handling:
   - 若引用“主流公链多客户端一致性测试”，必须同时说明 oasis7 当前是单实现栈，因此等价要求应落在 `独立 replay/verifier`、`跨 world/节点副本一致性` 与 `共享网络升级演练`，而不是伪造不存在的第二客户端。
   - 若 oasis7 某层已有命令，但没有固定成 release gate、没有周期执行、没有证据模板，则该层最多只能记为 `partial`。
@@ -116,3 +126,17 @@
 | DEC-P2P-BENCH-001 | 用“主流公链测试分层 + oasis7 等价映射”做 benchmark | 直接照抄多客户端公链 checklist | oasis7 当前是单实现栈，必须给出等价要求才有执行意义。 |
 | DEC-P2P-BENCH-002 | 把 governance audit/runbook 与窄范围 default/live finality drill 记为正向证据，但不等于完整治理 drill 或 ceremony 收口 | 因为已有 import/audit 工具或单条 pass case 就直接记整体完成 | 后续 evidence 已记录 `2-of-3` finality pass、negative gate block 和 baseline restore；custody、ceremony 与更广覆盖仍需独立证据，详见 design 的历史补充证据节。 |
 | DEC-P2P-BENCH-003 | 把 `network rehearsal / release-train readiness` 记为当前明显缺口 | 继续只在本地/clone-world dry-run 评估 readiness | 主流公链的成熟度很大一部分来自共享环境、升级窗口和持续演练。 |
+
+## 测试成熟度的局部产品承接
+
+<a id="bench-public-window"></a>
+
+Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff
+
+本条仅承接 [REQ-ENTRY-CLAIM-001](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-001) 的历史或局部 green 不得单独生成公开事实这一边界。AC-5 的三份 dated finality 样本、AC-6 的历史矩阵与 controlled/resettable/non-mainnet candidate 不能外推为当前 fleet、public launch、open validator onboarding 或 mainnet；不承接全渠道发布、撤回或 LiveOps 审核。
+
+<a id="bench-public-categories"></a>
+
+Trace refs: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
+
+本条仅承接 [REQ-ENTRY-CLAIM-003](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 的事实、目标、假设与证据边界分离。原始六层快照、后续带日期观察、producer 优先级和正式 network authority 的当前结论分别解释；示例措辞不是当下发布许可，不代签完整拟发布文案或四层全域组合验收。

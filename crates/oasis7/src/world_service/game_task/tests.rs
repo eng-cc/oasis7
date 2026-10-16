@@ -1,6 +1,9 @@
 use super::*;
 use crate::runtime::{Action, WorldState};
 fn fixture() -> (World, String) {
+    fixture_with_formal_history(false)
+}
+fn fixture_with_formal_history(formal: bool) -> (World, String) {
     let private = hex::encode([71u8; 32]);
     let public = sign_read_request("fixture", (), &private)
         .unwrap()
@@ -20,6 +23,41 @@ fn fixture() -> (World, String) {
             1,
         )
         .unwrap();
+    if formal {
+        // Bind the fresh World before any task/history publication, then install C0.
+        let snapshot = world.snapshot_with_chain_resource_context(
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: "world",
+                chain_id: "fixture-chain",
+                genesis_ref: Some("fixture"),
+                created_at_height: 0,
+                manifest_height: 0,
+                commit_block_hash: None,
+                tick: 0,
+            },
+            "fixture",
+            "fixture",
+        );
+        world = World::from_snapshot(snapshot, world.journal().clone()).unwrap();
+        world.initialize_empty_formal_history().unwrap();
+        struct EmptyHistoryNodes;
+        impl oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader
+            for EmptyHistoryNodes
+        {
+            fn read_node(&self, _: &str) -> Result<Option<Vec<u8>>, String> {
+                Ok(None)
+            }
+        }
+        let root = world.state().retained_history_root.clone().unwrap();
+        let snapshot_bytes = serde_cbor::to_vec(&world.snapshot()).unwrap();
+        let parent = crate::runtime::VerifiedFormalRetainedHistoryParentV1::for_test_snapshot(
+            root,
+            &snapshot_bytes,
+        );
+        world
+            .attach_verified_formal_history(parent, std::sync::Arc::new(EmptyHistoryNodes))
+            .unwrap();
+    }
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent".into(),
         pos: crate::GeoPos::new(0, 0, 0),
@@ -772,3 +810,59 @@ fn goal_snapshot(world: &World) -> crate::runtime::Snapshot {
 
 #[path = "tests/executor.rs"]
 mod executor_tests;
+
+#[test]
+fn game_goal_retention_overflow_preserves_revision_chain_and_fails_closed() {
+    let (mut world, private) = fixture_with_formal_history(true);
+    let create = result(&world, request(&private, "retention-task"));
+    world.record_world_service_result(create).unwrap();
+    for revision in 0..40 {
+        let control = current_control(&world, "agent").unwrap().unwrap();
+        let published = goal_result(
+            &world,
+            goal_request(&private, &control, &format!("retention-goal-{revision}")),
+            &[],
+            revision + 2,
+        );
+        world.record_world_service_result(published).unwrap();
+    }
+    let expected = reduce(collect(&world, []).unwrap()).unwrap()
+        [&current_control(&world, "agent").unwrap().unwrap().task_id]
+        .control
+        .clone();
+    let before = world.snapshot();
+    let error = world.prepare_formal_retention_candidate().unwrap_err();
+    assert!(error.contains("WorldService history cannot fit the hot count/byte budget"));
+    assert_eq!(world.snapshot(), before);
+    // Read the exact still-hot chain: no predecessor may disappear on refusal.
+    let hot = super::super::retained_queries::hot_results(&world).unwrap();
+    let reduced = reduce(hot.into_values().collect()).unwrap();
+    assert_eq!(reduced[&expected.task_id].control, expected);
+    assert_eq!(expected.latest_goal_revision.0, 40);
+}
+
+#[test]
+fn game_task_canonical_empty_retained_checkpoint_restores_hot_chain_without_reader() {
+    let (mut world, private) = fixture_with_formal_history(true);
+    let create = result(&world, request(&private, "empty-history-task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let publication = goal_result(
+        &world,
+        goal_request(&private, &initial, "empty-history-goal"),
+        &[],
+        2,
+    );
+    world
+        .record_world_service_result(publication.clone())
+        .unwrap();
+    let expected = current_control(&world, "agent").unwrap();
+    // Restoration intentionally has no process-local CAS reader. The exact
+    // canonical empty commitment proves all task results are still hot.
+    let restored = World::from_snapshot(world.snapshot(), world.journal().clone()).unwrap();
+    assert_eq!(current_control(&restored, "agent").unwrap(), expected);
+    assert_eq!(
+        active_publish(&restored, "agent").unwrap(),
+        Some(publication)
+    );
+}

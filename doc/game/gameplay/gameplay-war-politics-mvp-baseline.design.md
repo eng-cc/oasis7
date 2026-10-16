@@ -186,8 +186,8 @@ Non-goal: 本预览不重平衡治理阈值、投票窗口、票权公式或冷�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [`REQ-WR-CC-001`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001) | 战争推荐与后果预览必须保持在已声明冲突授权、成本和恢复边界内。 | [`DES-WAR-POLITICS-001`](#des-war-politics-001) | `gameplay_designer` / `runtime_engineer` | 不重平衡战争参数或改变 runtime ABI。 |
-| [`REQ-WR-GCB-001`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001) | 治理提案、票权、法定人数和通过阈值必须遵守普通治理白名单边界。 | [`DES-WAR-POLITICS-002`](#des-war-politics-002) | `gameplay_designer` / `runtime_engineer` | 不新增复杂议会、外交或全局政治模拟。 |
+| [`REQ-WR-CC-001`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001) Trace refs: O7-REQ-2e68a48f-4a44-4135-9268-e17c6f32d0b3 | 战争推荐与后果预览必须保持在已声明冲突授权、成本和恢复边界内。 | [`DES-WAR-POLITICS-001`](#des-war-politics-001) | `gameplay_designer` / `runtime_engineer` | 不重平衡战争参数或改变 runtime ABI。 |
+| [`REQ-WR-GCB-001`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001) Trace refs: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b | 治理提案、票权、法定人数和通过阈值必须遵守普通治理白名单边界。 | [`DES-WAR-POLITICS-002`](#des-war-politics-002) | `gameplay_designer` / `runtime_engineer` | 不新增复杂议会、外交或全局政治模拟。 |
 
 <a id="des-war-politics-001"></a>
 ### DES-WAR-POLITICS-001：战争成本与结果预览承接
@@ -216,5 +216,5 @@ Non-goal: 本预览不重平衡治理阈值、投票窗口、票权公式或冷�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [`REQ-WR-CC-001`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001) | [`DES-WAR-POLITICS-001`](#des-war-politics-001) | 验证战争预览保留授权边界、成本、胜负与恢复风险的可读关系。 | [`war declaration quote tests`](../../../crates/oasis7/src/runtime/tests/war_declaration_quote.rs) | PR 与实际验证记录 / QA result | 不证明跨服平衡或生产发布。 |
-| [`REQ-WR-GCB-001`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001) | [`DES-WAR-POLITICS-002`](#des-war-politics-002) | 验证治理预览保留法定人数、通过阈值、票权影响与失败/过期代价。 | [`governance vote quote tests`](../../../crates/oasis7/src/viewer/runtime_live/tests/governance_vote_quote.rs) | PR 与实际验证记录 / QA result | 不证明完整政治模拟或最终平衡。 |
+| [`REQ-WR-CC-001`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-001) Trace refs: O7-REQ-2e68a48f-4a44-4135-9268-e17c6f32d0b3 | [`DES-WAR-POLITICS-001`](#des-war-politics-001) | 验证战争预览保留授权边界、成本、胜负与恢复风险的可读关系。 | [`war declaration quote tests`](../../../crates/oasis7/src/runtime/tests/war_declaration_quote.rs) | PR 与实际验证记录 / QA result | 不证明跨服平衡或生产发布。 |
+| [`REQ-WR-GCB-001`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-001) Trace refs: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b | [`DES-WAR-POLITICS-002`](#des-war-politics-002) | 验证治理预览保留法定人数、通过阈值、票权影响与失败/过期代价。 | [`governance vote quote tests`](../../../crates/oasis7/src/viewer/runtime_live/tests/governance_vote_quote.rs) | PR 与实际验证记录 / QA result | 不证明完整政治模拟或最终平衡。 |

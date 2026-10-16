@@ -2,7 +2,7 @@
 
 本页是产品信息架构的唯一总入口。它按玩家价值组织产品，不完全替代 `doc/README.md` 的工程模块矩阵；四大模块的产品真值与设计将逐步迁移到本目录下的文档树，散落在外部各专业模块的相关产品文档也将随语义归拢逐步清理、删除。
 
-本目录的文档树以 PRD 为主，并可按需包含同名配对的 design：PRD 承载产品真值、产品承诺、组合关系和跨域验收；design 承载产品设计。迁移与交付追踪、任务状态和过程证据只由 GitHub Issue / GitHub Project-backed task truth 承载，不创建本地 project ledger。
+本目录的文档树以 PRD 为主，并可按需包含同名配对的 design：PRD 承载产品真值、产品承诺、组合关系和跨域验收；design 承载产品设计。迁移与交付事实由 Git、PR、实际 CI 与评审记录承载；Issue/Project 按需使用，不创建本地 project ledger。
 
 产品文档规范与可复用模板：[`product-documentation-standard.prd.md`](../engineering/doc-governance/product-documentation-standard.prd.md)、[`product-documentation-standard.design.md`](../engineering/doc-governance/product-documentation-standard.design.md)、[`product-documentation-standard.templates.md`](../engineering/doc-governance/product-documentation-standard.templates.md)。
 
@@ -21,6 +21,8 @@
 
 ### 条款级唯一主责与跨模块引用
 
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；新增或实质修改的跨层要求按[全局要求追踪](../engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)在主责原文声明一次，设计和任务复用同一 ID。既有 Product PRD-ID、局部 REQ/AC/SC 与真实路径/锚点保留；未触达存量和历史证据不批量回填。
+
 以下拆分是长期归属规则。每一行的“主责条款”拥有规范性条件、成本/权利/失败含义；其他模块只能保留必要摘要、消费主责结果，或提出自己的组合验收条件，不得再次立法：
 
 | 语义簇 | 主责条款 | 跨模块引用与组合验收 |
@@ -37,12 +39,12 @@
 
 ### P1/P2/C1 迁移阶段、兼容前置与非目标
 
-- **P0（已完成）**：冻结四域标签、条款主责和迁移范围；保持四个 slug、四个 `Product PRD-ID`、根 SC/REQ/AC 与 checker 合同，不改变 runtime、WASM、Agent、Viewer、玩法数值或公开 claim。
-- **C0（历史兼容阶段，已完成）**：checker 曾为每个稳定身份建立明确的旧名/新名映射；该映射仅供历史引用、迁移 provenance 和兼容窗口识别，仍只允许这四个 slug/ID，不退化为任意名称或任意模块数。
-- **P1（已完成）**：按集成顺序更新入口、四根 PRD 的标题/职责声明、专题的模块归属声明与错误依赖引用；专题标题仍保留局部产品主题名称。只做分类、命名和引用收敛，不夹带玩法、经济平衡、实现或发行状态变化。
+历史实施与验收记录见 [C0 名称兼容 Task #3758](https://github.com/eng-cc/oasis7/issues/3758)、[P1 正式名称切换 Task #3763](https://github.com/eng-cc/oasis7/issues/3763)；总体治理背景见 [Task #3680](https://github.com/eng-cc/oasis7/issues/3680)，不将其作为所有迁移批次的接收方。本页保留条款归属、稳定身份和迁移条件，不镜像各批任务进度。
+
+- **稳定身份与变更边界**：四个 slug、四个 `Product PRD-ID`、根 SC/REQ/AC 与 checker 合同继续保持；名称与分类调整不改变 runtime、WASM、Agent、Viewer、玩法数值或公开 claim。C0 的旧名/新名映射只供历史引用、迁移 provenance 和兼容窗口识别，不作为 active identity，也不允许任意名称或任意模块数。
 - **P2（产品，按专题分片）**：按“源条款 → 目标条款/锚点 → 未接收语义 → 接收 owner → 删除条件”逐项迁移：Agent 资产/自治和免费进入/世界成长已按各自专题收敛；原区域 charter/tenure/公共融资 AC-1～5 已由[玩法区域专题](world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-004)的 GR-004～008 接收；工业/市场/保供旧源 AC-1～5 的产品语义现由[区域能力与扩展](world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-009)、[工业需求与生产交付](world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)和[常态市场与有界紧急保供](world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-004)的稳定锚点接收；普通治理 GG-1..5 的历史条款映射见[普通共同决策与宪制边界](world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md) §6.3。连续性旧源 CR-1/2 由基础设施模块 DC-1/DC-2 与 DE-1/DE-3 接收；CR-3/4/5 由 GCB-001/002/003/006、ES-003/004、根 [`SC-34`](world-rules-core-gameplay/prd.md#sc-34)（其中 CR-5 由成熟世界 `MW-12` 的 [`REQ-WR-MW-005`](world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-005)/[`AC-WR-MW-005`](world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-005) 接收）与[同候选门禁 REQ/AC](player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001)追踪至成熟世界/可玩性/入口/公开 claim 专题，CR-6 由 CC-003/AC-6/AC-7 接收。原始 CR-1..6 条款与完整映射保留在 Git 历史提交 `a83c57893de2ec4217fb7c1a04d30575ebd783e6`，仅作 provenance，不作为 active authority、实现、QA 或发行状态证据。这些接收仅定义产品边界，不声明实现或发行状态；保留现有 REQ/AC 可追溯性，过程记录继续写入 Git、PR 与实际 CI 记录，不在仓库新增 migration ledger。
 - **C1（当前 active-final 阶段）**：active 入口与模块根身份只使用四个最终中文名称；active 专题的模块归属与产品身份声明使用所属模块的最终中文标签，但专题标题仍是局部产品主题名称。C0 旧名仅可在历史兼容、迁移 provenance、`retired`/`superseded` 说明中作为别名保留，不得成为 active authority、稳定身份或 active 模块标签。后续迁移任务仍必须验证稳定 slug/ID、根身份、checker 规则、跨模块引用闭合、重复 authority 消除以及源/目标与失败恢复语义对账；`superseded` 不等于已迁移完成，也不等于可直接删除。
-- **本阶段非目标**：不新增第五模块，不改目录 slug 或 Product PRD-ID，不批量重构 crate/工程目录；本阶段 checker 仅覆盖产品文档的结构边界，包括 active 入口/模块根身份的最终标签、专题归属与可达性、产品树内部真实 fragment 及配对/退役结构引用，不替代语义评审，也不证明语义完整性；允许同步 fixture 测试以最终名称为默认，并保留历史别名 prose。不改变世界规则实现、数值平衡、视觉交互、WASM/Agent/runtime 合同；C1 active 名称收紧、checker/link 通过或文档归属变化，均不等于语义迁移完成、源文件可删除、能力已实现、测试已通过或发布状态升级。
+- **本阶段非目标**：不新增第五模块，不改目录 slug 或 Product PRD-ID，不批量重构 crate/工程目录；C1 当时的 checker 仅覆盖产品文档的结构边界，包括 active 入口/模块根身份的最终标签、专题归属与可达性、产品树内部真实 fragment 及配对/退役结构引用，不替代语义评审，也不证明语义完整性；允许同步 fixture 测试以最终名称为默认，并保留历史别名 prose。不改变世界规则实现、数值平衡、视觉交互、WASM/Agent/runtime 合同；C1 active 名称收紧、checker/link 通过或文档归属变化，均不等于语义迁移完成、源文件可删除、能力已实现、测试已通过或发布状态升级。
 
 ## 四大产品模块
 
@@ -91,4 +93,4 @@
 - 智能体、世界模拟与交互 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 - 玩家接入与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 
-专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务、状态与过程证据只由 GitHub task issue evidence 承载。
+专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务说明可以直接使用 PR；实际版本、状态与过程证据由 Git、PR、实际 CI 与评审记录承载，Issue/Project 按需使用。

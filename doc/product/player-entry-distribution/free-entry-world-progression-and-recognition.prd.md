@@ -14,14 +14,19 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只规定便利服务、独立基线和认可资格的产品边界；独立 design 不会增加不同的玩家操作语义。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 长期产品目标是让玩家无需购买客户端、账户或基础进入资格即可进入受支持世界路径；付费只能购买可选的 hosting、storage、support 等便利服务，不能购买、租用或跳过世界中的实质权力。早期体验应容易进入，并把愿意继续的玩家引向世界规则与玩法系统中真实、有代价、可审计的成长、认可和区域协作路径；这些世界内语义分别由[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)与[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)主责，本分册不复制其规范性条件。
 
 该目标描述的是产品方向与组合验收要求，不表示当前任何 preview 已实现免费广泛可用、某项付费服务已上线，或当前版本已经通过发行/可玩性门禁；当前入口、可用性和公开 claim 始终以根 `README.md`、对应专业域和同一候选证据为准。
+
+## 1.1 体验决策
+
+玩家可选择免费基础路径或可选便利服务；选择依据是托管、保留与协助成本，而不是世界内权力。服务中断时按 §2.1 判断等待、独立恢复或安全停止，世界内成长和机会继续由其专业权威决定。
 
 ## 2. 范围与玩家边界
 
@@ -81,8 +86,20 @@
 <a id="req-entry-free-001"></a>
 ### REQ-ENTRY-FREE-001：便利服务不得购买世界权力
 
+Trace ID: O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898
+
 - 要求：免费基础进入必须与世界权力分离；hosting、storage 或 support 等可选服务只能改善便利交付，不能购买、租用、跳过或自动恢复资源、权限、治理、合同、Agent 能力或区域控制。
 - 验收：AC-ENTRY-FREE-001
+
+
+- 功能点：[REQ-ENTRY-FREE-001](#req-entry-free-001)；验收 [AC-ENTRY-FREE-001](#ac-entry-free-001)。
+- 适用范围：免费基础进入、可选 hosting/storage/support 的权力隔离及中断恢复；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 对账免费与可选服务的权限/成本，核对取消、失效与恢复不改变世界权力；待取得同候选记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：免费基础进入、可选 hosting/storage/support 的权力隔离及中断恢复的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-free-001"></a>
 ### AC-ENTRY-FREE-001：服务中断保留独立基线与历史
@@ -94,10 +111,22 @@
 <a id="req-entry-free-002"></a>
 ### REQ-ENTRY-FREE-002：认可与机会必须有界且可失效
 
+Trace ID: O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e
+
 - 适用阶段：首次持续能力之后的成熟世界认可/机会组合；首次持续能力之前不承诺世界内认可、资格、奖励、优先级、容量或可使用机会。
 - 要求：在该适用阶段，入口必须消费并显式链接[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)和[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)的世界内认可/机会主责；免费基础进入、付费便利、访问或外部参与不得自动变成世界资产、资格、区域优先级、OC、治理权、区域控制或永久全局权力。目标专题定义的失效仍不得抹除历史或封锁独立基线。
 - 早期负边界：首次持续能力之前，从接入、付费便利、在线时长、泛化互动或自我声明推导的认可/机会仅可证明 preview、推荐、当前 blocker 或下一步不产生世界效果，不构成由这些信号授予的早期认可、奖励、资格、优先级、容量或可使用机会；不限制首局玩法合同下取得持续能力所需的世界行动、资源和交付结果。
 - 验收：AC-ENTRY-FREE-002
+
+
+- 功能点：[REQ-ENTRY-FREE-002](#req-entry-free-002)；验收 [AC-ENTRY-FREE-002](#ac-entry-free-002)。
+- 适用范围：成熟世界认可/机会组合与早期入口信号不产生世界效果的负边界；沿用本条原有阶段和前置条件。
+- 系统设计状态：未核实
+- 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
+- 实现状态：未核实
+- 实现与验证依据：按 AC 对账成熟世界认可来源/失效和早期信号负例，核对历史及独立基线；待取得专业规则与入口组合记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
+- 剩余范围：设计：成熟世界认可/机会组合与早期入口信号不产生世界效果的负边界的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
 
 <a id="ac-entry-free-002"></a>
 ### AC-ENTRY-FREE-002：认可到期不会重放为新资格
@@ -138,9 +167,13 @@
 - 不定义永久等级、全局战力分、职业数值、资格算法、奖励分配、OC 经济、治理权或区域控制的执行规则。
 - 不把长期免费进入、世界内成长或区域互赖目标当作当前 preview readiness、release gate、可玩性或公开承诺的替代证据。
 
+## 7. 风险与未决边界
+
+主要风险是把免费进入目标误读为当前无条件可用、把便利购买误读为世界权力，或用入口信号替代成熟世界资格。具体服务交付与中断恢复的系统设计、候选实现和组合验收仍需核清；在证据成立前维持本专题负边界与根 README 的较窄公开口径。
+
 ## 全量语义追踪
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 入口负边界与成熟世界/情境声誉主责的可导航组合追踪；认可失效、容量竞争、独立恢复和 specialized authority 不重复立法 | `test_tier_full` |
+| [REQ-ENTRY-FREE-001](#req-entry-free-001) / [AC-ENTRY-FREE-001](#ac-entry-free-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC 对账免费与可选服务的权限/成本，核对取消、失效与恢复不改变世界权力；待取得同候选记录；导航关系不等于通过证据 | `test_tier_required` |
+| [REQ-ENTRY-FREE-002](#req-entry-free-002) / [AC-ENTRY-FREE-002](#ac-entry-free-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 待执行方法：按 AC-ENTRY-FREE-002 分别核对成熟世界认可授予/到期/撤销、双人容量竞争、重复申领及独立恢复；首次持续能力前另核对入口信号不产生资格/容量/世界效果；待取得同候选主责与入口对照记录，导航关系不等于通过证据 | `test_tier_full` |

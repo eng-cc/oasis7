@@ -13,7 +13,8 @@
 
 本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。运维证据的采集与解释由 `blockchain_ops_engineer` 负责，不能单独把模块证据解释为 release、public testnet 或 mainnet readiness。
 
-### 使用者情境与术语
+<a id="使用者情境与术语"></a>
+### 使用者体验、决策与术语
 
 玩家与 Agent 需要判断当前观察是否可信、行动是否可以提交；节点运营者需要判断副本是否能 serving（提供可信状态）或 voting（参与权威投票）。正常读取、提交与等待结果的路径见 §4.1，失败时的可用性和恢复选择见 §4；这些是目标合同，不是当前节点已经支持全部路径的说明。
 
@@ -22,9 +23,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 适用边界：仅豁免重复的产品体验配对 design；专业系统设计仍按各功能状态和准确承接独立判定，不因此变为“不适用”。
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义 canonical history、可用性、权限隔离和 fail-closed 产品结果；它不声明独立玩家信息架构。
-- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：历史分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，历史闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 基础承诺
 
 基础层为一个 `world_id` 提供唯一的可验证提交序列：只有当时合法激活 authority profile 的正式提交证明与持久条件成立才使输入成为世界历史。它提供节点间复制、状态同步、可验证的数据可用性、故障恢复与证明服务；它不定义游戏规则、Agent 行为、玩家交互或发行体验。
@@ -80,12 +82,22 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 当前实现是 stake-weighted proposer/attestation threshold prototype，不是已经具备完整 BFT 最终性的公开承诺。目标仍缺持久且可复验的 quorum certificate、prevote/precommit 锁定、round timeout/view-change、验证者转换证明、复制端证书复验与对抗性恢复证据。本文不因目标描述而宣称 mainnet、去中心化规模、SLA 或发行 readiness。
 
-## 6. 叶子需求与可观察验收
+<a id="6-叶子需求与可观察验收"></a>
+## 6. 叶子要求与可观察验收
 
 这些叶子把本专题的五类可独立失败义务映射到现有 DC 汇总标准；它们保留 P2P、runtime、blockchain ops 和 QA 的专业 authority，不把证书、拓扑或节点运行步骤复制到产品层。
 
 <a id="req-dcs-001"></a>
 ### REQ-DCS-001：单一 canonical history 与最终性
+
+- Trace ID: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39
+- 适用范围：本条要求及对应 AC-DCS-001，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-receipt-finality)；P2P 提交证明已有承接；适用 profile 持久性、runtime apply 与消费者完整组合仍须核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，P2P 提交证明已有承接；适用 profile 持久性、runtime apply 与消费者完整组合仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 同一 `world_id` 只能由适用合法 profile 的可验证正式提交证明及持久条件 推进唯一 canonical order；副本、缓存、非权威 peer 或未最终化输入不能成为玩家世界结果。
 
@@ -95,12 +107,26 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="ac-dcs-001"></a>
 ### AC-DCS-001：非权威材料不能代签
 
+Trace refs: O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39；唯一要求声明：[REQ-DCS-001](#req-dcs-001)。
+
 同一候选的服务节点、full node、light companion 和消费者只能依据验证过的合法 profile 提交证明及 hash-bound 材料得出世界状态；冲突、缺证或非权威写入被拒绝且不进入玩家可见历史。证据必须覆盖适用的 P2P/runtime 组合边界，transport 成功不能代签。
 
 - 对应需求：[REQ-DCS-001](#req-dcs-001)。
 
 <a id="req-dcs-002"></a>
 ### REQ-DCS-002：状态可用性与恢复链连续
+
+- Trace ID: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4
+- 适用范围：本条要求及对应 AC-DCS-002，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-target-recovery)；恢复链已有目标设计；日志后缀正向续跑、真实故障域与重新可服务组合仍须核对。 补充局部依据：[Node PoS 局部恢复](../../p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md#hardening-recovery-continuity)（仅 startup reconciliation，非完整恢复链）。
+- 实现状态：部分实现
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
+- 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
+- 新增局部设计依据（Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4）：[Node authoritative-state 拒绝启动](../../p2p/node/node-identity-replication-contract.design.md#des-nir-recovery)，由[专业恢复条款](../../p2p/node/node-identity-replication-contract.prd.md#nir-recovery)承接；仅 corrupt/unreadable PoS state 不默认重置的负向边界，不证明完整恢复链、非空日志后缀或新请求/模块行动/业务结算续跑。
+- 本次局部关系静态核对：2026-10-15；`a0b6ab12ad14c6c881e48cecdb4adbdb322dd30e` 与文档候选；不改变上述系统设计/实现状态、既有执行证据或原 AC / test_tier_full。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅本地driver/CAS恢复子范围；真实多节点、合法profile激活/authority链、pruning/archive与新请求/模块行动正向续跑对照仍缺完整验收。
 
 恢复只能沿同一 `world_id` 的 固定 genesis 身份、合法 manifest/profile/epoch 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
 
@@ -112,6 +138,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 <a id="ac-dcs-002"></a>
 ### AC-DCS-002：分区、重启与恢复不产生第二世界
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；唯一要求声明：[REQ-DCS-002](#req-dcs-002)。
 
 分区、重启、落后追赶、snapshot/state sync 或 pruning 样例能证明同一 `world_id` 的唯一顺序、可重建性和 state-root 连续；任一恢复材料不匹配时停止服务/投票或降为明确只读，不能把替代 endpoint、缓存或本地世界包装成原世界恢复。
 
@@ -133,15 +161,29 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="req-dcs-003"></a>
 ### REQ-DCS-003：共识权限与服务角色隔离
 
+- Trace ID: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3
+- 适用范围：本条要求及对应 AC-DCS-003，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-layer-authority)；角色隔离已有设计；各存储角色、pruning 冗余和运行暴露面的完整范围仍须核对。 补充局部依据：[identity-v2 域隔离](../../p2p/blockchain/public-testnet-identity-v2-signing.design.md#identity-v2-role-isolation)、[签名/复制准入](../../p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md#hardening-signature-boundary)、[registry-first](../../p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md#readiness-registry-isolation)（均为局部承接，不证明完整角色暴露面或 BFT）。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
+- 新增局部设计依据（Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3）：[Node 条件 signer binding](../../p2p/node/node-identity-replication-contract.design.md#des-nir-signer)及其[专业接受](../../p2p/node/node-identity-replication-contract.prd.md#nir-signer-binding)，仅启用配置/签名模式后拒绝冒充受治理 validator；[local signer 权限边界](../../p2p/blockchain/local-file-signing-backend.design.md#des-local-signer-install)，仅安装、OS caller、grant 与通用文件签名不自授链/governance 权限。未配置 map、完整角色/暴露面/注册轮换/BFT 及真实主机组合仍未证明。
+- 本次局部关系静态核对：2026-10-15；`a0b6ab12ad14c6c881e48cecdb4adbdb322dd30e` 与文档候选；不改变上述系统设计/实现状态、既有执行证据或原 AC / test_tier_full。
+- 剩余范围：设计方面，角色隔离已有设计；各存储角色、pruning 冗余和运行暴露面的完整范围仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+
 验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
 
-目标态参与边界：公网 IP 不是受治理 validator 或 permissionless full/storage/observer service role 参与网络的通用前置条件；治理 admission/activation 仅适用于 validators，full/storage/observer 等服务角色按本地 role policy 和技术可达性参与。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#2-user-experience-functionality)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
+目标态参与边界：公网 IP 不是受治理 validator 或 permissionless full/storage/observer service role 参与网络的通用前置条件；治理 admission/activation 仅适用于 validators，full/storage/observer 等服务角色按本地 role policy 和技术可达性参与。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#reachability-user-experience)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
 
 - 对应验收：[AC-DCS-003](#ac-dcs-003)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)。
 
 <a id="ac-dcs-003"></a>
 ### AC-DCS-003：非权威节点不能扩大权限
+
+Trace refs: O7-REQ-103d7ad7-33f2-41b8-a741-a9c4b383b4c3；唯一要求声明：[REQ-DCS-003](#req-dcs-003)。
 
 验证者注册/轮换、网络暴露和服务角色的组合样例证明非权威节点不能推进 canonical history、签发最终性或代替受治理验证者完成高影响状态变化；被攻破的服务节点只能导致隔离/缺证等可观察结果，不能产生权威写入。
 
@@ -152,6 +194,15 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="req-dcs-004"></a>
 ### REQ-DCS-004：commit certificate 的安全推进边界
 
+- Trace ID: O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46
+- 适用范围：本条要求及对应 AC-DCS-004，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-target-bft)；BFT 拒绝边界已有目标设计；锁定、round、验证者转换及对抗性恢复仍未形成完整证明。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，BFT 拒绝边界已有目标设计；锁定、round、验证者转换及对抗性恢复仍未形成完整证明；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+
 目标 BFT commit 只有在活动、治理注册的验证者集合满足产品要求的最终性证据时才能推进；equivocation、缺证、错误验证者集合或 round 故障不得产生部分或可见权威历史。
 
 - 对应验收：[AC-DCS-004](#ac-dcs-004)。
@@ -160,12 +211,23 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="ac-dcs-004"></a>
 ### AC-DCS-004：错误证明和 round 故障 fail closed
 
+Trace refs: O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46；唯一要求声明：[REQ-DCS-004](#req-dcs-004)。
+
 BFT 实现样例证明符合产品最终性条件的 commit certificate 才能推进历史；equivocation、缺证、错误验证者集合和 round 故障全部被拒绝或保持无效果，不以 prototype 状态宣称完整 BFT readiness。具体阈值、签名和 round 状态由 P2P authority 定义。
 
 - 对应需求：[REQ-DCS-004](#req-dcs-004)。
 
 <a id="req-dcs-005"></a>
 ### REQ-DCS-005：消费者可读的可用性与 fail-closed
+
+- Trace ID: O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b
+- 适用范围：本条要求及对应 AC-DCS-005，保留原文入口、前置条件及测试层级。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-target-service-gate)；服务闸门已有目标设计；结构化附件、正向续跑、同窗口故障与消费者完整范围仍须核对。
+- 实现状态：未核实
+- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
+- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 剩余范围：设计方面，服务闸门已有目标设计；结构化附件、正向续跑、同窗口故障与消费者完整范围仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
 
 只有“已验证可服务”同时满足 `world_id`、checkpoint/head、hash-bound 状态、finality/追加条件、manifest compatibility 和单调 head continuity 时，消费者才可提交新的权威 intent；其他等级必须保持只读、无效果待决或不可用/隔离，并说明 blocker 与下一步。
 
@@ -174,6 +236,8 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 
 <a id="ac-dcs-005"></a>
 ### AC-DCS-005：状态转换不伪造世界效果
+
+Trace refs: O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b；唯一要求声明：[REQ-DCS-005](#req-dcs-005)。
 
 同一候选覆盖“已验证可服务 -> 陈旧/追赶中 -> 已验证只读 -> 已验证可服务”和证明冲突进入“不可用/隔离”的转换；非可服务等级的新 intent 的 committed receipt 为 `0`，正式消费者能读到当前等级、受影响操作、最后可信边界、blocker 和真实下一步。重连、重复提交和跨入口重试不产生第二次世界效果。
 
@@ -199,7 +263,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 
 ## 未决问题与追踪解释
 
-准确专业设计及 QA 场景回链见下表；[文档接收任务 #4180](https://github.com/eng-cc/oasis7/issues/4180)记录本次三层接收与文档检查，不能代替实现、semantic verdict 或 full 执行证明。设计/接收可定位的问题可据此复核，仍缺的当前能力、同候选证据与真实环境保持未证明；专业 owner 与 QA 的判定权不变。
+准确专业设计及 QA 场景回链见下表；[历史文档接收任务 #4180](https://github.com/eng-cc/oasis7/issues/4180)记录当时三层接收与文档检查，不能代替实现、semantic verdict 或 full 执行证明。设计/接收可定位的问题可据此复核，仍缺的当前能力、同候选证据与真实环境保持未证明；专业 owner 与 QA 的判定权不变。
 
 当前追踪表提供产品条款到专业 authority 的导航；重复的模块入口、泛化的“可导航追踪证据”和产品 owner 不能证明准确的专业接受、系统设计与验证场景已经全部闭合。产品 owner 拥有产品结果，P2P 拥有最终性、权限与 freshness，runtime 拥有 manifest/head、服务闸门和 receipt，运维拥有同窗口事实，消费者 owner 拥有投影，QA 拥有组合 verdict。准确承接及当前能力事实仍须分别核对。
 
@@ -209,7 +273,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 | DCS-005/DC-5 的转换、manifest/head 负例、receipt 0/1 和消费者反馈由哪个结构化附件合同判定？ | runtime/P2P、运维、消费者 owner 与 QA；需要同候选字段、证据窗口和明确 verdict | 验证设计与附件可定位后复核；此前 state-sync 模板、health 或重连成功均不构成通过证据 |
 | DCS-001/004 表中的 required 局部检查与根 SC-1/SC-2 等 full 组合证据如何分工？ | P2P/runtime 与 QA；需要独立义务覆盖和适用环境说明 | 验证设计明确两层范围后确认；局部结果不降低根组合条件，DCS-003/005 仍按正文 full 验收 |
 
-问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收，任务依赖和执行状态由 Git、PR 与实际 CI 记录 维护，不在长期正文复制进度；解决前不新增未来路径或虚构任务。下面的“验证证据”栏尚包含导航描述，除非有同候选的实际执行证据，不能解释为测试已存在或已通过。
+问题的历史接收来源为[已关闭的文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)；该任务已关闭，不恢复其当前义务；任务依赖和执行状态由 Git、PR 与实际 CI 记录维护，不在长期正文复制进度；解决前不新增未来路径或虚构任务。下面的“验证证据”栏尚包含导航描述，除非有同候选的实际执行证据，不能解释为测试已存在或已通过。
 
 ## 全量语义追踪
 

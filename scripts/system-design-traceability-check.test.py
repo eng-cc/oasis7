@@ -781,8 +781,466 @@ def scenario_tracking_metadata_does_not_hide_design_changes() -> None:
         shutil.rmtree(root)
 
 
+def relation_run(root: Path, *args: str):
+    return subprocess.run([sys.executable, str(CHECKER), "--repo-root", str(root), *args], capture_output=True, text=True)
+
+
+def scenario_product_fragment_must_identify_feature() -> None:
+    module = load_checker()
+    root, _, _ = make_repo()
+    try:
+        (root / PRODUCT).write_text('# Product\n<a id="req-sample"></a>\n## Overview\n\n### REQ-OTHER-001\nUnrelated nested feature.\n')
+        errors = module.check_system_design(root / DESIGN)
+        assert any('trace-upstream-feature-invalid' in error or 'trace-upstream-label-mismatch' in error for error in errors), errors
+        (root / PRODUCT).write_text(PRODUCT_TEXT)
+        assert_no_errors(module, root / DESIGN)
+        (root / 'doc/product/README.md').write_text(PRODUCT_TEXT)
+        (root / DESIGN).write_text(DESIGN_HEADER.replace('sample.prd.md', 'README.md'))
+        errors = module.check_system_design(root / DESIGN)
+        assert any('trace-upstream-authority-invalid' in error for error in errors), errors
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_trace_refs_require_addressed_declaration() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    other = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root, _, _ = make_repo()
+    try:
+        (root / DESIGN).write_text(DESIGN_HEADER.replace('说明系统必须承接的结果与适用条件。', 'Trace refs: ' + identifier + '；说明系统必须承接的结果与适用条件。'))
+        errors = module.check_system_design(root / DESIGN)
+        assert any('trace-id-unresolved' in e for e in errors), errors
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace('## REQ-SAMPLE-001', '## REQ-SAMPLE-001\n\nTrace ID: ' + identifier))
+        assert_no_errors(module, root / DESIGN)
+        valid_design = (root / DESIGN).read_text()
+        for malformed in ('O7-REQ-not-a-valid-id', identifier + 'extra', 'garbage', ''):
+            (root / DESIGN).write_text(valid_design.replace(identifier, malformed))
+            assert any('trace-id-invalid' in e for e in module.check_system_design(root / DESIGN))
+        (root / DESIGN).write_text(valid_design)
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace('## REQ-SAMPLE-001', '## REQ-SAMPLE-001\n\nTrace ID: ' + other) + '\n## Unrelated\nTrace ID: ' + identifier)
+        errors = module.check_system_design(root / DESIGN)
+        assert any('trace-row-id-mismatch' in e for e in errors), errors
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_engineering_only_needs_bounded_na() -> None:
+    module = load_checker()
+    root, _, _ = make_repo()
+    try:
+        (root / 'doc/system/rules.prd.md').write_text('# Rules\n## Build invariant\nOnly deterministic builds.\n')
+        text = DESIGN_HEADER.replace('../product/sample.prd.md#req-sample', 'rules.prd.md#build-invariant').replace('[REQ-SAMPLE-001]', '[build invariant]')
+        (root / DESIGN).write_text(text)
+        assert any('trace-product-na-incomplete' in e for e in module.check_system_design(root / DESIGN))
+        for disposition, valid in [('产品适用性：N/A；reason=只维护构建检查；scope=构建输入', True), ('产品适用性：N/A；reason=无；scope=待补', False)]:
+            (root / DESIGN).write_text(text.replace('系统设计条款说明边界、拒绝条件和可观察结果。', disposition))
+            errors = module.check_system_design(root / DESIGN)
+            assert (not errors) == valid, errors
+        (root / 'doc/system/rules.manual.md').write_text('# Rules\n## Build invariant\nOnly deterministic builds.\n')
+        (root / DESIGN).write_text(text.replace('rules.prd.md', 'rules.manual.md').replace('系统设计条款说明边界、拒绝条件和可观察结果。', '产品适用性：N/A；reason=仅维护构建检查；scope=构建输入'))
+        assert_no_errors(module, root / DESIGN)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_feature_boundaries_and_explicit_label_mismatch() -> None:
+    module = load_checker()
+    text = '# Product\n<a id="one"></a>\n## REQ-ONE-1\nFirst.\n\n<a id="two"></a>\n## REQ-TWO-1\nSecond.'
+    section = module.fragment_section(text, 'one')
+    assert section and 'id="two"' not in section
+    assert module.requirement_identity(text, 'one') == {'REQ-ONE-1'}
+    assert module.trace_reference_ids('Use `Trace refs: <complete ID>` when applicable.') == (set(), set())
+    assert module.trace_reference_ids('Trace refs: garbage')[1] == {'garbage'}
+    root, _, _ = make_repo(design_text=DESIGN_HEADER.replace('[REQ-SAMPLE-001]', '[REQ-NONEXISTENT-001]'))
+    try:
+        assert any('trace-upstream-label-mismatch' in e for e in module.check_system_design(root / DESIGN))
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_validation_na_rejects_placeholders() -> None:
+    module = load_checker()
+    assert not module.na_is_complete('N/A: reason=无; scope=无; owner_role=无; evidence_ref=https://github.com/eng-cc/oasis7/issues/1#issuecomment-1; re-evaluate=无')
+
+
+def scenario_root_scoped_and_contract_downgrade_fail() -> None:
+    module = load_checker()
+    root, base, _ = make_repo(design_text=None)
+    try:
+        path = root / 'doc/system/design.md'
+        path.write_text(DESIGN_HEADER)
+        contract = commit(root, 'add root contract')
+        assert path in module.changed_system_design_paths(root, base, contract, False)
+        p = relation_run(root, '--base', base, '--head', contract)
+        assert p.returncode == 0, p.stdout + p.stderr
+        path.write_text('# Module overview\n## Architecture\nNavigation only now.\n')
+        p = relation_run(root, '--full-corpus')
+        assert p.returncode == 0 and 'trace-upstream-missing' in p.stdout, p.stdout + p.stderr
+        head = commit(root, 'remove root contract headings and tables')
+        p = relation_run(root, '--base', contract, '--head', head)
+        assert p.returncode == 1 and 'trace-upstream-missing' in p.stdout, p.stdout + p.stderr
+        assert module.design_requires_traceability('doc/system/design.md', DESIGN_HEADER.replace('### 2.1 需求承接与分配表', '### Allocation').replace('### 11.1 验证映射表', '### Verification'))
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_reverse_consumer_only_new_breakage_is_strict() -> None:
+    root, base, _ = make_repo(design_text=DESIGN_HEADER.replace('[sample test](../tests/sample.test.py)', '[missing test](../tests/old-missing.test.py)'))
+    try:
+        (root / PRODUCT).write_text(PRODUCT_TEXT + '\nExtra explanation.\n')
+        head = commit(root, 'clarify upstream without breaking its fragment')
+        p = relation_run(root, '--base', base, '--head', head)
+        assert p.returncode == 0, p.stdout + p.stderr
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace('req-sample', 'renamed-feature'))
+        broken = commit(root, 'remove consumed feature anchor')
+        p = relation_run(root, '--base', head, '--head', broken)
+        assert p.returncode == 1 and 'trace-ref-unresolved' in p.stdout, p.stdout + p.stderr
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_manual_only_change_rechecks_unchanged_design() -> None:
+    text = DESIGN_HEADER.replace('../product/sample.prd.md#req-sample', '../manual/rules.md#build-invariant').replace('[REQ-SAMPLE-001]', '[build invariant]')
+    text = text.replace('系统设计条款说明边界、拒绝条件和可观察结果。', '产品适用性：N/A；reason=仅维护构建检查；scope=构建输入')
+    text = text.replace('[sample test](../tests/sample.test.py)', '[old missing test](../tests/old-missing.test.py)')
+    root, _, _ = make_repo(design_text=text)
+    try:
+        authority = root / 'doc/manual/rules.md'
+        authority.write_text('# Rules\n## Build invariant\nDeterministic inputs.\n')
+        base = commit(root, 'add precise professional acceptance source')
+        authority.write_text(authority.read_text() + '\nClarification only.\n')
+        head = commit(root, 'clarify manual without breaking relation')
+        p = relation_run(root, '--base', base, '--head', head)
+        assert p.returncode == 0, p.stdout + p.stderr
+        authority.write_text('# Rules\n## Renamed invariant\nDeterministic inputs.\n')
+        broken = commit(root, 'break consumed manual anchor')
+        p = relation_run(root, '--base', head, '--head', broken)
+        assert p.returncode == 1 and 'trace-ref-unresolved' in p.stdout, p.stdout + p.stderr
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_formal_trace_table_and_multirefs_compatibility() -> None:
+    module = load_checker()
+    first = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    second = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    assert module.declared_trace_ids('| Trace ID | Meaning |\n| --- | --- |\n| `' + first + '` | Requirement |') == {first}
+    assert module.declared_trace_ids('| Meaning | Value |\n| --- | --- |\n| declaration | `Trace ID:` `' + first + '` |') == {first}
+    assert module.trace_reference_ids('| `Trace refs` | Meaning |\n| --- | --- |\n| `' + first + '`; `' + second + '` | Both |') == ({first, second}, set())
+    assert module.trace_reference_ids('- `Trace refs:` `' + first + '`; ' + second) == ({first, second}, set())
+    assert module.declared_trace_ids('## Example\nTrace ID: ' + first) == set()
+    assert module.declared_trace_ids('`Trace ID: ' + first + '`') == set()
+
+
+def scenario_product_ac_and_professional_chain_preserve_unique_declaration() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    root, _, _ = make_repo()
+    try:
+        product = PRODUCT_TEXT.replace('## REQ-SAMPLE-001', '## REQ-SAMPLE-001\n\n| Trace ID | Meaning |\n| --- | --- |\n| ' + identifier + ' | Product requirement |')
+        product += '\n<a id="ac-sample"></a>\n## AC-SAMPLE-001\nTrace refs: ' + identifier + '\n[requirement](#req-sample)\n'
+        (root / PRODUCT).write_text(product)
+        text = DESIGN_HEADER.replace('#req-sample)', '#ac-sample)').replace('[REQ-SAMPLE-001]', '[AC-SAMPLE-001]')
+        text = text.replace('说明系统必须承接的结果与适用条件。', 'Trace refs: ' + identifier)
+        (root / DESIGN).write_text(text)
+        assert_no_errors(module, root / DESIGN)
+        rule = root / 'doc/system/rules.prd.md'
+        rule.write_text('# Rules\n## Product rule\nTrace refs: ' + identifier + '\n[product acceptance](../product/sample.prd.md#ac-sample)\n')
+        indirect = text.replace('../product/sample.prd.md#ac-sample', 'rules.prd.md#product-rule').replace('[AC-SAMPLE-001]', '[professional rule]')
+        (root / DESIGN).write_text(indirect)
+        assert_no_errors(module, root / DESIGN)
+        assert module.declared_trace_ids(rule.read_text()) == set(), 'intermediate references must not redeclare ownership'
+        # An exact chain to another section is mandatory; an unlinked mention
+        # or unrelated ID elsewhere in the file cannot establish the relation.
+        rule.write_text('# Rules\n## Product rule\nTrace refs: ' + identifier + '\nNo declaration link.\n')
+        errors = module.check_system_design(root / DESIGN)
+        assert any('trace-row-id-mismatch' in e for e in errors), errors
+        rule.write_text('# Rules\n## Product rule\nTrace refs: ' + identifier + '\n[loop](rules.prd.md#product-rule)\n')
+        errors = module.check_system_design(root / DESIGN)
+        assert any('requirement chain cycle' in e for e in errors), errors
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_root_rename_cannot_drop_previous_contract() -> None:
+    module = load_checker()
+    root, _, _ = make_repo(design_text=None)
+    try:
+        old = root / 'doc/system/design.md'
+        padding = '\n'.join('Stable architecture paragraph %d: component ownership and boundaries remain unchanged.' % i for i in range(100))
+        old.write_text(DESIGN_HEADER + padding)
+        base = commit(root, 'root contract with stable architecture')
+        new = root / 'doc/new/design.md'
+        new.parent.mkdir()
+        old.rename(new)
+        new.write_text('# Module overview\n' + padding)
+        # Staged rename also retains the HEAD contract during a full scan.
+        run_git(root, 'add', '.')
+        assert module.previous_design_text(root, base, base, 'doc/new/design.md', True) == DESIGN_HEADER + padding
+        head = commit(root, 'rename and remove mapping contract')
+        assert 'R' in run_git(root, 'diff', '--name-status', '-M', base, head)
+        p = relation_run(root, '--base', base, '--head', head)
+        assert p.returncode == 1 and 'trace-upstream-missing' in p.stdout, p.stdout + p.stderr
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_validation_source_reverse_selection() -> None:
+    root, base, _ = make_repo()
+    try:
+        (root / TEST_SOURCE).unlink()
+        head = commit(root, 'delete consumed verification source')
+        p = relation_run(root, '--base', base, '--head', head)
+        assert p.returncode == 1 and 'reference target is missing' in p.stdout, p.stdout + p.stderr
+        unrelated = root / 'unrelated.py'
+        unrelated.write_text('# unrelated implementation change\n')
+        binary = root / 'unrelated.bin'
+        binary.write_bytes(b'\xff\xfe\x00')
+        later = commit(root, 'unrelated sources do not collect existing verification debt')
+        p = relation_run(root, '--base', head, '--head', later)
+        assert p.returncode == 0, p.stdout + p.stderr
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_transitive_reverse_dependency_selection() -> None:
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    for mutation in ('id', 'anchor', 'delete'):
+        root, _, _ = make_repo()
+        try:
+            product = PRODUCT_TEXT.replace('## REQ-SAMPLE-001', '## REQ-SAMPLE-001\n\nTrace ID: ' + identifier)
+            (root / PRODUCT).write_text(product)
+            (root / 'doc/manual/rules.md').write_text('# Rules\n## Rule\nTrace refs: ' + identifier + '\n[product requirement](../product/sample.prd.md#req-sample)\n')
+            design = DESIGN_HEADER.replace('../product/sample.prd.md#req-sample', '../manual/rules.md#rule').replace('[REQ-SAMPLE-001]', '[professional rule]')
+            design = design.replace('说明系统必须承接的结果与适用条件。', 'Trace refs: ' + identifier)
+            design = design.replace('[sample test](../tests/sample.test.py)', '[old missing test](../tests/old-missing.test.py)')
+            (root / DESIGN).write_text(design)
+            base = commit(root, 'product to professional acceptance to design chain')
+            (root / PRODUCT).write_text(product + '\nClarification without relationship change.\n')
+            unchanged = commit(root, 'clarify transitive endpoint without collecting old debt')
+            p = relation_run(root, '--base', base, '--head', unchanged)
+            assert p.returncode == 0, p.stdout + p.stderr
+            if mutation == 'delete':
+                (root / PRODUCT).unlink()
+            elif mutation == 'anchor':
+                (root / PRODUCT).write_text(product.replace('req-sample', 'new-anchor'))
+            else:
+                (root / PRODUCT).write_text(product.replace(identifier, 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'))
+            broken = commit(root, 'break transitive endpoint ' + mutation)
+            p = relation_run(root, '--base', unchanged, '--head', broken)
+            assert p.returncode == 1 and 'trace-id-unresolved' in p.stdout, p.stdout + p.stderr
+        finally:
+            shutil.rmtree(root)
+
+
+def scenario_clause_graph_diamonds_are_parsed_once_per_call() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    other = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-clause-graph')
+    documents = {}
+    depth = 12
+    for level in range(depth):
+        for label in ('a', 'b'):
+            links = (f'[a]({level + 1}a.prd.md#rule) [repeat a]({level + 1}a.prd.md#rule) [b]({level + 1}b.prd.md#rule)'
+                     if level < depth - 1 else '[origin](../product/feature.prd.md#req-actual-001)')
+            documents[root / f'doc/system/{level}{label}.prd.md'] = '# Rules\n## Rule\nTrace refs: ' + identifier + '\n' + links
+    product = root / 'doc/product/feature.prd.md'
+    documents[product] = '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier
+    initial = root / 'doc/system/0a.prd.md'
+    parse_calls, reads = [], []
+    original = module.fragment_section
+    def counted_parse(*args):
+        parse_calls.append(args[1])
+        assert len(parse_calls) <= len(documents), 'diamond paths must not cause repeated clause parsing'
+        return original(*args)
+    def reader(path):
+        reads.append(path)
+        return documents.get(path)
+    module.fragment_section = counted_parse
+    dependencies = set()
+    ids, product_chain = module.resolved_requirement_context(root, initial, documents[initial], 'rule', reader, dependencies=dependencies)
+    assert ids == {identifier} and product_chain
+    assert len(reads) == len(set(reads)), 'each source is read at most once inside one clause graph'
+    expected = {path.relative_to(root).as_posix() for path in documents if path != root / 'doc/system/0b.prd.md'}
+    assert dependencies == expected, (dependencies, expected)
+    # A later snapshot/call cannot inherit cached identities from this one.
+    documents[product] = documents[product].replace(identifier, other)
+    parse_calls.clear()
+    ids, product_chain = module.resolved_requirement_context(root, initial, documents[initial], 'rule', reader)
+    assert not ids and not product_chain
+
+
+def scenario_clause_graph_preserves_depth_cycle_and_ref_contexts() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    other = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-clause-contexts')
+    source = root / 'doc/system/root.prd.md'
+    product = root / 'doc/product/feature.prd.md'
+    wrong = root / 'doc/product/other.prd.md'
+    documents = {product: '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier,
+                 wrong: '# Other\n## REQ-OTHER-001\nTrace ID: ' + other}
+    for i in range(1, 32):
+        target = f'{i + 1}.prd.md#rule' if i < 31 else '../product/feature.prd.md#req-actual-001'
+        documents[root / f'doc/system/{i}.prd.md'] = '# Clause file\n## Rule\nTrace refs: ' + identifier + '\n[next](' + target + ')'
+    branches = ['[shallow](../product/feature.prd.md#req-actual-001)', '[deep](1.prd.md#rule)', '[wrong](../product/other.prd.md#req-other-001)']
+    results = []
+    for links in (branches, list(reversed(branches))):
+        documents[source] = '# Root\n## Rule\nTrace refs: ' + identifier + '\n' + ' '.join(links)
+        issues, paths = [], set()
+        ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', documents.get, diagnostics=issues, dependencies=paths)
+        assert ids == {identifier} and has_product, (ids, has_product)
+        assert any('depth limit (32)' in issue for issue in issues), issues
+        results.append((ids, has_product, set(issues), paths))
+    assert results[0] == results[1], 'shallow cache must not hide deep cutoffs, or vice versa'
+    documents[source] = '# Root\n## Rule\nTrace refs: ' + identifier + '\n[next](cycle.prd.md#rule)'
+    documents[root / 'doc/system/cycle.prd.md'] = '# Cycle\n## Rule\nTrace refs: ' + identifier + '\n[back](root.prd.md#rule) [origin](../product/feature.prd.md#req-actual-001)'
+    issues, paths = [], set()
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', documents.get, diagnostics=issues, dependencies=paths)
+    assert ids == {identifier} and has_product
+    assert any('chain cycle:' in issue for issue in issues), issues
+    assert paths == {'doc/system/root.prd.md', 'doc/system/cycle.prd.md', 'doc/product/feature.prd.md'}, paths
+
+
+def scenario_plain_navigation_is_not_a_requirement_chain() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    own_identifier = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-explicit-chain')
+    source = root / 'doc/system/rules.prd.md'
+    bridge = root / 'doc/system/navigation.prd.md'
+    product = root / 'doc/product/feature.prd.md'
+    documents = {source: '# Rules\n## Rule\nTrace ID: ' + own_identifier + '\n[navigation](navigation.prd.md#bridge)',
+                 bridge: '# Navigation\n## Bridge\nTrace refs: ' + identifier + '\n[product](../product/feature.prd.md#req-actual-001)',
+                 product: '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier + '\n'}
+    reads, dependencies = [], set()
+    def reader(path):
+        reads.append(path)
+        return documents.get(path)
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader, dependencies=dependencies)
+    assert ids == {own_identifier} and not has_product
+    assert not reads, 'no-refs professional navigation must not read its recursive neighborhood'
+    assert dependencies == {'doc/system/rules.prd.md'}, dependencies
+    # A direct precise product citation remains sufficient; no invented ID or
+    # repeated declaration is needed for this existing local relationship.
+    documents[source] = '# Rules\n## Rule\n[product](../product/feature.prd.md#req-actual-001)'
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert ids == set() and has_product
+    # Direct AC may itself explicitly reference its unique REQ declaration.
+    documents[product] += '\n## Acceptance\nTrace refs: ' + identifier + '\n[requirement](#req-actual-001)'
+    documents[source] = '# Rules\n## Rule\n[acceptance](../product/feature.prd.md#acceptance)'
+    _, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert has_product
+    # A product generic heading with only ordinary navigation is not a relay.
+    documents[product] += '\n## Overview\n[requirement](#req-actual-001)'
+    documents[source] = '# Rules\n## Rule\n[overview](../product/feature.prd.md#overview)'
+    _, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert not has_product
+    # Adding an actual same-ID field establishes the intended multi-hop chain.
+    documents[source] = '# Rules\n## Rule\nTrace refs: ' + identifier + '\n[rule](navigation.prd.md#bridge)'
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert ids == {identifier} and has_product
+
+
+def scenario_validation_source_filename_tokens() -> None:
+    module = load_checker()
+    design = Path("doc/system/sample.design.md")
+    accepted = (
+        "transfer_submit_api_tests.rs", "transfer_submit_api_explorer_tests.rs",
+        "main_tests.rs", "explorer_tests.rs", "tests.rs", "specs.rs",
+        "tests_sample.rs", "sample.tests.rs", "sample-tests.rs",
+        "sample_specs.rs", "sample.specs.ts", "sample-specs.py",
+        "SAMPLE_TESTS.RS", "sample_test.rs", "sample.spec.ts",
+    )
+    rejected = (
+        "transfer_auth.rs", "main.rs", "contest.rs", "latest.rs",
+        "sample_teststuff.rs", "sample_testsuite.rs", "mytests.rs",
+        "sample_specsification.rs", "aspects.rs", "specsheet.rs",
+        "sample_tests2.rs", "sample_2tests.rs", "sample_tests.design.md",
+        "sample_specs.design.md", "source.unknown",
+    )
+    for name in accepted:
+        assert module.is_test_or_manual_source(Path("crates/sample/src") / name, design), name
+    for name in rejected:
+        assert not module.is_test_or_manual_source(Path("crates/sample/src") / name, design), name
+    assert not module.is_test_or_manual_source(design, design)
+
+
+def scenario_plural_sources_preserve_reference_guards() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo()
+    source = root / "crates/sample/src/transfer_submit_api_tests.rs"
+    source.parent.mkdir(parents=True)
+    source.write_text("#[test]\nfn rejects_invalid_request() {}\n", encoding="utf-8")
+    original = "[sample test](../tests/sample.test.py)"
+    method = "[request tests](../../crates/sample/src/transfer_submit_api_tests.rs)"
+    try:
+        (root / DESIGN).write_text(DESIGN_HEADER.replace(original, method), encoding="utf-8")
+        assert_no_errors(module, root / DESIGN)
+        source.unlink()
+        assert_code(module, root / DESIGN, "trace-validation-missing")
+        source.write_text("#[test]\nfn rejects_invalid_request() {}\n", encoding="utf-8")
+        for invalid_method, code in (
+            (method + " " + original, "trace-validation-source-invalid"),
+            (method.replace(".rs)", ".rs#missing)"), "trace-ref-unresolved"),
+            ("[escape](../../../outside_tests.rs)", "trace-validation-missing"),
+        ):
+            (root / DESIGN).write_text(DESIGN_HEADER.replace(original, invalid_method), encoding="utf-8")
+            assert_code(module, root / DESIGN, code)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_plain_source_content_cannot_impersonate_test_path() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo()
+    source = root / "crates/sample/src/transfer_auth.rs"
+    source.parent.mkdir(parents=True)
+    method = "[source](../../crates/sample/src/transfer_auth.rs)"
+    (root / DESIGN).write_text(
+        DESIGN_HEADER.replace("[sample test](../tests/sample.test.py)", method), encoding="utf-8"
+    )
+    try:
+        for text in (
+            "fn test_request() {}\n",
+            "// #[test] fn fake() {}\n",
+            "/* #[test] fn fake() {} */\n",
+            'const S: &str = "#[test] fn fake() {}";\n',
+            'const S: &str = r###"#[test] fn fake() {}"###;\n',
+            "#[cfg(test)] mod tests {}\n",
+            "#[test_case] fn fake() {}\n",
+            # Inline Rust test parsing is deliberately outside this path-only fix.
+            "#[cfg(test)] mod tests { #[test] fn actual() {} }\n",
+        ):
+            source.write_text(text, encoding="utf-8")
+            assert_code(module, root / DESIGN, "trace-validation-source-invalid")
+    finally:
+        shutil.rmtree(root)
+
+
 def main() -> None:
     scenarios = (
+        scenario_validation_source_filename_tokens,
+        scenario_plural_sources_preserve_reference_guards,
+        scenario_plain_source_content_cannot_impersonate_test_path,
+        scenario_plain_navigation_is_not_a_requirement_chain,
+        scenario_clause_graph_diamonds_are_parsed_once_per_call,
+        scenario_clause_graph_preserves_depth_cycle_and_ref_contexts,
+        scenario_validation_source_reverse_selection,
+        scenario_transitive_reverse_dependency_selection,
+        scenario_formal_trace_table_and_multirefs_compatibility,
+        scenario_product_ac_and_professional_chain_preserve_unique_declaration,
+        scenario_root_rename_cannot_drop_previous_contract,
+        scenario_manual_only_change_rechecks_unchanged_design,
+        scenario_product_fragment_must_identify_feature,
+        scenario_trace_refs_require_addressed_declaration,
+        scenario_engineering_only_needs_bounded_na,
+        scenario_validation_na_rejects_placeholders,
+        scenario_feature_boundaries_and_explicit_label_mismatch,
+        scenario_root_scoped_and_contract_downgrade_fail,
+        scenario_reverse_consumer_only_new_breakage_is_strict,
         scenario_tracking_metadata_does_not_hide_design_changes,
         scenario_valid_new_design,
         scenario_committed_range_reads_trusted_head_content,

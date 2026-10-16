@@ -7,8 +7,15 @@
 - 审读日期：2026-09-30。
 - 审读基线：`0bcb10dfa6874884c5879800e6c8836e7430f8fe`；这是本次代码观察的快照，不是要求后续任务永远绑定的 policy commit，也不要求每次 main 前进修改本文。
 - 当前入口：[doc-governance README](README.md)。写作约束：[系统设计写作规范](system-design-writing-standard.design.md)。权限、任务及启用权威：[workflow source of truth](../workflow/source-of-truth.md)。
-- 产品 AC：本次不改变玩家承诺、产品范围或游戏规则；实施任务使用 `professional_acceptance`，并按现行 traceability 合同填写 product requirement 的显式 N/A。不得同时把专业上游和产品上游都省略。
+- 产品 AC：本次不改变玩家承诺、产品范围或游戏规则；引用实际专业上游并说明产品层不适用，不要求 `professional_acceptance` 或 typed applicability 字段。
 - 新命令、schema、模块及测试场景均为本设计新增接口；除明确标注为现有的命令外，不得当作当前仓库已经支持的功能。
+
+## 当前阅读边界
+
+本文的 proposed 状态、§3 差距和实施计划描述上述 2026-09-30 审读快照，不据此断言当前仓库仍未实现 v3。现有存储、semantic/evidence SHA、组完整性、trusted loader 与实际启用的检查继续按实现和技术合同验证，本次文档澄清不撤销这些约束。§8.3、§10 及对应测试中保留的 loop、write_scope、same-PR migration 和 activation 是原基线准入适配背景，不是现行普通任务的身份、拆分或审批要求；不得据此恢复已退出的通用流程。当前普通修改可以在同一 PR 维护源文档与准确附属分片，范围、必要 CI 和独立评审按[开发流程规范](../workflow/source-of-truth.md)执行；是否启用或改变某个实际技术检查，须核对其实现、调用入口和适用保护设置，不能仅改本文解除。
+
+<a id="corpus-requirement-identity"></a>
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本文适用的跨层引用遵循[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)。§6.1 的 path-key 是 corpus 存储地址，不是要求身份；源路径移动可能改变分片 key，但同一要求的 Trace ID 不变，真实链接、源 SHA 与历史复核绑定仍分别维护。
 
 ## 1. 问题、目标与非目标
 
@@ -42,16 +49,17 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 独立源对象使用独立机器记录；任务证据仍是任务事实 | [DCI-01](#DCI-01) | repository_health_engineer；原始用户需求须在实施任务中回读绑定 | 不重构其他 README/index 热点 |
-| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 新增、修改或删除对象不更新动态父级汇总 | [DCI-02](#DCI-02) | repository_health_engineer；原始用户需求须在实施任务中回读绑定 | 不重构其他 README/index 热点 |
-| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 保留覆盖、复核、路由和证据检查；同步不能代表审批 | [DCI-03](#DCI-03) | repository_health_engineer、qa_engineer | 不改变既有 domain review 权限 |
-| [目录登记](doc-structure-standard.design.md#35-一级物理目录-registry-与例外) | 保留结构登记与目录覆盖；治理分片不得制造递归登记或盲区 | [DCI-05](#DCI-05) | repository_health_engineer；现有 registry | 不增加产品模块 |
-| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | QA 保留对已有证据分类、留存和处置决定的权限 | [DCI-06](#DCI-06) | qa_engineer；原 decision/domain owner | 结构通过不等于当前验收通过 |
-| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | 保留证据字段、窗口、冻结 cohort 和组边界 | [DCI-07](#DCI-07) | qa_engineer；原 decision/domain owner | 不重签历史结论或声明 fresh run |
-| [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | 不新增治理状态；工具操作状态只描述本地过程 | [DCI-08](#DCI-08) | repository_health_engineer；Git 工作树 | 不创建任务或审批状态 |
-| [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | 明确局部写入、并发、失败恢复及不可逆边界 | [DCI-09](#DCI-09) | repository_health_engineer；Git 工作树 | 不声称文件系统跨文件事务 |
-| [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | 一次切换必须同时提供读写器、数据和消费者 | [DCI-04](#DCI-04) | repository_health_engineer、qa_engineer | 不在 main 保留双读双写 |
-| [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | 旧新身份映射、无损证明、受控适配和有界回滚 | [DCI-12](#DCI-12) | repository_health_engineer、qa_engineer | 不覆盖未声明的仓库外消费者 |
+| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 独立源对象使用独立机器记录；任务证据仍是任务事实 | [DCI-01](#DCI-01) | repository_health_engineer；原始用户需求须在实施任务中回读绑定 | 不重构其他 README/index 热点；产品适用性：N/A；reason=分片写集合隔离是仓库协作存储合同，不改变玩家行为；scope=独立源/组的机器清单写入 |
+| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 新增、修改或删除对象不更新动态父级汇总 | [DCI-02](#DCI-02) | repository_health_engineer；原始用户需求须在实施任务中回读绑定 | 不重构其他 README/index 热点；产品适用性：N/A；reason=静态入口避免机器汇总争写，不定义玩家体验；scope=日常对象增删改与父级入口 |
+| [文档职责](doc-structure-standard.design.md#22-文件按职责) | 保留覆盖、复核、路由和证据检查；同步不能代表审批 | [DCI-03](#DCI-03) | repository_health_engineer、qa_engineer | 不改变既有 domain review 权限；产品适用性：N/A；reason=保留的是文档治理检查和复核权限，不形成产品验收结论；scope=覆盖、路由、漂移及语义复核绑定 |
+| [目录登记](doc-structure-standard.design.md#35-一级物理目录-registry-与例外) | 保留结构登记与目录覆盖；治理分片不得制造递归登记或盲区 | [DCI-05](#DCI-05) | repository_health_engineer；现有 registry | 不增加产品模块；产品适用性：N/A；reason=物理目录和元数据覆盖是仓库登记责任，不新增产品模块；scope=D/E/M 集合及 registry 覆盖 |
+| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | QA 保留对已有证据分类、留存和处置决定的权限 | [DCI-06](#DCI-06) | qa_engineer；原 decision/domain owner | 结构通过不等于当前验收通过；产品适用性：N/A；reason=候选复核与QA处置权限属于治理记录，不代签游戏证据；scope=semantic/evidence propose 与 apply-review |
+| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | 保留证据字段、窗口、冻结 cohort 和组边界 | [DCI-07](#DCI-07) | qa_engineer；原 decision/domain owner | 不重签历史结论或声明 fresh run；产品适用性：N/A；reason=保留历史证据元数据和组边界，不作新的玩家价值判断；scope=冻结 cohort、窗口组及历史 claim 防误用 |
+| [状态与持久化](system-design-writing-standard.design.md#state-transaction-persistence) | 不新增治理状态；工具操作状态只描述本地过程 | [DCI-08](#DCI-08) | repository_health_engineer；Git 工作树 | 不创建任务或审批状态；产品适用性：N/A；reason=本地工具操作状态不是产品或任务状态机；scope=快照与日志状态的非授权含义 |
+| [状态与持久化](system-design-writing-standard.design.md#state-transaction-persistence) | 明确局部写入、并发、失败恢复及不可逆边界 | [DCI-09](#DCI-09) | repository_health_engineer；Git 工作树 | 不声称文件系统跨文件事务；产品适用性：N/A；reason=写入原子性和锁属于本地治理文件操作，不影响游戏事务；scope=局部分片写入、故障和并发恢复 |
+| [兼容与迁移](system-design-writing-standard.design.md#compatibility-migration-rollback) | 一次切换必须同时提供读写器、数据和消费者 | [DCI-04](#DCI-04) | repository_health_engineer、qa_engineer | 不在 main 保留双读双写；产品适用性：N/A；reason=治理格式切换不改变玩家协议或产品范围；scope=reader、数据及消费者的一次切换 |
+| [兼容与迁移](system-design-writing-standard.design.md#compatibility-migration-rollback) | 旧新身份映射、无损证明、受控适配和有界回滚 | [DCI-12](#DCI-12) | repository_health_engineer、qa_engineer | 不覆盖未声明的仓库外消费者；产品适用性：N/A；reason=旧治理记录适配不裁决产品要求或旧PR处置；scope=迁移无损、三方比较及回滚边界 |
+| Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；[全局要求身份](cross-layer-requirements-traceability.design.md#global-requirement-trace) | path-key 与稳定要求身份分离；迁移路径不重发同一要求 ID | [要求身份边界](#corpus-requirement-identity) | 原要求 owner；现有追踪规范 | 产品适用性：N/A；reason=仅关联治理要求与存储地址，不新增玩家承诺；scope=本文要求引用与路径迁移说明 |
 
 ### 2.2 审读与权限
 
@@ -366,7 +374,7 @@ Evidence 的基本必填字段为 `path/lifecycle/semantic_role/retention_owner/
 ### 8.3 Loop 与 write_scope 的附属分片规则
 
 <a id="DCI-10"></a>
-必须先在 workflow source of truth 增补窄范围的“document corpus sidecar”合同，再实现相同规则。现有 `doc/.governance/** → code` 不能简单改成全部 system；否则产品文档仍受阻，而且会把真正的治理控制交给普通文档任务。
+以下保留原审读基线的窄范围“document corpus sidecar”准入设计，不要求在现行 workflow 恢复 loop。该基线中的 `doc/.governance/** → code` 不能简单改成全部 system；否则产品文档仍受阻，而且会把真正的治理控制交给普通文档任务。
 
 | 路径/变更 | 生效后的归属 | 准入条件 |
 | --- | --- | --- |
@@ -385,7 +393,7 @@ Evidence 的基本必填字段为 `path/lifecycle/semantic_role/retention_owner/
 
 object 内容、组成员或来源集合变化均触发重新核对；普通任务不能以 `--all` 为由修改其他文档分片。纯 semantic 复核不要求伪造源文本变化，但必须有明确复核义务和批准范围。
 
-原子迁移 PR 同时触达代码、系统文档和历史元数据时，采用 source of truth 已定义的、显式用户授权的 legacy/same-PR migration 包装。设计请求本身不代表已有执行授权；执行任务必须回读授权和冻结精确集合。候选 loop policy 不能给该迁移 PR 自我准入，合并后经实际 readback 才能按既有流程启用新规则。
+原审读基线曾为同时触达代码、系统文档和历史元数据的原子迁移 PR 定义 legacy/same-PR migration 包装；该包装仅作历史适配背景。设计请求本身不代表已有执行授权；执行任务必须回读授权和冻结精确集合。候选 loop policy 不能给该迁移 PR 自我准入，合并后经实际 readback 才能按既有流程启用新规则。
 
 ### 8.4 CI 及本地入口
 
@@ -425,28 +433,22 @@ object 内容、组成员或来源集合变化均触发重新核对；普通任�
 
 ## 10. 兼容、迁移与回滚
 
-### 10.1 交付组织
+<a id="101-交付组织"></a>
+### 10.1 原子迁移与消费者合同
 
-推荐一项已明确授权的原子格式迁移任务、一份最终合入 PR。PR 内可以有独立 review 的规范提交、实现提交、机械数据提交，但最终启用不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+当次 PR 包装、工作包和逐文件执行清单见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610)。持续维护仍按 [workflow source of truth](../workflow/source-of-truth.md)；本文不要求普通改动先建 Task 或按旧 loop/packet 包装。
 
-已有 workflow 支持显式授权的同 PR source＋implementation 包装；必须先冻结并独立审读规范修订。授权未建立时，不执行混合写入，也不为了满足“一 PR”伪装成普通 code loop；按现行规范发布/实现流程包装同一格式切换。本文不扩大例外权限。
+同一交付目的的格式切换可包含规范、实现、数据和测试，按现行 workflow 核对授权范围及必要独立评审，不要求额外 loop 包装。本文不扩大实际操作权限，也不免除无损迁移和存储检查。
 
-### 10.2 逐文件改动清单
+- 格式切换必须原子启用，不能让 main 处于“新数据配旧 checker”或“双份表都有效”的状态。
+- 规范变化接受适用独立评审；数据转换、checker、入口、trusted-root 保护、CI 路由、测试和文档必须与真实消费者一致。
+- 在实际 base/head 搜索旧路径、glob、动态加载、发布和测试消费者；修齐调用链后才退役旧入口，不以旧逐文件表代替搜索。
+- legacy fixtures 继续保留字段全集、冻结 cohort 和 golden 等价结果，不进入活跃 corpus，也不作为批准证据。精确忽略报告，不扩大 ignore 范围，不重写历史源 bytes。
 
-| 文件/集合 | 实施动作 | 验收重点 |
-| --- | --- | --- |
-| 本设计、doc-governance README、engineering `prd.index.md` | 新增设计与导航；长期规则只维护本设计 | 十二段、需求与验证映射可解析；无任务台账 |
-| `doc/engineering/workflow/source-of-truth.md` | 增补窄 sidecar 所有权、scope、trusted loader、启用边界和启用后的 corpus baseline obligation | 保留现有 gate、full fallback 和三 loop/可选 Issue 规则；候选策略不激活 |
-| `documentation-governance.manual.md` | 替换旧整表刷新步骤为 locate/sync/propose/check | 不鼓励 blanket regenerate 或自动续签 |
-| 新公共库、evidence policy、管理 CLI | 提供读取、严格模型、局部写入、转换与三方导入 | 单一算法、无 shell 注入、幂等 |
-| 两个现有 checker 及其测试 | 使用公共模型，保留专用语义检查，退役旧生成输出 | 现有负例语义不丢失 |
-| 两个入口与新分片集合 | 静态化、无损拆分、删除旧 semantic 表 | 无动态父级摘要 |
-| CI scope、runner、capability inventory、调用链测试 | 接入实际检查与按需回归 | source/merge 检查都执行，未引入 accidental full |
-| `.gitignore`、`.gitattributes` | 精确忽略报告目录；约束新增元数据换行 | 不大范围忽略 doc，不改变历史源 bytes |
-| `scripts/fixtures/document-corpus-v3/legacy/` | 保留旧结构、字段全集、冻结 cohort、golden 等价结果 | fixture 不进入活跃 corpus、不当作批准证据 |
-| 旧路径实际消费者 | `git grep` 完整查找后修复，包括 testing/templates、playability 入口等 | 只留明确历史或迁移专用引用 |
+<a id="102-逐文件改动清单"></a>
+### 10.2 历史执行清单入口
 
-实施必须建立 base/head 下的精确消费者清单，不以本表代替仓库搜索。新增模块位置若调整，需同步 trusted-root 保护、CI 路由、测试与文档，不能只改 import。
+[历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/4176#issuecomment-6162415610) 保留原文件/动作/验收表；迁移算法、精确保护范围和失败/恢复含义继续由下节持有。
 
 ### 10.3 迁移算法与命令
 
@@ -506,20 +508,22 @@ git diff --check
 
 ### 11.1 验证映射表
 
-下表是待实施验证计划。测试文件中新增的 DCI-T 场景在实现时落入准确入口；表中没有声称这些新增场景当前已运行。证据 target 均为当前 PR 与实际验证记录＋对应 CI artifact，真实 source/integration/tested tree、环境及退出码在执行时记录，不填写虚构身份。
+下表保留原设计的验证义务，DCI-T 编号是场景合同。现有源码中可定位的 T01–T30 分布于 corpus 与 evidence 两个回归文件；表内区分这些静态测试入口与仍需补证的范围，不把函数存在当作本次运行通过，也不将原 proposed 快照改成当前全未实现。证据 target 均为当前 PR 与实际验证记录＋对应 CI artifact，真实 source/integration/tested tree、环境及退出码在执行时记录，不填写虚构身份。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [文档职责](doc-structure-standard.design.md#22-文件按职责) | [DCI-01](#DCI-01) | 独立普通源写集合互斥 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T01、T18–T21；临时 Git 分支与双合并顺序 | task evidence＋Git transcript | 不证明同源或同组无冲突 |
+| [文档职责](doc-structure-standard.design.md#22-文件按职责) | [DCI-01](#DCI-01) | 独立普通源写集合互斥 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T01、T18–T21；临时 Git 分支与双合并顺序；现有 T20 为独立 evidence entry，T21 为同源 object 冲突，原同组目标仍需单独覆盖 | task evidence＋Git transcript | 不证明同源或同组无冲突 |
 | [文档职责](doc-structure-standard.design.md#22-文件按职责) | [DCI-02](#DCI-02) | 日常更新保持两个静态入口不变 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T01/T02；入口字节前后比较 | task evidence＋checker 输出 | 不证明未来 schema 版本无需更新入口 |
-| [文档职责](doc-structure-standard.design.md#22-文件按职责) | [DCI-03](#DCI-03) | 覆盖、重复、路由、内容漂移和复核绑定均保留 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T03–T12；结构与语义负例 | task evidence＋checker 输出 | 不替代 domain review |
+| [文档职责](doc-structure-standard.design.md#22-文件按职责) | [DCI-03](#DCI-03) | 覆盖、重复、路由、内容漂移和复核绑定均保留 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：T03–T09；`scripts/doc-evidence-inventory-check.test.py`：T10–T12（该负例源单列于 DCI-06 行）；结构与语义负例 | task evidence＋checker 输出 | 不替代 domain review |
 | [目录登记](doc-structure-standard.design.md#35-一级物理目录-registry-与例外) | [DCI-05](#DCI-05) | 源、证据与元数据覆盖闭合 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T03–T09；微型 fixture 和迁移候选 | task evidence＋checker 输出 | 不证明内容语义正确 |
-| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | [DCI-06](#DCI-06) | 同步不续签已有语义复核 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T10–T13；源变异和过期 proposal | task evidence＋schema diff | 不证明 owner 实际批准 |
+| [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | [DCI-06](#DCI-06) | 同步不续签已有语义复核 | [evidence 回归](../../../scripts/doc-evidence-inventory-check.test.py)：test_t10、test_t11、test_t12、test_t13 对应函数；源变异保留旧 review bytes，过期 proposal 返回 3 且零写入 | task evidence＋schema diff | 不证明 owner 实际批准 |
 | [证据生命周期](doc-structure-standard.design.md#36-证据生命周期) | [DCI-07](#DCI-07) | 冻结 cohort、专用分类、窗口组和导航边界保留 | [evidence 回归](../../../scripts/doc-evidence-inventory-check.test.py)：DCI-T14–T17；组和历史边界负例 | task evidence＋checker 输出 | 不证明 fresh run 或发布 readiness |
-| [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | [DCI-08](#DCI-08) | 操作状态不成为任务或审批状态 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T22；检查和导出前后快照比较 | task evidence＋before/after 文件集 | 不新增任务状态机 |
-| [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | [DCI-09](#DCI-09) | 写入幂等、限于声明集合并对并发/故障失败关闭 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T23–T25；故障注入和双写者 | task evidence＋before/after 文件集 | advisory lock 不阻止外部编辑 |
-| [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | [DCI-04](#DCI-04) | 读写器、格式数据、消费者和测试一次切换 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T26/T27/T30；完整 fixture 和旧格式拒绝 | task evidence＋migration report | 不覆盖未声明的外部消费者 |
-| [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | [DCI-12](#DCI-12) | 三方适配按记录比较且冲突时拒绝 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T28/T29；三快照导入 fixture | task evidence＋proposal and conflict output | 不自动裁决旧 PR 处置 |
+| [状态与持久化](system-design-writing-standard.design.md#state-transaction-persistence) | [DCI-08](#DCI-08) | 操作状态不成为任务或审批状态 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T22；检查/导出前后源、分片及 index 快照比较；另人工核对 §7.1 无 task/审批状态或授权含义，文件无写入不能代替此语义核对 | task evidence＋before/after 文件集 | 不新增任务状态机 |
+| [状态与持久化](system-design-writing-standard.design.md#state-transaction-persistence) | [DCI-09](#DCI-09) | 写入幂等、限于声明集合并对并发/故障失败关闭 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T23–T25；故障注入和双写者 | task evidence＋before/after 文件集 | advisory lock 不阻止外部编辑 |
+| [兼容与迁移](system-design-writing-standard.design.md#compatibility-migration-rollback) | [DCI-04](#DCI-04) | 读写器、格式数据、消费者和测试一次切换 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T26/T27/T30；完整 fixture 和旧格式拒绝；现有 T26/T27 对已迁移目标的重复 apply 断言 legacy-target-drift 与零改动，不据此声称重复迁移已幂等通过 | task evidence＋migration report | 不覆盖未声明的外部消费者 |
+| [兼容与迁移](system-design-writing-standard.design.md#compatibility-migration-rollback) | [DCI-12](#DCI-12) | 三方适配按记录比较且冲突时拒绝 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T28/T29；三快照导入 fixture | task evidence＋proposal and conflict output | 不自动裁决旧 PR 处置 |
+| Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；[全局要求身份](cross-layer-requirements-traceability.design.md#global-requirement-trace) | [要求身份边界](#corpus-requirement-identity) | 同一要求 ID 不因 corpus 路径 key 改变；不混同内容 SHA/复核绑定 | N/A；reason=该局部引用约定没有独立可执行行为；scope=人工核对本候选的唯一声明与 §6.1 path-key/Trace ID 分工及 PR 同 ID；owner_role=repository_health_engineer；evidence_ref=cross-layer-requirements-traceability.design.md#global-requirement-trace；re-evaluate=修改身份生成或路径迁移技术合同时重新分配行为测试 | 当前 PR 的条款/链接核对记录 | 不证明全仓唯一性、迁移成功或审批完成 |
+
 
 ### 11.2 必须实现的场景
 

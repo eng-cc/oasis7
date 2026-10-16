@@ -468,6 +468,8 @@ impl RuntimeLlmSidecar {
                 .as_ref()
                 .ok_or("canonical configuration missing")?;
             return Ok(Some(AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: config.expected_world.clone(),
                 scope_id: config.scope_id.clone(),
@@ -691,6 +693,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 .ok_or("fresh admission stage has no operation")?
         } else {
             AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),
@@ -838,6 +842,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             IntentOutcome::Rejected { reason } => {
                 if stage == "reserve" {
                     self.llm_sidecar.retire_rejected_reserve(&IntentResponse {
+                        formal_profile: None,
                         execution_evidence_scope: None,
                         contract_version: response.contract_version,
                         correlation: response.correlation,

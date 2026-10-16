@@ -2,6 +2,10 @@
 # Cross-platform test contract: large doc scans must avoid Windows argv limits while preserving Linux/macOS results.
 set -euo pipefail
 
+# This suite creates its own Git history. Hosted CI's real-repository range
+# must not leak into fixture calls; individual range-error cases set their own.
+unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMPDIR="$(mktemp -d)"
@@ -57,11 +61,35 @@ cat >"$FIXTURE/scripts/product-doc-governance-check.py" <<'PY'
 #!/usr/bin/env python3
 raise SystemExit(0)
 PY
+cat >"$FIXTURE/scripts/fixture_check.py" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+
+def check():
+    name = Path(sys.argv[0]).stem
+    args = sys.argv[1:]
+    full = "--full-corpus" in args
+    assert ("--warn-only" in args) == full
+    if full:
+        assert not set(args) & {"--base", "--head", "--worktree"}
+    else:
+        assert {"--base", "--head", "--worktree"} <= set(args)
+    if os.environ.get("CONTENT_CHECK_LOG"):
+        with Path(os.environ["CONTENT_CHECK_LOG"]).open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"name": name, "args": args}) + "\n")
+    if os.environ.get("CONTENT_FAIL_CHECKER") == name and os.environ.get("CONTENT_FAIL_SCOPE") == ("full" if full else "scoped"):
+        raise SystemExit(2 if full else 1)
+PY
 cat >"$FIXTURE/scripts/product-doc-content-check.py" <<'PY'
 #!/usr/bin/env python3
 import os
 from pathlib import Path
 import sys
+
+from fixture_check import check
+check()
 
 args_file = os.environ.get("PRODUCT_DOC_CONTENT_ARGS")
 if args_file:
@@ -70,8 +98,16 @@ print("product-doc-content: checked 0: reason=fixture")
 if "--worktree" in sys.argv and os.environ.get("PRODUCT_DOC_FAIL_CHANGED") == "1":
     raise SystemExit(1)
 PY
+cat >"$FIXTURE/scripts/doc-core-content-check.py" <<'PY'
+#!/usr/bin/env python3
+from fixture_check import check
+check()
+print("doc-core-content: fixture scope flags OK")
+PY
 cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
 #!/usr/bin/env python3
+from fixture_check import check
+check()
 print("system-design-traceability: checked 0: reason=fixture")
 PY
 chmod +x "$FIXTURE/scripts/doc-governance-check.sh"
@@ -98,6 +134,15 @@ cat >"$FIXTURE/doc/testing/upstream.md" <<'DOC'
 ## Fixture requirement
 DOC
 printf '%s\n' '# fixture test source' >"$FIXTURE/doc/testing/fixture.test.py"
+cat >"$FIXTURE/doc/testing/design.md" <<'DOC'
+# Testing module overview
+## Architecture
+## Component responsibilities
+## Main flow
+## Data and state flow
+## Topic navigation
+DOC
+
 cat >"$FIXTURE/doc/testing/changed.design.md" <<'DOC'
 # Fixture system design
 
@@ -118,7 +163,7 @@ Fixture local design.
 | [fixture requirement](upstream.md#fixture-req) | [fixture local](#fixture-local) | fixture obligation | [fixture test](fixture.test.py) | fixture evidence | fixture uncovered |
 DOC
 {
-  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md' 'doc/testing/changed.design.md' 'doc/testing/upstream.md'
+  printf '%s\n' 'doc/many/README.md' 'doc/testing/README.md' 'doc/testing/prd.md' 'doc/testing/changed.design.md' 'doc/testing/upstream.md' 'doc/testing/design.md'
   find "$FIXTURE/doc/many" -type f -name '*.md' | sed "s#^$FIXTURE/##" | sort
 } >"$FIXTURE/doc/.governance/module-root-md-allowlist.txt"
 cat >"$FIXTURE/doc/.governance/top-level-directory-registry.json" <<'JSON'
@@ -209,6 +254,96 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   exit 1
 fi
 
+# Use the real baseline caller; unrelated gates are isolated fixture no-ops.
+for gate in unified-world-code-terminology-scan.test.sh lint-skills.sh check-windows-paths.sh check-script-executable-bits.sh; do
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$FIXTURE/scripts/$gate"
+  chmod +x "$FIXTURE/scripts/$gate"
+done
+printf 'raise SystemExit(0)\n' >"$FIXTURE/scripts/validate-codex-agent-config.py"
+# Remove the inventoried input immediately before real awk opens it. This
+# exercises an actual read error without platform-dependent chmod semantics.
+REAL_AWK="$(command -v awk)"
+cat >"$TMPDIR/bin/awk" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${LENGTH_INPUT_FAILURE:-0}" == 1 && -f doc/many/doc-1.md ]]; then
+  mv doc/many/doc-1.md doc/many/doc-1.unreadable
+fi
+exec "${REAL_AWK:?}" "$@"
+SH
+chmod +x "$TMPDIR/bin/awk"
+
+# Length is editorial guidance, including through the full-corpus caller.
+# The same boundary documents must still fail for real reference/registry/read
+# errors. The content stub tests error propagation, not content parsing.
+cp "$FIXTURE/doc/many/doc-1.md" "$TMPDIR/length-original.md"
+cp "$FIXTURE/doc/.governance/top-level-directory-registry.json" "$TMPDIR/length-registry.json"
+for length in 999 1000 1001; do
+  for mode in default full baseline; do
+    command=(./scripts/doc-governance-check.sh)
+    case "$mode" in
+      full) command+=(--full-corpus) ;;
+      baseline) command=(bash "$ROOT_DIR/scripts/ci-tests.sh" required --group baseline --repo-root "$FIXTURE") ;;
+    esac
+    for defect in none reference structure content input; do
+      "$REAL_PYTHON" - "$FIXTURE/doc/many/doc-1.md" "$length" "$defect" <<'PY_LENGTH'
+from pathlib import Path
+import sys
+
+path, length, defect = Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+lines = ["# Length boundary fixture"] + ["Readable fixture paragraph." for _ in range(length - 1)]
+if defect == "reference":
+    lines[-1] = "Missing reference: doc/testing/nested/length-missing.md"
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+assert len(path.read_text(encoding="utf-8").splitlines()) == length
+PY_LENGTH
+      cp "$TMPDIR/length-registry.json" "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+      content_failure=0
+      input_failure=0
+      case "$defect" in
+        none) expected='doc-governance-check: OK' ;;
+        reference) expected='references missing markdown path: doc/testing/nested/length-missing.md' ;;
+        structure)
+          printf '%s\n' '{}' >"$FIXTURE/doc/.governance/top-level-directory-registry.json"
+          expected='top-level directory registry contract failed' ;;
+        content) content_failure=1; expected='product document content contract failed' ;;
+        input)
+          input_failure=1
+          expected='markdown line count scan failed' ;;
+      esac
+      status=0
+      (
+        cd "$FIXTURE"
+        OASIS7_PRODUCT_DOC_BASE="$fixture_history_commit" OASIS7_PRODUCT_DOC_HEAD="$fixture_history_commit" OASIS7_TEST_PYTHON="$REAL_PYTHON" PRODUCT_DOC_FAIL_CHANGED="$content_failure" LENGTH_INPUT_FAILURE="$input_failure" REAL_AWK="$REAL_AWK" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" "${command[@]}"
+      ) >"$TMPDIR/length-$length-$mode-$defect.out" 2>&1 || status=$?
+      if [[ "$defect" == input ]]; then
+        mv "$FIXTURE/doc/many/doc-1.unreadable" "$FIXTURE/doc/many/doc-1.md"
+      fi
+      output="$TMPDIR/length-$length-$mode-$defect.out"
+      if { [[ "$defect" == none ]] && [[ "$status" != 0 ]]; } || { [[ "$defect" != none ]] && [[ "$status" == 0 ]]; }; then
+        echo "doc-governance-check.test: length=$length mode=$mode defect=$defect unexpected status=$status" >&2
+        cat "$output" >&2
+        exit 1
+      fi
+      grep -Fq "$expected" "$output"
+      if [[ "$length" == 1001 && "$defect" != input ]]; then
+        grep -Fq 'advisory: doc/many/doc-1.md exceeds 1000 lines (1001)' "$output"
+      elif grep -Fq 'advisory: doc/many/doc-1.md' "$output"; then
+        echo "doc-governance-check.test: unexpected advisory at $length lines" >&2
+        exit 1
+      fi
+    done
+  done
+done
+rm "$TMPDIR/bin/awk"
+cp "$TMPDIR/length-original.md" "$FIXTURE/doc/many/doc-1.md"
+cp "$TMPDIR/length-registry.json" "$FIXTURE/doc/.governance/top-level-directory-registry.json"
+(
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --help
+) >"$TMPDIR/length-help.out"
+grep -Fq 'over 1000 lines receive an advisory only' "$TMPDIR/length-help.out"
+
 printf 'Moving branch history: eng-cc/oasis7@main:doc/testing/nested/historical-source.md.\n' >>"$FIXTURE/doc/README.md"
 if (
   cd "$FIXTURE"
@@ -234,7 +369,7 @@ cp "$TMPDIR/doc-readme-pinned-history.md" "$FIXTURE/doc/README.md"
 if ! (
   cd "$FIXTURE"
   : >"$TMPDIR/corpus-check.log"
-  OASIS7_TEST_PYTHON="$REAL_PYTHON" DOC_CORPUS_CHECK_LOG="$TMPDIR/corpus-check.log" PRODUCT_DOC_CONTENT_ARGS="$TMPDIR/product-doc-content.args" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" CONTENT_CHECK_LOG="$TMPDIR/content-check.log" DOC_CORPUS_CHECK_LOG="$TMPDIR/corpus-check.log" PRODUCT_DOC_CONTENT_ARGS="$TMPDIR/product-doc-content.args" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
 ) >"$TMPDIR/full-corpus.out" 2>"$TMPDIR/full-corpus.err"; then
   echo "doc-governance-check.test: --full-corpus caller integration unexpectedly failed" >&2
   cat "$TMPDIR/full-corpus.out" >&2
@@ -244,6 +379,48 @@ fi
 grep -Fxq -- '--full-corpus' "$TMPDIR/product-doc-content.args"
 [[ "$(wc -l <"$TMPDIR/corpus-check.log" | tr -d ' ')" == 1 ]]
 grep -Fxq 'document-corpus-inventory: fixture OK' "$TMPDIR/full-corpus.out"
+
+# Every strict scoped check runs before the separate historical warning pass.
+"$REAL_PYTHON" - "$TMPDIR/content-check.log" "$FIXTURE" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+calls = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines()]
+root = sys.argv[2]
+head = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+names = ["product-doc-content-check", "doc-core-content-check", "system-design-traceability-check"]
+assert [call["name"] for call in calls] == names + names, calls
+for call in calls[:3]:
+    assert call["args"] == ["--repo-root", root, "--base", head, "--head", head, "--worktree"], call
+for call in calls[3:]:
+    assert call["args"] == ["--warn-only", "--repo-root", root, "--full-corpus"], call
+PY
+
+# Both scoped failures and full-corpus input/execution errors remain hard failures.
+for checker in product-doc-content-check doc-core-content-check system-design-traceability-check; do
+  for scope in scoped full; do
+    if (
+      cd "$FIXTURE"
+      OASIS7_TEST_PYTHON="$REAL_PYTHON" CONTENT_FAIL_CHECKER="$checker" CONTENT_FAIL_SCOPE="$scope" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
+    ) >"$TMPDIR/$checker-$scope.out" 2>"$TMPDIR/$checker-$scope.err"; then
+      echo "doc-governance-check.test: --full-corpus masked $checker $scope failure" >&2
+      exit 1
+    fi
+    grep -Fq 'doc-governance-check: failed with' "$TMPDIR/$checker-$scope.out"
+  done
+done
+
+# Full mode cannot make a partial explicit range silently fall back to HEAD.
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" OASIS7_PRODUCT_DOC_BASE=HEAD OASIS7_PRODUCT_DOC_HEAD= RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh --full-corpus
+) >"$TMPDIR/partial-range.out" 2>"$TMPDIR/partial-range.err"; then
+  echo "doc-governance-check.test: --full-corpus masked partial explicit range" >&2
+  exit 1
+fi
+grep -Fq 'explicit base/head must be supplied together' "$TMPDIR/partial-range.err"
 
 if (
   cd "$FIXTURE"
@@ -264,10 +441,11 @@ fi
 grep -Fq 'document corpus inventory contract' "$TMPDIR/corpus-failure.out"
 [[ "$(wc -l <"$TMPDIR/corpus-failure.log" | tr -d ' ')" == 1 ]]
 
-# Full-corpus is product-only; the changed-scope system-design gate must still
-# receive the same trusted range and reject a malformed changed design.
+# Historical professional-design warnings must not mask the strict changed-scope
+# gate: retain the trusted range and reject a malformed changed design.
 fixture_base="$(git -C "$FIXTURE" rev-parse HEAD^{commit})"
 fixture_head="$fixture_base"
+cp "$ROOT_DIR/scripts/doc_content_warnings.py" "$FIXTURE/scripts/doc_content_warnings.py"
 cp "$ROOT_DIR/scripts/product_doc_markdown.py" "$FIXTURE/scripts/product_doc_markdown.py"
 cp "$ROOT_DIR/scripts/system-design-traceability-check.py" "$FIXTURE/scripts/system-design-traceability-check.real.py"
 cat >"$FIXTURE/scripts/system-design-traceability-check.py" <<'PY'
@@ -277,9 +455,10 @@ from pathlib import Path
 import runpy
 import sys
 
-Path(os.environ["SYSTEM_DESIGN_TRACEABILITY_ARGS"]).write_text(
-    "\n".join(sys.argv[1:]) + "\n", encoding="utf-8"
-)
+if "--worktree" in sys.argv and os.environ.get("SYSTEM_DESIGN_TRACEABILITY_ARGS"):
+    Path(os.environ["SYSTEM_DESIGN_TRACEABILITY_ARGS"]).write_text(
+        "\n".join(sys.argv[1:]) + "\n", encoding="utf-8"
+    )
 runpy.run_path(str(Path(__file__).with_name("system-design-traceability-check.real.py")), run_name="__main__")
 PY
 chmod +x "$FIXTURE/scripts/system-design-traceability-check.py"
@@ -292,6 +471,9 @@ if (
   exit 1
 fi
 grep -Fq 'trace-upstream-missing' "$TMPDIR/full-corpus-system-design.out"
+grep -Fq 'system-design-traceability: full-corpus inventoried 2 professional designs; topic-contracts=1 module-overviews=1 module-contracts=0;' "$TMPDIR/full-corpus-system-design.out"
+grep -Fq '::warning::system-design-traceability: trace-upstream-missing' "$TMPDIR/full-corpus-system-design.out"
+grep -Fq 'module-overview: doc/testing/design.md: inventoried' "$TMPDIR/full-corpus-system-design.out"
 grep -Fqx -- '--base' "$TMPDIR/system-design.args"
 grep -Fqx -- "$fixture_base" "$TMPDIR/system-design.args"
 grep -Fqx -- '--head' "$TMPDIR/system-design.args"
@@ -471,5 +653,20 @@ if (
   exit 1
 fi
 grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/false-task-truth-link.out"
+
+# Exercise the complete suite under foreign, well-formed CI OIDs as well.
+# The child must still forward its own fixture HEAD, as asserted above. The
+# guard limits this regression to one child, including when CI is already set.
+if [[ "${OASIS7_DOC_GOVERNANCE_TEST_ENV_CHILD:-}" != 1 ]]; then
+  if ! OASIS7_DOC_GOVERNANCE_TEST_ENV_CHILD=1 \
+    OASIS7_PRODUCT_DOC_BASE=1111111111111111111111111111111111111111 \
+    OASIS7_PRODUCT_DOC_HEAD=2222222222222222222222222222222222222222 \
+    bash "$SCRIPT_DIR/doc-governance-check.test.sh" >"$TMPDIR/foreign-ci-range.out" 2>&1; then
+    echo "doc-governance-check.test: inherited CI range isolation failed" >&2
+    cat "$TMPDIR/foreign-ci-range.out" >&2
+    exit 1
+  fi
+  grep -Fxq 'doc-governance-check.test: OK' "$TMPDIR/foreign-ci-range.out"
+fi
 
 echo "doc-governance-check.test: OK"
