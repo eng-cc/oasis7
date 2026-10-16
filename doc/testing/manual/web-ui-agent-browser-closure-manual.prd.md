@@ -93,7 +93,7 @@
 - Edge Cases & Error Handling:
   - F1 `ERR_CONNECTION_REFUSED`: launcher 未就绪或已退出；先确认端口监听再重试。
   - F2 渲染初始化崩溃（如 `RuntimeError: unreachable`、`CONTEXT_LOST_WEBGL`）：立即归档证据并标记失败。
-  - F3 `connecting + tick=0` 长时间不推进：先执行 `play` 并额外观察约 12 秒，仍无推进则失败。
+  - F3 `connecting + tick=0` 长时间不推进：先记录实际 surface、构建/profile、`renderMode`、连接状态与可见错误，按 [S6 renderer/验收目的分流](../../../testing-manual.md#testing-software-renderer-scope)和[操作手册 Fail-Fast](web-ui-agent-browser-closure-manual.manual.md#fail-fast)定位连接、图形环境或运行态 blocker。正式 Viewer 验证自然实时推进；若被 blocker 阻止，要求明确可见的 blocker 文案并归档 screenshot、console 与状态证据，不用 `play` / `step` 补推进，也不以测试 hook 代替 release UI 输入。显式 debug/test profile 可在其受控范围读取诊断或执行该 profile 允许的动作，但结果不升级为正式 UI 验收；不能单凭 `connecting` 或固定等待约 12 秒就判定所有 surface/profile 失败。图形 fatal 仍按 F2 阻断受影响范围，可见 blocker 不是推进或发布通过。
   - F4 URL 在 `source` 场景解析失败：强制使用带引号 URL，避免 `&` 被 shell 截断。
   - 会话残留或 daemon/IPC 异常：先执行 `doctor --offline --quick --json` 与本轮 named session 的 `session info --json`；仅重建并关闭本轮自有 session，不重放非幂等动作，也不影响其他任务 session。
   - headed 或 QA 哨兵 headless 落到 SwiftShader/software renderer：先核对实际 `renderMode` 与验收目的。已确认 viewer/compat DOM 路径只继续连接、目标选择、自然实时推进或可见 blocker 的最小闭环；其他模式及 GPU/完整验收目标保留环境阻断。归档 `browser_env.json`、状态、截图及缺失范围，“窗口能打开”不构成可玩性通过。
