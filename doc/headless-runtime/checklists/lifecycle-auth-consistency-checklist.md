@@ -43,5 +43,5 @@
 ## 五、最小审查清单
 - 是否三大维度均已填写状态与证据路径。
 - 是否所有 `fail` / `blocked` 项都写明原因。
-- 是否已回写 `doc/headless-runtime/prd.md` 与对应 PR、实际 CI 与评审记录（Issue 按需）。
+- 是否在实际 PR/已有 Task 记录本次结果并定位原始证据；仅当长期要求、合同、验证方法或真实能力边界变化时同步受影响 PRD/design，分工见[开发流程规范](../../engineering/workflow/source-of-truth.md#information-record-placement)。
 - 是否已标明哪些检查仅完成 `test_tier_required`，哪些需后续 `test_tier_full`。

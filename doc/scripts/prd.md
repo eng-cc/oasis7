@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 scripts 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/scripts/prd.md` 的需求追踪。
+- 覆盖稳定脚本要求及验证方法；本次需求与执行证据的关联由对应 PR/已有 Task 承接。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/scripts/prd.md`
-- 项目管理入口: `doc/scripts/prd.md`
+- 项目管理入口: 对应 PR、实际 CI 与评审记录（Issue 按需）；分工见[开发流程规范](../engineering/workflow/source-of-truth.md#information-record-placement)
 - 文件级索引: `doc/scripts/prd.index.md`
 - 追踪主键: `PRD-SCRIPTS-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -33,7 +33,7 @@
   - SC-1: 核心脚本均有明确 owner、输入输出约定与失败语义。
   - SC-2: 新增脚本在合并前通过语法/参数最小校验。
   - SC-3: 脚本入口重复率下降并保留稳定主入口。
-  - SC-4: 脚本任务 100% 映射到 PRD-SCRIPTS-ID。
+  - SC-4: 脚本变更关联实际适用的稳定要求与测试证据；已有 PRD-SCRIPTS-ID 保留需求追踪用途，不作为普通任务准入身份，也不为简单编辑虚构要求。
   - SC-5: scripts 治理专题标题统一使用 `oasis7` 品牌，不再在脚本治理入口中混用 `oasis7` 标题。
   - SC-6: `doc/scripts/precommit/**` 等活跃脚本手册中的当前 crate 命令、依赖说明与 CI 帮助文案必须统一使用 `oasis7*` 口径；旧品牌包名仅允许保留在历史记录或外部原文引用中。
   - SC-7: Viewer Web 相关脚本文档只允许围绕 canonical `viewer` / `viewer.html` 静态入口、freshness gate 与 browser automation 维护当前真值；`software_safe` 仅作为兼容 alias / legacy regression 命名保留；已移除的 native fallback / 贴图质检 / 视觉基线工具不得继续作为活跃脚本入口保留。

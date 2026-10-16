@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "59ff7282634c88c4aa6b73153b7fa7fc7ccb137cb6a8771e7ef8a9db57ce137f",
+    "content_sha256": "9c9d7a321116d2fb025f6c099c477b96199d6e055cbc1ac8995c116260bb7389",
     "current_authority": "doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "author semantic review of the full site PRD: retain release/public-claim authority; navigation follows available content and hidden Canvas initialization is removed; no new package/gameplay acceptance or independent approval claimed",
+    "note": "author semantic review of the full site PRD: retain release/public-claim authority; navigation follows available content and hidden Canvas initialization is removed; no new package/gameplay acceptance or independent approval claimed; 2026-10-16 bounded documentation rereview against main 080488ab902802d9d92a10f6f6e561a6ddf684fc: full PRD reread for workflow-consumer delta only: task placement, requirement identity and historical mapping applicability; no new implementation or public-claim acceptance; prior disposition, authority and domain ownership retained; historical claims are not re-certified",
     "path": "doc/site/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

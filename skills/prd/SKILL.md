@@ -140,7 +140,7 @@ Quick contrast:
 - Bad: `Critical User Flows: read old doc -> rewrite -> update project doc -> verify commit`
 - Good: `Critical User Flows: user triggers X -> system validates -> state transitions -> user sees Y`
 
-For review gate items and veto conditions, use `check.md` as the canonical checklist.
+For applicable quality questions and risk assessment, use `check.md`; it does not define a separate workflow gate.
 
 ---
 
@@ -236,21 +236,15 @@ You **MUST** follow this exact structure for the output:
 
 # Check written PRD
 Use the following checklist to evaluate the quality of a written PRD. 
-check.md contains a detailed checklist template for PRD review, covering aspects such as business goals, user definition, scope control, and functional specifications. Each item should be marked with ✔ / ❌ / ⚠, and critical items must be fully checked to proceed with development.
+`check.md` is a professional quality checklist for business goals, users, scope, functional specifications, edge cases and testability. Apply relevant questions to the changed scope; it does not create a separate development gate.
 
-## Review Gate (Mandatory)
+## Review and Risk Assessment
 
-After drafting, you MUST run a self-review against `check.md` and output:
+Self-review the applicable requirements and risks after drafting. Record the reviewed version, conclusion, genuine blockers and their disposition in the actual PR/existing Task as appropriate. Item-by-item marks, scores and color summaries are optional aids, not mandatory deliverables or readiness proofs.
 
-1. Item-by-item marks (`✔ / ❌ / ⚠`) with evidence.
-2. Overall gate result: `🟢 Ready` / `🟡 Risky` / `🔴 Not Ready`.
-3. If not `🟢`, list concrete remediation actions before implementation.
+Missing requirements, undefined boundaries, untestable acceptance criteria, correctness and safety gaps must be resolved or factually shown inapplicable before dependent implementation proceeds. Assess their actual impact under the development workflow and applicable product/system contracts; do not use a checklist color as a blanket stop for unrelated authorized work.
 
-Critical dimensions that cannot be `❌`:
-- Scope definition
-- Functional specification completeness
-- Edge case coverage
-- Testability
+Explain genuine N/A scope and important uncovered obligations. This checklist adds no N/A approval step. Non-blocking suggestions may be left unchanged with reasons; they do not require automatic follow-up tasks, owners/deadlines or deferral forms. Applicable authority and independent-review requirements remain in force.
 
 ## Guardrails
 

@@ -2,7 +2,8 @@
 
 - 上游设计文档: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md`
 - 上游 PRD: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`
-- 当前性质: bounded brainstorming / next-slice design brief。
+- 当前性质: 2026-05-28 的历史 bounded brainstorming / next-slice design brief；下文候选、理由、任务身份及当时下一步建议保留原语境。
+- 当前适用性：现行设计入口是[配套设计](viewer-pixel-world-player-readable-rendering.design.md)；后续动作遵循[开发流程规范](../../engineering/workflow/source-of-truth.md)。本文的 “Current implementation task” 与新建 `.pm` task 建议仅是历史流程记录，不恢复退役本地任务义务，也不声明 S1–S4 已实施或验收。
 
 ## Decision
 - Problem: pixel-world 的商业化目标不是把模拟器数据全部画出来，而是把玩家能理解、能选择、能复盘的因果关系画出来。

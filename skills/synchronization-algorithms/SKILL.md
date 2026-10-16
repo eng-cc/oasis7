@@ -15,8 +15,7 @@ In oasis7, this is a runtime domain skill for state consistency and authority
 semantics. It is domain-triggered and non-default; it does not replace
 `runtime_engineer` ownership of runtime correctness.
 
-Use it only inside the bound GitHub-backed task/worktree and tie conclusions to current
-runtime code, tests, design docs, traces, or playtest evidence.
+Follow [the development workflow](../../doc/engineering/workflow/source-of-truth.md): read-only analysis needs no task, branch, worktree or remote evidence comment; changes use an independent branch and isolation as needed. The actual PR may carry the task, with Issues optional. Tie conclusions to current runtime code, tests, design docs, traces, or playtest evidence.
 
 ## When to Use
 

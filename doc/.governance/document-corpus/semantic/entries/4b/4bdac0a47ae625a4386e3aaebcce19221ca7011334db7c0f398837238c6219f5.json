@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "02d5265133ce8ab64469c1f9773884ed10ab558354078f576666228cc840c92f",
+    "content_sha256": "79857be38e078688503a5c9afca9743d83ca25814a3f5e6273b1347180a4ac7c",
     "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_non_authoritative_ideation",
-    "note": "bounded brainstorm only; no approved gameplay runtime compatibility quality or release claim",
+    "note": "bounded brainstorm only; no approved gameplay runtime compatibility quality or release claim; 2026-10-16 bounded documentation rereview against main 080488ab902802d9d92a10f6f6e561a6ddf684fc: full brainstorm reread; added historical applicability note only, original alternatives, candidates and old task identity preserved; prior disposition, authority and domain ownership retained; historical claims are not re-certified",
     "path": "doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md",
     "retirement_gate": "absorb ideas or redirect active gameplay callers, preserve provenance, then visual and repository-health review"
   },
