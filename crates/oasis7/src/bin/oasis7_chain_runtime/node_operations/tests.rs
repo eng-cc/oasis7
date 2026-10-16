@@ -1,10 +1,48 @@
-use super::super::node_lifecycle::{actions, local_io as io, tests::operation_fixture};
+use super::super::node_lifecycle::{
+    actions, local_io as io,
+    tests::{operation_fixture, operation_fixture_with_stop_signal},
+};
 use super::{
     executor,
     model::{Kind, Record, Request},
     planner,
     store::Store,
 };
+fn safe_blocker_class(blocker: Option<&str>) -> &'static str {
+    let Some(blocker) = blocker else {
+        return "none";
+    };
+    if blocker == "LOCAL_ADMISSION_REJECTED: receiver receipt absent after action" {
+        return "receipt_absent_after_action";
+    }
+    if blocker.starts_with("LOCAL_ADMISSION_REJECTED: exact instance control unavailable:") {
+        return "control_query_unavailable";
+    }
+    if blocker.starts_with("LOCAL_ADMISSION_REJECTED: another process retains") {
+        return "owner_lock_unavailable";
+    }
+    if blocker.starts_with("LOCAL_ADMISSION_REJECTED: stale stop target") {
+        return "stale_target";
+    }
+    if blocker.starts_with("LOCAL_ADMISSION_REJECTED:") {
+        return "local_admission_rejected_other";
+    }
+    if blocker.starts_with("ORIGINAL_OUTCOME_UNKNOWN:") {
+        return "original_outcome_unknown";
+    }
+    "other"
+}
+
+fn safe_stage(stage: &str) -> &'static str {
+    match stage {
+        "prepared" => "prepared",
+        "stop_verified" => "stop_verified",
+        "maintenance_stopped" => "maintenance_stopped",
+        "local_process_stopped" => "local_process_stopped",
+        _ => "other",
+    }
+}
+
 #[test]
 fn operation_store_real_stop_readback_cas_identity_and_reserved_resources() {
     let (_fixture, config, handle, current) = operation_fixture();
@@ -221,7 +259,7 @@ fn operation_timeout_cancel_reconciles_original_effect_then_forward_completes() 
 
 #[test]
 fn operation_lost_ledger_query_only_recovery_keeps_original_goal_and_old_instance() {
-    let (_fixture, config, handle, current) = operation_fixture();
+    let (_fixture, config, receiver_cleanup, current) = operation_fixture_with_stop_signal();
     let binding = actions::binding(&config).unwrap();
     let root = binding.data_dir.join("management");
     let request = Request {
@@ -244,8 +282,18 @@ fn operation_lost_ledger_query_only_recovery_keeps_original_goal_and_old_instanc
         .admit(planner::plan(request.clone()).unwrap())
         .unwrap();
     let stopped = executor::resume(&mut store, &request.operation_id, admitted.revision).unwrap();
-    assert_eq!(stopped.state, "succeeded");
-    handle.join().unwrap().unwrap();
+    let stopped_ok = stopped.state == "succeeded";
+    let phase = safe_stage(&stopped.stage);
+    let blocker_class = safe_blocker_class(stopped.blocker.as_deref());
+    let receiver_cleanup_ok = receiver_cleanup.finish(!stopped_ok).is_ok();
+    assert_eq!(
+        stopped.state,
+        "succeeded",
+        "phase={phase} blocker_class={blocker_class} dispatched={} native_results={} receiver_cleanup={receiver_cleanup_ok}",
+        stopped.dispatched,
+        stopped.results.len(),
+    );
+    assert!(receiver_cleanup_ok, "test receiver cleanup failed");
     drop(store);
     std::fs::remove_file(root.join("operations.json")).unwrap();
     let (replacement, next) =
