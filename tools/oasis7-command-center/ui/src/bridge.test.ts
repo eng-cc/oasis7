@@ -43,3 +43,9 @@ it('binds file inventory paging to an explicit schema, project, snapshot and fil
   await bridge.documentInventory(query);
   expect(mock.invoke).toHaveBeenLastCalledWith('query_document_inventory', {query});
 });
+
+it('passes finite directory queries without filesystem or shell proxy arguments', async () => {
+  const query = {parentPath:'doc',inventory:{schemaVersion:1,projectId:'project',snapshotId:'snapshot',query:'设计',readFilter:'all',cursor:null}};
+  await bridge.documentDirectory(query);
+  expect(mock.invoke).toHaveBeenLastCalledWith('query_document_directory',{query});
+});
