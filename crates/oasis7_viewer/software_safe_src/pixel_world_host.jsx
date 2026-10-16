@@ -1212,7 +1212,9 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </Show>
-      <Show when={spatialSupported()}><PixelWorldWorldViewExplorer state={worldViewState()} locale={locale()} pauseVersion={followPauseVersion()}
+      <Show when={spatialSupported()}><details class="pixel-world-exploration-disclosure">
+        <summary>{tr(locale(), "探索世界", "Explore world")}</summary>
+        <PixelWorldWorldViewExplorer state={worldViewState()} locale={locale()} pauseVersion={followPauseVersion()}
         onQuery={(query) => { navigationSequence += 1; currentSpatialQuery = query; return worldViewClient.query(query); }}
         onSelect={(selection) => { navigationSequence += 1; core.applySelection(selection); }}
         onLocate={(selection) => { core.applySelection(selection); navigate("locate",selection); }}
@@ -1233,7 +1235,7 @@ export function PixelWorldHost(props) {
             core.applySelection({kind:"agent",id});
             navigate("locate",{kind:"agent",id});
           });
-        }} /></Show>
+        }} /></details></Show>
       <div
         class="pixel-world-focus-entry"
         data-viewer-overlay="cinematic-entry"
