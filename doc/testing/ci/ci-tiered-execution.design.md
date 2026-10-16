@@ -16,6 +16,10 @@ Rust 变化覆盖自身及需要验证的反向消费者，删除和重命名覆
 
 `./scripts/ci-tests.sh required` 是普通必要测试的本地入口；`full` 保留广覆盖回归，nightly 执行适用 full。真实产品测试、WASM 确定性、共识、持久化、安全、升级恢复和跨平台打包均继续保留，不因流程精简删除。
 
+Command Center 的独立 Cargo workspace 由 `command_center` 组承接，工具目录变化选择 baseline 和该组；共享 context、local signer、secure envelope crate 变化也选择该组。Rust workflow 调用可复用的 `command-center.yml`，保留 Core、生成类型、UI、Clippy 和 macOS App 打包，并将调用结果纳入 `required-gate`。专用 workflow 不再独立触发 PR/push，避免重复执行；Cargo manifest、锁文件和 CI 控制变化仍采用保守全量。该平台组的本地验证使用专用 workflow 中的 canonical 命令，不由通用 shell driver 执行。
+
+文档 corpus 对象、索引及 evidence inventory 数据更新由始终执行的 baseline 文档治理检查校验一致性；三平台 corpus/evidence 工具回归只在检查器实现、fixture、Git 路径配置、scope 配置或平台 workflow 变化时触发，数据更新不单独触发三平台回归。
+
 ## 调度和结果
 
 select 先产生明确的非空逻辑组列表，按资源组并行执行。普通组使用原生 job，fleet-health 使用固定 Linux/Windows/macOS 矩阵。最终唯一 `required-gate` 使用可靠的 always 汇总，并显式依赖 select 和所有组。选中组必须 success；未选中组可以 skipped 或 success；失败、取消、缺失、未知及意外 skipped 都必须阻断。fleet 矩阵不吞退出码，采用 fail-fast=false。
