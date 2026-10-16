@@ -9,6 +9,21 @@ This profile uses the ordinary `oasis7_game_client` executable and an operator-p
 
 Use only the supplied executable and device configuration. Do not inspect owner keys, server storage, fixture source or other players' state. Never print signer files or copy private goal content into public action reasons. Keep full goals and observations inside the authorized model context.
 
+## Executor selection
+
+An operator may select a built-in consumer through the trusted launcher BYOK
+session entry. That entry must authenticate the owner and bind a legitimate
+GameClient executor before using the same signed SDK. A model connection is not
+world authority, and missing bindings must not be reported as a started worker.
+Real-model play through this entry remains separately authorized work.
+
+Do not run CLI effects concurrently with another worker for the same Agent.
+Switching executors requires the owner-controlled fence and recovery of original
+operations; never replace an unknown request or increase the same run's immutable
+budget. The CLI instructions below apply when you are the authorized executor,
+with no competing worker. They do not authorize paid inference or establish
+complete built-in/Runtime parity.
+
 ## Discover and capture
 
 Run the supplied executable with `--help`, then:

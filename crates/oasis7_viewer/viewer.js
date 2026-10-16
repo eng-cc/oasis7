@@ -1111,6 +1111,7 @@ var CODES = /* @__PURE__ */ new Set([
 	"session_expired",
 	"version_conflict",
 	"executor_unavailable",
+	"executor_busy",
 	"game_executor_unavailable",
 	"deployment_unavailable",
 	"untrusted_executor",
@@ -1126,9 +1127,37 @@ var ModelConnectionError = class extends Error {
 };
 var text$3 = (value, max = 256) => typeof value === "string" && value.length <= max ? value : "";
 var number$1 = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+var RUN_REASONS = /* @__PURE__ */ new Set([
+	"completed",
+	"budget_exhausted",
+	"pending_original",
+	"rejected_original",
+	"expired_original",
+	"control_changed",
+	"context_expired",
+	"model_failed",
+	"model_timeout",
+	"invalid_model_output",
+	"aborted",
+	"host_failure"
+]);
+function executionSnapshot(value) {
+	if (!value || ![
+		"running",
+		"finished",
+		"stopped"
+	].includes(value.phase)) return null;
+	return {
+		phase: value.phase,
+		reason: RUN_REASONS.has(value.reason) ? value.reason : null,
+		successful_effects: number$1(value.successful_effects),
+		model_calls_spent: number$1(value.model_calls_spent)
+	};
+}
 function modelConnectionSnapshot(value) {
 	if (!value || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.id || "") || !Number.isSafeInteger(value.version) || value.version < 1) throw new ModelConnectionError("request_failed");
 	return {
+		execution: executionSnapshot(value.execution),
 		id: value.id,
 		version: value.version,
 		preset_id: text$3(value.preset_id),
@@ -1302,7 +1331,9 @@ var _tmpl$6$15 = /*#__PURE__*/ template(`<p role=status>`);
 var _tmpl$7$11 = /*#__PURE__*/ template(`<option> · <!> · `);
 var _tmpl$8$7 = /*#__PURE__*/ template(`<option> · `);
 var _tmpl$9$6 = /*#__PURE__*/ template(`<div class=model-connection-panel__connection><p role=status> · </p><p>: <!> / </p><label class=model-connection-panel__check><input type=checkbox></label><button type=button></button><label class=model-connection-panel__check><input type=checkbox></label><div class=model-connection-panel__actions><button type=button></button><button type=button></button><button type=button></button></div><p>`);
+var _tmpl$0$6 = /*#__PURE__*/ template(`<p role=status> · <!>: `);
 var COPY = {
+	executor_busy: ["同一执行设备正在处理原运行，请先核对状态。", "This device is handling an existing run. Check its status first."],
 	deployment_unavailable: ["当前部署尚未启用模型连接，暂不接收凭证。", "Model connections are not enabled on this deployment; credentials are not accepted."],
 	authentication_required: ["请先登录当前玩家账号。", "Sign in to the current player account."],
 	authentication_failed: ["模型凭证认证失败，请重新输入或到供应商检查。", "Model authentication failed. Re-enter the key or check the provider account."],
@@ -1319,9 +1350,23 @@ var COPY = {
 	invalid_request: ["连接请求无效，请刷新并重新确认。", "The connection request is invalid. Refresh and confirm again."],
 	request_failed: ["连接服务暂不可用，请刷新状态或稍后重试。", "The connection service is unavailable. Refresh status or try again later."]
 };
+var RUN_REASON = {
+	completed: ["本轮执行上限已达到；尚未证明目标完成", "Run limit reached; goal completion is unverified"],
+	budget_exhausted: ["调用预算已用尽", "Call budget exhausted"],
+	pending_original: ["原操作结果待确认", "Original operation result pending"],
+	rejected_original: ["原操作已拒绝", "Original operation rejected"],
+	expired_original: ["原操作已过期", "Original operation expired"],
+	control_changed: ["授权或运行状态已改变", "Authority or run state changed"],
+	context_expired: ["决策上下文已过期", "Decision context expired"],
+	model_failed: ["模型调用未完成", "Model call did not complete"],
+	model_timeout: ["模型调用超时", "Model call timed out"],
+	invalid_model_output: ["模型工具输出不受支持", "Unsupported model tool output"],
+	aborted: ["执行器已结束本轮", "Executor ended this run"],
+	host_failure: ["执行端暂不可用", "Executor unavailable"]
+};
 var STATE = {
 	checking: ["检查中", "Checking"],
-	ready: ["模型可用，尚未开始", "Model ready; not started"],
+	ready: ["模型可用", "Model ready"],
 	blocked: ["模型连接受限", "Model connection blocked"],
 	revoked: ["已断开并忘记", "Disconnected and forgotten"],
 	expired: ["会话已过期", "Session expired"],
@@ -1625,6 +1670,22 @@ function ModelConnectionPanel(props) {
 								return () => _c$3() ? stateLabel("revoked") : memo(() => !!expired(current()))() ? stateLabel("expired") : stateLabel(current().state);
 							})(), _el$45);
 							insert(_el$44, () => stateLabel(current().run_state), null);
+							insert(_el$43, createComponent(Show, {
+								get when() {
+									return current().execution;
+								},
+								children: (execution) => (() => {
+									var _el$62 = _tmpl$0$6(), _el$63 = _el$62.firstChild, _el$65 = _el$63.nextSibling;
+									_el$65.nextSibling;
+									insert(_el$62, (() => {
+										var _c$4 = memo(() => execution().phase === "running");
+										return () => _c$4() ? tr("本轮正在执行", "Run in progress") : (RUN_REASON[execution().reason] || ["执行已停止，结果需核对", "Execution stopped; verify the result"])[zh() ? 0 : 1];
+									})(), _el$63);
+									insert(_el$62, () => tr("已确认效果", "Confirmed effects"), _el$65);
+									insert(_el$62, () => execution().successful_effects ?? "—", null);
+									return _el$62;
+								})()
+							}), _el$46);
 							insert(_el$46, () => tr("已占用调用预算 / token", "Call budget used / tokens reserved"), _el$47);
 							insert(_el$46, () => current().calls_spent ?? "—", _el$49);
 							insert(_el$46, () => current().tokens_reserved ?? "—", null);

@@ -11,8 +11,8 @@ use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener};
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -45,13 +45,13 @@ impl Drop for EnvVarGuard {
                 unsafe {
                     oasis7::env_mut::set_var(self.key.as_str(), value);
                 }
-            },
+            }
             None => {
                 // SAFETY: This test/setup code mutates process environment in a controlled scope.
                 unsafe {
                     oasis7::env_mut::remove_var(self.key.as_str());
                 }
-            },
+            }
         }
     }
 }
@@ -660,7 +660,7 @@ fn llm_env_var_reads_oasis7_prefix() {
     let _primary_guard = EnvVarGuard::capture(ENV_LLM_MODEL);
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(ENV_LLM_MODEL, "oasis7-model");
+        oasis7::env_mut::set_var(ENV_LLM_MODEL, "oasis7-model");
     }
 
     assert_eq!(llm_env_var(ENV_LLM_MODEL).as_deref(), Some("oasis7-model"));
@@ -674,11 +674,11 @@ fn llm_env_var_rejects_removed_old_brand_prefix() {
     let _removed_old_brand_guard = EnvVarGuard::capture(removed_old_brand_model.as_str());
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(ENV_LLM_MODEL);
+        oasis7::env_mut::remove_var(ENV_LLM_MODEL);
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
+        oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
     }
 
     assert!(llm_env_var(ENV_LLM_MODEL).is_none());
@@ -701,40 +701,40 @@ fn llm_config_from_env_for_agent_rejects_removed_old_brand_prefix() {
     let _removed_old_brand_api_key_guard = EnvVarGuard::capture(removed_old_brand_api_key.as_str());
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(ENV_LLM_MODEL);
+        oasis7::env_mut::remove_var(ENV_LLM_MODEL);
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(ENV_LLM_BASE_URL);
+        oasis7::env_mut::remove_var(ENV_LLM_BASE_URL);
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::remove_var(ENV_LLM_API_KEY);
+        oasis7::env_mut::remove_var(ENV_LLM_API_KEY);
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
+        oasis7::env_mut::set_var(removed_old_brand_model.as_str(), "removed-old-brand-model");
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(
-                removed_old_brand_base_url.as_str(),
-                "https://removed-old-brand.example.com/v1",
-            );
+        oasis7::env_mut::set_var(
+            removed_old_brand_base_url.as_str(),
+            "https://removed-old-brand.example.com/v1",
+        );
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(
-                removed_old_brand_api_key.as_str(),
-                "removed-old-brand-secret",
-            );
+        oasis7::env_mut::set_var(
+            removed_old_brand_api_key.as_str(),
+            "removed-old-brand-secret",
+        );
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-            oasis7::env_mut::set_var(
-                removed_old_brand_goal.as_str(),
-                "removed-old-brand-agent-short",
-            );
+        oasis7::env_mut::set_var(
+            removed_old_brand_goal.as_str(),
+            "removed-old-brand-agent-short",
+        );
     }
 
     let error = LlmAgentConfig::from_env_for_agent("agent-1").expect_err("missing oasis7 env");
@@ -902,6 +902,14 @@ fn normalize_openai_api_base_url_handles_suffix_variants() {
 
 #[test]
 fn openai_client_respects_configured_timeout_without_hidden_retry() {
+    let _env_lock = llm_env_lock().lock().expect("env lock");
+    let _diagnostic_guard = EnvVarGuard::capture(ENV_LLM_STREAM_DIAGNOSTICS);
+    // SAFETY: The shared environment lock isolates the ordinary SDK contract
+    // from the parallel opt-in diagnostic transport test.
+    unsafe {
+        oasis7::env_mut::set_var(ENV_LLM_STREAM_DIAGNOSTICS, "0");
+    }
+
     let mut config = base_config();
     config.timeout_ms = 200;
     config.base_url = spawn_slow_openai_like_server(Duration::from_millis(600));
@@ -918,7 +926,7 @@ fn openai_client_respects_configured_timeout_without_hidden_retry() {
         .complete(&request)
         .expect_err("request should time out");
 
-    assert_eq!(client.request_timeout_ms, 200);
+    assert_eq!(client.request_timeout_ms(), 200);
     assert!(
         started_at.elapsed() < Duration::from_secs(2),
         "client should fail fast near the configured timeout instead of retrying with a long fallback"
@@ -936,6 +944,14 @@ fn openai_client_respects_configured_timeout_without_hidden_retry() {
 
 #[test]
 fn openai_client_retries_single_concurrency_limit_decode_failure() {
+    let _env_lock = llm_env_lock().lock().expect("env lock");
+    let _diagnostic_guard = EnvVarGuard::capture(ENV_LLM_STREAM_DIAGNOSTICS);
+    // SAFETY: The shared environment lock isolates the ordinary SDK contract
+    // from the parallel opt-in diagnostic transport test.
+    unsafe {
+        oasis7::env_mut::set_var(ENV_LLM_STREAM_DIAGNOSTICS, "0");
+    }
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind flaky openai server");
     let bind = listener.local_addr().expect("listener addr");
     thread::spawn(move || {
@@ -1014,8 +1030,8 @@ fn stream_transport_diagnostic_is_structured_and_redacted() {
         frame_count: 7,
         decoded_frame_count: 6,
         elapsed_ms: 21_158,
-        nested_transport_cause:
-            "Transport error: error decoding response body Bearer secret-token".to_string(),
+        nested_transport_cause: "Transport error: error decoding response body Bearer secret-token"
+            .to_string(),
     };
 
     let rendered = format_stream_transport_diagnostics(&metadata);
@@ -1092,10 +1108,15 @@ fn instrumented_stream_transport_error_reports_response_metadata() {
         max_model_calls: Some(1),
     };
 
-    let error = client.complete(&request).expect_err("truncated stream should fail");
+    let error = client
+        .complete(&request)
+        .expect_err("truncated stream should fail");
     match error {
         LlmClientError::Http { message } => {
-            assert!(message.contains("http_status=200"), "unexpected error: {message}");
+            assert!(
+                message.contains("http_status=200"),
+                "unexpected error: {message}"
+            );
             assert!(
                 message.contains("request_timeout_ms=1000"),
                 "unexpected error: {message}"
@@ -1113,7 +1134,10 @@ fn instrumented_stream_transport_error_reports_response_metadata() {
                 "unexpected error: {message}"
             );
             assert!(message.contains("frames=1"), "unexpected error: {message}");
-            assert!(message.contains("decoded_frames=1"), "unexpected error: {message}");
+            assert!(
+                message.contains("decoded_frames=1"),
+                "unexpected error: {message}"
+            );
             assert!(
                 message.contains("cause=failure_kind=transport reqwest_kind=decode"),
                 "unexpected error: {message}"

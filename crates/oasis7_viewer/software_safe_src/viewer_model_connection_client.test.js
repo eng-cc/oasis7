@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { acceptsModelCredentials, createViewerModelConnectionClient } from "./viewer_model_connection_client.js";
+import { acceptsModelCredentials, createViewerModelConnectionClient, modelConnectionSnapshot } from "./viewer_model_connection_client.js";
 const snapshot = { id: "connection-1", version: 1, preset_id: "deepseek-v1", state: "ready", run_state: "idle", expires_at_ms: 200000, absolute_expires_at_ms: 900000 };
 const response = (value, status = 200) => ({ ok: status < 400, status, json: async () => value });
 describe("model connection client", () => {
@@ -63,6 +63,13 @@ describe("model connection client", () => {
    const client = createViewerModelConnectionClient({ fetch: async (url) => url.endsWith("/capabilities") ? response({ csrf_token: "csrf" }) : response({ error_code: code, error: "private-canary" }, 409) });
    await expect(client.stop(snapshot)).rejects.toMatchObject({ code, status: 409 });
   }
+ });
+
+ it("keeps only bounded native execution status and hides unsolicited fields", () => {
+  const result = modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "completed", successful_effects: 4, model_calls_spent: 6, raw_key: "private-canary", goal_completion_verified: true } });
+  expect(result.execution).toEqual({ phase: "finished", reason: "completed", successful_effects: 4, model_calls_spent: 6 });
+  expect(JSON.stringify(result)).not.toContain("private-canary");
+  expect(modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "private-canary", successful_effects: -1 } }).execution.reason).toBeNull();
  });
 
 });

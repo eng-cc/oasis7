@@ -21,6 +21,26 @@ level `WorldServiceTransport` verifies request-bound service envelopes; callers 
 its generic methods must also validate world, scope, evidence and business correlation.
 A service signature is not an independent consensus or durable receipt proof.
 
+`lookup_typed` retains error categories for recovery decisions. After one
+submission, the high-level client retries only the original result query for
+transport failure, HTTP 503 or bounded Retry-After advice. It keeps forty attempts
+within an eight-second query window; an already in-flight read retains its
+configured timeout. Assurance/configuration failures stop immediately. Neither
+query retry nor an unknown result creates a replacement action or signature.
+Native Harness model-call reservations are separately encrypted and locked in
+the local operation store; they do not become world task authority.
+
+Private preparation may retry the exact durable signed Prepare after bounded
+transport/503/cooldown failures; it never renews the stored Context or nonce.
+Context reads and factory/recipe quotes retry only their route-specific snapshot
+drift codes, at most three attempts starting within eight seconds. Context reads
+reuse the same signed Get; quote refreshes preserve the full prepared identity,
+selection and TTL. Other conflicts, permission failures and expired contexts stop.
+The server rejects a Context read whose head changes during delivery, after checking
+current authority and validity. This does not make a later Action atomic with the
+read. Once an Action is cached, recovery retains that original; a rejected Action
+is not re-signed or replaced to make progress.
+
 Public JSON observations explicitly use `/v1/world/view-json`: the server applies
 the same pinning and authorization as `/v1/world/view`, normalizes the projection to
 JSON, then signs it in the distinct path domain. `VerifiedTaskWorldView` retains the
@@ -33,6 +53,26 @@ request variants. It does not expand the CLI's supported gameplay or migrate the
 legacy built-in executor. See [the API scope](../../doc/world-simulator/llm/external-agent-game-api.design.md)
 and [implementation scope](https://github.com/eng-cc/oasis7/issues/4726).
 
+The feedback foundation exposes bounded, service-authenticated scoped history.
+`record_caller_persisted_feedback_acceptance` resolves a record inside a
+`VerifiedTaskWorldView`; call it only after the caller durably commits its private
+feedback effects and acceptance digest. The SDK records that signed caller
+statement, not proof of private-memory correctness. It does not run or restore
+Harness cognition, reorder private effects, or turn server delivery state into a
+local acceptance marker. Only committed service feedback supports the existing
+ACK protocol; other feedback remains readable without gaining ACK authority.
+
+Acceptance and the original signed ACK share the existing encrypted operation
+store. The view and journal bind the exact configured read authority; changing
+that trust configuration cannot authorize acceptance or recovery of the old ACK. Immutable feedback-ID and session/sequence indexes must agree before an
+ACK can be recovered or sent. A repeated acceptance must retain the same digest,
+generation and feedback identity; recovery uses `recover_caller_persisted_feedback_ack`
+without applying private effects again. `acknowledge_caller_persisted_feedback`
+submits that exact cached payload and uses bounded original-result polling.
+Unknown/Pending remains unresolved, and no authoritative ACK-completion marker is
+persisted locally. A missing or conflicting index blocks sending; an interrupted
+initial write can be retried with the exact original acceptance. This foundation
+alone does not complete the legacy feedback/memory consumer migration.
 ## Bounded recovery of original operations
 
 `Client` sends each public intent once and queries its immutable original after
@@ -59,3 +99,14 @@ These checks do not eliminate the race between receiving an observation and
 canonical action admission. A stale or otherwise rejected original remains rejected;
 callers must retain its evidence and choose an explicit recovery policy. This SDK
 slice does not implement a built-in model runner or claim autonomous play success.
+
+
+## Native execution call budget
+
+`OperationStore::initialize_native_run` fixes the local run identity and call
+limit. `reserve_native_model_call` durably increments its encrypted counter under
+a capability-relative file lock before a physical model request starts. Restart,
+a lost response, or repeating an operation label does not refund that reservation.
+Changed bindings, changed limits, missing counter files, and corrupt records fail
+closed. This counter is local consumption accounting; it grants no World authority
+and does not replace the session credential and token limits of a BYOK connection.

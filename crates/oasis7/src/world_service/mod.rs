@@ -3,7 +3,11 @@ pub mod agent_authority;
 pub mod agent_chat;
 pub mod authority;
 pub mod client;
+mod cognition_disposition;
 pub mod correlation;
+pub use cognition_disposition::{
+    AuthenticatedCognitionDisposition, ValidatedStaleCognitionRejection,
+};
 mod formal_governance;
 pub mod formal_projection;
 mod formal_projection_header;
