@@ -201,9 +201,16 @@ impl HostedModelClient {
             }
             ("POST", "stop") => {
                 let input: Operation = decode(body)?;
-                self.manager
+                let stopped = self
+                    .manager
                     .stop_operation(p, id, input.expected_version, &input.operation_id)
                     .map_err(connection_error)?;
+                // An old idempotent receipt must not alter a later run display.
+                if input.expected_version.checked_add(1) == Some(stopped.version)
+                    && stopped.active_version.is_none()
+                {
+                    self.executions.set(id, json!({"phase":"stopped","reason":"control_changed","generation":stopped.generation,"goal_completion_verified":false}));
+                }
             }
             ("DELETE", "") => {
                 let input: Version = decode(body)?;

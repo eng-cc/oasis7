@@ -60,7 +60,7 @@ export function ModelConnectionPanel(props) {
  const message = (code) => (COPY[code === "game_executor_unavailable" ? "executor_unavailable" : code] || COPY.request_failed)[zh() ? 0 : 1];
  const modelFailure = (connection) => {
   const execution = connection.execution;
-  if (connection.run_state === "stopped" || ["revoked", "expired"].includes(connection.state) || execution?.phase !== "finished" || !["model_failed", "input_limit"].includes(execution.reason)) return null;
+  if (["revoked", "expired"].includes(connection.state) || execution?.phase !== "finished" || !["model_failed", "input_limit"].includes(execution.reason)) return null;
   return MODEL_FAILURE[execution.model_failure]?.[zh() ? 0 : 1] || null;
  };
  const stateLabel = (state) => (STATE[state] || ["状态未知", "Status unknown"])[zh() ? 0 : 1];

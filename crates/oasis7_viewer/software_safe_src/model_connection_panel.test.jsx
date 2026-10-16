@@ -79,7 +79,7 @@ describe("model connection panel", () => {
 
 it("shows safe bilingual output-limit recovery without exposing diagnostic codes", async () => {
  for (const [locale, label, guidance] of [["en", "Model output reached its limit", "Truncated output is not an executable action"], ["zh", "模型输出达到上限", "截断输出不能作为可执行动作"]]) {
-  const api = client([{ ...connection(), execution: { phase: "finished", reason: "model_failed", model_failure: "output_limit" } }]);
+  const api = client([{ ...connection(), run_state: "stopped", execution: { phase: "finished", reason: "model_failed", model_failure: "output_limit" } }]);
   const result = panel(api, locale);
   await waitFor(() => expect(result.container.textContent).toContain(label));
   expect(result.container.textContent).toContain(guidance);
@@ -94,4 +94,15 @@ it("keeps legacy failures generic and Stop ahead of stale model diagnostics", as
   expect(result.container.textContent).not.toContain("Model output reached its limit");
   expect(result.container.textContent).not.toContain("private-canary"); cleanup();
  }
+});
+
+it("hides stale failure details in revoked, expired or stopped-phase snapshots", async () => {
+ for (const state of ["revoked", "expired"]) {
+  const result = panel(client([{ ...connection(), state, run_state: "stopped", execution: { phase: "finished", reason: "model_failed", model_failure: "output_limit" } }]));
+  await waitFor(() => expect(result.container.textContent).toContain(state === "revoked" ? "Disconnected and forgotten" : "Session expired"));
+  expect(result.container.textContent).not.toContain("Model output reached its limit"); cleanup();
+ }
+ const result = panel(client([{ ...connection(), run_state: "stopped", execution: { phase: "stopped", reason: "control_changed", model_failure: "output_limit" } }]));
+ await waitFor(() => expect(result.container.textContent).toContain("Authority or run state changed"));
+ expect(result.container.textContent).not.toContain("Model output reached its limit");
 });

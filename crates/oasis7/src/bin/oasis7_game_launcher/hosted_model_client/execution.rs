@@ -140,8 +140,15 @@ impl HostedModelClient {
     }
 }
 impl Executions {
-    fn set(&self, id: &str, value: Value) {
+    pub(super) fn set(&self, id: &str, value: Value) {
         if let Ok(mut states) = self.0.lock() {
+            let incoming = value["generation"].as_u64().unwrap_or(0);
+            if states
+                .get(id)
+                .is_some_and(|current| current["generation"].as_u64().unwrap_or(0) > incoming)
+            {
+                return;
+            }
             states.insert(id.to_owned(), value);
         }
     }
