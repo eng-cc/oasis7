@@ -626,6 +626,52 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 
 The [canonical QA receiver](../../testing/prd.md#qa-infrastructure-receiver) and [scene allocation](../../testing/prd.md#qa-infrastructure-scene-families) join infrastructure SC-5/7/8/9/10 and provider-continuity PC-4 to Harness observations. Runtime retains world/finality/action/receipt/journal authority; gameplay retains quantity, W/window and progression meaning; QA owns the joined verdict. The following is a verification contract, not current execution or capability proof.
 
+The following six precise product links identify only the existing infrastructure consumer sub-obligations below. They reuse the sole product declarations; they do not allocate the whole Harness lifecycle or change product coverage/implementation status. The original consumer matrix, PC-4 reference, 17/10/8 inventory and every required/full/proven condition remain independently applicable.
+
+<a id="harness-infrastructure-pending-receiver"></a>
+#### Finality/pending consumer
+
+Trace refs: O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405; [product_requirement: DWE-002](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-002).
+
+Correlate the same candidate/world/request and authoritative receipt; distinguish pending, rejected, stale, expired and effective results. A provider reply, queued status or transport ACK cannot establish completion, authoritative memory or world effect; recovery rejudges under current authority. No finality, scheduler, journal or complete recovery implementation claim. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+<a id="harness-infrastructure-lineage-receiver"></a>
+#### Exclusive lineage consumer
+
+Trace refs: O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6; [product_requirement: DWE-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003).
+
+Retain ordered intent and original/withdraw/replace association, root/revision/child/direct-parent receipt. For professionally marked exclusive members, consume the first effective winner and the others' zero-effect terminal results; rejected/expired members do not cancel independent intents. No new lineage marking, canonical ordering, atomic disposition or implicit withdrawal/replacement support. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+<a id="harness-infrastructure-recovery-receiver"></a>
+#### Same-world recovery consumer
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4; [product_requirement: DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002).
+
+Consume only matching world/manifest/snapshot/journal/receipt recovery material; preserve confirmed history and agent/session/turn/request/digest feedback correlation. Missing/conflicting recovery proof cannot become a recovered-world, goal-completion or authoritative memory claim. Consumer join only: not complete trust-chain validation, nonempty journal-suffix replay, new-request/module/action positive continuation, durable exactly-once or GoalGraph proof. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+<a id="harness-infrastructure-industrial-receiver"></a>
+#### Industrial result consumer
+
+Trace refs: O7-REQ-05c84021-ee48-41ef-b94a-8aa9ceb8048c; [product_requirement: SC-8](../../product/world-infrastructure/prd.md#sc-infra-008).
+
+Join immutable root, revision/child/direct parent, authoritative receipt and Agent readback of held/consumed/unmet/residual quantities, W/window, progression, earliest blocker and next action/recheck. Do not confuse accepted with reserved, local completion or transit with production/delivery completion. No recipe, capacity, W/window, resource, progression or economic policy change; one local stage does not prove the complete industrial pipeline. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+<a id="harness-infrastructure-outage-receiver"></a>
+#### Eight-cell outage and tier consumer
+
+Trace refs: O7-REQ-4792541c-aaa4-4ac1-9a2d-374df44eba6a; [product_requirement: SC-9](../../product/world-infrastructure/prd.md#sc-infra-009).
+
+Retain all eight SC9 authority/read × stage_finish/transit/buffer_admission/terminal_settlement cells; each authority cell keeps root-absent pre-finality and root-present post-commit/pre-child specimens. Read outage never mutates world/W/history; only canonical gameplay interruption may reset unfinished W once. Preserve quantities/window/receipt/progression/blocker/next_action/next_recheck parity. No missing-cell N/A, mock/history substitution, actual provider/browser execution, full/parity/readiness or release claim; Ops classifies the dependency and gameplay owns W/window. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+<a id="harness-infrastructure-world-scope-receiver"></a>
+#### Explicit world-scope consumer
+
+Trace refs: O7-REQ-2b7cfef9-d917-46ea-a3a9-e3a4fb96d730; [product_requirement: SC-10](../../product/world-infrastructure/prd.md#sc-infra-010).
+
+Before submit distinguish actual global-authoritative versus isolated local/development world and match world/manifest across request, root, receipt and result. Missing/mismatched/reused receipt identity fails closed with zero global effect. Environment labels/local receipts do not prove global finality; no world-identity, receipt schema or authority expansion. The design consumes this same bounded obligation at [infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join); validation follows the existing QA source-to-scene and tier rules, not an executed result.
+
+#### Complete consumer matrix (unchanged obligations)
+
 | Scene / consumer obligation | Required Harness readback and oracle | Evidence tier / limit |
 | --- | --- | --- |
 | `V-EXECUTION` / `V-CONSUMER`: canonical result and exclusive lineage | Same candidate/world/root/revision/child/direct-parent receipt, ordered request/intent and original/withdraw/replace association; preserve pending/rejected/effective and unsupported-operation truth. First effective winner and losers' zero effect follow Runtime's oracle, not provider prose or transport ACK. | Join the existing [17 QA negatives / 10 runtime groups](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-qa-negative-matrix) and authoritative receipt; located/mock fixtures alone do not prove canonical inclusion. |

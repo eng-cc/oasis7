@@ -9,7 +9,19 @@ use super::protocol::{
 };
 
 mod collect_data;
+#[path = "auth/hosted_authorization.rs"]
+mod hosted_authorization;
 pub use collect_data::{sign_collect_data_auth_proof, verify_collect_data_auth_proof};
+#[cfg(test)]
+pub(crate) use hosted_authorization::tests::context as test_hosted_authorization_context;
+pub use hosted_authorization::{
+    HOSTED_AUTHORIZATION_ISSUER_PUBLIC_KEY_ENV, HOSTED_AUTHORIZATION_MAX_AGE_MS,
+    HOSTED_IDENTITY_V2_ENABLED_ENV, HostedAuthContextV2, hosted_identity_v2_enabled,
+    hosted_identity_v2_enabled_checked, issue_hosted_authorization_grant,
+};
+pub(crate) use hosted_authorization::{
+    authorization_nonce, verify_hosted_authorization_grant, verify_hosted_release_grant,
+};
 #[path = "auth/prompt_control.rs"]
 mod prompt_control;
 pub use prompt_control::{
@@ -517,7 +529,22 @@ fn verify_session_register_auth_proof_inner(
     // Both the public issuer and the hosted account broker issue player IDs in
     // the hosted-player namespace.  The namespace selects the grant-required
     // path; the signed grant remains the authority for every such identity.
-    let hosted_registration_nonce = if request_player_id.starts_with(HOSTED_PLAYER_ID_PREFIX) {
+    let hosted_registration_nonce = if hosted_identity_v2_enabled() {
+        let context = verify_hosted_authorization_grant(
+            request
+                .registration_grant
+                .as_deref()
+                .ok_or("hosted authorization v2 required")?,
+            &request_player_id,
+            &request_public_key,
+            require_unused_hosted_grant,
+        )?;
+        if context.capabilities != ["player_session"] {
+            return Err("hosted registration authorization required".into());
+        }
+        Some(authorization_nonce(&context))
+    } else if request_player_id.starts_with(HOSTED_PLAYER_ID_PREFIX) {
+        hosted_authorization::require_legacy_registration_opt_in()?;
         Some(verify_hosted_registration_grant(
             request.registration_grant.as_deref().ok_or_else(|| {
                 "hosted session registration requires a registration grant".to_string()
@@ -604,7 +631,7 @@ pub(crate) use registration_replay::{
 };
 pub use registration_replay_lock::ExclusiveDirectoryProcessLock;
 
-fn now_unix_ms() -> u64 {
+pub(crate) fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

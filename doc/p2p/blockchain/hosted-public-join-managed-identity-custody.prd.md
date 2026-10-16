@@ -30,11 +30,13 @@
 - 若继续让浏览器持有长期 player signer，任何缓存泄露都会放大为账户接管风险。
 - 若把 player custody 与 node/governance signer 共用一套 trust domain，会让产品问题和协议级 custody 问题互相绑死。
 
+账号接入的推荐方式、多凭证管理和邮箱受限恢复已由[免邮箱多凭证 PRD](hosted-public-join-key-based-onboarding.prd.md)承接；本专题继续拥有资产 signer / custody / step-up 与自托管升级合同。多凭证实现候选不升级当前技术预览或生产 custody 口径。
+
 ## 1. Executive Summary
 - Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker、`device_session + in-memory session key` 恢复链路，以及 env-configured SMTP 邮件投递；普通玩家不再需要手抄浏览器本地私钥，也不必继续依赖 repo-owned preview code 才能回到同一 `player_id`。但这套实现整体仍停留在 `limited playable technical preview` 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；`signer_ref`、managed custody sign API、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
-- Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户用邮箱验证码登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
+- Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户通过通行密钥或已登记邮箱证明登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
 - Success Criteria:
-  - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认支持邮箱登录。
+  - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认推荐通行密钥，邮箱为可选兼容因子；账号与凭证生命周期由[免邮箱多凭证合同](hosted-public-join-key-based-onboarding.prd.md)承接。
   - SC-2: 浏览器在 `hosted_public_join` 下不得再持有长期资产 signer、node signer 或可长期复用的明文私钥；旧 `localStorage privateKey` 残留必须被清洗而不是恢复到运行态。
   - SC-3: 玩家身份必须拆成 `hosted_account_id`、`player_id`、`device_session_id`、`signer_ref` 四类真值，不再把 `player_id` 直接当成完整账户体系。
   - SC-4: 高风险动作必须支持 `managed custody sign` lane，并由 step-up auth、风险策略和审计日志共同放行；`main_token_transfer` 不得再停留在“blocked，但没有目标方案”的状态。
@@ -52,7 +54,7 @@
   - `qa_engineer` / `liveops_community`: 需要知道托管账户、托管签名、撤销、恢复和事故处置的 pass/block 标准。
 - User Scenarios & Frequency:
   - 新用户第一次打开公开 join URL 时，需要先以 guest 方式进入，再升级为 hosted account player。
-  - 老用户换设备或清缓存时，需要通过邮箱重新登录并恢复玩家身份，而不是找回私钥文件。
+  - 老用户换设备或清缓存时，需要通过可用的已登记通行密钥或邮箱重新登录并恢复玩家身份，而不是找回私钥文件。
   - 玩家第一次执行高风险动作时，需要通过 step-up auth 触发托管签名，而不是暴露托管私钥。
   - 玩家后续若要脱离托管模式，需要显式绑定外部钱包或转移到自托管账户。
 - User Stories:
@@ -81,7 +83,7 @@
 | Audit / recovery | `risk_event_id/revoke_reason/recovered_by/evidence_ref` | 撤销设备、冻结账户、恢复访问 | `healthy -> challenged -> suspended -> recovered/closed` | 任一异常登录、设备丢失、滥用或风控命中都必须可审计 | `qa_engineer` / `liveops_community` 可追踪 |
 - Acceptance Criteria:
   - AC-1: 专题必须明确 `hosted_account_id/player_id/device_session_id/signer_ref` 的职责分离，不再把 `player_id` 既当登录账户又当 signer。
-  - AC-2: 专题必须明确邮箱登录是 hosted player 默认入口，而“输入公钥/私钥”不是默认 UX。
+  - AC-2: 专题必须明确通行密钥是推荐入口、邮箱为可选兼容方式，而“输入公钥/私钥”不是默认 UX；凭证注册、撤销与恢复遵循[多凭证合同](hosted-public-join-key-based-onboarding.prd.md)。
   - AC-3: 专题必须明确 hosted 浏览器已经清退 `localStorage privateKey` 持久化，并改用 `device_session + in-memory ephemeral Ed25519` 恢复路径；旧缓存残留必须在读取时被清洗。
   - AC-4: 专题必须明确 `managed custody sign` lane 的动作范围，至少覆盖 `prompt_control_apply` / `prompt_control_rollback` / `main_token_transfer`。
   - AC-5: 专题必须明确托管身份只适用于 player plane；node / validator / governance signer 继续由独立 custody/governance 文档约束。
@@ -93,7 +95,7 @@
 
 ## 3. Technical Requirements
 - Architecture Overview: 最合适的 hosted_public_join 目标态不是“让浏览器代持真正的玩家私钥”，也不是“强迫用户第一次进游戏就接外部钱包”，而是把登录、设备会话、托管签名和后续自托管升级拆成四层。
-  - `identity broker`: 处理邮箱 OTP、rate limit 与登录风险控制。
+  - `identity broker`: 按[多凭证设计](hosted-public-join-key-based-onboarding.design.md)处理标准 WebAuthn、可选邮箱 OTP、稳定账号、独立账号会话与风险控制；普通登录不占世界 slot。
   - `account registry`: 保存 `hosted_account_id -> player_id/signer_ref/device bindings` 映射；当前 hosted account 第一版实现允许 `file` 与 `Aliyun Tablestore` 双 backend，并约定 hosted 部署默认应优先落到服务端托管表存储而不是单机 JSON。
   - `session broker`: 用已验证账户换发 `player_session` 与设备短期 key challenge，服务于 runtime register/reconnect。
   - `custody service`: 只暴露 `prepare_sign/approve_sign/finalize_sign` 或等价 sign API；底层可以是 KMS/HSM 直管密钥，也可以是 KMS-wrapped sealed-key backend，但浏览器不能直接拿到长期 signer。

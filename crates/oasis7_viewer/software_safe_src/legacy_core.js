@@ -1,3 +1,4 @@
+import { createHostedWorldAccount } from "./viewer_hosted_world_account_module.js";
 import { createCanonicalOwnerReadModule } from "./viewer_canonical_owner_read_module.js";
 import { createViewerHostedAccountLoginIssuer } from "./viewer_hosted_account_login_issuer.js";
 import { invalidateAuthConnection, authConnectionGeneration, authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
@@ -342,6 +343,11 @@ const issueHostedAccountLogin = createViewerHostedAccountLoginIssuer({ state, ca
 const hostedLoginRegistrationBridge = createViewerHostedLoginRegistrationBridge({ registerPlayerSession: ensureRegisteredPlayerSession, render, state });
 const startHostedTestLogin = hostedLoginRegistrationBridge.wrapLogin(issueHostedTestLogin, "hosted_test_login");
 const completeHostedAccountLogin = hostedLoginRegistrationBridge.wrapLogin(issueHostedAccountLogin, "hosted_browser_storage");
+const hostedWorldAccount = createHostedWorldAccount({ state, generateKeypair: generateEphemeralEd25519Keypair, register: ensureRegisteredPlayerSession, render, clearLegacy: clearHostedPlayerSession });
+export const joinHostedAccountWorld = (...args) => hostedWorldAccount.join(...args);
+export const disableLegacyHostedSession = () => hostedWorldAccount.disableLegacy();
+export const releaseHostedAccountWorld = () => hostedWorldAccount.release();
+export const invalidateHostedAccountSession = () => hostedWorldAccount.invalidate();
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (auth?.source === "visual_fixture_projection") throw new Error("visual fixture authentication has no signing capability");
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -2336,6 +2342,7 @@ async function ensureRegisteredPlayerSession(requestedAgentId = null, options = 
     state.auth.registrationStatus === "registered"
     && (state.auth.runtimeStatus === "registered" || state.auth.runtimeStatus === "registered_unbound")
     && !forceRebind
+    && options?.renewAuthorization !== true
     && (
       normalizedRequestedAgentId == null
       || normalizedRequestedAgentId === state.auth.boundAgentId

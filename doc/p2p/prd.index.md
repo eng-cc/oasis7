@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-06-13
+更新时间：2026-10-13
 
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
@@ -40,7 +40,7 @@
 - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`：hosted player join 分享、信任面隔离、session 处置、claim freeze 与最小披露的稳定 operator 入口；不定义产品 claim 或 custody 实现。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
 - `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
-- `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
+- `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 與 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
 - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`：已退役 `shared_devnet` rehearsal 的历史 rollback/provenance 入口；不等于 formal `public_testnet` / `mainnet` readiness。
 - `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet readiness evidence / claims-boundary / mixed-topology / legacy shared-network 证据的当前入口与归档边界。
 - `doc/p2p/token/README.md`：Token 专题簇 landing page，按创世冻结、分配机制、授权、目标态与 quota bridge 分流；再按需进入理想交易设计或 quota bridge runbook。
@@ -52,6 +52,7 @@
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义
+- `draft`：待评审方案；纳入索引只保证可检索，不代表已采纳、已实现或公开可用。
 - `active`：当前执行真值以 GitHub Issue / GitHub Project 为准；仓库文档不维护任务状态段。
 - `canonical`：模块规格、设计总览、热点子域入口、当前补充阅读面和专题主文档；这些文档可长期保留在默认可达路径中。
 - `completed`：已完成但仍需按文件名可达的专题三件套；保留在下方检索清单，不自动进入默认首读面。
@@ -82,6 +83,7 @@
 | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | GitHub Issue / GitHub Project |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md` | GitHub Issue / GitHub Project |
+| [hosted-public-join-key-based-onboarding.prd.md](blockchain/hosted-public-join-key-based-onboarding.prd.md) | [hosted-public-join-key-based-onboarding.design.md](blockchain/hosted-public-join-key-based-onboarding.design.md) | `draft`；Git / PR / 实际 CI 与评审记录 |
 | `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md` | GitHub Issue / GitHub Project |

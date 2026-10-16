@@ -64,6 +64,15 @@
 - 页面级设计证据按 route family 管理：中英文共享视觉系统时可复用一份明确列出路径、语言长度风险与响应式约束的设计稿；真实浏览器桌面/移动截图与门禁结果仍是实现验证，Image2/概念图和设计稿不能替代运行证据或 QA 结论。fixture、debug、vendor 与纯构建输出不是产品页面，须在其所属模块明确分类而非纳入公开首页覆盖。
 - 任何新增公开页面、Hero Canvas/架构图/时间线的实质变更，或现有页面的视觉层级重排，均须先更新本节或对应的非日期化专业设计 authority，并补齐 `1440x900`、`390x844`、`360x800` 的真实浏览器证据。这是未清偿的页面设计治理债务触发器，不得恢复已退役微专题作为替代。
 
+<a id="site-roadshow-deck-receiver"></a>
+### 既有 HTML 路演 deck 的有限接收
+
+Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；承接 [产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011)，只将既有 [PRD-SITE-012](prd.md#prd-site-012)与 [AC-15](prd.md#ac-15)、[AC-16](prd.md#ac-16)、[AC-17](prd.md#ac-17)接入本模块 authority，不新增页面、框架或视觉方案。
+
+原 `site/deck/index.html` / `site/deck/en/index.html` 属于同一 route family；其固定顺序、双语长度、hash/键盘触控、持续 preview 与回链的页面比较目标见 [Coverage](deck/html-roadshow-deck-page-2026-06-19.design.md#coverage)、[信息结构](deck/html-roadshow-deck-page-2026-06-19.design.md#information-architecture)及 [Required States](deck/html-roadshow-deck-page-2026-06-19.design.md#required-states)。保留 [AC-16](prd.md#ac-16)的当前静态 Pages 发布兼容性及“不要求新增 Node/Vite/SPA 构建”边界；本段只定位原合同，不宣称实现已适配。
+
+维护权限、`draft -> linked -> published -> revised` 与发布责任人复核仍见 [原功能矩阵](prd.md#deck-functional-contract)，不新增审批层。首页当前布局 authority 不因此改为 deck 布局，deck 也不进入 discovery 六叶的状态范围。Image2 与历史 #1484 只提供原设计/出处，不提供浏览器、a11y、导航、发布或新视觉 signoff。验证沿 [原专业验证入口](prd.md#validation-site-012)及 [页面比较说明](deck/html-roadshow-deck-page-2026-06-19.design.md#implementation-comparison-notes)，静态链、页面行为和实际发布分别取证，本次全部未运行。
+
 <a id="static-manual-design"></a>
 ### 静态手册的共享设计
 
@@ -201,12 +210,13 @@ phase / result / reason / permitted_next_action`。
 
 ### 2.1 需求承接与分配表
 
-下表只为既有首写/完整性合同补齐身份与反链，不新增安装机制或平台承诺。页面展示、会话重验与世界恢复仍由原 owner 独立负责。
+下表为既有首写/完整性合同及独立 deck 公开说明合同补齐身份与反链，不新增安装机制、平台或页面承诺。页面展示、会话重验与世界恢复仍由原 owner 独立负责。
 
 | 上游 requirement / acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
 | Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
 | Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [首写与完整性](#manual-upgrade-first-write) | packaging/Launcher/runtime/QA，各实际平台入口 | 目标编排；不代签安装器接线、迁移实现、签名或世界恢复 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011) | 既有固定顺序公开说明、双语导航/预览边界，以及原静态发布兼容性的接收定位 | [deck 有限接收](#site-roadshow-deck-receiver) | [PRD-SITE-012](prd.md#prd-site-012)、AC-15–17；页面比较 owner 与模块维护者、发布责任人各保留原职责 | 不代签完整设计、页面行为、静态链适配或当前发布；不扩 discovery 六叶 |
 
 <a id="manual-upgrade-validation"></a>
 ### SC-8 / SC-10 的平台验证映射
@@ -236,6 +246,7 @@ phase / result / reason / permitted_next_action`。
 | --- | --- | --- | --- | --- | --- |
 | Trace refs: O7-REQ-2f44d108-4588-46f4-8c96-63b79983a15f；[SC-8 独立义务](../product/player-entry-distribution/prd.md#sc-entry-008) | [首写与完整性](#manual-upgrade-first-write) | 原状态首写前兼容判断、可信未改写回退及未知写入禁止降级 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：compatible / unchanged failure / uncertain write / retrieval and retry；原 test_tier_full，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
 | Trace refs: O7-REQ-2c381c11-8004-4efb-bc82-b04958b7eec5；[SC-10 独立义务](../product/player-entry-distribution/prd.md#sc-entry-010) | [首写与完整性](#manual-upgrade-first-write) | 安装/覆盖前完整性阻断、对象漂移与重新获取后独立重验 | [验证执行入口](../../testing-manual.md)；仅复用该手册的分层/实际执行记录要求，以下为未运行目标用例：平台矩阵（#manual-upgrade-validation）：missing / unverifiable / mismatch / replaced candidate / retrieval and retry；原 test_tier_required，每个支持的平台/primary mode、同一最终候选分别执行 | PR 记录候选资产、状态来源、首写前后及真实下一步；逐项 pass/fail/blocked/not_run | 本次未运行安装/迁移；静态下载或其他平台成功不能代签 |
+| Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；[产品 SC-11](../product/player-entry-distribution/prd.md#sc-entry-011) | [deck 有限接收](#site-roadshow-deck-receiver) | 固定顺序/直接访问、双语/hash/键盘触控、入口回链/preview、静态发布适配分别核对 | planned；`test_tier_required`；[测试分层与证据规范](../../testing-manual.md)只提供分层/实际记录要求，不是现成 deck 自动化。按本接收段链接的原专业验证要求，在固定候选记录 CN/EN deck 的直接访问/固定顺序、hash/键盘触控、入口回链/preview 及原静态发布兼容核对；当前未运行 | 页面实施 PR 的同候选真实操作/截图、静态链与适用发布核对结果 | 本次只有文档关系；Image2、旧任务或链接可解析均不证明 QA、设计全覆盖、部署或发行 |
 
 ## 设计目标
 - 提供 `site` 模块的总体设计入口。

@@ -20,7 +20,7 @@ pub(super) fn process(
         .map_err(|_| PrivateError::Unavailable)?
         != proof.request.expected_base_binding
     {
-        return Err(PrivateError::Conflict);
+        return Err(PrivateError::QuoteBaseDrift);
     }
     let captured = load_captured(service, store, context_proof, &pinned)?;
     let quote = pinned
@@ -45,7 +45,7 @@ pub(super) fn process(
     before_delivery();
     let fresh = pinned_check(service, fence, &proof.subject_public_key, true)?;
     if fresh.commit != pinned.commit {
-        return Err(PrivateError::Conflict);
+        return Err(PrivateError::QuoteDeliveryDrift);
     }
     game_task::validate_task_context_capture(
         &fresh.world,

@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "dbf67c410b7a54280d6e94abd2203a1a6e7f9a8e30d5ef10af6c6dd4434199e7",
+    "content_sha256": "7292f95f8fa58c36ccfab6067f04dd3b2709e6c7b08f09c061ea6c0c2418eb94",
     "current_authority": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
