@@ -362,10 +362,6 @@ fn state_with_previous_chain_identity() -> ServiceState {
             ..LauncherConfig::default()
         },
     );
-    state.executor_status = Some(oasis7_launcher_ui::AgentExecutorStatus {
-        phase: "running".into(),
-        ..Default::default()
-    });
     state.chain_identity = Some(super::ChainIdentitySnapshot {
         chain_id: "old-chain".into(),
         network_id: "old-network".into(),
@@ -384,10 +380,6 @@ fn session_stop_discards_previous_chain_evidence() {
     let mut state = state_with_previous_chain_identity();
     state.chain_runtime_status = super::ChainRuntimeStatus::Unreachable("probe failed".into());
     super::stop_chain_process(&mut state).expect("stop no-op");
-    assert!(
-        state.executor_status.is_none(),
-        "retained old executor evidence"
-    );
     assert!(
         state.chain_replication_status.is_none(),
         "retained old replication evidence"
@@ -408,10 +400,6 @@ fn session_failed_start_discards_previous_chain_evidence() {
     let config = state.config.clone();
     assert!(start_chain_process(&mut state, config).is_err());
     assert!(
-        state.executor_status.is_none(),
-        "retained old executor evidence"
-    );
-    assert!(
         state.chain_replication_status.is_none(),
         "retained old replication evidence"
     );
@@ -426,10 +414,6 @@ fn session_without_process_discards_previous_chain_evidence() {
     let mut state = state_with_previous_chain_identity();
     state.chain_runtime_status = super::ChainRuntimeStatus::StaleExecutionWorld("stale".into());
     super::update_chain_runtime_status(&mut state);
-    assert!(
-        state.executor_status.is_none(),
-        "retained old executor evidence"
-    );
     assert!(
         state.chain_replication_status.is_none(),
         "retained old replication evidence"

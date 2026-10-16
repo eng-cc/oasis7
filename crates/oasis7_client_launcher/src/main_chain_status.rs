@@ -32,7 +32,6 @@ impl crate::ClientLauncherApp {
         self.chain_p2p_status = None;
         self.chain_observability_status = None;
         self.chain_replication_status = None;
-        self.executor_status = None;
         self.chain_recovery = None;
         self.control_plane_snapshot_received = false;
     }
@@ -62,20 +61,12 @@ mod tests {
         let mut app = ClientLauncherApp::default();
         app.control_manage_service = false;
         app.chain_runtime_status = ChainRuntimeStatus::Ready;
-        app.executor_status = Some(oasis7_launcher_ui::AgentExecutorStatus {
-            phase: "running".into(),
-            ..Default::default()
-        });
         app.chain_identity = Some(crate::web_api_support::WebChainIdentityStatus {
             chain_id: "old".into(),
             network_id: "old".into(),
         });
         app.web_api_tx.send(event).expect("queue failure");
         app.poll_process();
-        assert!(
-            app.executor_status.is_none(),
-            "offline surface retained executor state"
-        );
         assert!(
             app.chain_identity.is_none(),
             "offline surface retained authority"
@@ -110,7 +101,6 @@ mod response_order_tests {
             chain_p2p_status: None,
             chain_observability_status: None,
             chain_replication_status: None,
-            executor_status: None,
             chain_recovery: None,
             game_url: "http://localhost/".into(),
             config: app.config.clone(),
@@ -224,7 +214,6 @@ mod termination_tests {
             chain_p2p_status: None,
             chain_observability_status: None,
             chain_replication_status: None,
-            executor_status: None,
             chain_recovery: None,
             game_url: "http://localhost/".into(),
             config: app.config.clone(),

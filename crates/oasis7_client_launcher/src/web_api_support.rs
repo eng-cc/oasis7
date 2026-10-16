@@ -137,7 +137,6 @@ pub(crate) struct WebStateSnapshot {
     pub(crate) chain_p2p_status: Option<WebChainP2pStatus>,
     pub(crate) chain_observability_status: Option<WebChainNodeObservabilityStatus>,
     pub(crate) chain_replication_status: Option<WebChainReplicationStatus>,
-    pub(crate) executor_status: Option<oasis7_launcher_ui::AgentExecutorStatus>,
     pub(crate) chain_recovery: Option<WebChainRecoverySnapshot>,
     pub(crate) game_url: String,
     pub(crate) config: LaunchConfig,

@@ -186,7 +186,6 @@ fn clear_chain_session_evidence(state: &mut ServiceState) {
     state.chain_p2p_status = None;
     state.chain_observability_status = None;
     state.chain_replication_status = None;
-    state.executor_status = None;
 }
 
 pub(super) fn poll_service_state(state: &mut ServiceState) {
@@ -280,7 +279,6 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
         state.chain_p2p_status = None;
         state.chain_observability_status = None;
         state.chain_replication_status = None;
-        state.executor_status = None;
         state.chain_recovery = None;
         state.last_chain_probe_at = None;
         return;
@@ -299,7 +297,6 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
             state.chain_p2p_status = None;
             state.chain_observability_status = None;
             state.chain_replication_status = None;
-            state.executor_status = None;
             state.chain_recovery = None;
         }
         state.last_chain_probe_at = None;
@@ -322,7 +319,6 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
             state.chain_p2p_status = Some(status_snapshot.p2p);
             state.chain_observability_status = Some(status_snapshot.observability);
             state.chain_replication_status = Some(status_snapshot.replication);
-            state.executor_status = None;
             state.chain_recovery = None;
         }
         Err(err) => {
@@ -330,7 +326,6 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
             state.chain_p2p_status = None;
             state.chain_observability_status = None;
             state.chain_replication_status = None;
-            state.executor_status = None;
             let within_grace = state.chain_started_at.is_some_and(|started_at| {
                 now.duration_since(started_at)
                     < Duration::from_secs(CHAIN_STATUS_STARTING_GRACE_SECS)
@@ -733,7 +728,6 @@ pub(super) fn snapshot_from_state(
         chain_p2p_status: state.chain_p2p_status.clone(),
         chain_observability_status: state.chain_observability_status.clone(),
         chain_replication_status: state.chain_replication_status.clone(),
-        executor_status: state.executor_status.clone(),
         chain_recovery: state.chain_recovery.clone(),
         hosted_access: hosted_player_access_contract(deployment_mode_from_config(&state.config)),
         game_url,
