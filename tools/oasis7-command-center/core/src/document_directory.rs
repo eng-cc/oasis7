@@ -23,6 +23,10 @@ pub struct DocumentDirectoryQuery {
     #[serde(default)]
     #[ts(optional)]
     pub kind_filter: Option<String>,
+    /// Omitted preserves all explicit pairing states.
+    #[serde(default)]
+    #[ts(optional)]
+    pub pairing_filter: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +65,7 @@ pub struct DocumentDirectoryPage {
     pub hidden_history_files: usize,
     pub lifecycle_filter: String,
     pub kind_filter: String,
+    pub pairing_filter: String,
     pub total_children: usize,
     pub entries: Vec<DocumentDirectoryEntry>,
     pub next_cursor: Option<String>,
@@ -113,6 +118,10 @@ impl CommandCenter {
         if !matches!(kind, "all" | "prd" | "design" | "entry") {
             return Err(Error::Invalid("invalid document kind filter".into()));
         }
+        let pairing = request.pairing_filter.as_deref().unwrap_or("all");
+        if !crate::document_directory_pairings::valid(pairing) {
+            return Err(Error::Invalid("invalid document pairing filter".into()));
+        }
         let inventory = self.load_document_inventory(query)?;
         let eligible: Vec<_> = inventory
             .files
@@ -137,6 +146,7 @@ impl CommandCenter {
             &query.read_filter,
             lifecycle,
             kind,
+            pairing,
         ))?);
         let offset = if let Some(cursor) = &query.cursor {
             let cursor: Cursor = serde_json::from_str(cursor)
@@ -154,7 +164,9 @@ impl CommandCenter {
             .iter()
             .copied()
             .filter(|f| {
-                (kind == "all" || f.kind == kind) && f.matches_filter(&text, &query.read_filter)
+                (kind == "all" || f.kind == kind)
+                    && f.matches_filter(&text, &query.read_filter)
+                    && crate::document_directory_pairings::matches(f, pairing)
             })
             .collect();
         let references = if lifecycle == "current" {
@@ -260,6 +272,7 @@ impl CommandCenter {
             hidden_history_files,
             lifecycle_filter: lifecycle.into(),
             kind_filter: kind.into(),
+            pairing_filter: pairing.into(),
             total_children,
             entries: children.into_values().skip(offset).take(100).collect(),
             next_cursor,

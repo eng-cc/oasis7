@@ -34,6 +34,7 @@ fn fixture(files: &[(&str, &str)]) -> (tempfile::TempDir, CommandCenter, Documen
         parent_path: String::new(),
         lifecycle_filter: None,
         kind_filter: None,
+        pairing_filter: None,
         inventory: DocumentInventoryQuery {
             schema_version: 1,
             project_id: snapshot.project.unwrap().id,
@@ -254,6 +255,7 @@ fn lifecycle_filters_keep_unknowns_and_bind_cursors_without_changing_coverage() 
     let mut legacy_json = legacy_json.as_object().unwrap().clone();
     legacy_json.remove("lifecycleFilter");
     legacy_json.remove("kindFilter");
+    legacy_json.remove("pairingFilter");
     let legacy_request: DocumentDirectoryQuery =
         serde_json::from_value(legacy_json.into()).unwrap();
     assert_eq!(
@@ -437,4 +439,77 @@ fn kind_filters_preserve_coverage_and_cross_kind_history_evidence() {
     query.inventory.read_filter = "all".into();
     query.inventory.query = "nonmatching".into();
     assert_eq!(core.document_directory(query).unwrap().matching_files, 0);
+}
+
+#[test]
+fn pairing_gap_filters_use_only_explicit_pairings_and_preserve_coverage() {
+    let files: Vec<_> = (0..105)
+        .map(|i| {
+            (
+                format!("doc/{i:03}.prd.md"),
+                "# Requirement\n- 配对系统设计：[missing](deleted.design.md)\n".into(),
+            )
+        })
+        .chain([
+            ("doc/deleted.design.md".into(), "# Deleted\n".into()),
+            (
+                "doc/unpaired.prd.md".into(),
+                "# Unpaired\n- 上游：[missing](deleted.design.md)\n".into(),
+            ),
+            (
+                "doc/incomplete.prd.md".into(),
+                "# Incomplete\n- 配对系统设计：unclear\n".into(),
+            ),
+        ])
+        .collect();
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (tmp, mut core, mut query) = fixture(&refs);
+    fs::remove_file(tmp.path().join("repo/doc/deleted.design.md")).unwrap();
+    core.refresh().unwrap();
+    query.pairing_filter = Some("missing".into());
+    query.parent_path = "doc".into();
+    let page = core.document_directory(query.clone()).unwrap();
+    assert_eq!(page.matching_files, 105);
+    assert_eq!(page.candidates, 108);
+    assert_eq!(page.eligible_files, 108);
+    assert_eq!(page.omitted, 1);
+    assert!(page.next_cursor.is_some());
+    query.inventory.cursor = page.next_cursor;
+    query.pairing_filter = Some("all".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.inventory.cursor = None;
+    query.pairing_filter = Some("unpaired".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("unparsed".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("incomplete".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.pairing_filter = Some("missing".into());
+    query.inventory.query = "unpaired".into();
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        0
+    );
+    query.pairing_filter = Some("invented".into());
+    assert!(core.document_directory(query).is_err());
 }
