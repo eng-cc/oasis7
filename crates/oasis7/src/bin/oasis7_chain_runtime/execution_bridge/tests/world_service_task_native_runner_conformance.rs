@@ -46,18 +46,22 @@ impl ModelProvider for ScriptedFactoryChain {
             context["native_authorization_read_commit"],
             context["current_read_commit"]
         );
-        assert!(
-            context["native_delegation_authorizations"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|a| a["grant"]["object_id"] == FACTORY
-                    && a["grant"]["action_kinds"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|kind| kind == "BuildFactory"))
-        );
+        // The one construction grant is exhausted after the first build;
+        // require it in discovery only before that effect is committed.
+        if call <= 1 {
+            assert!(
+                context["native_delegation_authorizations"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|a| a["grant"]["object_id"] == FACTORY
+                        && a["grant"]["action_kinds"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|kind| kind == "BuildFactory"))
+            );
+        }
         if call == 0 {
             // Deliberately propose an ungranted object, then a physical effect
             // in the same stale plan. The signed rejection must suppress that
