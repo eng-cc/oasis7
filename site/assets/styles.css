@@ -4100,3 +4100,15 @@ body.discovery-page.observatory { --text-soft: #b7c9d3; --line-soft: #263d49; ba
  .observatory .lore-art { position: static; width: 100%; margin-top: 24px; }
  .observatory .lore-art img { height: 160px; }
 }
+
+/* Preview choices remain available while installation details are closed. */
+.observatory #download, .observatory #package-download { scroll-margin-top: 96px; }
+.observatory .preview-paths { margin: 16px 0 24px; }
+.observatory .preview-validation > dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 0; }
+.observatory .preview-validation h3 { margin: 0; }
+.observatory .preview-validation dd p { margin-top: 0; }
+.observatory .download-candidate-warning { color: #d2e6de; line-height: 1.7; }
+@media (max-width: 639px) {
+  .observatory .preview-validation > dl { grid-template-columns: 1fr; gap: 16px; }
+  .observatory #download, .observatory #package-download { scroll-margin-top: 24px; }
+}

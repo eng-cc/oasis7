@@ -127,11 +127,11 @@
       </section>
 
 <section id="download" class="section landing-chapter landing-download discovery-portal portal-preview">
-        <h2>了解技术预览</h2><p class="section-intro">需本地环境和自备模型配置；公共网页加入尚未开放。下载前核对平台、费用与未签名风险。</p><dl class="preview-quickfacts"><div><dt>体验范围</dt><dd>本地技术预览与受控验证；不是公开网页加入。</dd></div><div><dt>需要准备</dt><dd>受支持桌面系统、本地环境和配置你使用的模型服务；自然语言不等于零配置。</dd></div><div><dt>模型与费用</dt><dd>模型由你选择并配置；调用会使用对应服务账户的额度，并可能产生费用，按该服务的计费规则执行。本站不提供免费模型额度或凭据输入。</dd></div><div><dt>保存与升级</dt><dd>升级前备份配置与世界数据；签名和兼容性按当前发行说明核对，不保证自动迁移。</dd></div></dl><details class="preview-installation" data-preview-details><summary>查看预览说明 →</summary><div class="preview-installation-body"><p class="preview-paths"><a href="#package-download">了解安装包：选择平台 ↓</a><a href="#case-conditions">了解十月案例复现条件 →</a></p>
-        <section class="preview-validation"><h3>本版本已验证到哪里</h3><dl>
+        <h2>了解技术预览</h2><p class="section-intro">需本地环境和自备模型配置；公共网页加入尚未开放。下载前核对平台、费用与未签名风险。</p><dl class="preview-quickfacts"><div><dt>需要准备</dt><dd>受支持桌面系统、本地环境与自备模型服务；调用可能消耗额度或产生费用。</dd></div><div><dt>安装前核对</dt><dd>平台、签名与兼容性；升级前备份配置和世界数据，不保证自动迁移。</dd></div></dl><p class="preview-paths"><a href="#package-download">选择下载平台 ↓</a><a href="#case-conditions">源码案例复现条件 →</a><a href="devlog/first-iron-batch/">不安装，继续阅读案例 →</a></p><details class="preview-installation" data-preview-details><summary>查看安装包与准备条件</summary><div class="preview-installation-body">
+        <section class="preview-validation"><h3>安装包与案例：版本不同</h3><dl>
 <div><dt>当前可下载预览 · <strong data-package-candidate-tag>2026-06-03_v2</strong></dt><dd><p data-package-validation-copy data-verified-release="2026-06-03_v2">Windows、macOS、Linux 安装包已构建发布，但尚无完整试玩验证记录。</p><a href="https://github.com/eng-cc/oasis7/actions/runs/26886794547">已核对的 2026-06-03_v2 构建发布记录</a></dd></div>
 <div><dt>官网展示案例</dt><dd>十月源码 52c136a7 的预置环境 CLI 测试，确认首批 3 个铁锭；尚未证明推荐安装包能复现。</dd></div>
-<div><dt>尚未开放与建议起点</dt><dd>公共网页加入与零配置体验未开放。若选择实验性安装，建议先核对启动器配置与预览入口；这是起步目标，不是已通过的包体验验收。不安装也可继续阅读和核对完整案例。</dd></div>
+
 </dl></section>
         <p class="release-status" data-release-status role="status">最后记录版本，未确认最新。</p>
         <p class="release-meta">
@@ -172,6 +172,7 @@
             </div>
             <h3 data-download-primary-title>Windows x64 主安装器</h3>
             <p class="download-primary-copy" data-download-primary-copy>下载 Windows x64 安装包 `oasis7-windows-x64.exe`，运行安装程序。</p>
+<p class="download-candidate-warning">此安装包尚无完整试玩验证记录，十月源码案例不是安装包教程。需自备模型配置，调用可能产生费用；本站不收集凭据。</p>
             <div class="download-actions">
               <a
                 class="button primary"
@@ -190,7 +191,7 @@
 <p class="download-trust-warning" data-download-primary-trust data-homepage-claim="access-signing-boundary">当前仍是技术预览主包：Windows 尚未补齐代码签名，macOS 尚未完成 notarization；checksums 仅用于辅助校验，不替代平台信任链。</p>
             <p class="download-primary-footnote" data-download-primary-footnote>如果你要给另一台机器下载，可切换上方平台按钮；默认面不会再把多个技术形态并列给普通用户判断。</p>
           </div>
-          <section class="preview-first-steps"><h3>安装包路径：先核对三件事</h3><ol><li><strong>在下方选择你的平台。</strong>安装前核对版本、架构、校验文件与签名提示。</li><li><strong>按该版本说明准备。</strong>配置本地环境和你使用的模型服务，再检查启动器是否提供可用入口；安装成功不等于已经完成试玩。</li><li><strong>决定是否继续尝试。</strong>这个包尚无完整试玩验证记录。如果你想了解十月案例，请先读另一条路径的<a href="#case-conditions">案例复现条件</a>。</li></ol><p>遇到问题？查看<a href="doc/cn/viewer-manual.html#troubleshooting">技术排障参考</a>，或到<a href="https://github.com/eng-cc/oasis7/issues">问题反馈</a>提供版本、平台与脱敏错误，不要发送密钥。</p></section>
+          <section class="preview-first-steps"><h3>安装包路径：先核对三件事</h3><ol><li><strong>核对上方选择的平台。</strong>安装前核对版本、架构、校验文件与签名提示。</li><li><strong>按该版本说明准备。</strong>配置本地环境和你使用的模型服务，再检查启动器是否提供可用入口；安装成功不等于已经完成试玩。</li><li><strong>决定是否继续尝试。</strong>这个包尚无完整试玩验证记录。如果你想了解十月案例，请先读另一条路径的<a href="#case-conditions">案例复现条件</a>。</li></ol><p>遇到问题？查看<a href="doc/cn/viewer-manual.html#troubleshooting">技术排障参考</a>，或到<a href="https://github.com/eng-cc/oasis7/issues">问题反馈</a>提供版本、平台与脱敏错误，不要发送密钥。</p></section>
           <details class="download-support-card">
             <summary>安装前的兼容性与信任边界</summary>
             <dl class="download-support-list">

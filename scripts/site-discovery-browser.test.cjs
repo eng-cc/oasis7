@@ -109,6 +109,19 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
   assert.equal(await p.locator('[data-preview-details]').getAttribute('open'),'');
   await c.close();record(locale+' compact preview opens by CTA, keyboard-native disclosure and deep link with visible risk');
  }
+ // Deep links must land in the viewport, not merely open the disclosure.
+ for(const locale of ['zh-CN','en-US']){
+  const c=await context({locale,viewport:{width:390,height:844}});const p=await c.newPage();
+  const route=locale==='zh-CN'?'/':'/en/';
+  await p.goto(origin+route+'#package-download');
+  assert.equal(await p.locator('[data-preview-details]').evaluate(e=>e.open),true);
+  await p.waitForFunction(()=>{const r=document.querySelector('#package-download').getBoundingClientRect();return r.top>=0&&r.top<innerHeight/2;});
+  await p.locator('[data-preview-details] > summary').click();
+  await p.locator('.preview-paths a[href="#package-download"]').click();
+  assert.equal(await p.locator('[data-preview-details]').evaluate(e=>e.open),true);
+  await p.waitForFunction(()=>{const r=document.querySelector('#package-download').getBoundingClientRect();return r.top>=0&&r.top<innerHeight/2;});
+  await c.close();record(locale+' platform deep link and repeated link reveal and position the destination');
+ }
  // Concept media failure must not remove the decision path or disclosure.
  for(const locale of ['zh-CN','en-US']){
   const c=await context({locale,viewport:{width:390,height:844},reducedMotion:'no-preference'});
