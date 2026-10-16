@@ -151,6 +151,7 @@ pub enum NativeTaskStopReason {
     ControlChanged,
     ContextExpired,
     ModelFailed,
+    InputLimit,
     ModelTimeout,
     InvalidModelOutput,
     Aborted,
@@ -196,6 +197,13 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         };
         let mut recovered = Vec::new();
         let mut rejected_feedback = Vec::new();
+        let mut feedback_sent = 0;
+        let provider_history = self
+            .provider
+            .as_ref()
+            .ok_or("native provider unavailable")?
+            .history_mode()
+            == crate::ModelProviderHistory::ProviderConversation;
         // Rejected originals consume immutable slots, never successful effects.
         // Bound recovery work independently of a model's willingness to finish.
         let slots = self
@@ -263,6 +271,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                 return Ok(report);
             }
             let mut transcript = Vec::<Value>::new();
+            let mut context_sent = false;
             loop {
                 if let Some(reason) = self.control_reason(&context)? {
                     report.stop_reason = reason;
@@ -272,8 +281,41 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     report.stop_reason = self.settle_exhausted_context(&operation, &run_fence)?;
                     return Ok(report);
                 }
-                let request =
-                    tools::request(&self.config, &context, &transcript, &rejected_feedback)?;
+                let feedback = if provider_history {
+                    &rejected_feedback[feedback_sent..]
+                } else {
+                    &rejected_feedback[..]
+                };
+                let request = match tools::request(
+                    &self.config,
+                    &context,
+                    &transcript,
+                    feedback,
+                    (provider_history && context_sent).then_some(report.model_calls_spent),
+                ) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        report.stop_reason = model_failure(&error);
+                        return Ok(report);
+                    }
+                };
+                let preflight = self
+                    .provider
+                    .as_ref()
+                    .ok_or("native provider unavailable")?
+                    .preflight(&request);
+                // Preflight is not inference and never spends a physical call.
+                // Recheck authority before reserving even if capacity was valid.
+                if let Some(reason) = self.control_reason(&context)? {
+                    report.stop_reason = reason;
+                    return Ok(report);
+                }
+                if let Err(error) = preflight {
+                    report.stop_reason = model_failure(&error);
+                    return Ok(report);
+                }
+                context_sent = true;
+                feedback_sent = rejected_feedback.len();
                 report.model_calls_spent =
                     self.host.reserve_model_call(&self.config, &operation)?;
                 // Recheck after durable reservation too. A canceled reservation
@@ -304,7 +346,9 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     .as_ref()
                     .ok_or("native provider unavailable")?
                     .pending_tool_calls();
-                if tools::validate_call_ids(&response, &pending).is_err() {
+                if (provider_history && pending.is_empty())
+                    || tools::validate_call_ids(&response, &pending).is_err()
+                {
                     report.stop_reason = NativeTaskStopReason::InvalidModelOutput;
                     return Ok(report);
                 }
@@ -347,7 +391,9 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                         report.stop_reason = NativeTaskStopReason::HostFailure;
                         return Ok(report);
                     }
-                    transcript.push(serde_json::json!({"tool":tool,"result":result.value}));
+                    if !provider_history {
+                        transcript.push(serde_json::json!({"tool":tool,"result":result.value}));
+                    }
                     if let Some(call) = pending.get(index) {
                         supplier_results.push(ModelProviderToolResult {
                             call_id: call.call_id.clone(),
@@ -513,7 +559,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     if let Some(reason) = self.control_reason(context)? {
                         return Ok(Err(reason));
                     }
-                    return Ok(response.map_err(|_| NativeTaskStopReason::ModelFailed));
+                    return Ok(response.map_err(|error| model_failure(&error)));
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     return Ok(Err(NativeTaskStopReason::ModelFailed));
@@ -521,6 +567,13 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
             }
         }
+    }
+}
+fn model_failure(error: &crate::ModelProviderError) -> NativeTaskStopReason {
+    if error.code() == "input_limit" {
+        NativeTaskStopReason::InputLimit
+    } else {
+        NativeTaskStopReason::ModelFailed
     }
 }
 fn terminal(state: NativeTaskRecovery) -> Option<NativeTaskStopReason> {

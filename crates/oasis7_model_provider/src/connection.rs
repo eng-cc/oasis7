@@ -635,6 +635,23 @@ impl ConnectionManager {
         }
         Ok(())
     }
+    /// Read non-secret encoding policy only after validating the live run epoch.
+    pub(crate) fn active_preset(
+        &self,
+        p: &Principal,
+        name: &str,
+        version: u64,
+        generation: u64,
+    ) -> Result<ProviderPreset, ConnectionError> {
+        self.check_execution(p, name, version, generation)?;
+        let mut state = self.lock()?;
+        self.expire(&mut state);
+        let c = Self::current(&mut state, p, name, None)?;
+        if c.active_version != Some(version) || c.generation != generation {
+            return Err(ConnectionError::Conflict);
+        }
+        Ok(c.preset.clone())
+    }
     pub fn reserve_run(
         &self,
         p: &Principal,
