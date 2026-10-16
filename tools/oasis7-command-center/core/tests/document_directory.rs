@@ -33,6 +33,7 @@ fn fixture(files: &[(&str, &str)]) -> (tempfile::TempDir, CommandCenter, Documen
     let query = DocumentDirectoryQuery {
         parent_path: String::new(),
         lifecycle_filter: None,
+        kind_filter: None,
         inventory: DocumentInventoryQuery {
             schema_version: 1,
             project_id: snapshot.project.unwrap().id,
@@ -252,6 +253,7 @@ fn lifecycle_filters_keep_unknowns_and_bind_cursors_without_changing_coverage() 
     let legacy_json = serde_json::to_value(&query).unwrap();
     let mut legacy_json = legacy_json.as_object().unwrap().clone();
     legacy_json.remove("lifecycleFilter");
+    legacy_json.remove("kindFilter");
     let legacy_request: DocumentDirectoryQuery =
         serde_json::from_value(legacy_json.into()).unwrap();
     assert_eq!(
@@ -364,4 +366,75 @@ fn history_reference_counts_deduplicate_sources_and_bound_path_samples() {
     assert_eq!(entry.historical_reference_paths[19], "doc/19.design.md");
     assert_eq!(page.hidden_history_files, 0);
     assert_eq!(page.matching_files, 27);
+}
+
+#[test]
+fn kind_filters_preserve_coverage_and_cross_kind_history_evidence() {
+    let files: Vec<_> = (0..105)
+        .map(|i| (format!("doc/{i:03}.prd.md"), "# Requirements\n".into()))
+        .chain([
+            ("AGENTS.md".into(), "# Entry\n".into()),
+            ("doc/README.md".into(), "# Docs\n".into()),
+            (
+                "doc/old/design.md".into(),
+                "# Old\n- 状态：retired\n".into(),
+            ),
+            (
+                "doc/source/prd.md".into(),
+                "# Source\n- 配对系统设计：[old](../old/design.md)\n".into(),
+            ),
+            ("doc/plain.md".into(), "# Body\n".into()),
+        ])
+        .collect();
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (_tmp, core, mut query) = fixture(&refs);
+    let all = core.document_directory(query.clone()).unwrap();
+    assert_eq!(all.candidates, 110);
+    assert_eq!(all.eligible_files, 109);
+    query.kind_filter = Some("design".into());
+    query.lifecycle_filter = Some("current".into());
+    let design = core.document_directory(query.clone()).unwrap();
+    assert_eq!(design.matching_files, 1);
+    assert_eq!(design.eligible_files, 109);
+    assert_eq!(design.candidates, 110);
+    query.parent_path = "doc/old".into();
+    let leaf = core.document_directory(query.clone()).unwrap();
+    assert_eq!(leaf.entries[0].historical_reference_files, 1);
+    assert_eq!(
+        leaf.entries[0].historical_reference_paths,
+        ["doc/source/prd.md"]
+    );
+    query.parent_path.clear();
+    query.kind_filter = Some("entry".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        2
+    );
+    query.parent_path = "doc".into();
+    query.kind_filter = Some("prd".into());
+    let prd = core.document_directory(query.clone()).unwrap();
+    assert_eq!(prd.matching_files, 106);
+    assert!(prd.next_cursor.is_some());
+    query.inventory.cursor = prd.next_cursor;
+    query.kind_filter = Some("all".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.inventory.cursor = None;
+    query.kind_filter = Some("other".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.kind_filter = Some("design".into());
+    query.inventory.read_filter = "omitted".into();
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        0
+    );
+    query.inventory.read_filter = "all".into();
+    query.inventory.query = "nonmatching".into();
+    assert_eq!(core.document_directory(query).unwrap().matching_files, 0);
 }

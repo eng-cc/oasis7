@@ -19,6 +19,10 @@ pub struct DocumentDirectoryQuery {
     #[serde(default)]
     #[ts(optional)]
     pub lifecycle_filter: Option<String>,
+    /// Omitted keeps all eligible document kinds.
+    #[serde(default)]
+    #[ts(optional)]
+    pub kind_filter: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +60,7 @@ pub struct DocumentDirectoryPage {
     /// History matches excluded by the current filter, before pagination.
     pub hidden_history_files: usize,
     pub lifecycle_filter: String,
+    pub kind_filter: String,
     pub total_children: usize,
     pub entries: Vec<DocumentDirectoryEntry>,
     pub next_cursor: Option<String>,
@@ -104,6 +109,10 @@ impl CommandCenter {
         {
             return Err(Error::Invalid("invalid document lifecycle filter".into()));
         }
+        let kind = request.kind_filter.as_deref().unwrap_or("all");
+        if !matches!(kind, "all" | "prd" | "design" | "entry") {
+            return Err(Error::Invalid("invalid document kind filter".into()));
+        }
         let inventory = self.load_document_inventory(query)?;
         let eligible: Vec<_> = inventory
             .files
@@ -127,6 +136,7 @@ impl CommandCenter {
             &text,
             &query.read_filter,
             lifecycle,
+            kind,
         ))?);
         let offset = if let Some(cursor) = &query.cursor {
             let cursor: Cursor = serde_json::from_str(cursor)
@@ -143,7 +153,9 @@ impl CommandCenter {
         let filtered: Vec<_> = eligible
             .iter()
             .copied()
-            .filter(|f| f.matches_filter(&text, &query.read_filter))
+            .filter(|f| {
+                (kind == "all" || f.kind == kind) && f.matches_filter(&text, &query.read_filter)
+            })
             .collect();
         let references = if lifecycle == "current" {
             historical_references(&eligible)
@@ -247,6 +259,7 @@ impl CommandCenter {
             matching_files: matching.len(),
             hidden_history_files,
             lifecycle_filter: lifecycle.into(),
+            kind_filter: kind.into(),
             total_children,
             entries: children.into_values().skip(offset).take(100).collect(),
             next_cursor,
