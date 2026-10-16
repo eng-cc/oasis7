@@ -202,11 +202,16 @@ impl oasis7_agent_harness::NativeTaskHost for FrozenOriginalDelivery {
             )?;
             // Observe independent real-node progress through the ordinary host;
             // no fixture World mutation, clock step or fabricated feedback.
-            self.inner.invoke(
-                context,
-                &NativeTaskTool::parse("wait", &json!({"ticks":1}))?,
-            )?;
-            let result = self.inner.invoke(context, tool)?;
+            self.inner
+                .invoke(
+                    context,
+                    &NativeTaskTool::parse("wait", &json!({"ticks":1}))?,
+                )
+                .map_err(|error| frozen_step_error("wait_after_cache", error))?;
+            let result = self
+                .inner
+                .invoke(context, tool)
+                .map_err(|error| frozen_step_error("submit_original", error))?;
             assert!(
                 serde_json::to_value(
                     client
@@ -220,6 +225,24 @@ impl oasis7_agent_harness::NativeTaskHost for FrozenOriginalDelivery {
         }
         self.inner.invoke(context, tool)
     }
+}
+// Closed diagnostics only. Never print the returned error, signed data or key.
+fn frozen_step_error(step: &'static str, error: String) -> String {
+    let category = if error == "context already has a different original action; query its result" {
+        "cached_action_mismatch"
+    } else if error.contains("original result query") {
+        "original_query_unavailable"
+    } else if error == "world progress wait timed out" {
+        "world_wait_timeout"
+    } else if error == "wait would exceed original context validity" {
+        "wait_exceeds_context"
+    } else if error.contains("public read") || error.contains("task control") {
+        "authenticated_read_unavailable"
+    } else {
+        "other_host_failure"
+    };
+    eprintln!("NATIVE_CONFORMANCE_FROZEN step={step} category={category}");
+    error
 }
 struct StopFixture(PathBuf);
 impl Drop for StopFixture {
