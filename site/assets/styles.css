@@ -3981,3 +3981,120 @@ body.discovery-page:not(.content-page)::before { display: none; }
   .discovery-page:not(.content-page) #contribute { display: block; width: 100%; }
   .discovery-page:not(.content-page) .footer { display: block; }
 }
+
+/* Civilization observatory: homepage only. Static content remains the baseline.
+   Existing AI concept art: hero focus 75% 45%, phone 67% 40%; the case
+   close-up reuses the same art family and never represents gameplay footage. */
+body.discovery-page.observatory { --text-soft: #b7c9d3; --line-soft: #263d49; background: #060b11; color: #f1f8fc; }
+.observatory.discovery-page:not(.content-page) > .topbar { max-width: 1440px; padding: 16px 5.55%; background: #060b11; border-color: #16252d; }
+.observatory.discovery-page:not(.content-page) > .topbar .brand { font-style: normal; font-weight: 700; letter-spacing: -.04em; }
+.observatory.discovery-page:not(.content-page) > .topbar .brand-mark { display: block; }
+.observatory.discovery-page:not(.content-page) main { max-width: 1440px; padding: 0 5.55%; }
+.observatory.discovery-page:not(.content-page) .button.primary { background: #43efbb; border-color: #43efbb; color: #04241b; box-shadow: none; }
+.observatory.discovery-page:not(.content-page) .eyebrow { color: #70e7c3; letter-spacing: .13em; }
+.observatory.discovery-page:not(.content-page) .landing-hero { padding: 100px 0 46px; }
+.observatory.discovery-page:not(.content-page) .landing-hero .hero-grid { min-height: 540px; display: flex; align-items: center; }
+.observatory.discovery-page:not(.content-page) .landing-hero .hero-grid > div { width: 55%; padding-bottom: 48px; }
+.observatory.discovery-page:not(.content-page) .landing-hero .hero-visual { inset: -100px -6.25% -35px 27%; }
+.observatory.discovery-page:not(.content-page) .landing-hero .hero-key-art img { object-position: 75% 45%; mask-image: linear-gradient(90deg,transparent,#000 24%),linear-gradient(0deg,transparent,#000 18%,#000 92%,transparent); }
+.observatory.discovery-page:not(.content-page) .landing-hero .hero-key-art::after { background: linear-gradient(90deg,#060b11d9,transparent 56%); }
+.observatory.discovery-page:not(.content-page) .hero h1 { font-size: clamp(2.5rem,4.1vw,3.75rem); line-height: 1.22; margin: 22px 0; }
+.observatory.discovery-page:not(.content-page) .hero-direction { color: #f1f8fc; }
+.observatory.discovery-page:not(.content-page) .hero .subtitle { font-size: 1rem; max-width: 31rem; }
+.observatory .hero-question { font-size: 1rem; line-height: 1.8; max-width: 30rem; color: #c9d7df; }
+.observatory.discovery-page:not(.content-page) .hero .cta-row { margin-top: 30px; gap: 30px; }
+.observatory.discovery-page:not(.content-page) .hero .button.primary { width: auto; min-width: 190px; }
+.observatory.discovery-page:not(.content-page) .preview-badge { color: #ffcf96; border-color: #75512d; background: #302217; }
+.observatory .scroll-cue { margin: 0; color: #99b1bf; font: 11px/20px monospace; letter-spacing: .2em; }
+.observatory.discovery-page:not(.content-page) .hero-telemetry-label { margin-top: -20px; color: #bdcdd8; }
+.observatory.discovery-page:not(.content-page) #proof { padding-top: 60px; }
+.observatory.discovery-page:not(.content-page) .decision-walkthrough { position: relative; border-top: 0; padding: 70px 0 20px; }
+.observatory.discovery-page:not(.content-page) .decision-walkthrough > h2 { font-size: clamp(1.8rem,2.7vw,2.5rem); max-width: 65%; line-height: 1.4; }
+.observatory.discovery-page:not(.content-page) .decision-walkthrough > .eyebrow { max-width: 65%; }
+.observatory.discovery-page:not(.content-page) .decision-lead { margin-top: 30px; max-width: 65%; }
+.observatory .case-art { position: absolute; top: 0; right: 0; width: 26%; margin: 0; }
+.observatory .case-art img { width: 100%; height: 160px; object-fit: cover; object-position: center 48%; border-radius: 3px; }
+.observatory .case-art figcaption { color: #b7c9d3; font-size: .75rem; line-height: 1.7; }
+.observatory.discovery-page:not(.content-page) .player-role { border-color: #43efbb; margin: 20px 0 30px; }
+.observatory.discovery-page:not(.content-page) .decision-panels { gap: 16px; margin-top: 32px; }
+.observatory.discovery-page:not(.content-page) .decision-panels article { padding: 22px; background: #0a1720; border: 1px solid #263d49; border-radius: 6px; }
+.observatory.discovery-page:not(.content-page) .decision-panels article::after { display: none; }
+.observatory.discovery-page:not(.content-page) .decision-panels article:last-child { background: #102e28; border-color: #285749; }
+.observatory.discovery-page:not(.content-page) .decision-panels .decision-number { display: flex; align-items: center; justify-content: space-between; font-size: .75rem; letter-spacing: 0; }
+.observatory.discovery-page:not(.content-page) .decision-number span { order: 2; color: #43efbb; }
+.observatory.discovery-page:not(.content-page) .decision-atmosphere { display: none; }
+.observatory.discovery-page:not(.content-page) .case-result { background: #0a1720; border-color: #263d49; border-radius: 6px; padding: 28px; }
+.observatory.discovery-page:not(.content-page) .result-output strong { font-size: 2.5rem; color: #f1f8fc; }
+.observatory.discovery-page:not(.content-page) .discovery-editorial-grid { display: block; }
+.observatory.discovery-page:not(.content-page) .discovery-editorial-grid > .section { display: block; padding: 90px 0; border: 0; }
+.observatory.discovery-page:not(.content-page) .discovery-editorial-grid .entry-art { display: none; }
+.observatory.discovery-page:not(.content-page) #progress h2 { font-size: 2rem; margin-bottom: 30px; }
+.observatory.discovery-page:not(.content-page) .editorial-row { padding: 26px 0; border-bottom: 1px solid #263d49; }
+.observatory.discovery-page:not(.content-page) #download { padding: 48px; background: #0a1720; border-radius: 6px; }
+.observatory.discovery-page:not(.content-page) #download > h2 { font-size: 2rem; }
+.observatory.discovery-page:not(.content-page) .discovery-editorial-grid > .portal-rules { padding: 24px 0; }
+.observatory.discovery-page:not(.content-page) .portal-rules h2, .observatory.discovery-page:not(.content-page) .portal-rules > p { display: none; }
+.observatory .preview-faq { display: grid; grid-template-columns: 1fr 2fr; gap: 48px; margin: 80px 0; }
+.observatory .preview-faq h2 { font-size: 1.6rem; }
+.observatory .preview-faq details { border-bottom: 1px solid #263d49; padding: 16px 0; }
+.observatory .preview-faq summary { cursor: pointer; min-height: 44px; line-height: 1.8; padding: 8px 0; }
+.observatory .preview-faq p { color: #b7c9d3; line-height: 1.8; }
+.observatory.discovery-page:not(.content-page) .lore-entry { display: block; width: 100%; padding: 45px 0; border-top: 1px solid #263d49; }
+.observatory.discovery-page:not(.content-page) .lore-entry h2 { font-size: 2rem; }
+.observatory.discovery-page:not(.content-page) .footer { max-width: 1280px; margin: 48px auto 0; padding: 30px 24px; border-color: #263d49; }
+.observatory a, .observatory button { transition: color 150ms, background-color 150ms, border-color 150ms; }
+@media (max-width: 1099px) {
+ .observatory.discovery-page:not(.content-page) .landing-hero { padding-top: 60px; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-grid > div { width: 68%; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-visual { inset: -60px -6.25% -35px 20%; }
+ .observatory.discovery-page:not(.content-page) .decision-panels { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 639px) {
+ .observatory.discovery-page:not(.content-page) > .topbar { padding: 12px 24px; }
+ .observatory.discovery-page:not(.content-page) main { padding: 0 24px; }
+ .observatory.discovery-page:not(.content-page) .landing-hero { padding: 40px 0 30px; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-grid { min-height: 570px; align-items: flex-start; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-grid > div { width: 100%; padding: 0; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-visual { inset: 50px -24px -20px 0; opacity: .65; }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-key-art img { object-position: 67% 40%; mask-image: linear-gradient(0deg,transparent,#000 25%,#000 70%,transparent); }
+ .observatory.discovery-page:not(.content-page) .landing-hero .hero-key-art::after { background: linear-gradient(90deg,#060b11c9,#060b1160); }
+ .observatory.discovery-page:not(.content-page) .hero h1 { font-size: 2rem; margin: 20px 0; }
+ .observatory.discovery-page:not(.content-page) .hero .cta-row { margin-top: 28px; gap: 18px; align-items: stretch; }
+ .observatory.discovery-page:not(.content-page) .hero .button.primary { width: 100%; }
+ .observatory.discovery-page:not(.content-page) .hero-overview-link { padding: 10px 0; min-height: 44px; }
+ .observatory .scroll-cue { display: none; }
+ .observatory.discovery-page:not(.content-page) .hero-telemetry-label { margin-top: 16px; text-align: left; }
+ .observatory.discovery-page:not(.content-page) #proof { padding-top: 25px; }
+ .observatory.discovery-page:not(.content-page) .decision-walkthrough { padding-top: 24px; }
+ .observatory.discovery-page:not(.content-page) .decision-walkthrough > h2, .observatory.discovery-page:not(.content-page) .decision-walkthrough > .eyebrow, .observatory.discovery-page:not(.content-page) .decision-lead { max-width: 100%; }
+ .observatory .case-art { position: static; width: 100%; margin: 24px 0; }
+ .observatory .case-art img { height: 130px; }
+ .observatory.discovery-page:not(.content-page) .decision-panels { grid-template-columns: 1fr; gap: 12px; }
+ .observatory.discovery-page:not(.content-page) .decision-panels article { display: flex; padding: 20px; }
+ .observatory.discovery-page:not(.content-page) .decision-panels .decision-number { font-size: .75rem; }
+ .observatory.discovery-page:not(.content-page) .decision-number span { order: 2; }
+ .observatory.discovery-page:not(.content-page) .case-result { padding: 20px; }
+ .observatory.discovery-page:not(.content-page) #download { padding: 24px; }
+ .observatory.discovery-page:not(.content-page) .discovery-editorial-grid > .section { padding-block: 48px; }
+ .observatory .preview-faq { grid-template-columns: 1fr; gap: 12px; margin: 48px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+ .observatory *, .observatory *::before, .observatory *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* Reading surfaces use the same calm, border-led editorial language. */
+.observatory.discovery-page:not(.content-page) .editorial-row { display: block; margin: 0; border: 0; border-bottom: 1px solid #263d49; border-radius: 0; background: none; }
+.observatory.discovery-page:not(.content-page) .discovery-editorial-grid .text-link,
+.observatory.discovery-page:not(.content-page) .text-link { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 0; margin-right: 24px; color: #70e7c3; border: 0; background: none; box-shadow: none; }
+.observatory.discovery-page:not(.content-page) #download > .preview-quickfacts { margin: 28px 0; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.observatory.discovery-page:not(.content-page) .preview-faq { border: 0; border-radius: 0; padding: 0; background: none; box-shadow: none; }
+.observatory.discovery-page:not(.content-page) .lore-entry { position: relative; min-height: 310px; padding-right: 42%; }
+.observatory .lore-art { position: absolute; right: 0; top: 40px; width: 36%; margin: 0; }
+.observatory .lore-art img { width: 100%; height: 210px; object-fit: cover; }
+.observatory .lore-art figcaption { font-size: .75rem; line-height: 1.7; color: #b7c9d3; }
+@media (max-width: 639px) {
+ .observatory.discovery-page:not(.content-page) #download > .preview-quickfacts { grid-template-columns: 1fr; }
+ .observatory.discovery-page:not(.content-page) .lore-entry { padding-right: 0; }
+ .observatory .lore-art { position: static; width: 100%; margin-top: 24px; }
+ .observatory .lore-art img { height: 160px; }
+}

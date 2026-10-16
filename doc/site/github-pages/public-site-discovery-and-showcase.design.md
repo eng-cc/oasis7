@@ -343,6 +343,10 @@ canonical 使用已配置的公开站点与真实路由；同语言详情有自�
 
 承接 [REQ-SITE-DISCOVERY-007](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-007)、[AC-SITE-DISCOVERY-007](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-007)及[多屏与动效规格](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#cinematic-experience)。视觉 owner 决定镜头构图、焦点和三维效果目标；实现负责正确交付，不从 CSS 动画数量推导产品质量。
 
+**静态观测站构图。** 首页使用 `observatory` 局部作用域：墨蓝背景、薄荷色主动作、琥珀预览状态；不改变内容详情和手册页面。桌面 Hero 采用非对称文案与世界图、接近一个视口的阅读尺度，手机保留主体裁切与文字暗面并允许内容自然增高。案例用同主题工业近景接续，四步显式标出玩家目标、Agent 尝试、Agent 调整和世界结果；结果图解与概念图分开。日志、预览、FAQ、小说按顺序阅读；预览的范围、准备、费用与升级信息无需展开即可看见，包详情继续使用原生 disclosure。小说名称、中文身份和虚构边界在展开前可见。首期只提供短控件反馈，不引入视差、循环、视频或新的字体请求，因此无需显示无实际增强可控制的暂停按钮。
+
+沿用 `asteroid-settlement-planet-20261015.webp` 与 `asteroid-industrial-cluster-20261015.webp` 的已有 AI 概念素材及来源记录；近景仅表示美术接续。Hero 桌面焦点为 75%/45%，手机为 67%/40%；近景高度在手机压缩，小说尾图延续世界意象。图片失败保留概念图说明、暗色底、全部 HTML 文案和动作；不追加更重替代素材。Hero 使用高优先级加载，后续概念图延迟加载，移除日志/下载/规则重复装饰缩略图。
+
 **结构与资产。** 采用“语义 HTML 内容 + 原创静态世界层 + 可选 CSS/JS 增强”，不新增 WebGL/Three.js、Canvas 粒子引擎或运行服务。Hero 世界层可全幅延伸，正文保持既有容器与阅读行宽；装饰层使用独立层叠上下文、`pointer-events: none` 和适当的 `aria-hidden`，不能拦截 CTA、遮住 focus 或代替必需图注。具有信息价值的图片仍用语义图片/图注，不因装饰层实现丢失来源性质。
 
 以现有媒体记录补充各素材的 `scene/role`、桌面与移动焦点、适配尺寸、来源/许可、provenance 和静态替代；这些是维护所需信息，可放在既有文档、HTML 和 CSS 中，不要求第二份 manifest 或数据库。`picture/srcset/sizes` 或现有等效响应式方案选择实际需要的资源；不同时预载桌面和手机主图。主视觉在 HTML/CSS 中可直接发现，不等待 JS、Reveal 或远端接口才出现；图片预留尺寸，正文不能等字体和素材加载完才可读。
