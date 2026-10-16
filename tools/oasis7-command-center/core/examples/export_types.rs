@@ -32,6 +32,8 @@ fn main() {
         DocumentPairing::decl(),
         DocumentPairings::decl(),
         DocumentIdentity::decl(),
+        DocumentAllocation::decl(),
+        DocumentAllocations::decl(),
         IndexedDocument::decl(),
         DocumentInventoryQuery::decl(),
         DocumentInventoryPage::decl(),
