@@ -92,6 +92,7 @@ grid最低，terrain为背景，Location为弱逻辑锚点，合法links/agents/
 
 无效bounds、删除/重排block、换world/撤权、partial输入与恢复是上述状态/兼容义务的负例；历史AC不因文档整理被取消。
 
+<a id="verification"></a>
 ## 7. Validation & Decision Record
 
 | 范围 | 验证方法 | 证据边界 |

@@ -214,9 +214,9 @@ Final asset language and token values stay in the brand companion; they do not e
 
 ### 11.1 验证映射表
 
-| 上游 requirement / acceptance | 本设计条款 | 独立 obligation 与条件 | 方法 / source / scenario / candidate | evidence target | 未证明范围 |
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation 与条件 | 验证方法 / source / scenario / candidate | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [HUD层级](#83-hud-dock-and-contextual-console-hierarchy) | 主区/从属/窄屏无退化。 | [PW-ACCESSIBILITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-accessibility)，当前release/S6、desktop/narrow、键盘/CJK。 | 状态、截图、焦点及实际步骤。 | 静态CSS/JSX不代签浏览器。 |
 | [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [评审升级](#visual-review-escalation-design) | 同证据下升级条件一致。 | [SOP](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)；无截图/缺视口/watch/medium/low/public/dispute判据，同候选。 | 实际card及owner处置，未执行标明。 | 不制造截图/发行通过。 |
-| [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [玩家影响](#62-player-leverage-before-ambient-activity) | ambient/他人结果/选中变化不冒充玩家进展。 | [PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)和[PW-READABILITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-readability)，同候选及原结果。 | 原主体/操作、UI、答案与误归因。 | 单张图/模型不证明真人理解。 |
+| [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [玩家影响](#62-player-leverage-before-ambient-activity) | ambient/他人结果/选中变化不冒充玩家进展。 | [PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)和PW-READABILITY，同候选及原结果。 | 原主体/操作、UI、答案与误归因。 | 单张图/模型不证明真人理解。 |
 | [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [回执](#113-receipt) | pending/no-progress/unknown/无Agent结果解释正确。 | [PW-FRESHNESS](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-freshness)与现有S6，实际受权原操作。 | 状态、原因、原结果及恢复路径。 | 页面标签不证明服务器授权/世界成功。 |

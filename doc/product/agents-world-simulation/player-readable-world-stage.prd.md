@@ -262,13 +262,13 @@ Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096
 
 ## 5.1 叶级 owner、authority、evidence 与 test tier 追踪
 
-| REQ / AC关系 | 专业owner与边界 | 专业权威 | 验证证据与层级 |
+| REQ / AC关系 | 专业owner与边界 | 专业权威 | 验证证据与 test tier |
 | --- | --- | --- | --- |
 | [REQ-AGENT-STAGE-001](#req-agent-stage-001) / [AC-AGENT-STAGE-001](#ac-agent-stage-001) | product/visual首读；Viewer投影；Runtime/gameplay因果；QA理解。 | [玩家可读渲染](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md#41-commercial-surface-dto) | PW-IDENTITY/READABILITY；确定性test_tier_required，真实因果/理解test_tier_full。 |
 | [REQ-AGENT-STAGE-002](#req-agent-stage-002) / [AC-AGENT-STAGE-002](#ac-agent-stage-002) | Runtime/Agent校验，Viewer表达，QA竞态。 | [观察到提交](../../world-simulator/viewer/external-agent-world-view.design.md#view-admission) | PW-FRESHNESS；确定性及test_tier_full实际组合分别留证。 |
 | [REQ-AGENT-STAGE-003](#req-agent-stage-003) / [AC-AGENT-STAGE-003](#ac-agent-stage-003) | Viewer/visual空间交互；Runtime授权数据；QA容量。 | [空间适配](../../world-simulator/viewer/external-agent-world-view.design.md#view-adapter) | PW-EXPLORATION/PERFORMANCE；完整范围test_tier_full。 |
 | [REQ-AGENT-STAGE-004](#req-agent-stage-004) / [AC-AGENT-STAGE-004](#ac-agent-stage-004) | Viewer/Launcher容器发行；QA逐平台。 | [Native](../../world-simulator/viewer/external-agent-world-view.design.md#view-native) | PW-RECOVERY/PLATFORM；test_tier_full，不相互代签。 |
-| [REQ-AGENT-STAGE-005](#req-agent-stage-005) / [AC-AGENT-STAGE-005](#ac-agent-stage-005) | Agent/Runtime指导权限结果；Viewer不另写世界。 | [指导](../../world-simulator/viewer/external-agent-world-view.design.md#view-guidance) | PW-IDENTITY/FRESHNESS；权限required，真实结果full。 |
+| [REQ-AGENT-STAGE-005](#req-agent-stage-005) / [AC-AGENT-STAGE-005](#ac-agent-stage-005) | Agent/Runtime指导权限结果；Viewer不另写世界。 | [指导](../../world-simulator/viewer/external-agent-world-view.design.md#view-guidance) | PW-IDENTITY/FRESHNESS；权限 test_tier_required，真实结果 test_tier_full。 |
 
 ## 5.2 组合验收
 
