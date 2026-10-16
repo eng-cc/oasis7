@@ -284,6 +284,7 @@ fi
 
 # 1) Build native binaries for launcher/live/client launcher.
 BUNDLE_NATIVE_BUILD_ARGS=(
+  -p oasis7_chain_runtime
   -p oasis7
   -p oasis7_client_launcher
   --bin oasis7_game_launcher

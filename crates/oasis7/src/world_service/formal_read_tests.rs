@@ -45,7 +45,7 @@ pub(super) fn response(
     )
     .unwrap();
     let anchor_ref = cache.anchor_ref().unwrap();
-    let inclusion = ProjectionCommitmentsV1::for_world(world)
+    let inclusion = crate::world_service::formal_projection::commitments_for_world(world)
         .unwrap()
         .inclusion(&ProjectionAudienceV1::public())
         .unwrap();

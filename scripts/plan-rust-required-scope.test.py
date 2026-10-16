@@ -86,6 +86,104 @@ class Selection(unittest.TestCase):
                 self.assertTrue({'rust_baseline', 'operational_contracts'}.issubset(plan['groups']))
                 self.base = self.git('rev-parse', 'HEAD')
 
+    def test_independent_targets_do_not_change_library_consumers(self):
+        for path in ['src/bin/tool.rs', 'src/bin/tool/helpers.rs',
+                     'tests/integration.rs', 'examples/example.rs', 'benches/bench.rs']:
+            with self.subTest(path=path):
+                self.write('crates/core/' + path, '// independent target')
+                self.assertEqual(set(self.plan()['groups']), {'baseline', 'rust_baseline', 'core'})
+
+    def test_library_and_leaf_source_rename_keep_consumers(self):
+        self.write('crates/core/src/lib.rs', '// library changed')
+        self.assertIn('consumer', self.plan()['groups'])
+        self.base = self.git('rev-parse', 'HEAD')
+        Path('crates/core/tests').mkdir()
+        self.git('mv', 'crates/core/src/lib.rs', 'crates/core/tests/moved.rs')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_library_import_of_target_source_keeps_consumers(self):
+        self.write('crates/core/src/lib.rs', '#[path = "bin/shared.rs"] mod shared;')
+        self.write('crates/core/src/bin/shared.rs', '#[path = "nested/child.rs"] mod child;')
+        self.write('crates/core/src/bin/nested/child.rs', '// child')
+        self.base = self.commit()
+        self.write('crates/core/src/bin/nested/child.rs', '// changed')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_unresolved_library_include_keeps_target_consumers(self):
+        self.write('crates/core/src/lib.rs', 'include!(concat!(env!("UNRESOLVED"), "/shared.rs"));')
+        self.write('crates/core/tests/shared.rs', '// shared')
+        self.base = self.commit()
+        self.write('crates/core/tests/shared.rs', '// changed')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_manifest_relative_library_fixture_keeps_target_consumers(self):
+        self.write('crates/core/src/lib.rs', 'const X: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/shared.json"));')
+        self.write('crates/core/tests/shared.json', '{}')
+        self.base = self.commit()
+        self.write('crates/core/tests/shared.json', '{"changed":true}')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_cross_package_source_import_keeps_nested_library_readers(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../other/src/bin/shared.rs"] mod shared;')
+        self.write('crates/other/src/bin/shared.rs', 'mod nested;')
+        self.write('crates/other/src/bin/shared/nested.rs', '// shared child')
+        self.base = self.commit()
+        self.write('crates/other/src/bin/shared/nested.rs', '// changed shared child')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_cross_package_import_fixture_keeps_library_readers(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../other/src/bin/shared.rs"] mod shared;')
+        self.write('crates/other/src/bin/shared.rs', 'const FIXTURE: &str = include_str!("../../../../doc/readme.md");')
+        self.base = self.commit()
+        self.write('doc/readme.md', 'imported fixture changed')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_root_source_import_keeps_registered_nested_readers(self):
+        self.config['rules'].append({'match': ['shared/**'], 'groups': ['other'], 'reason': 'shared fixture'})
+        self.write('crates/core/src/lib.rs', '#[path = "../../../shared.rs"] mod shared;')
+        self.write('shared.rs', 'mod nested;')
+        self.write('shared/nested.rs', '// shared child')
+        self.base = self.commit()
+        self.write('shared/nested.rs', '// changed shared child')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_root_import_does_not_register_unrelated_paths(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../../shared.rs"] mod shared;')
+        self.write('shared.rs', '// shared source')
+        self.base = self.commit()
+        self.write('scripts/unregistered.sh', '# unrelated new input')
+        with self.assertRaises(selector.UnknownInputsError):
+            self.plan()
+
+    def test_leaf_fixture_does_not_change_library_consumers(self):
+        self.write('crates/core/tests/integration.rs', 'const FIXTURE: &str = include_str!("../../../doc/readme.md");')
+        self.base = self.commit()
+        self.write('doc/readme.md', 'fixture changed')
+        self.assertEqual(set(self.plan()['groups']), {'baseline', 'rust_baseline', 'core'})
+
+    def test_shared_library_and_leaf_fixture_keeps_consumers(self):
+        self.write('crates/core/tests/integration.rs', 'const FIXTURE: &str = include_str!("../../../doc/readme.md");')
+        self.write('crates/core/src/lib.rs', 'const FIXTURE: &str = include_str!("../../../doc/readme.md");')
+        self.base = self.commit()
+        self.write('doc/readme.md', 'fixture changed')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_oasis7_library_reaches_formal_through_chain_runtime(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        self.write('crates/oasis7/Cargo.toml', '[package]\nname="oasis7"\nversion="0.1.0"\n')
+        self.write('crates/oasis7/src/lib.rs', '')
+        self.write('crates/oasis7_chain_runtime/Cargo.toml', '[package]\nname="oasis7_chain_runtime"\nversion="0.1.0"\n[dependencies]\noasis7={path="../oasis7",default-features=false}\n')
+        self.write('crates/oasis7_chain_runtime/src/main.rs', '')
+        self.base = self.commit()
+        self.write('crates/oasis7/src/bin/viewer.rs', '// viewer binary')
+        self.assertNotIn('formal_process', self.plan()['groups'])
+        self.base = self.git('rev-parse', 'HEAD')
+        self.write('crates/oasis7/src/lib.rs', '// world state changed')
+        self.assertIn('formal_process', self.plan()['groups'])
+        self.base = self.git('rev-parse', 'HEAD')
+        self.write('crates/oasis7_chain_runtime/src/main.rs', '// runtime changed')
+        self.assertIn('formal_process', self.plan()['groups'])
+
     def test_command_center_pr4790_paths_are_targeted(self):
         # Exact paths from 4f12acc; fixture stays usable without its Git object.
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
@@ -424,7 +522,7 @@ class Selection(unittest.TestCase):
 
     def test_agent_api_and_harness_route_through_support_and_oasis7_consumers(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
-        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')
+        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7', 'oasis7_chain_runtime')
         for package in packages:
             self.write(f'crates/{package}/Cargo.toml',
                        f'[package]\nname="{package}"\nversion="0.1.0"\n')
@@ -434,7 +532,7 @@ class Selection(unittest.TestCase):
         reverse = {
             'oasis7_agent_api': {'oasis7_agent_harness', 'oasis7'},
             'oasis7_agent_harness': {'oasis7'},
-            'oasis7': set(),
+            'oasis7': {'oasis7_chain_runtime'}, 'oasis7_chain_runtime': set(),
         }
         graph = (manifests, reverse, {})
         expected = {'baseline', 'rust_baseline', 'workspace_support',
@@ -454,7 +552,7 @@ class Selection(unittest.TestCase):
 
     def test_game_client_routes_through_support_and_server_consumer(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
-        packages = ('oasis7_client_api', 'oasis7_game_client', 'oasis7')
+        packages = ('oasis7_client_api', 'oasis7_game_client', 'oasis7', 'oasis7_chain_runtime')
         for package in packages:
             self.write(f'crates/{package}/Cargo.toml',
                        f'[package]\nname="{package}"\nversion="0.1.0"\n')
@@ -463,7 +561,7 @@ class Selection(unittest.TestCase):
         manifests = {name: (f'crates/{name}', {}) for name in packages}
         graph = (manifests, {
             'oasis7_client_api': {'oasis7_game_client', 'oasis7'},
-            'oasis7_game_client': {'oasis7'}, 'oasis7': set(),
+            'oasis7_game_client': {'oasis7'}, 'oasis7': {'oasis7_chain_runtime'}, 'oasis7_chain_runtime': set(),
         }, {})
         with patch.object(selector, 'cargo_graph', return_value=graph):
             for package in ('oasis7_client_api', 'oasis7_game_client'):
@@ -479,9 +577,9 @@ class Selection(unittest.TestCase):
                                      'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})
                     base = self.git('rev-parse', 'HEAD')
 
-    def test_model_provider_integration_tests_route_to_support_and_server_consumer(self):
+    def test_provider_tests_are_local_and_library_changes_reach_server_consumers(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
-        packages = ('oasis7_agent_harness', 'oasis7_model_provider', 'oasis7')
+        packages = ('oasis7_agent_harness', 'oasis7_model_provider', 'oasis7', 'oasis7_chain_runtime')
         for package in packages:
             self.write(f'crates/{package}/Cargo.toml',
                        f'[package]\nname="{package}"\nversion="0.1.0"\n')
@@ -491,7 +589,7 @@ class Selection(unittest.TestCase):
         manifests = {name: (f'crates/{name}', {}) for name in packages}
         graph = (manifests, {
             'oasis7_agent_harness': {'oasis7_model_provider', 'oasis7'},
-            'oasis7_model_provider': {'oasis7'}, 'oasis7': set(),
+            'oasis7_model_provider': {'oasis7'}, 'oasis7': {'oasis7_chain_runtime'}, 'oasis7_chain_runtime': set(),
         }, {})
         with patch.object(selector, 'cargo_graph', return_value=graph):
             for package, path in [('oasis7_model_provider', 'tests/transport.rs'),
@@ -504,13 +602,15 @@ class Selection(unittest.TestCase):
                     if package == 'oasis7_agent_harness':
                         expected_profiles.add('oasis7_agent_harness')
                     self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
-                    self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
-                                     'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})
+                    expected = {'baseline', 'rust_baseline', 'workspace_support'}
+                    if package == 'oasis7_agent_harness':
+                        expected.update({'oasis7_required', 'launcher_web', 'formal_process'})
+                    self.assertEqual(set(plan['groups']), expected)
                     base = self.git('rev-parse', 'HEAD')
 
     def test_deleted_agent_harness_source_uses_base_consumer_graph(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
-        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7')
+        packages = ('oasis7_agent_api', 'oasis7_agent_harness', 'oasis7', 'oasis7_chain_runtime')
         for package in packages:
             self.write(f'crates/{package}/Cargo.toml',
                        f'[package]\nname="{package}"\nversion="0.1.0"\n')
@@ -520,10 +620,10 @@ class Selection(unittest.TestCase):
         old_reverse = {
             'oasis7_agent_api': {'oasis7_agent_harness', 'oasis7'},
             'oasis7_agent_harness': {'oasis7'},
-            'oasis7': set(),
+            'oasis7': {'oasis7_chain_runtime'}, 'oasis7_chain_runtime': set(),
         }
-        new_manifests = {'oasis7': ('crates/oasis7', {})}
-        new_reverse = {'oasis7': set()}
+        new_manifests = {'oasis7': ('crates/oasis7', {}), 'oasis7_chain_runtime': ('crates/oasis7_chain_runtime', {})}
+        new_reverse = {'oasis7': {'oasis7_chain_runtime'}, 'oasis7_chain_runtime': set()}
         Path('crates/oasis7_agent_harness/src/lib.rs').unlink()
         head = self.commit()
 

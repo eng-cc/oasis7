@@ -747,11 +747,10 @@ pub(super) fn candidate_with_business_reader(
             )?),
         },
         result_root: result,
-        projection_root:
-            oasis7::world_service::formal_projection::ProjectionCommitmentsV1::for_world(
-                after_world,
-            )?
-            .root()?,
+        projection_root: oasis7::world_service::formal_projection::commitments_for_world(
+            after_world,
+        )?
+        .root()?,
         artifact_roots: roots,
         handoff: body.handoff.clone(),
     };
