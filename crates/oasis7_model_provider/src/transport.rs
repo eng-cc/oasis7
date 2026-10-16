@@ -1,6 +1,6 @@
 //! One budget-permitted physical HTTPS send. No redirects, proxies, fallback or retry.
 use crate::{
-    connection::RequestPermit,
+    connection::{Limits, RequestPermit},
     preset::ProviderPreset,
     protocol::{Conversation, ProviderFailure, ProviderResponse, decode_response, encode_request},
 };
@@ -34,14 +34,9 @@ impl ModelTransport {
             return Err(ProviderFailure::InputLimit);
         }
         let preset = permit.preset();
-        let body = Zeroizing::new(encode_request(preset, conversation)?);
-        let required = conservative_tokens(body.len(), conversation.max_output_tokens)?;
-        if permit.reserved_tokens() < required
-            || u64::try_from(body.len())
-                .unwrap_or(u64::MAX)
-                .saturating_add(256)
-                > permit.limits().max_input_tokens
-            || u64::from(conversation.max_output_tokens) > permit.limits().max_output_tokens
+        let body = validate_input(preset, permit.limits(), conversation)?;
+        if permit.reserved_tokens()
+            < conservative_tokens(body.len(), conversation.max_output_tokens)?
         {
             return Err(ProviderFailure::InputLimit);
         }
@@ -112,6 +107,24 @@ impl ModelTransport {
             })
             .map_err(|_| ProviderFailure::SessionExpired)?
     }
+}
+/// Pure admission shared by preflight and transport. Retains the full history.
+pub(crate) fn validate_input(
+    preset: &ProviderPreset,
+    limits: &Limits,
+    conversation: &Conversation,
+) -> Result<Zeroizing<Vec<u8>>, ProviderFailure> {
+    let body = Zeroizing::new(encode_request(preset, conversation)?);
+    let required = conservative_tokens(body.len(), conversation.max_output_tokens)?;
+    if required
+        > limits
+            .max_input_tokens
+            .saturating_add(u64::from(conversation.max_output_tokens))
+        || u64::from(conversation.max_output_tokens) > limits.max_output_tokens
+    {
+        return Err(ProviderFailure::InputLimit);
+    }
+    Ok(body)
 }
 /// Each encoded UTF-8 byte is reserved as one token, plus a conservative fixed
 /// envelope allowance and the full output ceiling. No price/cost claim follows.

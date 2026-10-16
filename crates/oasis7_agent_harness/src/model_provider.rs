@@ -190,7 +190,27 @@ impl fmt::Display for ModelProviderError {
 
 impl Error for ModelProviderError {}
 
+/// Input ownership is explicit; supplier IDs alone do not imply history support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModelProviderHistory {
+    /// Every request contains the complete current snapshot and tool transcript.
+    #[default]
+    CallerSnapshot,
+    /// The provider retains ordered protocol history and accepts incremental input.
+    ProviderConversation,
+}
+
 pub trait ModelProvider: Send {
+    fn history_mode(&self) -> ModelProviderHistory {
+        ModelProviderHistory::CallerSnapshot
+    }
+
+    /// Pure local capacity/shape checks, with no reservation or network send.
+    /// Stateful providers check the full candidate including retained history.
+    fn preflight(&self, request: &ModelProviderRequest) -> Result<(), ModelProviderError> {
+        request.validate()
+    }
+
     fn provider_id(&self) -> &str;
 
     /// Recheck the trusted executor lease/run before a tool may execute.

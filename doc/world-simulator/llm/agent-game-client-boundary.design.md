@@ -96,6 +96,8 @@ SDK 和 Harness 的受支持 feature/target 依赖闭包不得反向包含主 `o
 
 完整目标、软约束和必需工具结果必须进入获授权模型上下文；不能为接旧 Harness 摘要而静默截断为旧长度。原始 `world-agent-state/v1` 不能强转成旧 ProviderObservation；缺少公开投影时先补主责接口或声明 unsupported，不读取 shadow World 的隐藏字段。不同 lane 的观察限界原样保留。
 
+模型历史的唯一归属由 [DES-BYOK-005](self-supplied-model-connection.design.md#des-byok-005) 明确：调用者快照模式每轮完整输入；Provider 结构化会话模式在首次/新 Context 提供完整当前输入，同一 Context 后续只递交增量和原 supplier ID 工具结果，不叠加累计 transcript。完整编码的输入预检在持久物理调用预留之前；typed `input_limit` 保留原件并明确阻塞，不自动新 slot、清历史或重置预算。该阻塞不取消已经受理的世界作业，Stop/fence 控制继续独立生效。
+
 当前 native Context 租期消费既有上限及 grant 到期限制，现有 profile 最多 16 ticks；客户端不续租、不改变世界时钟，也不自动用新 base 重签旧请求。长推理返回时先验证可用性；已过期则按 §7 保留原结果和终结/到期条件，再取得新 Context 重新规划。若持续世界推进使合法决策不能完成，应测量并由 Runtime/agent owner 另审活性方案，不松 TTL、tick 或 deadline 掩盖缺陷。
 
 World::step 不等待 HTTP 或模型。已提交的生产、转运和确定性 WASM 世界作业留在 World 执行，即使没有 Harness 也按规则推进；只有后续新的候选由执行方发起。若存在确定性内置测试/脚本消费者，明确其测试或系统角色，不把它冒充普通玩家的统一路径。
