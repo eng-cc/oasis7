@@ -309,6 +309,15 @@
     },
     {
       "match": [
+        "scripts/hosted-local-mock-production-guard.py"
+      ],
+      "groups": [
+        "workflow_governance"
+      ],
+      "reason": "hosted_mock_production_guard"
+    },
+    {
+      "match": [
         "scripts/doc-*",
         "scripts/document*",
         "scripts/product-doc-*",
