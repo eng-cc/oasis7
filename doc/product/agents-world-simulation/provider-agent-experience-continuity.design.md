@@ -7,7 +7,7 @@
 - 配对产品 PRD：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-15
+- Last reviewed：2026-10-16
 - 专业域权威：[Provider parity](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
 - 适用范围：专业域声明支持的官方内置/外部执行方、平台和玩家入口。本文是目标体验，不是当前支持或发布报告。
 - 技术主责：[统一游戏客户端边界](../../world-simulator/llm/agent-game-client-boundary.design.md)；原在途意图技术语义仍由 [Provider Switch](../../world-simulator/llm/provider-switch-intent-continuity.design.md)拥有。
@@ -42,6 +42,8 @@ Trace refs: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01（[REQ-AGENT-PARITY-003]
 连接配置完成、执行方已启动、委托有效、正在思考和世界已接受行动分别表达。就绪检查失败时保留玩家目标和当前成果，说明哪一项未满足及修复入口，不自动改用其他模型或 Agent。
 
 源码拆分后的必要组件由正式启动路径组织。玩家不需要靠内部脚本名和端口猜测哪个程序缺失；手动诊断可以保留，但不是普通开始的默认步骤。
+
+选择官方执行方后的网页自带模型入口由[自带模型连接产品要求](self-supplied-model-connection.prd.md)及其[配对体验设计](self-supplied-model-connection.design.md)承接。它细化模型选择、凭证接收方、会话与费用说明，不改变本页执行方选择、委托和在途结果的主责。该入口仍是目标设计，不表示当前网页已支持 DeepSeek/OpenRouter 或默认云托管。
 
 ### 3.2 运行与阅读结果
 
