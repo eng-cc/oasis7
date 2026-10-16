@@ -72,6 +72,72 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 
 Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[Agent 所有权与持续经营](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)主责；本模块只消费其结果，并独立定义有效委托与责任连续性。
 
+
+
+## 既有统一生成合同的有限产品接收
+
+本节为 [unified 原需求](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#3-requirements)中已经存在的消费者承诺登记精确身份；逐卡原句来源限定其范围，不新增世界生成、出生、字段、参数或资源承载选择。已有专业目标不是新的实现完成声明；正式 profile 的 [四个未决问题](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-decision-profile)继续未定，已采用本地子范围不重新待选。原产品组合、叶项状态与验收层级保持不变。
+
+<a id="canonical-seed-consumer"></a>
+### 功能状态卡：统一世界种子的跨入口引用
+
+Trace ID: O7-REQ-f8497929-34dc-4193-a435-7dbe60bf0e4c
+
+- 主责范围与成功标准：每个大世界有唯一 canonical world_seed；genesis/manifest/runtime snapshot 有可验证引用，local/public testnet、launcher、Viewer 与 provider 引用同一世界种子或派生证明。
+- 原义接收来源：[原 R1](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r1-统一世界种子)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC1/AC5](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#31-seed-manifest)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R1 原有同世界引用结果；不选择 public genesis 字段位置、seed 提供者或新增 manifest schema。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
+<a id="formal-generated-world-entry"></a>
+### 功能状态卡：正式入口消费生成世界事实
+
+Trace ID: O7-REQ-212aa59b-6d97-43a7-8fd7-35d441489281
+
+- 主责范围与成功标准：runtime live 不自造独立资源世界；正式可玩入口不把 runtime 坐标锚点当正式资源地点；starter-safe chunk 提供 starter spawn、nearby resource pocket 与初始可见目标。
+- 原义接收来源：[原 R3](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r3-runtime-live-消费世界生成事实)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC2](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#51-world-bootstrap)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R3 原正式入口目标；不选择世界中心/manifest 优先级，不把本地固定 bootstrap 或兼容锚点删除视为完成。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
+<a id="first-claim-generated-context"></a>
+### 功能状态卡：首次认领的生成来源与失败边界
+
+Trace ID: O7-REQ-7853375e-94b6-4c6c-8d6b-c486a4277dd4
+
+- 主责范围与成功标准：claim_first_agent 绑定统一大世界 starter-safe spawn；OC/LLM 可为 onboarding grant，世界物料与可采资源来自 starter chunk；生成失败显示明确阻塞错误，不展示空快照或假地点。
+- 原义接收来源：[原 R4](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r4-新用户入口)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC2/AC3](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-claim-flow)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R4 原生成上下文与失败反馈；不授予免费 Agent、资源或权限，不选择正式 Agent 的 frag/logical base 模型，不改变原 claim 经济合同。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
+<a id="shared-snapshot-resource-observation"></a>
+### 功能状态卡：Viewer与Provider的同快照资源观察
+
+Trace ID: O7-REQ-fd8b7e31-afa8-4361-81f0-849c07099dfd
+
+- 主责范围与成功标准：Viewer locations、fragment terrain、资源摘要与 provider observation 来自同一 snapshot，location/resource IDs 一致；可隐藏低层 frag 细节，不把派生锚点误标为正式资源地点。
+- 原义接收来源：[原 R5](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r5-viewer-与-provider-观察一致)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC4](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-observation)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R5 原观察一致性；不新增观察权限、不保证任意 surface 可读性或选择新的 DTO/表示模型。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
 ## 4. 路线图
 
 1. 可重现场景：初始状态、资源变化、关键事件与验收证据一致。

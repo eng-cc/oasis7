@@ -6,6 +6,7 @@
 - 上位产品 PRD：[模块 PRD](prd.md)
 - 上位专题：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md#first-party-agent-client)
 - 配对产品 design：[连接与运行体验](self-supplied-model-connection.design.md)
+- 设计判定：`paired-design`。
 - 生命周期：`active`
 - 文档状态：目标产品合同，不是当前可用性公告。
 - Owner role：`producer_system_designer`
@@ -14,6 +15,12 @@
 - 适用入口：受支持部署的主 Web `viewer`；Launcher 可复用同一配置入口，不产生新玩家访问模式。
 
 本文拥有“玩家在网页使用自己的模型账户驱动第一方 Agent”的体验与验收。模型调用、凭证处理由 Agent 客户端侧负责；世界授权、任务、动作和结果仍由现有专业合同拥有。此处 BYOK 指玩家提供模型服务 Key，不等同于 OpenRouter 将其他厂商 Key 接入其账户的同名功能。
+
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[同名产品设计](self-supplied-model-connection.design.md)承接凭证接收、检查、运行状态、停止和恢复的玩家体验。
+- 设计适用性理由：跨越认证网页、可信执行端、模型消费与世界授权，需共同说明同意、状态和失败边界。
 
 ## 1. 玩家问题与目标
 

@@ -203,6 +203,8 @@ Trace ID: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95
 - 专业权威：[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001。
 
+- 局部专业设计导航：[玩法总纲的首产物完成边界](../../game/gameplay/gameplay-top-level-design.design.md#first-product-boundary)仅接收当前 production_only 的工厂、合法输入/电力、排程与 owner-bound 正量铁锭结算分开；结算后开放 Assembler 候选。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
+
 <a id="req-first-industrial-003"></a>
 #### REQ-FIRST-INDUSTRIAL-003：原料准备与物流边界
 
@@ -310,6 +312,8 @@ Trace ID: O7-REQ-757636b1-c9e9-4e7a-97d1-460de105daf3
 - 上位承诺：1、3、4、FS-3、FS-4、FS-5、FS-8、FS-12。
 - 专业权威：[`世界规则与玩法系统 PRD`](prd.md)、本分册后引导章节和 [`可玩性证据与 claim 边界`](playability-evidence-and-claim-boundaries.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-004。
+
+- 局部专业设计导航：[玩法总纲的成果承接与自然离场](../../game/gameplay/gameplay-top-level-design.design.md#continuation-boundary)仅接收一次成果连接真实后继及离场/重入，保留原成果、未决义务和适用授权；一次产出与持续能力分开。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
 
 ### 2.2.4 首个工业闭环验收场景
 
@@ -433,6 +437,8 @@ Trace ID: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1
 - 专业权威：[`Viewer 分支投影设计`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency)。
 - 验收：[AC-FIRST-BRANCH-001](#ac-first-branch-001)。
 
+- 局部专业设计导航：[玩法总纲的分支解释与阶段](../../game/gameplay/gameplay-top-level-design.design.md#branch-explanation)仅接收分支收益、风险/锁定、两个后续 beat 与回访第一动作按既有专业合同解释；当前阶段与真实合法动作保持同义。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
+
 <a id="ac-first-branch-001"></a>
 #### AC-FIRST-BRANCH-001：专业化指引不发布未开放的阶段承诺
 
@@ -460,6 +466,8 @@ Trace ID: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3
 - 上位承诺：3.1、3.2、FS-10、FS-13；路线各自拥有截止条件，本分册不统一所有路线的截止时点。
 - 专业权威：[`Viewer 回退样例与状态边界`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency)。
 - 验收：[AC-FIRST-BRANCH-002](#ac-first-branch-002)。
+
+- 局部专业设计导航：[玩法总纲的回退窗口边界](../../game/gameplay/gameplay-top-level-design.design.md#rollback-window)仅接收适用时回退期限、成本与保留/损失收益同义；不可回退或无安全路径必须显式说明。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
 
 <a id="ac-first-branch-002"></a>
 #### AC-FIRST-BRANCH-002：截止前、截止时和恢复后的回退信息一致

@@ -1,3 +1,4 @@
+import { modelConnectionStyles } from "./model_connection_styles.js";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { acceptsModelCredentials, createViewerModelConnectionClient } from "./viewer_model_connection_client.js";
 const COPY = {
@@ -124,6 +125,7 @@ export function ModelConnectionPanel(props) {
   previousAgent = id;
  });
  return <details class="model-connection-panel" data-testid="model-connection-panel">
+  <style>{modelConnectionStyles}</style>
   <summary>{tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor")}</summary>
   <p>{tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run.")}</p>
   <Show when={error()}><p role="alert">{error()}</p></Show>

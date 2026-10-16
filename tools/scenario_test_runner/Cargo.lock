@@ -2014,12 +2014,15 @@ dependencies = [
  "async-openai",
  "eventsource-stream",
  "futures-util",
+ "getrandom 0.4.3",
+ "hex",
  "oasis7_agent_harness",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
  "tokio",
  "toml",
+ "zeroize",
 ]
 
 [[package]]
