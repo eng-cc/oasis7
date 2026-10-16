@@ -101,7 +101,8 @@
 ### 3.2 当前 native lane 与目标合同的边界
 
 - 当前 owner source 是 `starter_oc_claims`；issuer 必须等于当前 owner，并精确绑定 claim source。组织成员关系不等于组织代表授权；现有 native lane 缺少组织 issuer resolver，返回 `organization_source_unsupported`，不能凭组织 ID 或 WASM capability 开通。
-- 当前额度只使用 native electricity accounting，支持 `MoveAgent`（零电力报价）、`TransferMaterial`（native tariff）与 `ScheduleRecipe`（accepted native plan power）。其他 action、resource/right source 与 risk accounting 尚无该 lane 的权威报价/结算接线，保持拒绝；扩大范围必须接入对应领域 authority 与原子 effect/debit/receipt，而不是仅放宽 allowlist。
+- 当前额度只使用 native electricity accounting，支持 `MoveAgent`（零电力报价）、`TransferMaterial`（native tariff）、`ScheduleRecipe`（accepted native plan power）与受限的 `BuildFactory`（可信 construction power profile 的建设电力义务）。其他 action（包括尚未接入此 lane 的 module-backed action）、resource/right source 与 risk accounting 仍保持拒绝；扩大范围必须接入对应领域 authority 与原子 effect/debit/receipt，而不是仅放宽 allowlist。
+- `BuildFactory` 要求有效且绑定目标工厂的 construction power profile、按其 kind 重算并精确匹配的 canonical factory spec，以及匹配的 factory profile；仍须通过 grant 的 action/object scope、有效期与累计 electricity budget 复核和建设领域准入。已提交的 `FactoryBuildStarted` 是开工及扣账依据，不等于工厂建成。正式客户端的内置 Smelter/Assembler、已授权场地与位置、报价和原请求恢复边界见 [oasis7-play Skill](../../../skills/oasis7-play/SKILL.md)及[建厂到首批生产切片](../../world-simulator/llm/external-agent-game-api.design.md#已实施切片建厂到首批生产)；该切片不证明冷启动、Viewer 或全部入口的完整首局。
 - Grant 的累计 key 是 grant/source/object/period，revocation、expiry、owner source 与 revision 在 cognition effect commit 和 native action admission 再校验。已有 owner-change fixture 证明旧授权失效，不证明产品要求的完整五门槛经济转让、pending revision event model 或组织责任归因已实现。
 - 在有效授权和世界前置条件内，Agent dissent 只是 receipt evidence，不要求玩家额外提交 override 才能执行。显式 override 仍必须来自已认证当前 owner、绑定 exact intent/grant revision 并至多消费一次；若显式声明 override，却缺少或伪造其 evidence，则拒绝效果；授权失效和 hard boundary 仍阻止效果。
 

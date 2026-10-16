@@ -73,6 +73,7 @@ pub(super) fn apply_intents(
         }
         let mut candidate = world.clone();
         let mut runtime_action_id = None;
+        let mut rejected_cognition = None;
         let applied = match request.signed_payload.clone() {
             WorldServicePayloadV1::GameExecutorControl(_) => {
                 oasis7::world_service::game_task::prepare_executor_control(
@@ -184,14 +185,23 @@ pub(super) fn apply_intents(
                     candidate.apply_authenticated_agent_chat(&request)
                 }
             }
-            WorldServicePayloadV1::Cognition(signed) => candidate
-                .commit_authenticated_cognition_staged(
+            WorldServicePayloadV1::Cognition(signed) => {
+                match candidate.commit_authenticated_cognition_disposition_staged(
                     signed,
                     &staged
                         .iter()
                         .map(|entry: &StagedResult| entry.result.clone())
                         .collect::<Vec<_>>(),
-                ),
+                ) {
+                    Ok(AuthenticatedCognitionDisposition::Committed(receipt)) => Ok(receipt),
+                    Ok(AuthenticatedCognitionDisposition::RejectedStale(rejection)) => {
+                        let reason = rejection.rejection_text();
+                        rejected_cognition = Some(rejection);
+                        Err(reason)
+                    }
+                    Err(error) => Err(error),
+                }
+            }
             WorldServicePayloadV1::FeedbackAck(signed) => {
                 candidate.apply_authenticated_feedback_ack(signed)
             }
@@ -212,7 +222,16 @@ pub(super) fn apply_intents(
                 *world = candidate;
                 (value, None)
             }
-            Err(reason) => (serde_json::Value::Null, Some(reason)),
+            Err(reason) => {
+                if let Some(rejection) = rejected_cognition {
+                    // Failed candidate causal/action/event mutations are never
+                    // adopted. Only approved terminal metadata and outbox are retained.
+                    let mut rejected_world = world.clone();
+                    rejection.publish(&mut rejected_world)?;
+                    *world = rejected_world;
+                }
+                (serde_json::Value::Null, Some(reason))
+            }
         };
         staged.push(StagedResult {
             result: CanonicalIntentResultV1 {

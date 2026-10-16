@@ -1,34 +1,6 @@
 name: Command Center
 on:
-  pull_request:
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - '.cargo/**'
-      - 'scripts/cargo-dev.sh'
-      - 'scripts/cargo-cache.py'
-      - 'scripts/find-python-with-module.sh'
-      - 'tools/oasis7-command-center/**'
-      - 'crates/oasis7_context/**'
-      - 'crates/oasis7_local_signer/**'
-      - 'crates/oasis7_secure_envelope/**'
-      - '.github/workflows/command-center.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - '.cargo/**'
-      - 'scripts/cargo-dev.sh'
-      - 'scripts/cargo-cache.py'
-      - 'scripts/find-python-with-module.sh'
-      - 'tools/oasis7-command-center/**'
-      - 'crates/oasis7_context/**'
-      - 'crates/oasis7_local_signer/**'
-      - 'crates/oasis7_secure_envelope/**'
-      - '.github/workflows/command-center.yml'
+  workflow_call:
 permissions:
   contents: read
 concurrency:

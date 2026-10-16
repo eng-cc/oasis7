@@ -34,7 +34,7 @@ impl SessionModelProvider {
         let snapshot = manager
             .snapshot(&principal, &connection_id)
             .map_err(|_| blocked("session_expired"))?;
-        if snapshot.version != version
+        if snapshot.active_version != Some(version)
             || snapshot.generation != generation
             || snapshot.run_state != crate::connection::RunState::Active
         {
@@ -53,6 +53,16 @@ impl SessionModelProvider {
     }
 }
 impl ModelProvider for SessionModelProvider {
+    fn check_execution(&self) -> Result<(), ModelProviderError> {
+        self.manager
+            .check_execution(
+                &self.principal,
+                &self.connection_id,
+                self.version,
+                self.generation,
+            )
+            .map_err(|_| blocked("model_session_unavailable"))
+    }
     fn provider_id(&self) -> &str {
         &self.provider_id
     }
@@ -84,7 +94,7 @@ impl ModelProvider for SessionModelProvider {
             .manager
             .snapshot(&self.principal, &self.connection_id)
             .map_err(|_| blocked("session_expired"))?;
-        if snapshot.version != self.version
+        if snapshot.active_version != Some(self.version)
             || snapshot.generation != self.generation
             || snapshot.run_state != crate::connection::RunState::Active
         {

@@ -10,6 +10,7 @@
     "allow-query-view",
     "allow-search-rules",
     "allow-query-document-inventory",
+    "allow-query-document-directory",
     "allow-save-decision-draft",
     "allow-save-preference",
     "allow-read-source",

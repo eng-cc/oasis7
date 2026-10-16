@@ -1,14 +1,19 @@
 const API = "/v1/agent-client";
 const IDENTITY = "/api/public/hosted-account/v2/capabilities";
-const CODES = new Set(["authentication_required", "authentication_failed", "quota_unavailable", "budget_exhausted", "rate_limited", "model_unavailable", "capability_unsupported", "transport_failed", "session_expired", "version_conflict", "executor_unavailable", "game_executor_unavailable", "deployment_unavailable", "untrusted_executor", "invalid_request", "request_failed"]);
+const CODES = new Set(["authentication_required", "authentication_failed", "quota_unavailable", "budget_exhausted", "rate_limited", "model_unavailable", "capability_unsupported", "transport_failed", "session_expired", "version_conflict", "executor_unavailable", "executor_busy", "game_executor_unavailable", "deployment_unavailable", "untrusted_executor", "invalid_request", "request_failed"]);
 export class ModelConnectionError extends Error {
   constructor(code, status = 0) { super(CODES.has(code) ? code : "request_failed"); this.code = this.message; this.status = status; }
 }
 const text = (value, max = 256) => typeof value === "string" && value.length <= max ? value : "";
 const number = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+const RUN_REASONS = new Set(["completed", "budget_exhausted", "pending_original", "rejected_original", "expired_original", "control_changed", "context_expired", "model_failed", "model_timeout", "invalid_model_output", "aborted", "host_failure"]);
+function executionSnapshot(value) {
+  if (!value || !["running", "finished", "stopped"].includes(value.phase)) return null;
+  return { phase: value.phase, reason: RUN_REASONS.has(value.reason) ? value.reason : null, successful_effects: number(value.successful_effects), model_calls_spent: number(value.model_calls_spent) };
+}
 export function modelConnectionSnapshot(value) {
   if (!value || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.id || "") || !Number.isSafeInteger(value.version) || value.version < 1) throw new ModelConnectionError("request_failed");
-  return { id: value.id, version: value.version, preset_id: text(value.preset_id), state: ["checking", "ready", "blocked", "revoked", "expired"].includes(value.state) ? value.state : "unknown", run_state: ["running", "stopped", "idle", "unavailable"].includes(value.run_state) ? value.run_state : "unknown", run_generation: number(value.run_generation), expires_at_ms: number(value.expires_at_ms), absolute_expires_at_ms: number(value.absolute_expires_at_ms), calls_spent: number(value.calls_spent), tokens_reserved: number(value.tokens_reserved), error_code: CODES.has(value.error_code) ? value.error_code : value.error_code ? "request_failed" : "" };
+  return { execution: executionSnapshot(value.execution), id: value.id, version: value.version, preset_id: text(value.preset_id), state: ["checking", "ready", "blocked", "revoked", "expired"].includes(value.state) ? value.state : "unknown", run_state: ["running", "stopped", "idle", "unavailable"].includes(value.run_state) ? value.run_state : "unknown", run_generation: number(value.run_generation), expires_at_ms: number(value.expires_at_ms), absolute_expires_at_ms: number(value.absolute_expires_at_ms), calls_spent: number(value.calls_spent), tokens_reserved: number(value.tokens_reserved), error_code: CODES.has(value.error_code) ? value.error_code : value.error_code ? "request_failed" : "" };
 }
 export function acceptsModelCredentials(capabilities, origin = globalThis.location?.origin) {
   const executor = capabilities?.trusted_executor;

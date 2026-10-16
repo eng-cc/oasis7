@@ -193,6 +193,12 @@ impl Error for ModelProviderError {}
 pub trait ModelProvider: Send {
     fn provider_id(&self) -> &str;
 
+    /// Recheck the trusted executor lease/run before a tool may execute.
+    /// Ordinary providers have no additional execution authority.
+    fn check_execution(&self) -> Result<(), ModelProviderError> {
+        Ok(())
+    }
+
     fn complete(
         &mut self,
         request: &ModelProviderRequest,

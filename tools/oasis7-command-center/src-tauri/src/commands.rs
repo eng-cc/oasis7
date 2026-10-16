@@ -300,3 +300,12 @@ pub async fn query_document_inventory(
     host.run(move |app| app.core.document_inventory(query).map_err(error))
         .await
 }
+
+#[tauri::command]
+pub async fn query_document_directory(
+    host: State<'_, Host>,
+    query: oasis7_command_center_core::document_directory::DocumentDirectoryQuery,
+) -> Result<oasis7_command_center_core::document_directory::DocumentDirectoryPage, String> {
+    host.run(move |app| app.core.document_directory(query).map_err(error))
+        .await
+}

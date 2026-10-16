@@ -9,8 +9,13 @@ use oasis7_agent_harness::{
     ContinuationAuthorityContextV1 as HarnessContinuationAuthorityContextV1,
     ContinuationBudgetProgressV1 as HarnessContinuationBudgetProgressV1,
     ContinuationHandle as HarnessContinuationHandle,
-    ContinuationHarness as HarnessContinuationHarness, ContinuationHostProjection,
+    ContinuationHarness as HarnessContinuationHarness,
     ContinuationInvalidationReason as HarnessInvalidationReason,
+};
+
+#[cfg(not(target_arch = "wasm32"))]
+use oasis7_agent_harness::{
+    ContinuationHostProjection,
     ContinuationStatusProjectionV1 as HarnessContinuationStatusProjectionV1, RuntimeAuthority,
 };
 
@@ -305,8 +310,10 @@ impl From<HarnessContinuationBudgetProgressV1> for ContinuationBudgetProgressV1 
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct RuntimeContinuationAuthority;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl RuntimeAuthority for RuntimeContinuationAuthority {
     type Lease = ();
     type Receipt = ();

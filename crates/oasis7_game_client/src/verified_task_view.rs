@@ -15,6 +15,8 @@ use serde_json::Value;
 #[derive(Debug, Clone)]
 pub struct VerifiedTaskWorldView {
     response: ReadWorldViewResponse<Value>,
+    pub(crate) world: WorldIdentity,
+    read_authority: Option<String>,
     projection: TaskWorldProjection,
     task_fence: Option<GameTaskFenceV1>,
 }
@@ -23,6 +25,7 @@ pub struct VerifiedTaskWorldView {
 #[derive(Debug, Clone)]
 pub struct TaskWorldProjection {
     pub state: Value,
+    pub feedback_history: Vec<AuthorizedFeedbackRecord>,
     pub native_delegation_authorizations:
         Vec<oasis7_agent_api::world_quote::AgentDelegationAuthorizationV1>,
     pub game_task_control: Option<GameTaskControlV1>,
@@ -36,14 +39,14 @@ struct ScopedAgent {
 #[derive(Deserialize)]
 struct History {
     agent_id: String,
-    records: Vec<ReplayRecord>,
+    records: Vec<AuthorizedFeedbackRecord>,
 }
-#[derive(Deserialize)]
-struct ReplayRecord {
-    feedback: FeedbackEnvelopeV1,
-    original_envelope_digest: String,
-    delivery_state: String,
-    receipt_lineage: Option<RuntimeReceiptLineageV1>,
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct AuthorizedFeedbackRecord {
+    pub feedback: FeedbackEnvelopeV1,
+    pub original_envelope_digest: String,
+    pub delivery_state: String,
+    pub receipt_lineage: Option<RuntimeReceiptLineageV1>,
 }
 #[derive(Deserialize)]
 struct OwnerScope {
@@ -160,11 +163,36 @@ impl VerifiedTaskWorldView {
             if !scoped(&history.agent_id) || history.records.len() > 16384 {
                 return Err(invalid("scoped feedback history audience or bound invalid"));
             }
+            let mut identities = std::collections::BTreeMap::new();
+            let mut sequences = std::collections::BTreeMap::new();
             for record in &history.records {
+                let identity = oasis7_client_api::world_service::request_digest(
+                    "scoped-feedback-identity",
+                    &(
+                        &record.feedback,
+                        &record.original_envelope_digest,
+                        &record.receipt_lineage,
+                    ),
+                )
+                .map_err(invalid)?;
+                let f = &record.feedback;
+                if identities
+                    .insert(&f.feedback_id, identity.clone())
+                    .is_some_and(|v| v != identity)
+                    || sequences
+                        .insert((&f.agent_session_id, f.feedback_seq), identity.clone())
+                        .is_some_and(|v| v != identity)
+                {
+                    return Err(invalid("scoped feedback identity collision"));
+                }
                 record.feedback.validate().map_err(invalid)?;
                 if !scoped(&record.feedback.agent_subject)
-                    || record.original_envelope_digest.is_empty()
-                    || record.delivery_state.is_empty()
+                    || !oasis7_agent_api::Digest32(record.original_envelope_digest.clone())
+                        .is_canonical_blake3()
+                    || !matches!(
+                        record.delivery_state.as_str(),
+                        "pending" | "in_flight" | "acked"
+                    )
                 {
                     return Err(invalid("scoped feedback history metadata invalid"));
                 }
@@ -210,9 +238,15 @@ impl VerifiedTaskWorldView {
         // capabilities or independent proof by this client.
         let _ = (&checks.events, &checks.continuation_contexts);
         Ok(Self {
+            world: request.world.clone(),
+            read_authority: None,
             response,
             projection: TaskWorldProjection {
                 state: checks.state,
+                feedback_history: checks
+                    .feedback_history
+                    .map(|h| h.records)
+                    .unwrap_or_default(),
                 native_delegation_authorizations: checks.native_delegation_authorizations,
                 game_task_control: checks.game_task_control,
                 agent_context: checks.agent_context,
@@ -220,6 +254,13 @@ impl VerifiedTaskWorldView {
             },
             task_fence,
         })
+    }
+    pub(crate) fn bind_read_authority(mut self, identity: String) -> Self {
+        self.read_authority = Some(identity);
+        self
+    }
+    pub(crate) fn read_authority_matches(&self, identity: &str) -> bool {
+        self.read_authority.as_deref() == Some(identity)
     }
     pub fn projection(&self) -> &TaskWorldProjection {
         &self.projection
@@ -246,4 +287,4 @@ impl VerifiedTaskWorldView {
 
 #[cfg(test)]
 #[path = "verified_task_view_tests.rs"]
-mod tests;
+pub(crate) mod tests;

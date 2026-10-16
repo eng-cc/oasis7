@@ -474,3 +474,6 @@ mod private_task_context_read_race_tests;
 #[cfg(unix)]
 #[path = "world_service_task_playtest.rs"]
 mod task_playtest;
+
+#[path = "world_service_cognition_rejection.rs"]
+mod cognition_rejection_tests;

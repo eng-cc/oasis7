@@ -1,7 +1,10 @@
 //! Deployment-owned, non-secret opt-in configuration.
 use oasis7_model_provider::{connection::Limits, preset::ProviderPreset};
 use serde::Deserialize;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -15,6 +18,15 @@ pub(super) struct Config {
     pub memory_only_controls_confirmed: bool,
     pub limits: Limits,
     pub presets: Vec<ProviderPreset>,
+    /// Operator provisioned SDK devices; login and provider keys mint no grant.
+    #[serde(default)]
+    pub executors: Vec<ExecutorConfig>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ExecutorConfig {
+    pub account_id: String,
+    pub device_config_path: PathBuf,
 }
 impl Config {
     pub fn from_env() -> Result<Option<Self>, String> {
@@ -54,6 +66,12 @@ impl Config {
             || self.presets.is_empty()
             || self.presets.len() > 16
             || self.presets.iter().any(|preset| preset.validate().is_err())
+            || self.executors.len() > 16
+            || self.executors.iter().any(|e| {
+                e.account_id.trim().is_empty()
+                    || e.account_id.len() > 256
+                    || !e.device_config_path.is_absolute()
+            })
         {
             return Err("invalid trusted agent client deployment".into());
         }
