@@ -1775,3 +1775,13 @@ body {
 .pixel-world-render-unavailable__retry {
   min-height: 44px;
 }
+
+.pixel-world-exploration { border: 1px solid rgba(148,163,184,.25); border-radius: .5rem; padding: .65rem; min-width: 0; }
+.pixel-world-exploration form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+.pixel-world-exploration label { display: flex; flex: 1 1 12rem; flex-direction: column; gap: .25rem; min-width: 0; }
+.pixel-world-exploration input { width: 100%; min-width: 0; box-sizing: border-box; }
+.pixel-world-exploration ul { margin: .5rem 0 0; padding: 0; list-style: none; max-height: 14rem; overflow-y: auto; }
+.pixel-world-exploration li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .4rem 0; border-top: 1px solid rgba(148,163,184,.15); overflow-wrap: anywhere; }
+.pixel-world-exploration li > button:first-child { text-align: start; flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
+.pixel-world-exploration p { margin: .5rem 0; font-size: .85rem; }
+.pixel-world-exploration button:focus-visible, .pixel-world-exploration input:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }

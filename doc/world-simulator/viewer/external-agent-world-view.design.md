@@ -39,7 +39,8 @@ Runtime拥有世界、控制版本、观察资格、admission及持久结果；A
 | viewer.html/viewer.js及oasis7_viewer_live，software_safe仅alias。 | 共用同一Viewer build与应用状态。 | 不建立第二入口。 |
 | host_state.rs::build_render_state从有界snapshot派生DTO；JS消费Rust。 | 数据客户端先组装明确授权范围/版本，再交Rust和renderer。 | 分页WorldView不是完整snapshot的直接替身。 |
 | 按类型reconcile、位置来源、地形LOD和宿主选择事件。 | 保留ABI，补partial/裁剪/来源侧带状态。 | 不把旧每帧全量重建当当前事实。 |
-| HUD active-agent fallback可流入next-action/receipt target。 | 分离焦点、原提交、原回执主体。 | 待代码整改与负例，文档不宣称已修复/越权已发生。 |
+| 显示焦点仅取明确选中；下一动作与原回执各取其原绑定。 | 保持原操作关联，不从列表补主体。 | 缺原绑定保留null；真实Runtime组合仍须验收。 |
+| Viewer WS `request_world_view`提供当前连接可见Agent/Location的有界查询、搜索和同cut分页。 | HTTP WorldView、远端独立观察binding、完整产业/事件空间投影。 | 新协议能力协商；来源不足标unknown，冻结续页标last-known；不证明完整大世界容量。 |
 | Launcher控制面不证明内嵌世界。 | 同build的受限WebView世界窗口。 | 平台支持/运行证据待独立验证。 |
 
 ## 4. 边界与结构
@@ -124,6 +125,16 @@ Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[AC-AGENT-STAGE-
 顺序为固定主体与方案→读取既有权威Context/能力→纯预览→明确确认→原API版本约束提交→pending/拒绝/待确认→原结果回读。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
 
 记录可脱敏关联的原操作、显示cut/分类、expected/实际控制版本及权威原因供对账，不公开token、观察正文或私有推理。
+
+### 5.5 初始实现范围
+
+当前空间读模型使用已协商 `world_view` 的 Viewer WebSocket：`request_world_view` 请求带 `request_generation`、可选 `search`/`bounds`/`cursor` 和 `page_size`，响应为 `world_view`。它只裁剪同一连接本来可读的兼容 snapshot，不新增 Agent 私有观察权限。展示字段经 allowlist；world、reorg、audience 和查询范围隔离分页。每会话只保留一份有界短期只读投影，不能用旧 audience 的 cursor读取。
+
+初次查询仅在本地权威 Runtime 的 Agent 位置上声明current；远端/回放和缺独立来源的地点位置保留unknown。冻结续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；当前不提供权威 tombstone 流。请求代际、输入导航、world/task流分别处理。
+
+图形context loss停止原会话和命中，保留仍获准的文本/原回执并提供显式重试；授权身份或world变化先清显示，旧异步挂载和事件不再生效，新scope通过带请求身份、socket和作用域代际校验的 `request_scope_snapshot` 定向重读后才可解锁；普通迟到snapshot不能解除锁定。旧本地反馈按提交scope隐藏，但原pending操作身份保留，不重新提交。导航明确区分选择、定位、跟随、停止和总览；手动平移/缩放退出跟随，失去可信位置后不会自动恢复。
+
+本切片不交付HTTP目标路由、空间索引、完整实体/关系/事件投影或native窗口，不声明§9数值预算和端到端验收已经通过。
 
 ## 6. 接口与数据合同
 

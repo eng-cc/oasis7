@@ -247,6 +247,10 @@ struct WorldBounds {
 
 #[derive(Clone, Debug, Deserialize)]
 struct RenderState {
+    #[serde(default)]
+    exploration_mode: bool,
+    #[serde(default)]
+    navigation: Option<navigation::Navigation>,
     #[serde(default = "default_render_locale")]
     locale: String,
     world_bounds: Option<WorldBounds>,
@@ -874,6 +878,9 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
     hasher.finish()
 }
 
+#[path = "navigation.rs"]
+mod navigation;
+
 fn focus_target_from_render_state(render_state: Option<&RenderState>) -> Option<FocusTarget> {
     let selection = render_state?.selection.as_ref()?;
     Some(FocusTarget {
@@ -898,18 +905,29 @@ fn apply_external_render_snapshot(
 
     let previous_focus_target = focus_target_from_render_state(runtime.render_state.as_ref());
     let next_focus_target = focus_target_from_render_state(render_state.as_deref());
+    let navigation_changed =
+        navigation::prepare_camera(runtime, render_state.as_deref(), render_version);
     let next_signature = render_content_signature(render_state.as_deref());
     let content_changed = next_signature != runtime.render_content_signature;
     let camera_content_changed = camera_content_signature(render_state.as_deref())
         != camera_content_signature(runtime.render_state.as_ref());
-    if camera_content_changed {
+    if camera_content_changed
+        && !render_state
+            .as_ref()
+            .is_some_and(|state| state.exploration_mode)
+    {
         runtime.camera_fit_version = 0;
         runtime.last_canvas_size = None;
         runtime.camera_user_override = false;
         runtime.hit_regions_dirty = true;
     }
     runtime.render_content_signature = next_signature;
-    if next_focus_target != previous_focus_target {
+    if render_state
+        .as_ref()
+        .is_some_and(|state| state.exploration_mode)
+    {
+        navigation::apply(runtime, render_state.as_deref(), camera_content_changed);
+    } else if next_focus_target != previous_focus_target {
         runtime.pending_focus_target = next_focus_target.clone();
         runtime.active_follow_target = next_focus_target
             .as_ref()
@@ -922,7 +940,8 @@ fn apply_external_render_snapshot(
     }
     runtime.render_version = render_version;
     runtime.render_state = render_state.map(|state| *state);
-    runtime.needs_reconcile = content_changed || next_focus_target != previous_focus_target;
+    runtime.needs_reconcile =
+        content_changed || next_focus_target != previous_focus_target || navigation_changed;
     runtime.hit_regions_dirty |=
         camera_content_changed || next_focus_target != previous_focus_target;
 }
