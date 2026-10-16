@@ -4,7 +4,7 @@ import { createSignal } from 'solid-js';
 import DocumentInventory from './DocumentInventory';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
-const api = vi.hoisted(() => ({ documentInventory: vi.fn(), documentDirectory: vi.fn(), documentSemanticTree: vi.fn() }));
+const api = vi.hoisted(() => ({ documentInventory: vi.fn(), documentDirectory: vi.fn(), documentSemanticTree: vi.fn(), loadDocumentTreeReading:vi.fn(),saveDocumentTreeReading:vi.fn(),loadDocumentTreeLastView:vi.fn(),resetDocumentTreeReading:vi.fn() }));
 vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => String(error), observedTime: () => '核验时间' }));
 const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
 const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
@@ -21,7 +21,7 @@ const page = (files = [file()], extra: Partial<DocumentInventoryPage> = {}): Doc
   candidates: 3, read: 1, omitted: 2, readBytes: 10, totalMatches: files.length,
   partial: true, stale: false, error: null, files, nextCursor: null, ...extra,
 });
-beforeEach(() => { api.documentInventory.mockReset(); api.documentSemanticTree.mockReset(); });
+beforeEach(() => { api.documentInventory.mockReset(); api.documentSemanticTree.mockReset();api.loadDocumentTreeLastView.mockResolvedValue({status:'missing',view:null,notice:null});api.loadDocumentTreeReading.mockResolvedValue({status:'missing',state:null,notice:null,resolvedSectionId:null});api.saveDocumentTreeReading.mockResolvedValue(undefined); });
 afterEach(cleanup);
 it('shows per-file omissions and opens only chapters from the matching file revision', async () => {
   api.documentInventory.mockResolvedValue(page([file(), file('doc/empty.md', {bytes:0}), file('doc/deleted.md', {state:'deleted',reason:'deleted',revision:null,bytes:null})]));
@@ -267,7 +267,7 @@ it('switches both semantic trees and reuses same-revision details despite a late
   let finish!: (value:DocumentInventoryPage)=>void;
   api.documentInventory.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
   const selected=file();
-  const tree={schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',view:'product',parentOccurrence:'',breadcrumbs:[],candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all',totalChildren:1,entries:[{occurrenceId:'module',label:'模块设计',path:selected.path,kind:'design',matchingFiles:1,historicalReferenceFiles:0,historicalReferencePaths:[],boundary:null,cycle:false,depthLimited:false,sourcePath:null,sourceLine:null,relationship:null,file:selected,hasChildren:false}],nextCursor:null,issues:[]};
+  const tree={schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',view:'product',parentOccurrence:'',parentRoute:[],routeNotice:null,breadcrumbs:[],candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all',totalChildren:1,entries:[{occurrenceId:'module',stableRoute:[{path:selected.path,sourcePath:null,destination:null,group:null,duplicateIndex:0,duplicateCount:1}],label:'模块设计',path:selected.path,kind:'design',matchingFiles:1,historicalReferenceFiles:0,historicalReferencePaths:[],boundary:null,cycle:false,depthLimited:false,sourcePath:null,sourceLine:null,relationship:null,file:selected,hasChildren:false}],nextCursor:null,issues:[]};
   api.documentSemanticTree.mockResolvedValue(tree);
   const showSource=vi.fn();render(()=><DocumentInventory snapshot={snapshot()} showSource={showSource}/>);
   fireEvent.click(screen.getByRole('button',{name:'产品树'}));
@@ -301,4 +301,14 @@ it('labels product pairings separately and opens the same-snapshot product desig
   expect(screen.queryByRole('region',{name:'显式配对系统设计'})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'打开配对章节：产品设计章节'}));
   expect(showSource).toHaveBeenLastCalledWith(design,expect.any(HTMLElement));
+});
+
+it('restores a bounded last tree view after restart without overtaking an explicit browsing choice',async()=>{
+  let finish!:(value:unknown)=>void;api.documentInventory.mockResolvedValue(page());api.loadDocumentTreeLastView.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+  render(()=><DocumentInventory snapshot={snapshot()} showSource={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'文档目录'}));finish({status:'ready',view:'professional',notice:null});await Promise.resolve();expect(screen.getByRole('button',{name:'文档目录'})).toHaveAttribute('aria-pressed','true');expect(screen.getByRole('button',{name:'专业系统树'})).toHaveAttribute('aria-pressed','false');
+});
+it('opens the stored product tree on restart when no newer browsing intent exists',async()=>{
+  api.documentInventory.mockResolvedValue(page());api.loadDocumentTreeLastView.mockResolvedValue({status:'ready',view:'product',notice:null});
+  api.documentSemanticTree.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',view:'product',parentOccurrence:'',parentRoute:[],routeNotice:null,breadcrumbs:[],candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all',totalChildren:0,entries:[],nextCursor:null,issues:[]});
+  render(()=><DocumentInventory snapshot={snapshot()} showSource={vi.fn()}/>);await waitFor(()=>expect(screen.getByRole('button',{name:'产品树'})).toHaveAttribute('aria-pressed','true'));await screen.findByRole('tree',{name:'产品树文档树'});expect(api.saveDocumentTreeReading).not.toHaveBeenCalled();
 });

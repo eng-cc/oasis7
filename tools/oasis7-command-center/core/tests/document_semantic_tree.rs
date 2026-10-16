@@ -34,6 +34,7 @@ fn fixture(
     let snapshot = core.open_project(&root).unwrap();
     let query = DocumentSemanticTreeQuery {
         parent_occurrence: String::new(),
+        parent_route: None,
         view: "professional".into(),
         lifecycle_filter: None,
         kind_filter: None,

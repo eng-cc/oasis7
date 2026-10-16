@@ -1,4 +1,6 @@
 use super::{DocumentSemanticBreadcrumb, DocumentSemanticTreeEntry};
+#[path = "document_semantic_routes.rs"]
+mod routes;
 use crate::{
     Error, Result,
     document_inventory::{DocumentPairing, IndexedDocument},
@@ -11,6 +13,7 @@ struct Node {
     source: Option<String>,
     edge: Option<DocumentPairing>,
     group: Vec<Node>,
+    group_key: Option<String>,
     boundary: Option<String>,
 }
 pub(super) struct Projection<'a> {
@@ -64,6 +67,7 @@ impl<'a> Projection<'a> {
                             source: Some(f.path.clone()),
                             edge: Some(edge.clone()),
                             group: vec![],
+                            group_key: None,
                             boundary: edge.target.as_deref().and_then(|target| {
                                 let target = target.split('#').next().unwrap_or(target);
                                 let domain = |p: &str| {
@@ -108,6 +112,10 @@ impl<'a> Projection<'a> {
                         source: None,
                         edge: None,
                         boundary: None,
+                        group_key: Some(format!(
+                            "module:{}",
+                            node.path.as_deref().unwrap_or("unresolved")
+                        )),
                         group: vec![node],
                     });
                 }
@@ -148,6 +156,7 @@ impl<'a> Projection<'a> {
                 edge: None,
                 boundary: None,
                 group: vec![],
+                group_key: None,
             })
             .collect::<Vec<_>>();
         if !unassigned.is_empty() {
@@ -158,6 +167,7 @@ impl<'a> Projection<'a> {
                 edge: None,
                 boundary: None,
                 group: unassigned,
+                group_key: Some("unassigned".into()),
             });
         }
         let refs = crate::document_directory_references::historical_references(
@@ -271,6 +281,7 @@ impl<'a> Projection<'a> {
         let mut crumbs = vec![];
         let mut ancestors = HashSet::new();
         let mut route = String::new();
+        let mut stable_route = vec![];
         let steps: Vec<_> = if parent.is_empty() {
             vec![]
         } else {
@@ -288,6 +299,7 @@ impl<'a> Projection<'a> {
             if index.to_string() != *step {
                 return Err(Error::Invalid("invalid semantic occurrence".into()));
             }
+            let stable_steps = routes::steps(&nodes);
             let node = nodes
                 .get(index)
                 .ok_or_else(|| Error::Invalid("semantic occurrence is outside snapshot".into()))?;
@@ -295,7 +307,9 @@ impl<'a> Projection<'a> {
                 route.push('/');
             }
             route.push_str(step);
+            stable_route.push(stable_steps[index].clone());
             crumbs.push(DocumentSemanticBreadcrumb {
+                stable_route: stable_route.clone(),
                 occurrence_id: format!("{snapshot}-{view}:{route}"),
                 label: node.label.clone(),
             });
@@ -308,6 +322,7 @@ impl<'a> Projection<'a> {
             }
             nodes = self.next(node);
         }
+        let child_routes = routes::steps(&nodes);
         let entries = nodes
             .iter()
             .enumerate()
@@ -342,6 +357,11 @@ impl<'a> Projection<'a> {
                     } else {
                         format!("{original_parent}/{i}")
                     },
+                    stable_route: stable_route
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(child_routes[i].clone()))
+                        .collect(),
                     label: node.label.clone(),
                     path: node.path.clone(),
                     kind: file.as_ref().map_or("group".into(), |f| f.kind.clone()),
