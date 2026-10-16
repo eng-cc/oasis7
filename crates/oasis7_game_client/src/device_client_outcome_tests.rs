@@ -32,7 +32,7 @@ fn fixture() -> (Client, PathBuf, WorldServicePayloadV1) {
         state: crate::operation_store::OperationStore::open(&root, [17; 32]).unwrap(),
     };
     let base = serde_json::from_value(json!({"world_id":"world","branch_id":"main",
-        "finality_epoch":0,"finality_block_hash":null,"finality_status":"finalized",
+        "finality_epoch":0,"finality_block_hash":null,"finality_status":"pending",
         "base_tick":0,"base_world_hash":format!("blake3:{}","1".repeat(64)),
         "reorg_epoch":0,"runtime_manifest_hash":format!("blake3:{}","2".repeat(64))}))
     .unwrap();
@@ -132,6 +132,51 @@ fn unresolved_or_rejected_original_prefix_cannot_create_retirement_outcome() {
 #[test]
 fn competing_original_action_blocks_retirement_without_network_or_new_outcome() {
     let (client, root, payload) = fixture();
+    let WorldServicePayloadV1::Scheduler(prefix) = payload else {
+        unreachable!()
+    };
+    let context = context();
+    let request = oasis7_agent_api::world_cognition::RuntimeCognitionCommitRequestV1 {
+        agent_id: "a".into(),
+        agent_session_id: context.agent_session_id,
+        agent_turn_id: context.agent_turn_id,
+        decision_request_id: context.decision_request_id,
+        retry_seq: 1,
+        transport_attempt: 1,
+        request_digest: context.request_commitment,
+        observation_digest: format!("blake3:{}", "44".repeat(32)),
+        context_digest: context.context_commitment,
+        capability_snapshot_hash: format!("blake3:{}", "55".repeat(32)),
+        authority_context_hash: format!("blake3:{}", "66".repeat(32)),
+        captured_base_binding: prefix.request.captured_base_binding,
+    };
+    let mut artifact = oasis7_agent_api::world_cognition::RuntimeCognitionResponseArtifactV1 {
+        schema_version: 1,
+        context_discriminator: oasis7_agent_api::world_cognition::RuntimeCognitionResponseArtifactV1::CONTEXT_DISCRIMINATOR.into(),
+        context_version: 1,
+        agent_session_id: request.agent_session_id.clone(),
+        agent_turn_id: request.agent_turn_id.clone(),
+        decision_request_id: request.decision_request_id.clone(),
+        retry_seq: 1, transport_attempt: 1,
+        request_digest: request.request_digest.clone(),
+        response_digest: format!("blake3:{}", "77".repeat(32)),
+        artifact_digest: String::new(),
+    };
+    artifact.refresh_artifact_digest();
+    let intent = oasis7_client_api::world_service_wire::CognitionIntentV1 {
+        request,
+        action: oasis7_agent_api::world_action::Action::MoveAgent {
+            agent_id: "a".into(),
+            to: oasis7_agent_api::world_action::GeoPos::new(0, 0, 0),
+        },
+        response_artifact: artifact,
+        delegation_generation: 1,
+        causal_proposal: None,
+        task_fence: Some(context.fence),
+    };
+    let payload = WorldServicePayloadV1::Cognition(
+        authority::sign_read_request("cognition", intent, &client.key_hex).unwrap(),
+    );
     let original = client
         .cache_intent(ClientStateKind::Action, "ctx", payload)
         .unwrap();
