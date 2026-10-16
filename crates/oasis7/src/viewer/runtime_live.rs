@@ -753,7 +753,7 @@ impl ViewerRuntimeLiveServer {
                     Ok(())
                 }
             };
-            output.deliver(&mut socket)?;
+            periodic_io.deliver_output(&mut output, &mut socket)?;
             driven?;
         }
     }
