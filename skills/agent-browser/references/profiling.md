@@ -2,9 +2,21 @@
 
 Capture Chrome DevTools performance profiles during browser automation for performance analysis.
 
-All examples assume an owned named session exported through
-`AGENT_BROWSER_SESSION` and an `EXIT INT TERM` trap that closes only that
-session. Never profile in the shared default session or use global multi-session cleanup.
+Use the owned-session setup and cleanup from [session-management.md](session-management.md)
+in the same shell before these examples (also inside any standalone script):
+
+```bash
+AB_SESSION="$(agent-browser session id --scope worktree --prefix profile)" || exit $?
+: "${AB_SESSION:?Session creation returned an empty id}"
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+```
+
+Install the scoped `EXIT INT TERM` cleanup from that reference after setup.
+Every `ab` invocation passes the owned id explicitly; an ambient
+`AGENT_BROWSER_SESSION` alone is not sufficient. Never use the default session
+or global multi-session cleanup. This follows the repository's 0.37.1 session
+contract; if the installed CLI differs, read `agent-browser skills get core --full`
+before adapting these examples.
 
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
@@ -22,28 +34,28 @@ session. Never profile in the shared default session or use global multi-session
 
 ```bash
 # Start profiling
-agent-browser profiler start
+ab profiler start
 
 # Perform actions
-agent-browser navigate https://example.com
-agent-browser click "#button"
-agent-browser wait 1000
+ab navigate https://example.com
+ab click "#button"
+ab wait 1000
 
 # Stop and save
-agent-browser profiler stop ./trace.json
+ab profiler stop ./trace.json
 ```
 
 ## Profiler Commands
 
 ```bash
 # Start profiling with default categories
-agent-browser profiler start
+ab profiler start
 
 # Start with custom trace categories
-agent-browser profiler start --categories "devtools.timeline,v8.execute,blink.user_timing"
+ab profiler start --categories "devtools.timeline,v8.execute,blink.user_timing"
 
 # Stop profiling and save to file
-agent-browser profiler stop ./trace.json
+ab profiler stop ./trace.json
 ```
 
 ## Categories
@@ -65,30 +77,30 @@ Several `disabled-by-default-*` categories are also included for detailed timeli
 ### Diagnosing Slow Page Loads
 
 ```bash
-agent-browser profiler start
-agent-browser navigate https://app.example.com
-agent-browser wait --load networkidle
-agent-browser profiler stop ./page-load-profile.json
+ab profiler start
+ab navigate https://app.example.com
+ab wait --load networkidle
+ab profiler stop ./page-load-profile.json
 ```
 
 ### Profiling User Interactions
 
 ```bash
-agent-browser navigate https://app.example.com
-agent-browser profiler start
-agent-browser click "#submit"
-agent-browser wait 2000
-agent-browser profiler stop ./interaction-profile.json
+ab navigate https://app.example.com
+ab profiler start
+ab click "#submit"
+ab wait 2000
+ab profiler stop ./interaction-profile.json
 ```
 
 ### CI Performance Regression Checks
 
 ```bash
 #!/bin/bash
-agent-browser profiler start
-agent-browser navigate https://app.example.com
-agent-browser wait --load networkidle
-agent-browser profiler stop "./profiles/build-${BUILD_ID}.json"
+ab profiler start
+ab navigate https://app.example.com
+ab wait --load networkidle
+ab profiler stop "./profiles/build-${BUILD_ID}.json"
 ```
 
 ## Output Format

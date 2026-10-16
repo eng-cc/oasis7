@@ -106,13 +106,12 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - `commit`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-script-executable-bits.sh`
-  - `./scripts/check-rust-file-size.sh`
-  - `cargo fmt --check`
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - 用途：显式本地诊断 baseline，不由普通 `pre-commit` 自动执行；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
+  - 范围：该入口不调用 `rust_baseline`，因此不运行 Rust 文件体量检查或 fmt；需要这些检查时另行显式运行 `./scripts/ci-tests.sh required --group rust_baseline`（也会执行该组的其他检查）。
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-script-executable-bits.sh`
@@ -132,14 +131,16 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
 - `full`：
-  - `required` 全部
+  - 调用 `run_full_required_superset`、`rust_baseline` 及下列 full 测试；函数名不代表当前已覆盖 `required` 的每个子检查。
+  - 当前仍缺 `oasis7` / consensus / distfs / node / net / net-libp2p 的组级 Clippy 和 `viewer-auth-browser-security-smoke.mjs`；workspace-support 的 Clippy 仍会执行。`full-standard` 同样存在这些缺口，`full` 另加 `formal_process`。
+  - `required` 全量包含于 full 是 [CI 分层设计](doc/testing/ci/ci-tiered-execution.design.md) 的目标，尚不能凭本入口通过宣称实现；应按变更范围执行实际选中的 required 组。
   - `cargo test -p oasis7 --tests --features test_tier_full,wasmtime,viewer_live_integration`
   - `cargo test -p oasis7_node --lib`
   - `cargo test -p oasis7_net --lib`
   - `cargo test -p oasis7_net --features libp2p --lib`
   - `./scripts/llm-baseline-fixture-smoke.sh`
   - `cargo test -p oasis7 --features wasmtime --lib --bins`
-  - 机械调用所有 scoped-required capability：包括 scenario regression、Pixel World Bridge lib + wasm、Viewer build、launcher web build 与 workspace-support crates；重叠的 support shard 只保留一次，避免无意义的重复执行。
+  - 复用部分 scoped-required capability：包括 scenario regression、Pixel World Bridge lib + wasm、Viewer build、launcher web build 与 workspace-support crates；重叠的 support shard 只保留一次，避免无意义的重复执行。
 
 `./scripts/ci-tests.sh` 不设默认 tier；省略参数会打印 usage 并失败，避免误把升级专用的 `full` 当成本地默认。
 
@@ -351,7 +352,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
 ./scripts/ci-tests.sh commit
 ```
 - 覆盖重点：
-  - 文档治理、release 关键脚本执行位、Rust 文件体量、`cargo fmt --check`
+  - 文档治理、release 关键脚本执行位等 `baseline` 治理/契约检查；不含 `rust_baseline` 的 Rust 文件体量和 fmt 检查
   - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
   - `software_safe` feedback contract regression
 - 边界：
