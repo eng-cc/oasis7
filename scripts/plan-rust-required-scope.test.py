@@ -138,6 +138,23 @@ class Selection(unittest.TestCase):
         self.write('doc/readme.md', 'imported fixture changed')
         self.assertIn('consumer', self.plan()['groups'])
 
+    def test_root_source_import_keeps_registered_nested_readers(self):
+        self.config['rules'].append({'match': ['shared/**'], 'groups': ['other'], 'reason': 'shared fixture'})
+        self.write('crates/core/src/lib.rs', '#[path = "../../../shared.rs"] mod shared;')
+        self.write('shared.rs', 'mod nested;')
+        self.write('shared/nested.rs', '// shared child')
+        self.base = self.commit()
+        self.write('shared/nested.rs', '// changed shared child')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_root_import_does_not_register_unrelated_paths(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../../shared.rs"] mod shared;')
+        self.write('shared.rs', '// shared source')
+        self.base = self.commit()
+        self.write('scripts/unregistered.sh', '# unrelated new input')
+        with self.assertRaises(selector.UnknownInputsError):
+            self.plan()
+
     def test_leaf_fixture_does_not_change_library_consumers(self):
         self.write('crates/core/tests/integration.rs', 'const FIXTURE: &str = include_str!("../../../doc/readme.md");')
         self.base = self.commit()

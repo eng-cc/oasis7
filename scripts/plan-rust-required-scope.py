@@ -151,10 +151,10 @@ def cargo_graph(ref):
         for path, owners in source_owners.items():
             source = blobs[path].decode('utf-8', 'replace')
             owners = owners | {reader for d, readers in library_readers.items()
-                               if path.startswith(d + '/') for reader in readers}
+                               if (not d or path.startswith(d + '/')) for reader in readers}
             library_owners = {n for n in owners
                               if not independent_target_input(path, *manifests[n])
-                              or any(path.startswith(d + '/') for d in library_directories)}
+                              or any(not d or path.startswith(d + '/') for d in library_directories)}
             if not library_owners:
                 continue
             for token in re.findall(r'"([^"\n]+)"', source):
@@ -181,7 +181,7 @@ def cargo_graph(ref):
             break
     leaf_inputs = {path for path, owners in source_owners.items() if owners
                    and all(independent_target_input(path, *manifests[n]) for n in owners)
-                   and not any(path.startswith(d + '/') for d in library_directories)}
+                   and not any(not d or path.startswith(d + '/') for d in library_directories)}
     # Embedded inputs retain whether their reader is a library or a leaf target.
     embedded = {}
     library_embeds = {}
@@ -190,7 +190,7 @@ def cargo_graph(ref):
         owners = [n for n, (d, _) in manifests.items()
                   if (d and path.startswith(d + '/')) or (not d and path.startswith(('src/', 'tests/', 'examples/', 'benches/')))]
         owners = sorted(set(owners) | {reader for directory, readers in library_readers.items()
-                                       if path.startswith(directory + '/') for reader in readers})
+                                       if (not directory or path.startswith(directory + '/')) for reader in readers})
         if not path.endswith('.rs') or not owners:
             continue
         source = blobs[path].decode('utf-8', 'replace')
@@ -298,13 +298,15 @@ def select(config, base, source_head, test_head=None, additions=()):
                 owners = {name for name, (directory, _) in manifests.items()
                           if directory and path.startswith(directory + '/')}
                 owners.update(embedded.get(path, ()))
+                registered_owners = set(owners)
                 imported_readers = {reader for directory, readers in embedded.get('__library_readers__', {}).items()
-                                    if path.startswith(directory + '/') for reader in readers}
+                                    if (not directory or path.startswith(directory + '/')) for reader in readers}
                 owners.update(imported_readers)
                 if owners:
-                    matched = True
+                    # Inferred directory readers widen tests; they do not register new inputs.
+                    matched |= bool(registered_owners)
                     leaf = all(independent_target_input(path, *manifests[n]) for n in owners) and not any(
-                        path.startswith(d + '/') for d in embedded.get('__library_directories__', ()))
+                        (not d or path.startswith(d + '/')) for d in embedded.get('__library_directories__', ()))
                     # An external fixture has no direct source owner; its readers
                     # determine whether reverse consumers are affected.
                     direct = {name for name, (directory, _) in manifests.items()
