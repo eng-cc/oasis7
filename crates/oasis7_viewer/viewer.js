@@ -1300,6 +1300,7 @@ var _tmpl$7$11 = /*#__PURE__*/ template(`<option> · <!> · `);
 var _tmpl$8$7 = /*#__PURE__*/ template(`<option> · `);
 var _tmpl$9$6 = /*#__PURE__*/ template(`<div class=model-connection-panel__connection><p role=status> · </p><p>: <!> / </p><label class=model-connection-panel__check><input type=checkbox></label><button type=button></button><label class=model-connection-panel__check><input type=checkbox></label><div class=model-connection-panel__actions><button type=button></button><button type=button></button><button type=button></button></div><p>`);
 var COPY = {
+	deployment_unavailable: ["当前部署尚未启用模型连接，暂不接收凭证。", "Model connections are not enabled on this deployment; credentials are not accepted."],
 	authentication_required: ["请先登录当前玩家账号。", "Sign in to the current player account."],
 	authentication_failed: ["模型凭证认证失败，请重新输入或到供应商检查。", "Model authentication failed. Re-enter the key or check the provider account."],
 	quota_unavailable: ["供应商额度不可用，请到供应商账户处理。", "Provider quota is unavailable. Check the provider account."],
@@ -1474,7 +1475,7 @@ function ModelConnectionPanel(props) {
 	});
 	return (() => {
 		var _el$ = _tmpl$5$22(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$33 = _el$3.nextSibling;
-		insert(_el$2, () => tr("模型连接 · 第一方执行方", "Model connection · first-party executor"));
+		insert(_el$2, () => tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor"));
 		insert(_el$3, () => tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run."));
 		insert(_el$, createComponent(Show, {
 			get when() {
@@ -1541,7 +1542,7 @@ function ModelConnectionPanel(props) {
 							_el$22.addEventListener("submit", create);
 							insert(_el$23, () => tr("供应商与模型", "Provider and model"), _el$24);
 							_el$24.addEventListener("change", (event) => setPreset(event.currentTarget.value));
-							insert(_el$25, () => tr("请选择已支持配置", "Choose a supported preset"));
+							insert(_el$25, () => tr("请选择本部署配置", "Choose a configured preset"));
 							insert(_el$24, createComponent(For, {
 								get each() {
 									return capabilities()?.presets;
@@ -1620,7 +1621,7 @@ function ModelConnectionPanel(props) {
 								return () => _c$3() ? stateLabel("revoked") : memo(() => !!expired(current()))() ? stateLabel("expired") : stateLabel(current().state);
 							})(), _el$44);
 							insert(_el$43, () => stateLabel(current().run_state), null);
-							insert(_el$45, () => tr("已花费调用 / 已预留 token", "Calls spent / tokens reserved"), _el$46);
+							insert(_el$45, () => tr("已占用调用预算 / token", "Call budget used / tokens reserved"), _el$46);
 							insert(_el$45, () => current().calls_spent ?? "—", _el$48);
 							insert(_el$45, () => current().tokens_reserved ?? "—", null);
 							insert(_el$42, createComponent(Show, {

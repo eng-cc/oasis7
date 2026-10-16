@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { acceptsModelCredentials, createViewerModelConnectionClient } from "./viewer_model_connection_client.js";
 const COPY = {
+ deployment_unavailable: ["当前部署尚未启用模型连接，暂不接收凭证。", "Model connections are not enabled on this deployment; credentials are not accepted."],
  authentication_required: ["请先登录当前玩家账号。", "Sign in to the current player account."],
  authentication_failed: ["模型凭证认证失败，请重新输入或到供应商检查。", "Model authentication failed. Re-enter the key or check the provider account."],
  quota_unavailable: ["供应商额度不可用，请到供应商账户处理。", "Provider quota is unavailable. Check the provider account."],
@@ -108,7 +109,7 @@ export function ModelConnectionPanel(props) {
   previousAgent = id;
  });
  return <details class="model-connection-panel" data-testid="model-connection-panel">
-  <summary>{tr("模型连接 · 第一方执行方", "Model connection · first-party executor")}</summary>
+  <summary>{tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor")}</summary>
   <p>{tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run.")}</p>
   <Show when={error()}><p role="alert">{error()}</p></Show>
   <Show when={available()} fallback={<p role="status">{capabilities() ? message(capabilities().reason || (capabilities().authenticated ? "untrusted_executor" : "authentication_required")) : tr("正在核对部署与登录状态；暂不接收凭证。", "Checking deployment and sign-in; credentials are not accepted yet.")}</p>}>
@@ -122,7 +123,7 @@ export function ModelConnectionPanel(props) {
    </div>
    <Show when={canControl()} fallback={<p role="status">{tr("先选中你有权控制的 Agent；连接不能补授权限。", "Select an Agent you may control; a model connection cannot grant authority.")}</p>}>
     <form onSubmit={create} class="model-connection-panel__form">
-     <label>{tr("供应商与模型", "Provider and model")}<select required value={preset()} onChange={(event) => setPreset(event.currentTarget.value)} disabled={busy()}><option value="">{tr("请选择已支持配置", "Choose a supported preset")}</option><For each={capabilities()?.presets}>{(item) => <option value={item.id}>{item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter"} · {item.model_id} · {item.protocol === "chat_completions" ? tr("工具对话", "Chat tools") : "Responses"}</option>}</For></select></label>
+     <label>{tr("供应商与模型", "Provider and model")}<select required value={preset()} onChange={(event) => setPreset(event.currentTarget.value)} disabled={busy()}><option value="">{tr("请选择本部署配置", "Choose a configured preset")}</option><For each={capabilities()?.presets}>{(item) => <option value={item.id}>{item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter"} · {item.model_id} · {item.protocol === "chat_completions" ? tr("工具对话", "Chat tools") : "Responses"}</option>}</For></select></label>
      <label>{tr("推理 API Key", "Inference API key")}<input ref={keyInput} type="password" name="model-inference-key" autocomplete="off" spellcheck={false} maxlength="4096" required disabled={busy()} /></label>
      <label class="model-connection-panel__check"><input type="checkbox" checked={consent()} onChange={(event) => setConsent(event.currentTarget.checked)} />{tr("我知晓凭证接收方、会话隐私和供应商账户费用，同意本次连接使用。", "I understand the recipient, session privacy and provider charges, and consent to this connection.")}</label>
      <button type="submit" disabled={busy() || !consent() || !preset()}>{tr("保存本次连接", "Create session connection")}</button>
@@ -131,7 +132,7 @@ export function ModelConnectionPanel(props) {
    <Show when={connections().length}><label>{tr("本会话连接", "Session connections")}<select value={selectedId()} onChange={(event) => setSelectedId(event.currentTarget.value)} disabled={busy()}><For each={connections()}>{(item) => <option value={item.id}>{capabilities()?.presets.find((value) => value.id === item.preset_id)?.model_id || tr("模型配置", "Model configuration")} · {stateLabel(item.state)}</option>}</For></select></label></Show>
    <Show when={selected()}>{(current) => <div class="model-connection-panel__connection">
     <p role="status">{current().state === "revoked" ? stateLabel("revoked") : expired(current()) ? stateLabel("expired") : stateLabel(current().state)} · {stateLabel(current().run_state)}</p>
-    <p>{tr("已花费调用 / 已预留 token", "Calls spent / tokens reserved")}: {current().calls_spent ?? "—"} / {current().tokens_reserved ?? "—"}</p>
+    <p>{tr("已占用调用预算 / token", "Call budget used / tokens reserved")}: {current().calls_spent ?? "—"} / {current().tokens_reserved ?? "—"}</p>
     <Show when={current().error_code}><p role="status">{message(current().error_code)}</p></Show>
     <Show when={!capabilities()?.executor_available}><p role="status">{message("executor_unavailable")}</p></Show>
     <label class="model-connection-panel__check"><input type="checkbox" checked={probeConsent()} onChange={(event) => setProbeConsent(event.currentTarget.checked)} disabled={busy() || expired(current())} />{tr("同意一次有界、可能计费的模型检查；不写游戏世界。", "Consent to a bounded, potentially billable model check; it does not write the world.")}</label>
