@@ -38,11 +38,24 @@
 
 成功首先是**理解正确、选择合适、离开后有可找回的内容**，不是把更多人推向下载。沿用首屏 30 秒理解目标；完整案例后应能说出一次有意义的取舍；预览说明后应能判断自己是否具备条件。点击、下载、安装、完成游戏目标和回访是不同结果，不互相代签，也不为测量引入追踪服务。
 
+<a id="visual-experience-outcomes"></a>
+### 1.2 科技感、沉浸感与视觉冲击是独立产品结果
+
+官网不仅要准确和可读，还应让人愿意停下来看：第一屏应能作为有辨识度的游戏宣传画面，后续阅读应像逐步接近同一座小行星文明，而不是浏览通用工具网站。保持“文明观测站”方向，但“克制”约束的是噪声和干扰，不是世界尺度、画面完成度或视觉张力。
+
+| 维度 | 想让访客获得的感受 | 可检查的表现，而非替代指标 |
+| --- | --- | --- |
+| 科技感 | 精密、可信、属于这个工业文明的技术系统 | 材质、结构、排版、图标和关系线有一致语法；不是仅深色加绿光，也不是假终端 |
+| 沉浸感 | 在接近同一个世界，能自主掌握探索节奏 | 远景、产业近景、一次决策和世界观余韵相互呼应；不是每屏换一张无关壁纸 |
+| 视觉冲击 | 第一眼有规模、方向和记忆点，愿意继续看 | 大小尺度反差、主光源、清楚轮廓与留白形成视觉焦点；关闭动效仍成立，不以特效数量计分 |
+
+这三项由 [REQ-SITE-DISCOVERY-007](#req-site-discovery-007)独立承接；006 继续负责可访问与恢复，两者不能互相替代。轻量动效可以增强空间感，非技术人员也应看到完整静态版本；动效开关、真实状态和主动作不成为沉浸效果的牺牲品。
+
 ## 2. 范围与 Non-Goals
 
-首期范围：中英文首页、一个分步玩法展示、精选静态观测记录、面向玩家的开发日志入口、技术预览速览与 FAQ、世界观小说导读、对应设计稿及渐进增强/失败恢复。
+首期范围：中英文首页、一个分步玩法展示、精选静态观测记录、面向玩家的开发日志入口、技术预览速览与 FAQ、世界观小说导读、对应设计稿及渐进增强/失败恢复；视觉深化覆盖同一批页面的主视觉、连续阅读节奏与可关闭的轻量动效，不另建体验站。
 
-不在范围：实时星图或游戏服务接入、账号/手机号预约、支付、投稿平台、创作者市场、公开网页加入、自动更新客户端、第三方追踪服务、全站框架迁移、游戏规则改造、小说正文重写。媒体资料包和实时数据是后续候选，不是首期隐藏依赖。不保证固定更新周期、模型费用、邀测时间或新平台支持。
+不在范围：实时星图或游戏服务接入、账号/手机号预约、支付、投稿平台、创作者市场、公开网页加入、自动更新客户端、第三方追踪服务、全站框架迁移、游戏规则改造、小说正文重写。媒体资料包、用户主动播放的短片和实时数据是后续候选，不是首期隐藏依赖。不保证固定更新周期、模型费用、邀测时间或新平台支持。
 
 产品文档与生成式设计稿确定目标与验证方法，不宣布持久世界开放。当前静态实现以功能状态中的固定版本为依据；真实素材、完整验收和发行仍消费各自主责证据。
 
@@ -67,12 +80,12 @@
 
 ## 4. 产品要求与功能状态
 
-以下功能 ID 同时对应独立 REQ；状态只覆盖本专题定义的首期范围。共同核对基线为 2026-10-14、上述源提交、远程源码阅读环境；实现基线与对应检查范围见各功能点；尚未完成陌生访客理解和完整发行验收。系统设计“已覆盖”仅指条款可逐项定位，不等于已通过独立评审。
+以下功能 ID 同时对应独立 REQ；状态只覆盖本专题定义的适用范围。原六项共同核对基线为 2026-10-14、上述源提交、远程源码阅读环境；实现基线与对应检查范围见各功能点；尚未完成陌生访客理解和完整发行验收。系统设计“已覆盖”仅指条款可逐项定位，不等于已通过独立评审。
 
 <a id="discovery-refinement-scope"></a>
 ### 本轮细化的范围与状态
 
-以下细化复用原六项要求及其 Trace ID，不新增平行需求体系。各功能点下的“已实现待验证”保留原静态范围与 2026-10-15 固定实现依据；**不覆盖下表新细化**。本轮细化的设计已经定义，代码覆盖待核实，验收未执行；不得用旧实现、旧截图或既有生成稿宣告细化已实现。
+下表细化复用原六项要求及其 Trace ID；视觉质量另以新增 007 声明，不将视觉吸引力混入可访问性。原功能点下的“已实现待验证”保留原静态范围与 2026-10-15 固定实现依据；**不覆盖下表新细化或 007**。本轮设计已经定义，代码覆盖待核实，验收未执行；不得用旧实现、旧截图或既有生成稿宣告细化已实现。
 
 | 既有要求 | 新细化的产品结果 | 产品体验承接 | 系统设计承接 |
 | --- | --- | --- | --- |
@@ -167,6 +180,20 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：完整无障碍与性能测量；既有桌面/窄屏/键盘/无脚本与故障场景的实际结果只覆盖已记录范围。
 
+<a id="req-site-discovery-007"></a>
+### REQ-SITE-DISCOVERY-007：有辨识度且可自主探索的视觉世界
+
+Trace ID: O7-REQ-a4f7d9b0-6c28-4e15-a90d-3b62c5e87401
+
+- 功能点：F-SITE-DISCOVERY-007；CN/EN 首页主视觉及到案例、预览、世界观的连续阅读；验收 [AC-SITE-DISCOVERY-007](#ac-site-discovery-007)。
+- 要求：科技感、沉浸感和视觉冲击分别满足[视觉体验目标](#visual-experience-outcomes)。首屏有原创世界的尺度与主焦点；后续图文延续同一视觉身份，以由远及近的节奏把氛围接到可理解的决策，不暗示概念镜头是连续实机。静态版必须成立，动效增强可暂停或关闭，不能阻塞正文、导航、阶段提示或主动作。视觉减配不等于手机只剩文字，窄屏仍应保留主体轮廓和品牌识别。
+- 系统设计状态：已覆盖
+- 系统设计依据：[沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion)、[验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)；产品体验见[多屏分镜与动效](public-site-discovery-and-showcase.design.md#cinematic-experience)。
+- 实现状态：未核实
+- 实现与验证依据：当前条款为新增视觉要求，尚无逐项候选实现核对、多屏稿、滚动录像或访客观察；既有素材和页面不能自动认定为不足，也不能代签本要求。
+- 核对日期与基线：2026-10-16；原文档基线 `62e1314368752726e85a050794c8f9b0dcebe123`；本次为文档与官方素材调研，无页面视觉验收。
+- 剩余范围：多屏视觉设计、原创素材取舍、对应静态/增强实现、真实浏览器与访客验证；排期和候选记录归当前 PR。
+
 ## 5. 验收与证据
 
 <a id="ac-site-discovery-001"></a>
@@ -199,7 +226,16 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 - 覆盖要求：REQ-SITE-DISCOVERY-006
 给定 CN/EN、1440×900、390×844、360×800、200% 缩放、键盘、无 JS 与 reduced-motion，当沿主路径浏览时，则文字、限制、导航、CTA 均可达，没有横向溢出或仅靠颜色传意；媒体失效仍有文字与替代入口。真实浏览器结果按路由和环境分别记录。
 
-验证方法由[系统设计验证矩阵](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)和现有 [testing-manual](../../../testing-manual.md)承接。自动结构检查不证明人类理解，生成稿不证明浏览器结果，页面合入不证明上线或游戏发行。
+<a id="ac-site-discovery-007"></a>
+### AC-SITE-DISCOVERY-007：静态有冲击、滚动有连续感、增强可控制
+- 覆盖要求：REQ-SITE-DISCOVERY-007
+以同一候选的完整首屏、多屏顺序与静态/增强两种呈现分别评估科技感、沉浸感和冲击力，不合成一个掩盖短板的总分。首次看完整静态首屏约 5 秒后，无提示询问记住的主体和世界印象；再连续阅读并询问是否像同一世界、哪里失去兴趣或把氛围误认为实机。5 秒是本项目观察方法，不是注意力研究结论或已测指标；原 30 秒角色理解任务另行执行。
+
+评审用 1/3/5 分锚点描述差异：1 为通用模板或混乱且无主焦点；3 为风格统一但尺度、连续感或记忆点仍平；5 为原创世界识别清晰、远近节奏连贯、静态主画面可记忆且不妨碍理解。2/4 表示中间情况；三维逐项记录理由和下一步，不设虚构提升百分比或固定人数审批。对比旧版与候选时使用同设备、语言和任务并交替顺序，记录未参与项目者的原话；设计者打分不代替访客观察。
+
+同时验证静态、暂停、系统减少动效、媒体失败和窄屏下的主体、文案、状态及动作仍成立；被要求看完开场、无法停下动效、误判公共世界已开放均须修复。截图证明构图，录像证明时序，性能记录证明运行代价，三者不互相代签；没有实际观察则主观效果仍标为待验证。
+
+验证方法由[系统设计验证矩阵](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)、[沉浸验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)和现有 [testing-manual](../../../testing-manual.md)承接。自动结构检查不证明人类理解，生成稿不证明浏览器结果，页面合入不证明上线或游戏发行。
 
 <a id="refinement-acceptance"></a>
 ### 5.1 细化验收：从“页面存在”到“访客能够判断”
@@ -226,7 +262,7 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 <a id="official-site-benchmark"></a>
 ## 7. 官网参考及采纳边界
 
-核对日期：2026-10-16；重新读取以下官方公开页面，观察信息结构、文案和链接去向，不是竞品实机、像素级视觉审查或转化研究。竞品拥有某项能力不说明 oasis7 已具备；采纳的是可验证的传播方法。EVE Frontier 的可读取内容主要是导航，只据此判断分层。
+核对日期：2026-10-16；以下信息结构观察不是竞品实机、像素级视觉审查或转化研究。竞品拥有某项能力不说明 oasis7 已具备；采纳的是传播方法。EVE Frontier 首页的可读取内容主要是导航，其视觉补充另见下一节的官方媒体。
 
 | 官方来源 | 观察到的结构 | 本专题采纳 / 不采纳 | 要求映射 |
 | --- | --- | --- | --- |
@@ -237,9 +273,23 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 | [BitCraft Discover](https://bitcraftonline.com/discover) | 先描述共同建设的玩家目标，再以角色和分篇世界故事承接兴趣 | 采纳有具体阅读动机的小说短导读和内容深链；不把小说当运行历史，不导入其多人世界承诺 | 001 / 005 |
 | [EVE Frontier](https://evefrontier.com/en) | 游戏、Builders、Vision、Roadmap 与文档入口分层 | 采纳玩家、技术读者和愿景的分流，技术材料下沉；不复制账户、市场、全量导航或发布范围 | 001 / 006 |
 
-先改价值表达、同案例叙事和预览选择，再打磨内容回访与视觉节奏；视频、媒体包和实时观测不是前置条件。没有合适素材时改善文字与已存在的入口，不扩张功能来填充版式。
+先改价值表达、同案例叙事和预览选择；主视觉和多屏节奏在同一轮设计中并行确定，不能永远推迟为上线后的装饰。随后落实轻量增强；视频、媒体包和实时观测不是前置条件。没有合适素材时改善文字与已存在的入口，不扩张功能来填充版式。
 
-只借鉴信息组织与交互原则；不复制竞品美术、标志、截图或文案。生成设计稿是 oasis7 的方案表达，来源与非证据边界见配对产品设计。
+<a id="visual-benchmark"></a>
+### 7.1 视觉科技感、沉浸与冲击的专项参考
+
+证据层级：官方页面文字/链接、直接查看的官方原生图片，以及据此形成的设计判断分别表达。本次未取得有效的官网浏览器截图或滚动录像，因此不把下表称为完整网页视觉审计，不判断竞品动效速度、移动端效果或性能；品牌素材也不是其当前首页截图。官方图片仅链接供研究，不复制入 oasis7 素材或用作游戏证据。
+
+| 官方页面与已查看材料 | 可直接观察到的表现 | 设计判断与采纳方式 | 不照搬与待验证 |
+| --- | --- | --- | --- |
+| [EVE Frontier Media](https://evefrontier.com/en/media)：Launch Art、Asteroid Debris Field；[Founder Access 介绍](https://evefrontier.com/en/news/introducing-founder-access) | 大型断裂工业结构、行星/恒星、极小物体形成尺度对照；明暗剪影和定向光形成主焦点；媒体区区分 Artwork/Cinematic | 科技感不只来自 UI：以原创工业巨构、尺度参照和一处主光建立世界重量；沿用自己的墨绿/薄荷绿身份，不照搬红橙主色 | 不能据静态素材声称官网有某种视差、实时星图或已验证沉浸转化；宣传素材不等于实机 |
+| [Homeworld 官网](https://www.homeworlduniverse.com/)及其[官方竖版 Key Art](https://www.homeworlduniverse.com/wp-content/uploads/2022/05/H3_KeyArt_vertical-733x1024.jpg) | 环形巨构包围较小舰船，近景框架、纵深和冷暖光形成清晰尺度；首页同时提供预告片入口 | 借鉴“巨构—小物体—远景”的三层构图；让 oasis7 首屏在静止状态有可记住的工业文明轮廓 | 不复制舰船/环形标志构图，不由预告片链接推导页面自动播放或 3D 实现 |
+| [No Man’s Sky 首页](https://www.nomanssky.com/)及其[Explore 官方图](https://www.nomanssky.com/media/legacy/uploads/2018/07/homepage-features-explore-1280x720.jpg) | Explore/Build/Multiplayer 等主题连接具体世界画面；图内近处角色、中景环境和远处飞船使空间可读 | 借鉴按体验主题推进、远近变化与画面中的生活感；在同一世界里由文明远景走近一次生产决策 | 不导入多人、VR、角色操控或“无限”承诺，不以彩色壁纸替代真实案例 |
+| [SpaceMolt 首页](https://spacemolt.com/) | 公开页面把 Live Galaxy Map、战斗回看、阵营与概念角色素材分组，并明确概念图性质 | 借鉴“世界可观察”的信息意象和素材分组；oasis7 使用带来源的静态观测和解释性关系线 | 本次仅确认可读结构，未取得该站可用浏览器画面；不将其真实服务数据换成装饰用假遥测 |
+
+Star Citizen 页面此次只读到脚本容器，未取得有效视觉材料，不用印象补造参考结论。以上方法归纳为“英雄主画面建立规模 → 同世界近景连接玩家 → 一次决策形成理解 → 安静阅读区消化 → 远景与小说留下余韵”；这是 oasis7 的设计提案，不是对竞品页面滚动顺序的事实描述。
+
+只借鉴信息组织、构图与交互原则；不复制竞品美术、标志、截图或文案。生成设计稿是 oasis7 的方案表达，来源与非证据边界见配对产品设计。
 
 ## 专业 owner、authority 与测试层级追踪
 
@@ -251,3 +301,4 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 | [REQ-SITE-DISCOVERY-004](#req-site-discovery-004) / [AC-SITE-DISCOVERY-004](#ac-site-discovery-004) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
 | [REQ-SITE-DISCOVERY-005](#req-site-discovery-005) / [AC-SITE-DISCOVERY-005](#ac-site-discovery-005) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
 | [REQ-SITE-DISCOVERY-006](#req-site-discovery-006) / [AC-SITE-DISCOVERY-006](#ac-site-discovery-006) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
+| [REQ-SITE-DISCOVERY-007](#req-site-discovery-007) / [AC-SITE-DISCOVERY-007](#ac-site-discovery-007) | `game_visual_interaction_designer` / `viewer_engineer` / `qa_engineer` | [沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion) | [视觉与动效验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)，同候选多屏、录像、性能与访客记录；均待实施 | 文档关系检查；页面实现沿现有 S6，不新增工作流 |
