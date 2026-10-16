@@ -16,8 +16,18 @@
 - 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/README.md`
 - 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/prd.md`；执行状态再读 PR、实际 CI 与评审记录（Issue 按需）
 - 想先看“正式公告仍在准备中”的当前公开口径：先读 `doc/site/prd.md`、`doc/site/prd.md`，再对照 `site/index.html` 与 `site/doc/cn/index.html`
-- 想看玩家优先官网的产品、系统和生成式设计稿：从[官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md)进入；目标设计不代表页面已实现或上线。
-- 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
+- 要做官网视觉稿：先读[产品体验与视觉设计](../product/player-entry-distribution/public-site-discovery-and-showcase.design.md)，再按需核对产品要求。
+- 要实现或验证官网：先读[系统实现设计](github-pages/public-site-discovery-and-showcase.design.md)，并回查上游产品体验。
+- 要查看完整配套文档：使用下方“官网发现与展示”入口；要继续按文件名下钻，使用活跃专题清单。
+
+<a id="public-site-document-set"></a>
+## 官网发现与展示：配套阅读入口
+
+| 产品需求 | 产品体验与视觉设计（设计师首读） | 系统实现设计（开发首读） |
+| --- | --- | --- |
+| [目标、范围与验收](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md) | [文案、布局、素材、分镜与交付物](../product/player-entry-distribution/public-site-discovery-and-showcase.design.md) | [结构、状态、资源与验证](github-pages/public-site-discovery-and-showcase.design.md) |
+
+三份文档按职责保留原目录，通过配套导航相互可达，不建立正文副本。执行与验收结果读取实际 PR、CI 和评审记录，不能由目标设计推定上线或发行。
 
 ## 密度快照
 - 当前模块库存与专题数量由 `./scripts/doc-inventory-report.sh` 生成；本索引不维护容易漂移的静态数量。
@@ -37,7 +47,7 @@
 - `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`：首页页面级层级基线；它是 Image2 设计证据，不是新的 visual-designer signoff。
 - `doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`：双语、响应式与概念图边界；旧三列布局已被 [Site 当前布局](design.md#homepage-layout-authority)替代。
 - `doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md`：后果链节奏与渐进披露；当前布局与图注优先关系见 [Site 设计](design.md#homepage-layout-authority)。
-- [官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md)：承接[产品 PRD](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md)与[产品体验设计/生成稿](../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#visual-board)，定义静态内容、入口分流、失败恢复及验证；继承 root 布局约束，不复制新专业 PRD。
+- [官网发现与展示配套文档](#public-site-document-set)：聚合产品需求、产品体验与视觉设计、系统实现设计；设计师和开发者分别从对应职责入口阅读，继承现有站点布局约束。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 github-pages 与 manual 专题表。
@@ -53,10 +63,10 @@
 - 按需进入：当 `README.md` 与 PR、实际 CI 与评审记录（Issue 按需） 已能完成首读分流时，本页只承担精确检索与补充路由职责。
 
 ## 当前默认活跃专题清单（按文件名精确检索）
-| 专题 PRD | 专题设计文档 | 专题项目文档 |
-| --- | --- | --- |
-| `doc/site/manual/site-manual-static-docs.prd.md` | [Site 静态手册共享设计](design.md#static-manual-design) | Git、PR、实际 CI 与评审记录；Issue 按需 |
-| [官网发现产品 PRD](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md) | [官网发现与展示系统设计](github-pages/public-site-discovery-and-showcase.design.md) | Git、PR、实际 CI 与评审记录；Issue 按需 |
+| 专题 / 产品需求 | 产品体验与视觉设计 | 系统实现设计 | 执行与验证记录 |
+| --- | --- | --- | --- |
+| [静态手册需求](manual/site-manual-static-docs.prd.md) | 本专题不另建配对体验文件 | [Site 静态手册共享设计](design.md#static-manual-design) | Git、PR、实际 CI 与评审记录；Issue 按需 |
+| [官网发现产品需求](../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md) | [官网发现产品体验与视觉设计](../product/player-entry-distribution/public-site-discovery-and-showcase.design.md) | [官网发现系统实现设计](github-pages/public-site-discovery-and-showcase.design.md) | Git、PR、实际 CI 与评审记录；Issue 按需 |
 
 ## 历史压缩专题清单
 当前无保留原址的历史压缩专题；已完成且有当前承接面的旧专题已转入下方退役删除清单。

@@ -1,7 +1,10 @@
 use super::*;
 use oasis7_agent_api::world_action::{Action, GeoPos, MaterialLedgerId, MaterialTransitPriority};
 use oasis7_client_api::world_service::{IntentOutcome, IntentResponse};
-use oasis7_game_client::{device_client::Client, operation_store::ClientStateKind};
+use oasis7_game_client::{
+    device_client::{BuildQuoteOutcome, Client},
+    operation_store::ClientStateKind,
+};
 use serde_json::json;
 
 /// SDK adapter retains the original encrypted device operation namespace.
@@ -159,7 +162,47 @@ impl NativeTaskHost for SdkNativeTaskHost {
                 "context prefix has not committed; retain original operation and lookup".into(),
             );
         }
-        let captured = self.client.captured(operation)?;
+        // Native object grants are absent from TaskPublicContextV1. Obtain
+        // them only from a currently authorized, signed read at its exact
+        // commit; a historical read could retain a revoked reader's scope.
+        // Drift retries reread this same committed context, never its prefix.
+        let mut matching = None;
+        for _ in 0..3 {
+            let captured = self.client.captured(operation)?;
+            let view = self.client.public_view()?;
+            if view.task_fence() != Some(&captured.prepared.identity.fence)
+                || captured.prepared.identity.fence != self.initial_fence()?
+                || view.logical_tick() > captured.prepared.valid_until_tick.0
+            {
+                return Err(
+                    "native capability discovery authority or context lease changed".into(),
+                );
+            }
+            if view.version().commit == captured.current_public_context.read_commit
+                && view.logical_tick()
+                    == captured
+                        .current_public_context
+                        .captured_base_binding
+                        .base_tick
+            {
+                matching = Some((captured, view));
+                break;
+            }
+        }
+        let (captured, view) = matching
+            .ok_or("native capability discovery drifted; retain original context and refresh")?;
+        let grants: Vec<_> = view
+            .projection()
+            .native_delegation_authorizations
+            .iter()
+            .filter(|authorization| {
+                let grant = &authorization.grant;
+                !grant.revoked
+                    && grant.valid_from_tick <= view.logical_tick()
+                    && view.logical_tick() <= grant.valid_until_tick
+                    && authorization.remaining_units > 0
+            })
+            .collect();
         let prepared = &captured.prepared;
         Ok(NativeTaskContext {
             operation: operation.into(),
@@ -172,6 +215,12 @@ impl NativeTaskHost for SdkNativeTaskHost {
                 "actor_observation":prepared.snapshot.actor_observation,
                 "current_actor_observation":captured.current_public_context.actor_observation,
                 "capability_catalog":captured.current_public_context.provider_authority.capability_catalog,
+                "native_delegation_authorizations":grants.iter().take(128).collect::<Vec<_>>(),
+                "native_authorization_count":grants.len(),
+                "native_authorizations_truncated":grants.len()>128,
+                "native_authorization_read_commit":view.version().commit,
+                "native_authorization_logical_tick":view.logical_tick(),
+                "native_authorization_scope":"current action/object grants only; choose BuildFactory factory ID from grant.object_id; admission still required",
                 "native_industry_profile":true,"task_fence":prepared.identity.fence,
                 "capture_commit":captured.capture_commit,"current_read_commit":captured.current_public_context.read_commit,
                 "context_identity":prepared.identity,
@@ -205,6 +254,7 @@ impl NativeTaskHost for SdkNativeTaskHost {
     ) -> Result<NativeTaskToolResult, String> {
         let operation = &context.operation;
         let mut effect = None;
+        let mut decision_required = false;
         let value = match tool {
             NativeTaskTool::Wait(v) => {
                 // Observe independently progressing Runtime time. This never
@@ -228,6 +278,7 @@ impl NativeTaskHost for SdkNativeTaskHost {
                         return Ok(NativeTaskToolResult {
                             value: json!({"wait":"interrupted"}),
                             effect: None,
+                            decision_required: false,
                         });
                     }
                     if current.logical_tick >= target {
@@ -246,9 +297,22 @@ impl NativeTaskHost for SdkNativeTaskHost {
             }
             NativeTaskTool::Industry(_) => self.client.industry()?,
             NativeTaskTool::Capabilities(_) => self.client.capabilities()?,
-            NativeTaskTool::QuoteBuild(v) => self
+            NativeTaskTool::QuoteBuild(v) => match self
                 .client
-                .quote_build(operation, &v.site, &v.factory, &v.kind)?,
+                .quote_build_outcome(operation, &v.site, &v.factory, &v.kind)?
+            {
+                BuildQuoteOutcome::Quote(quoted) => {
+                    decision_required = quoted.quote.rejection.is_some();
+                    serde_json::to_value(quoted).map_err(|_| "native quote encoding failed")?
+                }
+                BuildQuoteOutcome::Denied(denied) => {
+                    decision_required = true;
+                    json!({"status":"selection_rejected","reason":denied.reason,
+                        "no_action_submitted":true,"next":"read_capabilities_and_choose_authorized_factory",
+                        "verified_quote_denial":denied})
+                }
+                BuildQuoteOutcome::Original(original) => original,
+            },
             NativeTaskTool::QuoteSchedule(v) => self
                 .client
                 .quote_schedule(operation, &v.factory, &v.recipe, v.batches)?,
@@ -308,6 +372,10 @@ impl NativeTaskHost for SdkNativeTaskHost {
                 serde_json::to_value(result).map_err(|_| "native result encoding failed")?
             }
         };
-        Ok(NativeTaskToolResult { value, effect })
+        Ok(NativeTaskToolResult {
+            value,
+            effect,
+            decision_required,
+        })
     }
 }
