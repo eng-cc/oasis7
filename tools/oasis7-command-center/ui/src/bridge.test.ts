@@ -49,3 +49,9 @@ it('passes finite directory queries without filesystem or shell proxy arguments'
   await bridge.documentDirectory(query);
   expect(mock.invoke).toHaveBeenLastCalledWith('query_document_directory',{query});
 });
+
+it('passes semantic tree occurrence and same-snapshot filters through one finite command', async () => {
+  const query = {view:'product',parentOccurrence:'product/module/topic',lifecycleFilter:'current',kindFilter:'prd',pairingFilter:'missing',inventory:{schemaVersion:1,projectId:'project',snapshotId:'snapshot',query:'设计',readFilter:'all',cursor:'cursor'}};
+  await bridge.documentSemanticTree(query);
+  expect(mock.invoke).toHaveBeenLastCalledWith('query_document_semantic_tree',{query});
+});

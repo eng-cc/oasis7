@@ -2,6 +2,7 @@ use oasis7_command_center_core::codex::*;
 use oasis7_command_center_core::context::*;
 use oasis7_command_center_core::document_directory::*;
 use oasis7_command_center_core::document_inventory::*;
+use oasis7_command_center_core::document_semantic_tree::*;
 use oasis7_command_center_core::domain::*;
 use oasis7_command_center_core::github::{Check, GitHubSnapshot, PullRequest};
 use oasis7_command_center_core::tools::jobs::ToolJob;
@@ -30,6 +31,11 @@ fn main() {
         SourceStatus::decl(),
         DocumentLifecycle::decl(),
         DocumentSection::decl(),
+        DocumentNavigation::decl(),
+        DocumentSemanticTreeQuery::decl(),
+        DocumentSemanticTreeEntry::decl(),
+        DocumentSemanticTreePage::decl(),
+        DocumentSemanticBreadcrumb::decl(),
         DocumentPairing::decl(),
         DocumentPairings::decl(),
         DocumentIdentity::decl(),

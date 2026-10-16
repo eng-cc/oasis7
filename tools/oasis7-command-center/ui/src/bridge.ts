@@ -1,4 +1,4 @@
-import type { DocumentInventoryQuery, DocumentInventoryPage, DocumentDirectoryQuery, DocumentDirectoryPage } from './generated/core';
+import type { DocumentInventoryQuery, DocumentInventoryPage, DocumentDirectoryQuery, DocumentDirectoryPage, DocumentSemanticTreeQuery, DocumentSemanticTreePage } from './generated/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { DecisionDraft, DecisionRecord, DocumentSection, GitHubSnapshot, Preferences, Snapshot, WorkAssociation, RuntimeSnapshot, RuntimeTarget, RequestAnswer, QuitStatus, SessionConfig } from './types';
 import { listen } from '@tauri-apps/api/event';
@@ -10,6 +10,7 @@ function call<T>(command: string, args: Record<string, unknown> = {}): Promise<T
 // Explicit finite commands: no arbitrary method, shell, SQL or filesystem proxy.
 export const bridge = {
   documentDirectory: (query: DocumentDirectoryQuery) => call<DocumentDirectoryPage>('query_document_directory', { query }),
+  documentSemanticTree: (query: DocumentSemanticTreeQuery) => call<DocumentSemanticTreePage>('query_document_semantic_tree', { query }),
   documentInventory: (query: DocumentInventoryQuery) => call<DocumentInventoryPage>('query_document_inventory', { query }),
   snapshot: () => call<Snapshot>('query_view'),
   openProject: (path: string) => call<Snapshot>('open_project', { path }),

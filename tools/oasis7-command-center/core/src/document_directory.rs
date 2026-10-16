@@ -140,7 +140,7 @@ impl CommandCenter {
         }
         let text = query.query.trim().to_lowercase();
         let filter = index::digest(&serde_json::to_vec(&(
-            "document-directory-v2",
+            "document-directory-v3",
             parent,
             &text,
             &query.read_filter,
@@ -280,7 +280,7 @@ impl CommandCenter {
     }
 }
 
-fn matches_lifecycle(file: &IndexedDocument, filter: &str) -> bool {
+pub(crate) fn matches_lifecycle(file: &IndexedDocument, filter: &str) -> bool {
     let lifecycle = file.lifecycle.as_ref();
     match filter {
         "all" => true,

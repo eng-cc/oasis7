@@ -115,6 +115,27 @@ fn directory_pagination_binds_parent_filter_snapshot_schema_and_project() {
     assert_eq!(first.total_children, 105);
     assert_eq!(first.matching_files, 105);
     assert_eq!(first.entries.len(), 100);
+    // v2 predates product-identity parsing coverage. The same inventory snapshot
+    // can project legacy product pairing states differently, so old offsets expire.
+    {
+        use sha2::{Digest, Sha256};
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(first.next_cursor.as_ref().unwrap()).unwrap();
+        let old_filter = serde_json::to_vec(&(
+            "document-directory-v2",
+            "doc",
+            "",
+            "all",
+            "all",
+            "all",
+            "all",
+        ))
+        .unwrap();
+        legacy["filter"] = format!("{:x}", Sha256::digest(old_filter)).into();
+        let mut old_query = query.clone();
+        old_query.inventory.cursor = Some(legacy.to_string());
+        assert!(core.document_directory(old_query).is_err());
+    }
     query.inventory.cursor = first.next_cursor.clone();
     query.inventory.snapshot_id = Some(first.snapshot_id.clone());
     let next = core.document_directory(query.clone()).unwrap();

@@ -2,6 +2,8 @@ import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js'
 import { bridge, errorMessage, observedTime } from './bridge';
 import DocumentRelations from './DocumentRelations';
 import DocumentDirectory from './DocumentDirectory';
+import DocumentSemanticTree from './DocumentSemanticTree';
+import DocumentNavigation from './DocumentNavigation';
 import DocumentAllocations from './DocumentAllocations';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
@@ -38,6 +40,24 @@ export default function DocumentInventory(props: {
   let generation = 0;
   let applied = { query: '', filter: 'all' };
   let list: HTMLDivElement | undefined;
+  let detail: HTMLElement | undefined;
+  let selectionOrigin: HTMLElement | undefined;
+  function selectFile(file?: IndexedDocument, origin?: HTMLElement) {
+    selectionOrigin = origin;
+    setSelected(file);
+  }
+  function closeFile() {
+    const origin = selectionOrigin;
+    selectFile(undefined);
+    if (origin?.isConnected) { origin.focus(); origin.scrollIntoView?.({block:'nearest'}); }
+  }
+  createEffect(on(selected, file => {
+    if (!file) return;
+    queueMicrotask(() => {
+      if (selected() !== file || !detail?.isConnected) return;
+      detail.focus(); detail.scrollIntoView?.({block:'start'});
+    });
+  }));
 
   function browse(mode: string) {
     ++generation; setBusy(false); setSelected(undefined); setView(mode);
@@ -84,11 +104,12 @@ export default function DocumentInventory(props: {
     return file?.state === 'read' ? props.snapshot.sections.filter(s => s.path === file.path && s.revision === file.revision) : [];
   };
   return <section class="panel" aria-label="文档文件清单">
-    <div class="panel-title"><h3>文件清单与读取缺口</h3><Show when={view() === 'files'}><button disabled={busy()} onClick={() => void load()}>重新查询首页</button></Show></div>
+    <div class="panel-title"><h3>文档导航与读取缺口</h3><Show when={view() === 'files'}><button disabled={busy()} onClick={() => void load()}>重新查询首页</button></Show></div>
     <div class="panel-body">
-      <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头的显式配对系统设计和设计上游声明；可打开已解析的目标章节并返回，尚未提供产品/专业树。</p>
-      <div class="actions" role="group" aria-label="文档浏览方式"><button aria-pressed={view() === 'files'} onClick={() => browse('files')}>文件清单</button><button aria-pressed={view() === 'directory'} onClick={() => browse('directory')}>文档目录</button></div>
-      <Show when={view() === 'directory'}><DocumentDirectory snapshot={props.snapshot} selectFile={setSelected} /></Show>
+      <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头或产品身份章节的显式配对设计和设计上游声明；可打开已解析的目标章节并返回。产品树和专业系统树按显式入口与导航组织，配对保留为详情关系；同一文件可出现在多个位置。</p>
+      <div class="actions" role="group" aria-label="文档浏览方式"><button aria-pressed={view() === 'files'} onClick={() => browse('files')}>文件清单</button><button aria-pressed={view() === 'directory'} onClick={() => browse('directory')}>文档目录</button><button aria-pressed={view() === 'product'} onClick={() => browse('product')}>产品树</button><button aria-pressed={view() === 'professional'} onClick={() => browse('professional')}>专业系统树</button></div>
+      <Show when={view() === 'directory'}><DocumentDirectory snapshot={props.snapshot} selectFile={selectFile} /></Show>
+      <Show when={view() === 'product' || view() === 'professional'}><DocumentSemanticTree snapshot={props.snapshot} view={view() === 'product' ? 'product' : 'professional'} selectFile={selectFile} /></Show>
       <Show when={view() === 'files'}>
       <form class="inventory-filters" onSubmit={event => { event.preventDefault(); if (!composing()) void load(); }}>
         <label>标题、路径或文档 ID<input aria-label="筛选文档文件" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (composing() || e.isComposing || e.keyCode === 229) { if (e.key === 'Enter') e.preventDefault(); } }} /></label>
@@ -103,7 +124,7 @@ export default function DocumentInventory(props: {
         <Show when={result().stale}><div class="notice" role="status">清单已过期：保留最近一次成功扫描的文件记录。{result().error}</div></Show>
         <div class="inventory-list" ref={list} tabindex="-1" aria-label="当前页文档文件">
           <For each={result().files}>{file => <div class="row"><div class="row-content">
-            <button class="row-title" aria-pressed={selected()?.fileKey === file.fileKey} onClick={() => setSelected(file)}>{file.title}</button>
+            <button class="row-title" aria-pressed={selected()?.fileKey === file.fileKey} onClick={event => selectFile(file,event.currentTarget)}>{file.title}</button>
             <div class="metadata"><span>{file.path}</span><span>{kinds[file.kind] ?? file.kind}</span><span>{states[file.state] ?? file.state}</span><span>{file.dirty ? '工作树有修改' : '未检测到修改'}</span></div>
             <Show when={file.identity?.declaredId}><p class="muted small">文档 ID：{file.identity?.declaredId}<Show when={file.identity?.duplicateFiles}> · 相同 ID 另有 {file.identity?.duplicateFiles} 个已读文件</Show></p></Show>
             <Show when={file.reason}><p class="muted small">{reasons[file.reason!] ?? file.reason}</p></Show>
@@ -113,7 +134,7 @@ export default function DocumentInventory(props: {
         <div class="actions"><button disabled={busy() || !result().nextCursor} onClick={() => void load(true)}>下一页（最多 100 项）</button></div>
       </>}</Show>
       </Show>
-      <Show when={selected()}>{file => <section class="inventory-detail" aria-label="文件读取详情"><h4>{file().path}</h4>
+      <Show when={selected()}>{file => <section class="inventory-detail" aria-label="文件读取详情" ref={detail} tabindex="-1"><h4>{file().path}</h4>
         <p>{states[file().state] ?? file().state} · {file().reason ? reasons[file().reason!] ?? file().reason : `${file().bytes ?? 0} 字节`}</p>
         <Show when={file().revision}><p class="muted small">内容摘要 {file().revision}</p></Show>
         <Show when={file().lifecycle}><p class="muted small">生命周期原声明：{file().lifecycle?.rawStatus ?? file().lifecycle?.status ?? '未声明'} · 类别 {categories[file().lifecycle?.category ?? 'unknown'] ?? '未分类'}<Show when={file().lifecycle?.issue}> · {file().lifecycle?.issue}</Show></p></Show>
@@ -126,12 +147,13 @@ export default function DocumentInventory(props: {
               <Show when={identity().duplicateFiles}><p role="status">重复文档 ID：相同 ID 另有 {identity().duplicateFiles} 个已读文件；文件仍分别保留。</p><p class="muted small">路径样本 {identity().duplicatePaths.length} / {identity().duplicateFiles}（最多 20 条）</p><ul><For each={identity().duplicatePaths}>{path => <li>{path}</li>}</For></ul></Show>
             </>}</Show>
           </section>
-          <DocumentRelations relations={file().pairings} mode="pairing" sections={props.snapshot.sections} showSource={props.showSource} />
+          <DocumentNavigation navigation={file().navigation} sections={props.snapshot.sections} showSource={props.showSource} />
+          <DocumentRelations relations={file().pairings} mode={file().path.startsWith('doc/product/') ? 'product_pairing' : 'pairing'} sections={props.snapshot.sections} showSource={props.showSource} />
           <Show when={file().kind === 'design'}><DocumentRelations relations={file().upstream} mode="upstream" sections={props.snapshot.sections} showSource={props.showSource} /><DocumentAllocations allocations={file().allocations} sections={props.snapshot.sections} showSource={props.showSource} /></Show>
         </Show>
         <Show when={file().state === 'read' && !chapters().length}><p>已读取，文件没有可展示的章节。</p></Show>
         <For each={chapters()}>{section => <p><button onClick={e => props.showSource(section, e.currentTarget)}>{section.title} · 第 {section.line} 行</button></p>}</For>
-        <button onClick={() => setSelected(undefined)}>收起文件详情</button>
+        <button onClick={closeFile}>收起文件详情</button>
       </section>}</Show>
     </div>
   </section>;

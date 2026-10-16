@@ -309,3 +309,12 @@ pub async fn query_document_directory(
     host.run(move |app| app.core.document_directory(query).map_err(error))
         .await
 }
+
+#[tauri::command]
+pub async fn query_document_semantic_tree(
+    host: State<'_, Host>,
+    query: oasis7_command_center_core::document_semantic_tree::DocumentSemanticTreeQuery,
+) -> Result<oasis7_command_center_core::document_semantic_tree::DocumentSemanticTreePage, String> {
+    host.run(move |app| app.core.document_semantic_tree(query).map_err(error))
+        .await
+}
