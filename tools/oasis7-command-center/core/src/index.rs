@@ -1,5 +1,7 @@
 #[path = "index_coverage.rs"]
 mod coverage;
+#[path = "document_allocations.rs"]
+mod document_allocations;
 #[path = "document_fragments.rs"]
 mod document_fragments;
 #[path = "document_identity.rs"]
@@ -176,6 +178,7 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
         file.identity = Some(document_identity::parse(&content));
         file.pairings = Some(document_pairings::parse(name, &content, "配对系统设计"));
         if file.kind == "design" {
+            file.allocations = Some(document_allocations::parse(name, &content));
             file.upstream = Some(document_pairings::parse(name, &content, "上游"));
         }
         inventory_files.push(file);
