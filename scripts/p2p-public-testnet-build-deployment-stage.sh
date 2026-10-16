@@ -101,7 +101,7 @@ readonly TRIAD_INVENTORY_FILE="public-testnet-validator-triad-inventory.v1.json"
 # Keep stage generation pinned to the same immutable inventory that bootstrap,
 # readback, and fleet health consume.  The source registry is an input to the
 # generated file; it is not the runtime registry digest.
-readonly TRIAD_INVENTORY_SHA256="3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5"
+readonly TRIAD_INVENTORY_SHA256="b983bd9df4f29bf7a0e32dd9d1d56323d85d16d4cf572c10bc8c567908565739"
 readonly TRIAD_SOURCE_REGISTRY_RELATIVE="doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
 readonly TRIAD_SOURCE_REGISTRY_PATH="$repo_root/$TRIAD_SOURCE_REGISTRY_RELATIVE"
 readonly TRIAD_SOURCE_REGISTRY_FILE="public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"

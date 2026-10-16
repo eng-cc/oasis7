@@ -59,7 +59,7 @@ emit the unsupported runtime value `NODE_ROLE=validator`.
 The bootstrap peer input is governed bytes, not a caller-selected topology:
 use the exact evidence file
 `doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt`
-with SHA-256 `c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6`.
+with SHA-256 `5e62e5b132fe083c18c637213baefebad161c675e2243b2e02dc8bcd5f70401c`.
 Stage rejects wrong or stale peer files and source-registry digest drift before
 creating the stage directory.
 The source registry digest is only the immutable build-input link. The staged

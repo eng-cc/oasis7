@@ -57,12 +57,12 @@ VALIDATOR_47_PORTS = {"6634", "6834"}
 TRIAD_SIGNERS = {
     "triad-testnet-sequencer": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
     "triad-testnet-storage": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
-    "triad-testnet-validator-47": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+    "triad-testnet-validator-47": "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73",
 }
-TRIAD_ROOT_PUBLIC_KEY = "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6"
-TRIAD_VALIDATOR_47_PEER_ID = "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+TRIAD_ROOT_PUBLIC_KEY = "4eb958cb0376568df7c7abf3d3708b5b5ae52e2928b533e41a203c58271a6a25"
+TRIAD_VALIDATOR_47_PEER_ID = "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU"
 TRIAD_VALIDATOR_47_FIXTURE_SIGNER = TRIAD_SIGNERS["triad-testnet-validator-47"]
-TRIAD_REGISTRY_FIXTURE_DIGEST = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
+TRIAD_REGISTRY_FIXTURE_DIGEST = "1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd"
 TRIAD_INVENTORY_DIGEST = hashlib.sha256(INVENTORY.read_bytes()).hexdigest()
 TRIAD_WORLD_ID = "oasis7-public-testnet-governed-20260606"
 TRIAD_MANIFEST_HASH = hashlib.sha256(b"oasis7-test-fixture-triad-manifest").hexdigest()
@@ -216,7 +216,7 @@ def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: i
             "schema_version": "oasis7.chain_validator_provider_status.v1",
             "node_id": node_id,
             "provider_id": (
-                "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+                "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU"
                 if node_id == TRIAD_NODE_IDS["validator-47"]
                 else f"peer-{node_id}"
             ),
@@ -239,7 +239,7 @@ def node_emitted_triad_status(node_name: str, *, provider: bool = False, head: i
                 {
                     "status": "ready",
                     "provider_id": (
-                        "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+                        "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU"
                         if node_id == TRIAD_NODE_IDS["validator-47"]
                         else f"peer-{node_id}"
                     ),
@@ -341,7 +341,7 @@ class ThirdValidatorAdmissionContractTest(unittest.TestCase):
                 "config_dir = pathlib.Path(sys.argv[1])\n"
                 "node_id = sys.argv[2]\n"
                 "key_path = config_dir / 'node-keypair.toml'\n"
-                "print(json.dumps({'schema_version':'oasis7.identity_receipt.v1', 'node_id':node_id, 'peer_id':'12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ', 'key_path':str(key_path), 'key_sha256':hashlib.sha256(key_path.read_bytes()).hexdigest(), 'key_size_bytes':key_path.stat().st_size, 'key_mode':384, 'key_uid':key_path.stat().st_uid, 'key_gid':key_path.stat().st_gid}))\n"
+                "print(json.dumps({'schema_version':'oasis7.identity_receipt.v1', 'node_id':node_id, 'peer_id':'12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU', 'key_path':str(key_path), 'key_sha256':hashlib.sha256(key_path.read_bytes()).hexdigest(), 'key_size_bytes':key_path.stat().st_size, 'key_mode':384, 'key_uid':key_path.stat().st_uid, 'key_gid':key_path.stat().st_gid}))\n"
                 "PY\n",
                 encoding="utf-8",
             )

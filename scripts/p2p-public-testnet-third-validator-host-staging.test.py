@@ -50,11 +50,11 @@ MANUAL = ROOT / "doc/testing/manual/public-testnet-fresh-validator-host-bootstra
 INVENTORY_RELATIVE = "scripts/public-testnet-validator-triad-inventory.v1.json"
 VALIDATOR_47_NODE_ID = "triad-testnet-validator-47"
 VALIDATOR_47_SERVICE = "oasis7-triad-validator-47.service"
-VALIDATOR_47_FINALITY_PUBLIC_KEY = "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2"
-VALIDATOR_47_ROOT_PUBLIC_KEY = "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6"
-VALIDATOR_47_PEER_ID = "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
-GENERATED_REGISTRY_SHA256 = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
-GENERATED_REGISTRY_SEMANTIC_SHA256 = "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"
+VALIDATOR_47_FINALITY_PUBLIC_KEY = "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73"
+VALIDATOR_47_ROOT_PUBLIC_KEY = "4eb958cb0376568df7c7abf3d3708b5b5ae52e2928b533e41a203c58271a6a25"
+VALIDATOR_47_PEER_ID = "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU"
+GENERATED_REGISTRY_SHA256 = "1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd"
+GENERATED_REGISTRY_SEMANTIC_SHA256 = "82b3b705cc72173b34fc738f9cff00cba2f4cab0f05ca32ca58bf4dfd5ea7228"
 BOOTSTRAP_PEERS_EVIDENCE = (
     ROOT
     / "doc/testing/evidence/"
@@ -731,7 +731,7 @@ class Validator47HostStagingContractTests(unittest.TestCase):
             )
             self.assertEqual(
                 payload["inventory"]["source_registry_sha256"],
-                "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+                "1296accdac21371a017797b29503aa6658ed600f71049db0599ae3d12c651510",
             )
 
             write_fake_readback_tools(bin_dir, unit_file_state="enabled")

@@ -54,10 +54,10 @@ NODE_ROLES = {
 SIGNERS = {
     "triad-testnet-sequencer": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
     "triad-testnet-storage": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
-    "triad-testnet-validator-47": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+    "triad-testnet-validator-47": "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73",
 }
 TRIAD_STAKES = {node_id: 100 for node_id in NODE_IDS.values()}
-VALIDATOR_47_PEER_ID = "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+VALIDATOR_47_PEER_ID = "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU"
 TRIAD_REGISTRY_SEMANTIC_DIGEST = hashlib.sha256(
     json.dumps(
         {
@@ -225,7 +225,7 @@ def triad_registry() -> dict[str, Any]:
 # registry bound by the immutable inventory.  The source registry is retained
 # as a separate build-time input, while the runtime also emits the canonical
 # effective-registry semantic digest below.
-TRIAD_REGISTRY_DIGEST = "8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78"
+TRIAD_REGISTRY_DIGEST = "1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd"
 INVENTORY_DIGEST = hashlib.sha256(INVENTORY.read_bytes()).hexdigest()
 
 

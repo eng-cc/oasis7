@@ -34,10 +34,11 @@ case "${1:-}" in
   show)
     printf '%s\n' \
       LoadState="${FAKE_SERVICE_LOAD_STATE:-loaded}" \
-      ActiveState=inactive \
-      SubState=dead \
-      UnitFileState=disabled \
-      NRestarts=0
+      ActiveState="${FAKE_ACTIVE_STATE:-inactive}" \
+      SubState="${FAKE_SUB_STATE:-dead}" \
+      UnitFileState="${FAKE_UNIT_FILE_STATE:-disabled}" \
+      NRestarts="${FAKE_NRESTARTS:-0}" \
+      MainPID="${FAKE_MAIN_PID:-0}"
     ;;
   *)
     printf 'unexpected systemctl operation\n' >&2
@@ -48,12 +49,19 @@ EOF
 cat >"$FAKE_BIN/ps" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "-p" && "${FAKE_MAIN_PID:-0}" != "0" ]]; then
+  printf '/opt/oasis7/p2p-testnet/current/bin/oasis7_chain_runtime\n'
+  exit 0
+fi
 printf '  PID COMMAND\n'
 EOF
 cat >"$FAKE_BIN/ss" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'State      Recv-Q Send-Q Local Address:Port Peer Address:Port\n'
+for port in ${FAKE_PORTS:-}; do
+  printf 'LISTEN     0      128    127.0.0.1:%s      0.0.0.0:*\n' "$port"
+done
 EOF
 cat >"$FAKE_BIN/pgrep" <<'EOF'
 #!/usr/bin/env bash
@@ -80,11 +88,17 @@ PY
 }
 
 run_readback() {
+  run_role_readback storage oasis7-triad-storage.service
+}
+
+run_role_readback() {
+  local role=$1
+  local service=$2
   invoke_readback \
     --read-only \
-    --role storage \
+    --role "$role" \
     --root "$TEST_ROOT" \
-    --service oasis7-triad-storage.service
+    --service "$service"
 }
 
 readback_json="$(run_readback)"
@@ -108,6 +122,80 @@ assert value["service_state"] == "stopped", value
 assert value["independently_observed"] is True, value
 assert value["listeners"] == [], value
 PY
+
+# Active storage and sequencer units are valid read-only observations.  The
+# service helper must preserve the structured output schema while exposing the
+# live state needed by the governed triad adapter.
+active_storage_json="$({
+  FAKE_ACTIVE_STATE=active \
+  FAKE_SUB_STATE=running \
+  FAKE_UNIT_FILE_STATE=enabled \
+  FAKE_MAIN_PID=12345 \
+  FAKE_PORTS='6632 6832' \
+  run_role_readback storage oasis7-triad-storage.service
+})"
+active_sequencer_json="$({
+  FAKE_ACTIVE_STATE=active \
+  FAKE_SUB_STATE=running \
+  FAKE_UNIT_FILE_STATE=enabled \
+  FAKE_MAIN_PID=12345 \
+  FAKE_PORTS='6631 6831' \
+  run_role_readback sequencer oasis7-triad-sequencer.service
+})"
+python3 - "$active_storage_json" "$active_sequencer_json" <<'PY'
+import json
+import sys
+
+for value, ports in zip(
+    (json.loads(sys.argv[1]), json.loads(sys.argv[2])),
+    (['6632', '6832'], ['6631', '6831']),
+):
+    assert set(value) == {
+        'schema_version',
+        'active',
+        'running',
+        'service_state',
+        'independently_observed',
+        'listeners',
+    }, value
+    assert value['active'] is True, value
+    assert value['running'] is True, value
+    assert value['service_state'] == 'running', value
+    assert value['independently_observed'] is True, value
+    assert value['listeners'] == ports, value
+PY
+
+# validator-47 remains a no-start role: an active unit is rejected before any
+# identity/inventory readback can be treated as evidence.
+if FAKE_ACTIVE_STATE=active FAKE_SUB_STATE=running FAKE_UNIT_FILE_STATE=enabled \
+  FAKE_MAIN_PID=12345 FAKE_PORTS='6634 6834' \
+  run_role_readback validator-47 oasis7-triad-validator-47.service >"$TMP_DIR/validator-47-active.out" 2>&1; then
+  printf 'expected validator-47 active service to be rejected\n' >&2
+  exit 1
+fi
+
+# Only active/running is a valid live service state for the Type=simple chain
+# units. Socket/oneshot-like states and a missing active MainPID fail closed.
+for invalid_substate in listening exited failed; do
+  if FAKE_ACTIVE_STATE=active FAKE_SUB_STATE="$invalid_substate" FAKE_UNIT_FILE_STATE=enabled \
+    FAKE_MAIN_PID=12345 FAKE_PORTS='6632 6832' \
+    run_readback >"$TMP_DIR/active-$invalid_substate.out" 2>&1; then
+    printf 'expected active/%s service state to be rejected\n' "$invalid_substate" >&2
+    exit 1
+  fi
+done
+if FAKE_ACTIVE_STATE=active FAKE_SUB_STATE=running FAKE_UNIT_FILE_STATE=enabled \
+  FAKE_MAIN_PID=0 FAKE_PORTS='6632 6832' \
+  run_readback >"$TMP_DIR/active-missing-main-pid.out" 2>&1; then
+  printf 'expected active service without a MainPID to be rejected\n' >&2
+  exit 1
+fi
+if FAKE_ACTIVE_STATE=active FAKE_SUB_STATE=running FAKE_UNIT_FILE_STATE=enabled \
+  FAKE_MAIN_PID=not-a-pid FAKE_PORTS='6632 6832' \
+  run_readback >"$TMP_DIR/active-malformed-main-pid.out" 2>&1; then
+  printf 'expected active service with malformed MainPID to be rejected\n' >&2
+  exit 1
+fi
 
 if FAKE_SERVICE_LOAD_STATE=not-found run_readback >"$TMP_DIR/not-found.out" 2>&1; then
   printf 'expected missing systemd unit to be rejected\n' >&2

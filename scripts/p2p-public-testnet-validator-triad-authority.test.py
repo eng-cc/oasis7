@@ -28,10 +28,10 @@ WORLD_ID = "oasis7-public-testnet-governed-20260606"
 VALIDATOR_47 = {
     "node_id": "triad-testnet-validator-47",
     "stake": 100,
-    "root_public_key": "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6",
-    "finality_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
-    "finality_signer_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
-    "libp2p_peer_id": "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ",
+    "root_public_key": "4eb958cb0376568df7c7abf3d3708b5b5ae52e2928b533e41a203c58271a6a25",
+    "finality_public_key": "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73",
+    "finality_signer_public_key": "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73",
+    "libp2p_peer_id": "12D3KooWRHQrqchtg87SpBHiojGaVtfoGcPsnUfiNSpJd5J7UJbU",
 }
 
 
