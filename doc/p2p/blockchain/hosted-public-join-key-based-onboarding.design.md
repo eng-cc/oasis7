@@ -327,7 +327,7 @@ pending ──有效响应+事务提交──> consumed(result_ref)
 
 查不到凭证、userHandle 不匹配、已撤销及签名无效，向未认证者返回统一的 `authentication_failed`，内部审计记录具体原因。已认证用户在自己的安全中心可以看到其凭证的撤销原因；不能以“错误可解释”为由公开别人的账号存在性。
 ### 7.3 普通邮箱登录兼容
-保留现有 `/login/start` 与 `/login/complete` 的 email 兼容 façade，内部改为 `EmailAdapter → 身份事务 → AccountSession`，而不是邮箱专属账户写入逻辑。
+邮箱兼容指既有邮箱账号可通过 v2 `/api/public/hosted-account/v2/email/login/options` 与 `/api/public/hosted-account/v2/email/login/complete` 重新认证，内部走 `EmailAdapter → 身份事务 → AccountSession`，不是保留第二套旧登录 authority。启用 v2 时，旧 `/api/public/hosted-account/login/start` 与 `/api/public/hosted-account/login/complete` 返回 `identity_v2_required`；旧接口仅限 v2 未开启且满足 §13.4 安全回退条件的部署，完整路由边界见 §11.2。
 
 OTP 必须绑定 `purpose`（登录、绑定邮箱、恢复开始、恢复完成）、因子/版本、目标账号（适用时）和发起上下文。一个登录 OTP 不可拿去完成恢复或改变邮箱。OTP 存储采用带秘密的验证摘要，不能对低熵验证码仅做公开 hash 后声称抗离线猜测；发送与验证材料不入日志。
 
@@ -864,7 +864,7 @@ P0 放量必须同时满足全部 P0 AC、NFR 安全不变量、真实支持矩�
 表中“现有”路径已在基线或本次输入中核对；“建议新增”是待实施结构，不是仓库现存文件的声明。
 | 位置 | 类型 | 改造 |
 | --- | --- | --- |
-| `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs` | 现有 | email façade 保留，抽出身份认证；去掉 SMTP 整体前置和 world issue 失败后恢复 OTP 的耦合 |
+| `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs` | 现有 | legacy email façade 仅在 v2 未开启且满足 §13.4 时保留；v2 使用 §11.2 的 EmailAdapter / AccountSession 路由，拒绝旧登录和 player-session 发行/续期/释放入口 |
 | `.../hosted_account_store_backend.rs` | 现有 | 分离旧格式 reader / v2 store adapter；不再 login touch 解冻；事务先于内存可见 |
 | `.../hosted_player_session.rs` | 现有 | 账号 session 与控制 lease 关联，重排接管顺序，旧 release 绑定 epoch |
 | `crates/oasis7/src/viewer/runtime_live/session_policy.rs` | 现有 | 保留单控制 key/epoch；增加身份上下文版本和短期新鲜度校验 |
@@ -887,7 +887,7 @@ P0 放量必须同时满足全部 P0 AC、NFR 安全不变量、真实支持矩�
 **第四段：证据与开放。** 两后端集成、真实设备、用户观察、迁移与回退演练通过后，才开启公开注册。保持文档目标、实现状态和公开 claims 分开。
 
 这是减少无意义 PR 分裂的组织建议，不意味着大型改造可跳过评审或在安全链未闭合时部分上线。若 Tablestore 事务 SDK 适配必须独立上游提交，可作为依赖交付，但不能用不原子的临时后端替代 P0 安全结果。
-### 18.3 必须随采纳同步的产品澄清
+### 18.3 P0 采用后的产品与系统边界
 | 澄清项 | 必须同步的语义 | 是否改变核心产品方向 |
 | --- | --- | --- |
 | 账号 session 与 world device session | 多设备登录不等于多端同时控制；控制接管须明确确认 | 否，落实现有 runtime 边界，需进入 UI 流程 |
@@ -896,7 +896,7 @@ P0 放量必须同时满足全部 P0 AC、NFR 安全不变量、真实支持矩�
 | 旧浏览器认证 | 无完整派生关系的旧 release_token 不自动换成账号管理权限；切换可要求重登 | 否，不丢身份，但不是“全程免操作”升级 |
 | 邮箱成熟时间缺失 | 不伪造历史 bound_at；恢复资格从可信时间起算 | 否，不影响旧邮箱普通登录 |
 | 新鲜 action、默认 session TTL、恢复频率 | 本文新增的技术默认值需在配置与用户提示中一致 | 是具体参数补充，不应被误当作现有产品实测或既有正式值 |
-本设计不自动覆盖仓库现行 authority。采纳时需同时调整旧托管身份 PRD 中“邮箱默认前置”、identity plane、浏览器存储、会话恢复等条款，并由“玩家接入与发行”根产品入口引用本专题。保留资产/custody 原有边界与受控技术预览的公开阶段。
+托管身份 PRD 的 SC-1 / AC-2 和“玩家接入与发行”根产品已采用 P0 的网页推荐 Passkey、邮箱可选与多凭证账号接入合同；本节明确其产品与系统分工，不将 P1 原生密钥升级为已发布能力。资产/custody 原有边界、受控技术预览的公开阶段及 §18.4 尚待验证条件继续保留。
 ### 18.4 尚待实施验证的明确条件
 P0 代码候选已有 SQLite 事务、标准 WebAuthn、可选邮箱与恢复、v2 账号/世界会话接口及受控预览适配；这不等于已完成全部 P0 放量条件。以下是仍需实施或取得真实证据的门禁，不要求用户重新作已讨论过的产品选择：
 
