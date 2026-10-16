@@ -11,14 +11,16 @@
   - SC-1: 保证快照回放一致性与参数治理可追溯性。
 
 ## 2. User Experience & Functionality
-- User Personas: 协议维护者、任务执行者、质量复核者。
-- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
-- User Stories: As a 维护者, I want oasis7 主链 Token 分配与发行机制（已实现） 的需求结构化, so that implementation is auditable.
-- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
-- Functional Specification Matrix:
+- User Personas: 主链 Token 账本/治理维护者与发行审计复核者。
+- User Scenarios & Frequency: 创世分配、vesting 领取、epoch 发行、费用结算、治理更新或 NodePoints 桥接时。
+- User Stories: 作为账本维护者，需要沿既有动作和治理条件确定性记账并能复算供应守恒，不把文档迁移当作经济机制验证。
+- Critical User Flows: 验证 MainTokenConfig -> 创世写入分桶/vested balance -> 按领取动作释放 liquid balance；epoch 增发按目标 epoch 有效配置分配，费用结算按原 burn/treasury 规则；治理提案批准后按既有两 epoch 延迟生效，NodePoints 桥接使用同 epoch node_service_reward 预算并记录审计。
+- Functional Specification Matrix（仅承接下文既有专业合同；不新增实现或验收结论）:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+| 创世/领取 | config、genesis buckets、claim nonce | 创世分配后通过 ClaimMainTokenVesting 领取 | vested -> liquid | 分桶和 10000 bps；沿原边界 | 既有动作合同，不新增公开领取协议 |
+| 发行/费用 | epoch records、supply、treasury | 按目标 epoch 有效配置增发/销毁记账 | 供应和 bucket 同步更新 | 原公式、分桶与余数规则 | 不改变参数或费率 |
+| 治理/分发/桥接 | proposal_id、distribution_id、node account binding | 批准条件、两 epoch 延迟、幂等分发与桥接 | 审计记录和余额一致 | 桥接用同 epoch node_service_reward | 只限原三个 treasury bucket；内部绑定非 custody |
 - Acceptance Criteria:
   - AC-1: 主链 Token 配置、供应、账户、创世桶、epoch 发行记录、金库余额、治理延迟队列。
   - AC-2: 动作闭环：
@@ -36,13 +38,13 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Architecture Overview: 按下文配置边界、动作事件、WorldState 查询、既有发行/治理/桥接语义组织合同；NodePoints/PowerCredit 与主链 Token 账本保持解耦。
 - Integration Points:
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - GitHub Issue / GitHub Project
   - `testing-manual.md`
-- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
-- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+- Edge Cases & Error Handling: 非法 split/burn/rate/epoch/supply 配置须按原校验拒绝；治理提案须 Approved/Applied 并遵守两 epoch 延迟；distribution_id 幂等。旧快照默认值只提供既有兼容，不证明外部 custody。
+- Non-Functional Requirements: 保留供应守恒、确定性分配、审计幂等和快照回放一致；不改发行比例、账户绑定权限或奖励金额。
 - Security & Privacy: 不引入敏感信息与本地绝对路径。
 
 ### 原文技术约束（保真）
@@ -173,11 +175,11 @@ DomainEvent::NodePointsSettlementApplied {
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-P2P-MIG-112-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| 原 AC 与 §4 专业合同 | 对应业务变更的 PR / 实际验证记录 | `test_tier_required` + `test_tier_full` | AC-1..6 与 §4 既有动作/治理/桥接合同：按下文 main-token-regression.sh required/full 入口核配置边界、创世/领取、增发/费用、批准与延迟、分发幂等、同 epoch 桥接及供应守恒；命令是验证入口，本次未执行。 | 既有专业行为及负向边界；不代签当前运行通过 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-PRD-P2P-MIG-112-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
+| DEC-PRD-P2P-MIG-112-001 | 历史文档迁移：逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标” -> 第 1 章。
@@ -185,3 +187,25 @@ DomainEvent::NodePointsSettlementApplied {
 - 原“接口/数据、里程碑、风险” -> 第 4~6 章。
 
 专业设计追踪导航：[配置边界](mainchain-token-allocation-mechanism.design.md#tam-config-design)、[延迟](mainchain-token-allocation-mechanism.design.md#tam-delay-design)、[批准条件](mainchain-token-allocation-mechanism.design.md#tam-approval-design)、[三 bucket 分发](mainchain-token-allocation-mechanism.design.md#tam-buckets-design)、[审计幂等](mainchain-token-allocation-mechanism.design.md#tam-idempotency-design)、[内部绑定](mainchain-token-allocation-mechanism.design.md#tam-binding-design)、[快照默认](mainchain-token-allocation-mechanism.design.md#tam-defaults-design)。仅定位原文技术约束，不更新数值、状态或验收。
+
+## 历史 strictification 迁移记录（不属于业务流程或验收）
+
+以下保留迁移时的原流程、矩阵、结构说明和验证来源，仅供 Git history / 原 GitHub task evidence 追溯；`draft -> active -> done` 指文档迁移，不是运行状态。正文流程与 §6 现在承接本文原 AC/技术合同，未改变经济参数、权限、实现状态或重新激活前置。
+
+- User Personas: 协议维护者、任务执行者、质量复核者。
+- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
+- User Stories: As a 维护者, I want oasis7 主链 Token 分配与发行机制（已实现） 的需求结构化, so that implementation is auditable.
+- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
+- Functional Specification Matrix:
+| 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
+| --- | --- | --- | --- | --- | --- |
+| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
+- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+
+原迁移验证行（仅文档结构，不代签业务验收）：
+| PRD-P2P-MIG-112-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+
+原迁移决定：
+| DEC-PRD-P2P-MIG-112-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |

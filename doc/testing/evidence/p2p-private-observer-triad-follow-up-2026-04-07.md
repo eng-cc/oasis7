@@ -421,3 +421,9 @@ SSHPASS="$P2PARCH6_STORAGE_SSH_PASSWORD" sshpass -e ssh -o StrictHostKeyChecking
   - 启动早期 `13/14` 左右的 warmup gate 误杀
   - 更高高度 `≈75` 的 peer-headless `required_matches=2` 卡死
 - 下一步最合理的动作不再是继续拍脑袋放宽 gate，而是做更长的 soak，确认 triad 是否能在更高高度继续稳定推进。
+
+## 2026-10-16 解释性勘误：高度覆盖边界
+
+上文保留的是当时的原始数据、失败与结论，不回写旧运行。`6acd6fad174ea07be42bc19dbe24bc0f567faf28b36253100ba0811e303d29d0` 对应新窗口只记录 observer/sequencer `6 -> 36`、storage `7 -> 37`，现场最高 `39`；旧窗口 sequencer 停点约为 `75`。等长时间但尚未越过旧高度，不能证明该高度条件下的 stall 已消除。因此，上文“已把已知的两层真实环境 stall 都压掉了”对 `≈75` 停点的推断超出本窗口证据；本窗口只支持所记录高度内未再观察到阻断。
+
+若要验收旧高位停点已修复，须另存固定 candidate/binary、拓扑与判定 oracle 的新窗口，实际超过旧停点并验证持续推进。后续版本或不同拓扑的通过不能替代本窗口；本勘误不证明真实修复未发生，也不宣称已完成新的 soak 或部署验收。

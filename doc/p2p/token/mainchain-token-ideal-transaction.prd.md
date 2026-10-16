@@ -6,7 +6,7 @@
 ## 1. Executive Summary
 
 - **Authority:** 本三件套是主链 Token signed transaction metadata envelope 的稳定专业权威；它吸收已删除的 dated ideal-transaction source triad，并承接其 `PRD-P2P-ITX-001/002/003` 追溯身份。
-- **Current contract:** `TransferMainToken` 已完成 signed metadata 的 Phase 1 闭环。真实 fee debit、sponsor、fee payer 与 priority fee 仍不属于当前实现，不能据此作 mainnet-grade economics、钱包/keystore 或公开交易执行宣称。
+- **Current contract:** `TransferMainToken` 的 Phase 1 已实现范围限于 signed metadata / API 合同，不代表所有 UI 展示义务均已验收。真实 fee debit、sponsor、fee payer 与 priority fee 仍不属于当前实现，不能据此作 mainnet-grade economics、钱包/keystore 或公开交易执行宣称。
 - **Success criteria:** runtime、node-local re-verification、submit、explorer、launcher 与 transfer auth helper 对同一字段集合和签名 payload 一致；客户端只从 live runtime chain status 获取 chain/network identity。
 
 ## 2. User Experience & Functionality
@@ -20,7 +20,7 @@
 | `max_fee` / `fee_asset_id` | implemented metadata-only | 报价槽位，`max_fee=0` 或缺 fee asset 即 reject；不扣费、不结算。 |
 | `client_request_id` | implemented metadata-only | signed audit/idempotency metadata，不承诺 consensus-level dedupe。 |
 
-All implemented fields are included in `TransferMainToken` signing payload and in node-local signature rebuild/reverification. Explorer p0/p1 and launcher surface the submitted metadata; fee quote display must remain explicitly metadata-only.
+All implemented fields are included in `TransferMainToken` signing payload and in node-local signature rebuild/reverification. Explorer p0/p1 and launcher surface the submitted metadata; fee quote display must remain explicitly metadata-only. This remains a display obligation: JSON metadata tests do not verify native/wasm UI labels, Chinese/English quote wording, or actual rendering; those surfaces require their own evidence and are not included in the completed scope.
 
 ### Canonical request shape
 
@@ -70,7 +70,7 @@ env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 cargo test -p oasis7 --bin oasis7_chain
 
 ## 5. Risks & Roadmap
 
-Phase 1 metadata-only signed transaction closure is complete. The principal risk is semantic overclaim: quote metadata must never be presented as charged fees, and future payer/sponsor/priority fields must never be presented as execution support. Phase 2+ remains separately scoped as described above.
+Phase 1 implementation status is limited to the signed-metadata/API scope. UI quote labels and actual rendering remain unaccepted; see the [surface verification boundary](mainchain-token-ideal-transaction.design.md#itx-surface). The principal risk is semantic overclaim: quote metadata must never be presented as charged fees, and future payer/sponsor/priority fields must never be presented as execution support. Phase 2+ remains separately scoped as described above.
 
 ## 6. Validation & Decision Record
 
