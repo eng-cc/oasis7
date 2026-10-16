@@ -161,6 +161,8 @@ pub struct ConnectionSnapshot {
     pub preset_id: String,
     pub version: u64,
     pub generation: u64,
+    /// Immutable active-run revision; lease renewal only advances `version`.
+    pub active_version: Option<u64>,
     pub state: ConnectionState,
     pub run_state: RunState,
     pub expires_at_ms: u64,

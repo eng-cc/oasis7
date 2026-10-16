@@ -11,7 +11,7 @@
 
 当前支持受部署配置限定的 **非流式实验组合**：DeepSeek Chat Completions / Responses、OpenRouter Chat Completions。OpenRouter Chat 必须指定路由允许集合；OpenRouter Responses 与流式输入明确拒绝，不静默删参数或切协议。协议 fixture 不证明真实模型兼容；两家真实供应商验收仍延期。协议来源：[DeepSeek Chat](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek Responses](https://api-docs.deepseek.com/api/create-response/)、[OpenRouter Responses](https://openrouter.ai/docs/api/api-reference/responses/create-responses)。
 
-本切片没有网页登录账号到合法 Game Client executor 的解析器。页面可创建和检查模型连接，但 `executor_available=false`，activate 返回 `game_executor_unavailable`；不伪报运行。后续 #4744 接入已授权 SDK 执行器及实际运行循环后，才能验收游戏闭环。模型 Key 和登录 cookie 均不能替代 signer、任务/grant 或 Runtime fence。
+内置 Harness 通过受控 Launcher 进程运行，复用同一消费层和已授权 SDK。部署需显式登记既有设备配置及所属账号；执行端核对当前登录、PlayerBinding、服务签名任务视图、完整 Runtime fence 与设备执行器身份。无合法登记时 `executor_available=false`，activate 返回 `game_executor_unavailable`。模型 Key 和登录 cookie 均不能替代 signer、任务/grant 或 Runtime fence，也不传入 Runtime 子进程。
 
 ## 启用前提与非敏感配置
 
@@ -49,6 +49,11 @@ max_input_bytes = 8192
 max_response_bytes = 2097152
 max_output_tokens = 2048
 timeout_ms = 30000
+
+# 可选：部署前已完成正常 SDK 配对和任务授权的设备，不含模型 Key。
+[[executors]]
+account_id = "REPLACE_WITH_HOSTED_ACCOUNT_ID"
+device_config_path = "/absolute/private/device.json"
 ```
 
 配置与 Web capability 的 provider 标识分别为 `deepseek` / `openrouter`。OpenRouter 的 `routes` 必须为已审核的非空供应商允许集合；不接受客户端提交任意 URL、header、owner 或路由。
@@ -59,7 +64,9 @@ timeout_ms = 30000
 
 预算在同一应用会话的所有连接间共享，换 Key/新建连接不清零。发送前原子预留调用次数及完整输入/输出上界；输入按编码字节数及固定 envelope 余量作保守 token 准入。未知、部分、溢出或自相矛盾的 usage 不按零返还；该限制不是供应商账户费用硬封顶。认证、余额、限流和兼容失败不自动充值、重试或改用公共 Key。
 
-续期有版本 CAS、滑动期限及绝对期限，不能复活已过期连接。续期改变版本并保守终结旧版 pending 检查；网页在检查进行中不续期。执行端在发送和接收结果两侧重新检查会话、连接版本、运行代、租约与绑定。Stop 永久撤销当前运行代但保留尚有效凭证；Forget/退出/撤销/到期清除凭证。已经受理的世界作业依 Runtime 原合同，不由模型连接层回滚。
+续期有版本 CAS、滑动期限及绝对期限，不能复活已过期连接。续期改变版本并保守终结旧版 pending 检查；网页在检查进行中不续期。管理版本用于网页 CAS；激活时冻结运行版本，正常续租不改变运行版本。执行端在发送、接收结果及每个工具之前重新检查会话、运行版本、运行代、租约与绑定；新上下文准备前也检查。Stop 永久撤销当前运行代但保留尚有效凭证；Forget/退出/撤销/到期清除凭证。已经受理的世界作业依 Runtime 原合同，不由模型连接层回滚。
+
+内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求；只有 SDK 校验的 canonical `stale_base` 终结反馈允许新 slot 重新读取上下文和决策，不替换或重签原件。
 
 回滚先关闭配置/重启受控进程，清除内存凭证并阻止新请求。不得恢复旧 Key、旧运行代或重放未知世界操作。
 

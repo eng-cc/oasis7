@@ -121,8 +121,6 @@ mod main_token_submit_api;
 mod membership_cli;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
 mod module_release_attestation_submit_api;
-#[path = "oasis7_chain_runtime/native_agent_client.rs"]
-mod native_agent_client;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
 #[path = "oasis7_chain_runtime/node_lifecycle.rs"]
@@ -356,14 +354,6 @@ fn main() {
 }
 
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
-    let native_client_selected = native_agent_client::selected()?;
-    if native_client_selected
-        && (options.guarded_initial_config.is_some() || !options.reward_runtime_enabled || options.formal_live_config.is_some())
-    {
-        return Err(
-            "native task executor requires the ordinary World Service execution profile".into(),
-        );
-    }
     if let Some(config_path) = options.formal_live_config.as_deref() {
         if options.guarded_initial_config.is_some() {
             return Err(
@@ -754,12 +744,6 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let effective_p2p_policy = build_node_network_policy(&options);
     let (status_host, status_port) =
         parse_host_port(options.status_bind.as_str(), "--status-bind")?;
-    let native_executor = native_agent_client::PreparedExecutor::from_environment(
-        native_client_selected,
-        status_port,
-        &options.world_id,
-        &feedback_submit_signer.public_key_hex,
-    )?;
     let mut status_server = start_chain_status_server(
         status_host.as_str(),
         status_port,
@@ -779,10 +763,6 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         feedback_submit_signer,
         runtime_authority_binding,
     )?;
-
-    if let Some(executor) = native_executor {
-        executor.start()?;
-    }
 
     runtime_status_util::print_runtime_ready_summary(
         &options,

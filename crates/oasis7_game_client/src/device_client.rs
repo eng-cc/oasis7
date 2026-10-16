@@ -511,3 +511,6 @@ mod prepare_retry;
 
 #[path = "device_client_context_read_retry.rs"]
 mod context_read_retry;
+
+#[path = "device_client_stale_rejection.rs"]
+mod stale_rejection;

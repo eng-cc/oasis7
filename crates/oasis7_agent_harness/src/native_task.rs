@@ -1,6 +1,6 @@
 //! Bounded native task execution against authenticated remote World Service.
 //! No local World, clock advancement, RuntimeAuthority, or model SDK lives here.
-use crate::{ModelProvider, ModelProviderRequest, ModelProviderResponse};
+use crate::{ModelProvider, ModelProviderRequest, ModelProviderResponse, ModelProviderToolResult};
 use oasis7_agent_api::game::{GameTaskFenceV1, GameTaskStatusV1};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -112,6 +112,14 @@ pub trait NativeTaskHost: Send + Sync + 'static {
         operation: &str,
     ) -> Result<u32, String>;
     fn recover(&self, operation: &str) -> Result<NativeTaskRecovery, String>;
+    /// Return only an authoritative stale-base rejection strictly matched to the
+    /// signed original operation. Absence never authorizes a replacement.
+    fn known_rejection_feedback(
+        &self,
+        _operation: &str,
+    ) -> Result<Option<oasis7_game_client::AuthorizedFeedbackRecord>, String> {
+        Ok(None)
+    }
     /// Settle only the original prepared context using the fixed public
     /// transport_exhausted failure outcome. Never prepare, replace or cancel an
     /// existing action. Settled requires a canonically committed termination;
@@ -184,21 +192,43 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
             stop_reason: NativeTaskStopReason::Completed,
         };
         let mut recovered = Vec::new();
-        for index in 0..self.config.max_turns {
+        let mut rejected_feedback = Vec::new();
+        // Rejected originals consume immutable slots, never successful effects.
+        // Bound recovery work independently of a model's willingness to finish.
+        let slots = self
+            .config
+            .max_turns
+            .saturating_add(self.config.max_model_calls)
+            .min(128);
+        for index in 0..slots {
             let operation = self.config.operation_id(index);
             let state = self.host.recover(&operation)?;
+            if state == NativeTaskRecovery::Rejected
+                && self.collect_stale_feedback(&operation, &mut rejected_feedback)?
+            {
+                recovered.push(state);
+                continue;
+            }
             if let Some(reason) = terminal(state) {
                 report.last_operation = Some(operation);
                 report.stop_reason = reason;
                 return Ok(report);
             }
+            if state == NativeTaskRecovery::Settled {
+                report.turns_completed += 1;
+            }
             recovered.push(state);
         }
         for (index, state) in recovered.into_iter().enumerate() {
+            if report.turns_completed >= self.config.max_turns {
+                break;
+            }
             let operation = self.config.operation_id(index as u32);
             report.last_operation = Some(operation.clone());
-            if state == NativeTaskRecovery::Settled {
-                report.turns_completed += 1;
+            if matches!(
+                state,
+                NativeTaskRecovery::Settled | NativeTaskRecovery::Rejected
+            ) {
                 continue;
             }
             if report.model_calls_spent >= self.config.max_model_calls {
@@ -211,6 +241,16 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
             }
             let initial = self.host.current_control()?;
             if initial.fence != run_fence || initial.fence.task_status != GameTaskStatusV1::Active {
+                report.stop_reason = NativeTaskStopReason::ControlChanged;
+                break;
+            }
+            if self
+                .provider
+                .as_ref()
+                .ok_or("native provider unavailable")?
+                .check_execution()
+                .is_err()
+            {
                 report.stop_reason = NativeTaskStopReason::ControlChanged;
                 break;
             }
@@ -229,7 +269,8 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     report.stop_reason = self.settle_exhausted_context(&operation, &run_fence)?;
                     return Ok(report);
                 }
-                let request = tools::request(&self.config, &context, &transcript)?;
+                let request =
+                    tools::request(&self.config, &context, &transcript, &rejected_feedback)?;
                 report.model_calls_spent =
                     self.host.reserve_model_call(&self.config, &operation)?;
                 // Recheck after durable reservation too. A canceled reservation
@@ -253,34 +294,91 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                             return Ok(report);
                         }
                     };
+                // Protocol call IDs are separate from World operation IDs.
+                // Match all names/arguments before invoking even the first read.
+                let pending = self
+                    .provider
+                    .as_ref()
+                    .ok_or("native provider unavailable")?
+                    .pending_tool_calls();
+                if tools::validate_call_ids(&response, &pending).is_err() {
+                    report.stop_reason = NativeTaskStopReason::InvalidModelOutput;
+                    return Ok(report);
+                }
                 let mut finished = false;
-                for tool in turns {
+                let mut effect_result = None;
+                let mut supplier_results = Vec::new();
+                for (index, tool) in turns.into_iter().enumerate() {
                     if let Some(reason) = self.control_reason(&context)? {
+                        // Complete protocol causality without pretending that
+                        // canceled calls executed or made a World effect.
+                        let _ = self.record_supplier_results(
+                            &pending,
+                            supplier_results,
+                            "execution_stopped",
+                        );
                         report.stop_reason = reason;
                         return Ok(report);
                     }
-                    let result = self.host.invoke(&context, &tool)?;
+                    let result = match self.host.invoke(&context, &tool) {
+                        Ok(result) => result,
+                        Err(_) => {
+                            if let Some(call) = pending.get(index) {
+                                supplier_results.push(ModelProviderToolResult {
+                                    call_id: call.call_id.clone(),
+                                    content: serde_json::json!({"status":"execution_unknown","reason":"host_failure"}),
+                                });
+                            }
+                            let _ = self.record_supplier_results(
+                                &pending,
+                                supplier_results,
+                                "host_failure",
+                            );
+                            report.stop_reason = NativeTaskStopReason::HostFailure;
+                            return Ok(report);
+                        }
+                    };
                     if result.effect.is_some() != tool.side_effect() {
                         report.stop_reason = NativeTaskStopReason::HostFailure;
                         return Ok(report);
                     }
                     transcript.push(serde_json::json!({"tool":tool,"result":result.value}));
+                    if let Some(call) = pending.get(index) {
+                        supplier_results.push(ModelProviderToolResult {
+                            call_id: call.call_id.clone(),
+                            content: result.value.clone(),
+                        });
+                    }
                     if let Some(effect) = result.effect {
-                        if let Some(reason) = terminal(effect) {
-                            report.stop_reason = reason;
-                            return Ok(report);
-                        }
-                        if effect != NativeTaskRecovery::Settled {
-                            report.stop_reason = NativeTaskStopReason::HostFailure;
-                            return Ok(report);
-                        }
-                        report.turns_completed += 1;
-                        if matches!(tool, NativeTaskTool::Abort(_)) {
-                            report.stop_reason = NativeTaskStopReason::Aborted;
-                            return Ok(report);
-                        }
+                        effect_result = Some((effect, matches!(tool, NativeTaskTool::Abort(_))));
                         finished = true;
+                    }
+                }
+                if self
+                    .record_supplier_results(&pending, supplier_results, "not_executed")
+                    .is_err()
+                {
+                    report.stop_reason = NativeTaskStopReason::ModelFailed;
+                    return Ok(report);
+                }
+                if let Some((effect, abort)) = effect_result {
+                    if effect == NativeTaskRecovery::Rejected
+                        && self.collect_stale_feedback(&operation, &mut rejected_feedback)?
+                    {
                         break;
+                    }
+                    if let Some(reason) = terminal(effect) {
+                        report.stop_reason = reason;
+                        return Ok(report);
+                    }
+                    if effect != NativeTaskRecovery::Settled {
+                        report.stop_reason = NativeTaskStopReason::HostFailure;
+                        return Ok(report);
+                    }
+                    report.turns_completed += 1;
+                    if abort {
+                        report.stop_reason = NativeTaskStopReason::Aborted;
+                        return Ok(report);
                     }
                 }
                 if finished {
@@ -288,13 +386,58 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                 }
             }
         }
+        if report.turns_completed < self.config.max_turns
+            && report.stop_reason == NativeTaskStopReason::Completed
+        {
+            report.stop_reason = NativeTaskStopReason::BudgetExhausted;
+        }
         Ok(report)
+    }
+    fn record_supplier_results(
+        &mut self,
+        calls: &[crate::ModelProviderToolCall],
+        mut results: Vec<ModelProviderToolResult>,
+        remaining_reason: &str,
+    ) -> Result<(), String> {
+        if calls.is_empty() {
+            return Ok(());
+        }
+        for call in calls.iter().skip(results.len()) {
+            results.push(ModelProviderToolResult {
+                call_id: call.call_id.clone(),
+                content: serde_json::json!({"status":"not_executed","reason":remaining_reason}),
+            });
+        }
+        self.provider
+            .as_mut()
+            .ok_or("native provider unavailable")?
+            .record_tool_results(&results)
+            .map_err(|_| "native supplier tool result recording failed".into())
+    }
+    fn collect_stale_feedback(
+        &self,
+        operation: &str,
+        feedback: &mut Vec<Value>,
+    ) -> Result<bool, String> {
+        let Some(record) = self.host.known_rejection_feedback(operation)? else {
+            return Ok(false);
+        };
+        feedback
+            .push(serde_json::json!({"original_operation":operation,"authorized_feedback":record}));
+        Ok(true)
     }
     fn settle_exhausted_context(
         &self,
         operation: &str,
         run_fence: &GameTaskFenceV1,
     ) -> Result<NativeTaskStopReason, String> {
+        if self
+            .provider
+            .as_ref()
+            .is_some_and(|provider| provider.check_execution().is_err())
+        {
+            return Ok(NativeTaskStopReason::ControlChanged);
+        }
         let current = self.host.current_control()?;
         if &current.fence != run_fence || current.fence.task_status != GameTaskStatusV1::Active {
             return Ok(NativeTaskStopReason::ControlChanged);
@@ -312,6 +455,13 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         &self,
         context: &NativeTaskContext,
     ) -> Result<Option<NativeTaskStopReason>, String> {
+        if self
+            .provider
+            .as_ref()
+            .is_some_and(|provider| provider.check_execution().is_err())
+        {
+            return Ok(Some(NativeTaskStopReason::ControlChanged));
+        }
         let current = self.host.current_control()?;
         if current.fence != context.fence || current.fence.task_status != GameTaskStatusV1::Active {
             return Ok(Some(NativeTaskStopReason::ControlChanged));

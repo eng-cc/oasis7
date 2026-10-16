@@ -17,12 +17,15 @@ struct State {
     recover: BTreeMap<String, NativeTaskRecovery>,
     events: Vec<String>,
     settlement: Option<NativeTaskRecovery>,
+    known_feedback: BTreeMap<String, oasis7_game_client::AuthorizedFeedbackRecord>,
+    effects: std::collections::VecDeque<NativeTaskRecovery>,
 }
 struct FakeHost {
     state: Mutex<State>,
     started: Arc<AtomicBool>,
     drift: Option<&'static str>,
     context_drift: bool,
+    execution_allowed: Option<Arc<AtomicBool>>,
 }
 fn fence() -> GameTaskFenceV1 {
     GameTaskFenceV1 {
@@ -56,6 +59,7 @@ impl FakeHost {
             started: Arc::new(AtomicBool::new(false)),
             drift: None,
             context_drift: false,
+            execution_allowed: None,
         }
     }
     fn events(&self) -> Vec<String> {
@@ -90,6 +94,12 @@ impl NativeTaskHost for FakeHost {
             .get(op)
             .copied()
             .unwrap_or(NativeTaskRecovery::Vacant))
+    }
+    fn known_rejection_feedback(
+        &self,
+        op: &str,
+    ) -> Result<Option<oasis7_game_client::AuthorizedFeedbackRecord>, String> {
+        Ok(self.state.lock().unwrap().known_feedback.get(op).cloned())
     }
     fn settle_exhausted_context(&self, op: &str) -> Result<NativeTaskRecovery, String> {
         let mut s = self.state.lock().unwrap();
@@ -146,14 +156,21 @@ impl NativeTaskHost for FakeHost {
             c.operation,
             if t.side_effect() { "effect" } else { "read" }
         ));
-        let effect = t.side_effect().then_some(NativeTaskRecovery::Settled);
-        if effect.is_some() {
+        if let Some(allowed) = &self.execution_allowed {
+            allowed.store(false, Ordering::SeqCst);
+        }
+        let effect = if t.side_effect() {
+            Some(s.effects.pop_front().unwrap_or(NativeTaskRecovery::Settled))
+        } else {
+            None
+        };
+        if let Some(outcome) = effect {
             s.recover.insert(
                 c.operation.clone(),
                 if matches!(t, NativeTaskTool::Abort(_)) {
                     NativeTaskRecovery::Aborted
                 } else {
-                    NativeTaskRecovery::Settled
+                    outcome
                 },
             );
         }
@@ -549,6 +566,7 @@ fn exhausted_restart_settles_ready_original_without_prepare_or_model_and_preserv
             host.events(),
             [
                 "recover:operator-run:0",
+                "recover:operator-run:1",
                 "settle:operator-run:0:transport_exhausted"
             ]
         );
@@ -574,5 +592,11 @@ fn exhausted_ready_context_does_not_terminate_after_task_stop() {
         .run()
         .unwrap();
     assert_eq!(report.stop_reason, NativeTaskStopReason::ControlChanged);
-    assert_eq!(host.events(), ["recover:operator-run:0"]);
+    assert_eq!(
+        host.events(),
+        ["recover:operator-run:0", "recover:operator-run:1"]
+    );
 }
+
+#[path = "native_task_protocol_tests.rs"]
+mod protocol;

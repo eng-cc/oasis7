@@ -62,6 +62,7 @@ struct Connection {
     preset: ProviderPreset,
     version: u64,
     generation: u64,
+    active_version: Option<u64>,
     state: ConnectionState,
     binding: Option<BindingTarget>,
     expires: u64,
@@ -187,6 +188,7 @@ impl ConnectionManager {
     fn revoke(c: &mut Connection, state: ConnectionState) {
         c.key.take();
         c.binding = None;
+        c.active_version = None;
         c.generation = c.generation.saturating_add(1);
         c.state = state;
     }
@@ -225,6 +227,7 @@ impl ConnectionManager {
             preset_id: c.preset.id.clone(),
             version: c.version,
             generation: c.generation,
+            active_version: c.active_version,
             state: c.state,
             run_state: if c.binding.is_some() {
                 RunState::Active
@@ -274,6 +277,7 @@ impl ConnectionManager {
             preset,
             version: 1,
             generation: 0,
+            active_version: None,
             state: ConnectionState::Draft,
             binding: None,
             expires: now.saturating_add(self.shared.limits.lease_ms),
@@ -377,6 +381,7 @@ impl ConnectionManager {
             .checked_add(1)
             .ok_or(ConnectionError::Unavailable)?;
         Self::invalidate_probes(c);
+        c.active_version = Some(c.version);
         c.binding = Some(target);
         Ok(Self::projection(name, c, budget))
     }
@@ -401,6 +406,7 @@ impl ConnectionManager {
             .ok_or(ConnectionError::Unavailable)?;
         Self::invalidate_probes(c);
         c.binding = None;
+        c.active_version = None;
         Ok(Self::projection(name, c, budget))
     }
     /// Idempotent stop is scoped to this connection and the original CAS
@@ -449,6 +455,7 @@ impl ConnectionManager {
             .ok_or(ConnectionError::Unavailable)?;
         Self::invalidate_probes(c);
         c.binding = None;
+        c.active_version = None;
         c.stops.insert(operation.to_owned(), version);
         Ok(Self::projection(name, c, budget))
     }
@@ -593,20 +600,22 @@ impl ConnectionManager {
         }
         result
     }
-    pub fn reserve_run(
+    /// Validate an immutable run epoch independently of management CAS renewals.
+    /// Authority callbacks run outside the manager mutex and the local epoch is
+    /// checked again afterwards, so Stop cannot race a slow Runtime lookup.
+    pub fn check_execution(
         &self,
         p: &Principal,
         name: &str,
         version: u64,
         generation: u64,
-        max_tokens: u64,
-    ) -> Result<RequestPermit, ConnectionError> {
+    ) -> Result<(), ConnectionError> {
         self.authenticate(p)?;
         let target = {
             let mut state = self.lock()?;
             self.expire(&mut state);
-            let c = Self::current(&mut state, p, name, Some(version))?;
-            if c.generation != generation {
+            let c = Self::current(&mut state, p, name, None)?;
+            if c.active_version != Some(version) || c.generation != generation {
                 return Err(ConnectionError::Conflict);
             }
             c.binding.clone().ok_or(ConnectionError::BindingDenied)?
@@ -616,10 +625,31 @@ impl ConnectionManager {
         }
         let mut state = self.lock()?;
         self.expire(&mut state);
-        let c = Self::current(&mut state, p, name, Some(version))?;
-        if c.generation != generation || c.binding.as_ref() != Some(&target) {
+        let c = Self::current(&mut state, p, name, None)?;
+        if c.active_version != Some(version)
+            || c.generation != generation
+            || c.binding.as_ref() != Some(&target)
+        {
             return Err(ConnectionError::Conflict);
         }
+        Ok(())
+    }
+    pub fn reserve_run(
+        &self,
+        p: &Principal,
+        name: &str,
+        version: u64,
+        generation: u64,
+        max_tokens: u64,
+    ) -> Result<RequestPermit, ConnectionError> {
+        self.check_execution(p, name, version, generation)?;
+        let mut state = self.lock()?;
+        self.expire(&mut state);
+        let c = Self::current(&mut state, p, name, None)?;
+        if c.active_version != Some(version) || c.generation != generation {
+            return Err(ConnectionError::Conflict);
+        }
+        let target = c.binding.clone().ok_or(ConnectionError::BindingDenied)?;
         self.reserve_locked(&mut state, p, name, version, Some(target), None, max_tokens)
     }
     #[expect(
@@ -660,7 +690,19 @@ impl ConnectionManager {
         if state.tickets.contains_key(&ticket) {
             return Err(ConnectionError::Unavailable);
         }
-        let c = Self::current(state, p, name, Some(version))?;
+        let c = Self::current(
+            state,
+            p,
+            name,
+            if binding.is_some() {
+                None
+            } else {
+                Some(version)
+            },
+        )?;
+        if binding.is_some() && c.active_version != Some(version) {
+            return Err(ConnectionError::Conflict);
+        }
         if binding.is_some() && c.state != ConnectionState::Ready {
             return Err(ConnectionError::NotReady);
         }
@@ -723,7 +765,11 @@ impl ConnectionManager {
         state.connections.get(&ticket.connection).is_some_and(|c| {
             c.key.is_some()
                 && c.owner == ticket.owner
-                && c.version == ticket.version
+                && if ticket.probe.is_some() {
+                    c.version == ticket.version
+                } else {
+                    c.active_version == Some(ticket.version)
+                }
                 && c.generation == ticket.generation
                 && (ticket.probe.is_some() || c.binding == ticket.binding)
         })
@@ -826,6 +872,7 @@ impl ConnectionManager {
             if current && usage.is_some_and(|n| n > tokens) {
                 c.state = ConnectionState::Blocked;
                 c.binding = None;
+                c.active_version = None;
                 c.generation = c.generation.saturating_add(1)
             }
         }

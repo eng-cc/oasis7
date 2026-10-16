@@ -122,6 +122,7 @@ fn persisted_acceptance_retains_original_ack_across_restart_and_identity_conflic
     );
     let unknown = IntentResponse::<Value> {
         contract_version: 1,
+        formal_profile: None,
         execution_evidence_scope: None,
         correlation: original.correlation.clone(),
         outcome: IntentOutcome::Unknown,

@@ -22,8 +22,6 @@ const GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 mod chain_requests;
 #[path = "control_plane/chain_status_probe.rs"]
 mod chain_status_probe;
-#[path = "control_plane/executor_status_probe.rs"]
-mod executor_status_probe;
 #[path = "control_plane/provider_config.rs"]
 mod provider_config;
 #[path = "control_plane/support.rs"]
@@ -324,10 +322,7 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
             state.chain_p2p_status = Some(status_snapshot.p2p);
             state.chain_observability_status = Some(status_snapshot.observability);
             state.chain_replication_status = Some(status_snapshot.replication);
-            state.executor_status = executor_status_probe::query_executor_status_endpoint(
-                state.config.chain_status_bind.as_str(),
-            )
-            .ok();
+            state.executor_status = None;
             state.chain_recovery = None;
         }
         Err(err) => {

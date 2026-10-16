@@ -67,7 +67,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 原生 SDK 的公共观察使用显式 POST `/v1/world/view-json`。它与 `/v1/world/view` 复用 `ReadWorldViewRequest`、pin/minimum/fixed commit 和主体授权逻辑，但以自身路径为读签名及回应签名 domain；服务在授权投影转为 JSON 后签署 `ReadWorldViewResponse<serde_json::Value>`。旧路径继续签署原类型化投影，两者不能互换签名。新路径没有额外权限，public 及 executor 不因此取得 owner 私有目标；未知执行证据 scope、错误世界/切点、主体不符或篡改响应均拒绝。JSON 中的完整投影参与签名，客户端不能先裁掉未知字段再验签。服务签名仍只证明交付内容，不证明独立共识最终性。
 
-节点可显式选择 `native_task_industry_v1`，由现有 `oasis7_agent_harness` 通过同一 SDK 执行完整受权 task/context→模型→严格工具→原操作回读循环。模型连接与有限调用预算归执行方，世界时钟、任务/目标权威、executor fence、活动 turn、资源和收据仍归 Runtime；模型工作不阻塞世界 tick。独立控制轮询发现 Stop、目标/epoch 变化、过期或超时后丢弃迟到结果，未知原请求不换身份。预算在物理模型调用前加密持久化并发预留，重启不清零，同 run 改配置/提高上限拒绝；本地存储不提供硬件防回滚保证。节点内组合与运行配置见 [Harness](../../../crates/oasis7_agent_harness/README.md)。Trace refs: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01；O7-REQ-d452396d-291d-41a5-a912-6d615b58c29e。
+内置模型消费使用受信任 launcher BYOK 会话入口：认证 owner、绑定合法 GameClient executor，再由 `oasis7_agent_harness` 通过同一 SDK 执行受权 task/context→模型→严格工具→原操作回读循环。模型连接本身不授予世界权限，缺少受信任绑定时拒绝启动；不再提供 node-process 环境 Key worker 入口。世界时钟、任务/目标权威、executor fence、活动 turn、资源和收据仍归 Runtime。独立控制轮询发现 Stop、目标/epoch 变化、过期或超时后丢弃迟到结果，未知原请求不换身份。预算在物理模型调用前加密持久化预留，重启不清零，同 run 改配置/提高上限拒绝；本地存储不提供硬件防回滚保证。真实模型试玩仍待独立授权与验证，脚本测试不代签。库边界见 [Harness](../../../crates/oasis7_agent_harness/README.md)。Trace refs: O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01；O7-REQ-d452396d-291d-41a5-a912-6d615b58c29e。
 
 新 profile 支持观察、工业/能力查询、报价、移动、转运、内置建厂/排产、有界等待世界 tick 与明确放弃，不支持的工具硬拒绝。旧 Provider 的模块、聊天、私有记忆、continuation 和 portable/WASM 消费者仍保留明确旧 profile；不能同时为同一 Agent 执行。显式绑定任务后旧 unfenced prefix/行动由既有 Runtime 围栏拒绝。新 profile 不宣称全部内置能力已迁移；完整消费者迁移、真实模型/首局、性能和部署验收仍由 [#4726](https://github.com/eng-cc/oasis7/issues/4726) 承接。
 

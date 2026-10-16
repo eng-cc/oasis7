@@ -34,6 +34,7 @@ fn fixture() -> (HostedModelClient, Arc<AtomicBool>) {
                 location: "Local test".into(),
                 memory_only_controls_confirmed: true,
                 limits,
+                executors: vec![],
                 presets: vec![ProviderPreset {
                     id: "test".into(),
                     provider: ProviderId::DeepSeek,
@@ -45,6 +46,10 @@ fn fixture() -> (HostedModelClient, Arc<AtomicBool>) {
                 }],
             },
             manager,
+            executors: Arc::new(
+                executor::Executors::load(&[], Arc::new(Mutex::new(None))).unwrap(),
+            ),
+            executions: execution::Executions::default(),
         },
         current,
     )
@@ -227,4 +232,40 @@ fn capability_presets_use_the_web_provider_contract_without_acronym_splitting() 
         serde_json::to_value(oasis7_model_provider::preset::ProviderId::OpenRouter).unwrap(),
         "openrouter"
     );
+}
+
+#[test]
+fn operator_device_configuration_is_optional_but_requires_absolute_private_device_reference() {
+    let (mut host, _) = fixture();
+    assert!(host.config.validate().is_ok());
+    host.config.executors.push(config::ExecutorConfig {
+        account_id: "a".into(),
+        device_config_path: "relative-device.json".into(),
+    });
+    assert!(host.config.validate().is_err());
+    host.config.executors[0].device_config_path =
+        std::env::temp_dir().join("missing-byok-sdk-device.json");
+    assert!(host.config.validate().is_ok());
+    // A browser key/account label cannot bootstrap a missing SDK signer/config.
+    assert!(executor::Executors::load(&host.config.executors, Arc::new(Mutex::new(None))).is_err());
+}
+#[test]
+fn activate_accepts_only_target_reference_and_explicit_displayed_limits() {
+    let base = json!({"expected_version":1,"consent":true,"target_ref":{"agent_id":"agent"},"limits":Limits::default()});
+    assert!(serde_json::from_value::<execution::Activate>(base.clone()).is_ok());
+    for field in [
+        "account_id",
+        "owner_binding",
+        "executor_id",
+        "device_config_path",
+        "world_id",
+        "raw_key",
+    ] {
+        let mut body = base.clone();
+        body["target_ref"][field] = json!("injected");
+        assert!(
+            serde_json::from_value::<execution::Activate>(body).is_err(),
+            "{field}"
+        );
+    }
 }

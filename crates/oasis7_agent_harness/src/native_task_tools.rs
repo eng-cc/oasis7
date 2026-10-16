@@ -152,6 +152,35 @@ pub(super) fn validate_turns(
     }
     Ok(tools)
 }
+pub(super) fn validate_call_ids(
+    response: &ModelProviderResponse,
+    calls: &[crate::ModelProviderToolCall],
+) -> Result<(), String> {
+    if calls.is_empty() {
+        return Ok(());
+    } // Legacy providers have no protocol history.
+    if calls.len() != response.turns.len() {
+        return Err("supplier call count mismatch".into());
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for (turn, call) in response.turns.iter().zip(calls) {
+        if call.call_id.trim().is_empty()
+            || call.call_id.len() > 256
+            || call.call_id.chars().any(char::is_control)
+            || !ids.insert(&call.call_id)
+        {
+            return Err("invalid supplier call identity".into());
+        }
+        match turn {
+            ModelProviderTurn::ToolCall { name, arguments }
+                if name == &call.name && arguments == &call.arguments =>
+            {
+            }
+            _ => return Err("supplier call does not match model turn".into()),
+        }
+    }
+    Ok(())
+}
 pub fn native_task_tools() -> Vec<ModelProviderTool> {
     let empty = json!({"type":"object","properties":{},"additionalProperties":false});
     let string = json!({"type":"string","minLength":1,"maxLength":256});
@@ -172,10 +201,11 @@ pub(super) fn request(
     config: &NativeTaskRunConfig,
     context: &NativeTaskContext,
     transcript: &[Value],
+    rejected_feedback: &[Value],
 ) -> Result<ModelProviderRequest, String> {
     let user_prompt = serde_json::to_string(
         &json!({"operation":context.operation,"authorized_context":context.model_context,
-        "tool_results":transcript}),
+        "tool_results":transcript,"prior_authorized_rejections":rejected_feedback}),
     )
     .map_err(|_| "native prompt encoding failed")?;
     if user_prompt.len() > 8 * 1024 * 1024 {

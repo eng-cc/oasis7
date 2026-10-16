@@ -1,5 +1,7 @@
 //! Authenticated session-only model receiver. No arbitrary prompt proxy or world writer.
 mod config;
+mod execution;
+mod executor;
 mod http;
 pub(super) use http::handle_request;
 #[cfg(test)]
@@ -20,6 +22,8 @@ pub(super) type Identity = Arc<Mutex<Option<IdentityService>>>;
 pub(super) struct HostedModelClient {
     config: Config,
     pub manager: ConnectionManager,
+    executors: Arc<executor::Executors>,
+    executions: execution::Executions,
 }
 impl HostedModelClient {
     pub fn from_env(identity: &Identity) -> Result<Option<Self>, String> {
@@ -50,6 +54,10 @@ impl HostedModelClient {
         if config.presets.iter().any(|p| !ids.insert(p.id.as_str())) {
             return Err("duplicate model preset".into());
         }
+        let executors = Arc::new(executor::Executors::load(
+            &config.executors,
+            Arc::clone(&identity),
+        )?);
         disable_core_dumps()?;
         let authority = move |principal: &Principal| {
             identity
@@ -60,9 +68,10 @@ impl HostedModelClient {
                 })
                 .unwrap_or(false)
         };
-        // A login session is not an executor or signer. The native runner
-        // integration must install a real Runtime-authorized binding resolver.
-        let bindings = |_: &Principal, _: &BindingTarget| false;
+        let checked_executors = Arc::clone(&executors);
+        let bindings = move |principal: &Principal, target: &BindingTarget| {
+            checked_executors.authorize(principal, target)
+        };
         let manager = ConnectionManager::new(
             Arc::new(authority),
             Arc::new(bindings),
@@ -70,7 +79,12 @@ impl HostedModelClient {
             config.limits.clone(),
         )
         .map_err(|_| "invalid model session limits")?;
-        Ok(Self { config, manager })
+        Ok(Self {
+            config,
+            manager,
+            executors,
+            executions: execution::Executions::default(),
+        })
     }
     pub fn capabilities(&self) -> Value {
         json!({"ok":true,"enabled":true,"authenticated":true,
@@ -104,10 +118,18 @@ impl HostedModelClient {
             .strip_prefix(PREFIX)
             .ok_or_else(|| error(404, "not_found"))?;
         if method == "GET" && relative == "/capabilities" {
-            return Ok(self.capabilities());
+            let mut capabilities = self.capabilities();
+            let available = self.executors.available(p);
+            capabilities["executor_available"] = json!(available);
+            capabilities["reason"] = if available {
+                Value::Null
+            } else {
+                json!("game_executor_unavailable")
+            };
+            return Ok(capabilities);
         }
         if method == "GET" && relative == "/model-connections" {
-            return self.manager.list(p).map(|connections|json!({"ok":true,"connections":connections.iter().map(snapshot).collect::<Vec<_>>()})).map_err(connection_error);
+            return self.manager.list(p).map(|connections|json!({"ok":true,"connections":connections.iter().map(|c|self.execution_snapshot(c)).collect::<Vec<_>>()})).map_err(connection_error);
         }
         if method == "POST" && relative == "/model-connections" {
             // Move the sole decoded key allocation into zeroizing storage before
@@ -138,7 +160,7 @@ impl HostedModelClient {
                 .manager
                 .create(p, preset.clone(), key, true)
                 .map_err(connection_error)?;
-            return Ok(json!({"ok":true,"connection":snapshot(&connection)}));
+            return Ok(json!({"ok":true,"connection":self.execution_snapshot(&connection)}));
         }
         let path = relative
             .strip_prefix("/model-connections/")
@@ -151,7 +173,7 @@ impl HostedModelClient {
             return self
                 .manager
                 .snapshot(p, id)
-                .map(|v| json!({"ok":true,"connection":snapshot(&v)}))
+                .map(|v| json!({"ok":true,"connection":self.execution_snapshot(&v)}))
                 .map_err(connection_error);
         }
         // Resolve ownership before reporting an action-specific error.
@@ -189,11 +211,19 @@ impl HostedModelClient {
                     .forget(p, id, input.expected_version)
                     .map_err(connection_error)?;
             }
-            ("POST", "activate") => return Err(error(409, "game_executor_unavailable")),
+            ("POST", "activate") => {
+                // With no operator provisioned authority, remain fail closed
+                // before accepting any purported browser-supplied target.
+                if !self.executors.available(p) {
+                    return Err(error(409, "game_executor_unavailable"));
+                }
+                let input: execution::Activate = decode(body)?;
+                self.start_execution(p, id, input)?;
+            }
             _ => return Err(error(404, "not_found")),
         }
         let connection = self.manager.snapshot(p, id).map_err(connection_error)?;
-        Ok(json!({"ok":true,"connection":snapshot(&connection)}))
+        Ok(json!({"ok":true,"connection":self.execution_snapshot(&connection)}))
     }
 }
 fn decode<T: serde::de::DeserializeOwned>(body: &mut Value) -> Result<T, IdentityReply> {

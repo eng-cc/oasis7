@@ -55,7 +55,6 @@ mod app_process;
 mod app_process_web;
 mod chain_pos_defaults;
 mod config_ui;
-mod executor_status;
 mod explorer_window;
 #[cfg(not(target_arch = "wasm32"))]
 mod feedback_entry;

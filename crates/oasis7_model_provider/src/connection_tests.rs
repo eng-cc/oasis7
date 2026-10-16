@@ -622,3 +622,98 @@ fn session_authority_and_sweeper_callbacks_never_hold_core_mutex() {
     manager.logout(&p).unwrap();
     slot.lock().unwrap().take();
 }
+
+#[test]
+fn lease_renewal_preserves_active_epoch_but_stop_never_revives_it() {
+    let f = Fixture::new(limits());
+    let active = f.active();
+    let permit = f
+        .manager
+        .reserve_run(
+            &f.principal,
+            &active.id,
+            active.version,
+            active.generation,
+            20,
+        )
+        .unwrap();
+    permit.before_send().unwrap();
+    f.clock.0.store(1020, Ordering::SeqCst);
+    let renewed = f
+        .manager
+        .renew(&f.principal, &active.id, active.version)
+        .unwrap();
+    assert_ne!(renewed.version, active.version);
+    assert_eq!(renewed.active_version, Some(active.version));
+    permit.finish(Some(10), true).unwrap();
+    f.manager
+        .check_execution(&f.principal, &active.id, active.version, active.generation)
+        .unwrap();
+    let next = f
+        .manager
+        .reserve_run(
+            &f.principal,
+            &active.id,
+            active.version,
+            active.generation,
+            20,
+        )
+        .unwrap();
+    next.before_send().unwrap();
+    let stopped = f
+        .manager
+        .stop(&f.principal, &active.id, renewed.version)
+        .unwrap();
+    assert_eq!(stopped.active_version, None);
+    assert!(next.finish(Some(1), true).is_err());
+    assert!(
+        f.manager
+            .check_execution(&f.principal, &active.id, active.version, active.generation)
+            .is_err()
+    );
+    let restarted = f
+        .manager
+        .activate(&f.principal, &active.id, stopped.version, target())
+        .unwrap();
+    assert_ne!(restarted.generation, active.generation);
+    assert!(
+        f.manager
+            .reserve_run(
+                &f.principal,
+                &active.id,
+                active.version,
+                active.generation,
+                20
+            )
+            .is_err()
+    );
+    f.manager
+        .check_execution(
+            &f.principal,
+            &active.id,
+            restarted.version,
+            restarted.generation,
+        )
+        .unwrap();
+}
+#[test]
+fn tool_execution_rechecks_authority_and_lease_without_reserving_a_call() {
+    let f = Fixture::new(limits());
+    let active = f.active();
+    f.binding.store(false, Ordering::SeqCst);
+    assert_eq!(
+        f.manager
+            .check_execution(&f.principal, &active.id, active.version, active.generation),
+        Err(ConnectionError::BindingDenied)
+    );
+    f.binding.store(true, Ordering::SeqCst);
+    f.clock.0.store(1100, Ordering::SeqCst);
+    assert!(
+        f.manager
+            .check_execution(&f.principal, &active.id, active.version, active.generation)
+            .is_err()
+    );
+    let snapshot = f.manager.snapshot(&f.principal, &active.id).unwrap();
+    assert_eq!(snapshot.active_version, None);
+    assert_eq!(snapshot.budget.calls, active.budget.calls);
+}

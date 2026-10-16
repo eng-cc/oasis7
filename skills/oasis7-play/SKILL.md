@@ -11,22 +11,18 @@ Use only the supplied executable and device configuration. Do not inspect owner 
 
 ## Executor selection
 
-The operator may instead explicitly select the built-in `native_task_industry_v1`
-executor described in the [Harness startup instructions](../../crates/oasis7_agent_harness/README.md).
-It uses this profile's ordinary device authorization and the same signed SDK,
-with strict native tools, bounded world-progress wait and a persistent physical
-model-call budget. Its worker belongs to the node process; closing the Viewer
-does not stop that worker. Missing status or exhausted budget does not establish
-goal completion. The profile does not support generic modules, legacy chat,
-private memory or continuation.
+An operator may select a built-in consumer through the trusted launcher BYOK
+session entry. That entry must authenticate the owner and bind a legitimate
+GameClient executor before using the same signed SDK. A model connection is not
+world authority, and missing bindings must not be reported as a started worker.
+Real-model play through this entry remains separately authorized work.
 
-This is an operator choice made before play, not a tool for claiming another
-executor's task. Do not run CLI effects concurrently with a selected built-in
-worker for the same Agent. Switching executors requires the owner-controlled
-fence and recovery of original operations; never replace an unknown request or
-increase the same run's immutable budget. The CLI instructions below apply when
-you are the authorized executor, with no competing worker. They do not authorize
-paid inference or establish complete built-in/Runtime parity.
+Do not run CLI effects concurrently with another worker for the same Agent.
+Switching executors requires the owner-controlled fence and recovery of original
+operations; never replace an unknown request or increase the same run's immutable
+budget. The CLI instructions below apply when you are the authorized executor,
+with no competing worker. They do not authorize paid inference or establish
+complete built-in/Runtime parity.
 
 ## Discover and capture
 

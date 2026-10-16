@@ -3,7 +3,7 @@
 The existing portable actor, TurnEngine, continuation and provider primitives stay
 available to their consumers. Native builds additionally expose
 `NativeTaskRunner` and `SdkNativeTaskHost` for the explicit
-`native_task_industry_v1` execution profile. They consume the same signed HTTP SDK
+native industry library profile. They consume the same signed HTTP SDK
 as the ordinary CLI; neither the Harness nor SDK links the World or Viewer.
 
 The current delivery prioritizes external Agent clients, including Codex. The
@@ -34,30 +34,17 @@ Original operation IDs, signatures and cached results are recovered before new
 contexts; unknown originals stop progress instead of acquiring replacement IDs.
 World progress and authoritative admission remain with the Runtime.
 
-The chain node composes this worker after its existing World Service starts:
+The built-in model consumer uses the trusted launcher BYOK session boundary,
+not a node-process environment-key worker. The launcher authenticates the owner,
+binds an authorized GameClient executor, and supplies a `SessionModelProvider`
+from [`oasis7_model_provider`](../oasis7_model_provider/README.md). A model
+connection alone does not grant task authority or establish that a worker started.
+Missing trusted executor/session bindings fail closed. Legacy simulator consumers
+retain their existing behavior independently of this native library.
 
-```sh
-export OASIS7_AGENT_EXECUTION_PROFILE=native_task_industry_v1
-export OASIS7_AGENT_DEVICE_CONFIG=/absolute/path/to/executor-device.json
-export OASIS7_AGENT_RUN_ID=operator-approved-run-1
-export OASIS7_AGENT_MAX_MODEL_CALLS=8
-export OASIS7_AGENT_MAX_TURNS=8
-```
-
-Then use the existing node/launcher startup command. The device must target that
-node's literal-loopback HTTP endpoint and service identity, and already possess
-ordinary task-executor authorization. This entry does not create a goal, claim an
-Agent or grant itself authority. Model configuration uses the extracted
-[`oasis7_model_provider`](../oasis7_model_provider/README.md) source precedence.
-Do not enable it without an approved inference account and bounded budget.
-Absent selection preserves the explicit legacy profile; unknown profile names
-fail without fallback. Never run another worker for the same Agent.
-
-`GET /v1/world/executor-status` reports the selected profile, node-process
-location, execution phase and bounded run outcome. Turn-limit exhaustion does
-not mean goal completion. Closing the Viewer does not stop the node-owned
-worker; stopping the node does. No cloud hosting is implied. This diagnostic
-endpoint is not an authority or completion receipt.
+Real-model play through the trusted launcher BYOK entry remains an explicitly
+authorized TODO. Scripted HTTP tests do not establish UI startup, paid-provider
+acceptance, full legacy capability parity, or complete goal accomplishment.
 
 The deterministic fake-host/provider tests and real HTTP conformance fixture
 exercise protocol behavior. They do not replace authorized real-model play,

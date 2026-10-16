@@ -98,6 +98,12 @@ impl NativeTaskHost for SdkNativeTaskHost {
         }
         Ok(NativeTaskRecovery::Vacant)
     }
+    fn known_rejection_feedback(
+        &self,
+        operation: &str,
+    ) -> Result<Option<oasis7_game_client::AuthorizedFeedbackRecord>, String> {
+        self.client.known_stale_rejection(operation)
+    }
     fn settle_exhausted_context(&self, operation: &str) -> Result<NativeTaskRecovery, String> {
         // An already signed action keeps its terminal lane; budget cleanup must
         // never create a competing outcome or replace an unknown operation.
