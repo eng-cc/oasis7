@@ -78,6 +78,8 @@ impl NativeTaskRunConfig {
 pub enum NativeTaskRecovery {
     Vacant,
     Ready,
+    /// Original context_expired outcome is canonically committed; no business effect.
+    ContextRetired,
     Settled,
     Pending,
     Rejected,
@@ -128,6 +130,16 @@ pub trait NativeTaskHost: Send + Sync + 'static {
     /// existing action. Settled requires a canonically committed termination;
     /// uncertain/rejected/expired originals retain their recovery state.
     fn settle_exhausted_context(&self, operation: &str) -> Result<NativeTaskRecovery, String>;
+    /// Optionally retire an already expired original prefix with the fixed
+    /// context_expired outcome. Called only after the full original scan. None
+    /// means no retirement is needed; ContextRetired requires canonical commit.
+    /// Never replace an action/outcome or read an expired private context body.
+    fn retire_expired_context(
+        &self,
+        _operation: &str,
+    ) -> Result<Option<NativeTaskRecovery>, String> {
+        Ok(None)
+    }
     fn prepare(&self, operation: &str) -> Result<NativeTaskContext, String>;
     fn current_control(&self) -> Result<NativeTaskControl, String>;
     /// The exact authenticated fence bound when this run budget was initialized.
@@ -272,9 +284,49 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
             report.last_operation = Some(operation.clone());
             if matches!(
                 state,
-                NativeTaskRecovery::Settled | NativeTaskRecovery::Rejected
+                NativeTaskRecovery::Settled
+                    | NativeTaskRecovery::Rejected
+                    | NativeTaskRecovery::ContextRetired
             ) {
                 continue;
+            }
+            if state == NativeTaskRecovery::Ready {
+                let current = self.host.current_control()?;
+                if current.fence != run_fence
+                    || current.fence.task_status != GameTaskStatusV1::Active
+                    || self
+                        .provider
+                        .as_ref()
+                        .ok_or("native provider unavailable")?
+                        .check_execution()
+                        .is_err()
+                {
+                    report.stop_reason = NativeTaskStopReason::ControlChanged;
+                    break;
+                }
+                if let Some(retired) = self.host.retire_expired_context(&operation)? {
+                    if retired == NativeTaskRecovery::ContextRetired {
+                        // A late committed receipt survives Stop, but cannot
+                        // authorize another slot or model call after revocation.
+                        let current = self.host.current_control()?;
+                        if current.fence != run_fence
+                            || current.fence.task_status != GameTaskStatusV1::Active
+                            || self
+                                .provider
+                                .as_ref()
+                                .ok_or("native provider unavailable")?
+                                .check_execution()
+                                .is_err()
+                        {
+                            report.stop_reason = NativeTaskStopReason::ControlChanged;
+                            break;
+                        }
+                        continue;
+                    }
+                    report.stop_reason =
+                        terminal(retired).unwrap_or(NativeTaskStopReason::HostFailure);
+                    break;
+                }
             }
             if report.model_calls_spent >= self.config.max_model_calls {
                 report.stop_reason = if state == NativeTaskRecovery::Ready {
