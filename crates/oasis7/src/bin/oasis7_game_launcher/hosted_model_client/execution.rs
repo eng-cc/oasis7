@@ -119,9 +119,7 @@ impl HostedModelClient {
             let _claim = claim;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(||runner.run()));
             let status = match result {
-                Ok(Ok(report)) => json!({"phase":"finished","reason":report.stop_reason,"generation":generation,
-                    "successful_effects":report.turns_completed,"model_calls_spent":report.model_calls_spent,
-                    "goal_completion_verified":false}),
+                Ok(Ok(report)) => finished_status(&report, generation),
                 _ => json!({"phase":"stopped","reason":"host_failure","generation":generation,"goal_completion_verified":false}),
             };
             executions.set(&connection,status);
@@ -155,5 +153,34 @@ fn stop_generation(manager: &ConnectionManager, p: &Principal, id: &str, generat
         if current.generation == generation && current.active_version.is_some() {
             let _ = manager.stop(p, id, current.version);
         }
+    }
+}
+
+fn finished_status(report: &oasis7_agent_harness::NativeTaskRunReport, generation: u64) -> Value {
+    json!({"phase":"finished","reason":report.stop_reason,"generation":generation,
+        "model_failure":report.model_failure,"successful_effects":report.turns_completed,
+        "model_calls_spent":report.model_calls_spent,"goal_completion_verified":false})
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn execution_projection_exposes_only_typed_failure_and_preserves_stop_reason() {
+        use oasis7_agent_harness::{
+            NativeTaskModelFailure, NativeTaskRunReport, NativeTaskStopReason,
+        };
+        let report = NativeTaskRunReport {
+            run_id: "private-run-id".into(),
+            model_calls_spent: 1,
+            turns_completed: 0,
+            last_operation: Some("private-operation".into()),
+            stop_reason: NativeTaskStopReason::ModelFailed,
+            model_failure: Some(NativeTaskModelFailure::InvalidToolIdentity),
+        };
+        let status = finished_status(&report, 7);
+        assert_eq!(status["reason"], "model_failed");
+        assert_eq!(status["model_failure"], "invalid_tool_identity");
+        assert_eq!(status["goal_completion_verified"], false);
+        assert!(!status.to_string().contains("private-"));
     }
 }

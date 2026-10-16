@@ -614,3 +614,9 @@ mod protocol;
 
 #[path = "native_task_history_tests.rs"]
 mod history;
+
+#[path = "native_task_diagnostic_tests.rs"]
+mod diagnostics;
+
+#[path = "native_task_baseline_diagnostic_tests.rs"]
+mod baseline_diagnostics;

@@ -157,6 +157,37 @@ pub enum NativeTaskStopReason {
     Aborted,
     HostFailure,
 }
+/// Safe local classification only; provider text and arbitrary codes never leave the runner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeTaskModelFailure {
+    InputLimit,
+    OutputLimit,
+    ModelIdentityMismatch,
+    UnexpectedStreaming,
+    UnsupportedFinishReason,
+    UnsupportedTool,
+    InvalidToolIdentity,
+    UnsupportedContent,
+    CapabilityUnsupported,
+    Other,
+}
+impl NativeTaskModelFailure {
+    fn from_error(error: &crate::ModelProviderError) -> Self {
+        match error.code() {
+            "input_limit" => Self::InputLimit,
+            "output_limit" => Self::OutputLimit,
+            "model_identity_mismatch" => Self::ModelIdentityMismatch,
+            "unexpected_streaming" => Self::UnexpectedStreaming,
+            "unsupported_finish_reason" => Self::UnsupportedFinishReason,
+            "unsupported_tool" => Self::UnsupportedTool,
+            "invalid_tool_identity" => Self::InvalidToolIdentity,
+            "unsupported_content" => Self::UnsupportedContent,
+            "capability_unsupported" => Self::CapabilityUnsupported,
+            _ => Self::Other,
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NativeTaskRunReport {
     pub run_id: String,
@@ -164,6 +195,8 @@ pub struct NativeTaskRunReport {
     pub turns_completed: u32,
     pub last_operation: Option<String>,
     pub stop_reason: NativeTaskStopReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_failure: Option<NativeTaskModelFailure>,
 }
 pub struct NativeTaskRunner<H: NativeTaskHost> {
     host: Arc<H>,
@@ -194,6 +227,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
             turns_completed: 0,
             last_operation: None,
             stop_reason: NativeTaskStopReason::Completed,
+            model_failure: None,
         };
         let mut recovered = Vec::new();
         let mut rejected_feedback = Vec::new();
@@ -295,7 +329,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                 ) {
                     Ok(request) => request,
                     Err(error) => {
-                        report.stop_reason = model_failure(&error);
+                        report.record_model_failure(&error);
                         return Ok(report);
                     }
                 };
@@ -311,7 +345,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     return Ok(report);
                 }
                 if let Err(error) = preflight {
-                    report.stop_reason = model_failure(&error);
+                    report.record_model_failure(&error);
                     return Ok(report);
                 }
                 context_sent = true;
@@ -324,7 +358,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     report.stop_reason = reason;
                     return Ok(report);
                 }
-                let response = match self.complete(&context, &request)? {
+                let response = match self.complete(&context, &request, &mut report)? {
                     Ok(response) => response,
                     Err(reason) => {
                         report.stop_reason = reason;
@@ -411,11 +445,14 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                         finished = true;
                     }
                 }
-                if self
-                    .record_supplier_results(&pending, supplier_results, "not_executed")
-                    .is_err()
-                {
-                    report.stop_reason = NativeTaskStopReason::ModelFailed;
+                let recorded =
+                    self.record_supplier_results(&pending, supplier_results, "not_executed");
+                if let Some(reason) = self.control_reason(&context)? {
+                    report.stop_reason = reason;
+                    return Ok(report);
+                }
+                if let Err(error) = recorded {
+                    report.record_model_failure(&error);
                     return Ok(report);
                 }
                 if let Some((effect, abort)) = effect_result {
@@ -455,7 +492,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         calls: &[crate::ModelProviderToolCall],
         mut results: Vec<ModelProviderToolResult>,
         remaining_reason: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::ModelProviderError> {
         if calls.is_empty() {
             return Ok(());
         }
@@ -467,9 +504,8 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         }
         self.provider
             .as_mut()
-            .ok_or("native provider unavailable")?
+            .ok_or_else(|| crate::ModelProviderError::new("provider_unavailable", "", false))?
             .record_tool_results(&results)
-            .map_err(|_| "native supplier tool result recording failed".into())
     }
     fn collect_stale_feedback(
         &self,
@@ -532,6 +568,7 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         &mut self,
         context: &NativeTaskContext,
         request: &ModelProviderRequest,
+        report: &mut NativeTaskRunReport,
     ) -> Result<Result<ModelProviderResponse, NativeTaskStopReason>, String> {
         let mut provider = self
             .provider
@@ -559,7 +596,10 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                     if let Some(reason) = self.control_reason(context)? {
                         return Ok(Err(reason));
                     }
-                    return Ok(response.map_err(|error| model_failure(&error)));
+                    return Ok(response.map_err(|error| {
+                        report.record_model_failure(&error);
+                        report.stop_reason
+                    }));
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     return Ok(Err(NativeTaskStopReason::ModelFailed));
@@ -569,11 +609,15 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
         }
     }
 }
-fn model_failure(error: &crate::ModelProviderError) -> NativeTaskStopReason {
-    if error.code() == "input_limit" {
-        NativeTaskStopReason::InputLimit
-    } else {
-        NativeTaskStopReason::ModelFailed
+impl NativeTaskRunReport {
+    fn record_model_failure(&mut self, error: &crate::ModelProviderError) {
+        let failure = NativeTaskModelFailure::from_error(error);
+        self.model_failure = Some(failure);
+        self.stop_reason = if failure == NativeTaskModelFailure::InputLimit {
+            NativeTaskStopReason::InputLimit
+        } else {
+            NativeTaskStopReason::ModelFailed
+        };
     }
 }
 fn terminal(state: NativeTaskRecovery) -> Option<NativeTaskStopReason> {

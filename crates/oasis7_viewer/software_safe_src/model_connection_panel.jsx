@@ -28,10 +28,23 @@ const RUN_REASON = {
  control_changed: ["授权或运行状态已改变", "Authority or run state changed"],
  context_expired: ["决策上下文已过期", "Decision context expired"],
  model_failed: ["模型调用未完成", "Model call did not complete"],
+ input_limit: ["模型输入达到上限", "Model input reached its limit"],
  model_timeout: ["模型调用超时", "Model call timed out"],
  invalid_model_output: ["模型工具输出不受支持", "Unsupported model tool output"],
  aborted: ["执行器已结束本轮", "Executor ended this run"],
  host_failure: ["执行端暂不可用", "Executor unavailable"],
+};
+const MODEL_FAILURE = {
+ input_limit: ["模型输入达到上限。请核对上下文容量与原任务状态，再明确确认后续执行。", "Model input reached its limit. Review context capacity and the original task state before explicitly confirming further execution."],
+ output_limit: ["模型输出达到上限。截断输出不能作为可执行动作；请核对原操作状态和输出配置后再明确确认。", "Model output reached its limit. Truncated output is not an executable action; review original-operation status and output settings before explicitly confirming further execution."],
+ model_identity_mismatch: ["返回模型与所选配置不符。请核对供应商模型配置。", "The returned model differs from the selected configuration. Check the provider model settings."],
+ unexpected_streaming: ["供应商返回了不支持的流式响应。请核对兼容协议配置。", "The provider returned an unsupported streaming response. Check protocol compatibility settings."],
+ unsupported_finish_reason: ["模型结束方式不受支持。请核对模型协议兼容性。", "The model completion type is unsupported. Check model protocol compatibility."],
+ unsupported_tool: ["模型请求了不支持的工具。请核对可用游戏工具与模型配置。", "The model requested an unsupported tool. Review available game tools and model settings."],
+ invalid_tool_identity: ["模型工具调用标识无效。请核对协议兼容性与原操作状态。", "The model tool-call identity is invalid. Check protocol compatibility and original-operation status."],
+ unsupported_content: ["模型返回内容格式不受支持。请核对模型协议兼容性。", "The model returned an unsupported content format. Check model protocol compatibility."],
+ capability_unsupported: ["模型能力不满足执行要求。请核对工具协议与模型配置。", "Model capabilities do not meet execution requirements. Check tool protocol and model settings."],
+ other: ["模型调用失败。请核对连接与原操作状态。", "The model call failed. Check the connection and original-operation status."],
 };
 const STATE = {
  checking: ["检查中", "Checking"], ready: ["模型可用", "Model ready"],
@@ -45,6 +58,11 @@ export function ModelConnectionPanel(props) {
  const zh = () => String(read(props.locale) || "en").startsWith("zh");
  const tr = (cn, en) => zh() ? cn : en;
  const message = (code) => (COPY[code === "game_executor_unavailable" ? "executor_unavailable" : code] || COPY.request_failed)[zh() ? 0 : 1];
+ const modelFailure = (connection) => {
+  const execution = connection.execution;
+  if (connection.run_state === "stopped" || ["revoked", "expired"].includes(connection.state) || execution?.phase !== "finished" || !["model_failed", "input_limit"].includes(execution.reason)) return null;
+  return MODEL_FAILURE[execution.model_failure]?.[zh() ? 0 : 1] || null;
+ };
  const stateLabel = (state) => (STATE[state] || ["状态未知", "Status unknown"])[zh() ? 0 : 1];
  const [capabilities, setCapabilities] = createSignal(null);
  const [connections, setConnections] = createSignal([]);
@@ -150,6 +168,7 @@ export function ModelConnectionPanel(props) {
    <Show when={selected()}>{(current) => <div class="model-connection-panel__connection">
     <p role="status">{current().state === "revoked" ? stateLabel("revoked") : expired(current()) ? stateLabel("expired") : stateLabel(current().state)} · {stateLabel(current().run_state)}</p>
     <Show when={current().execution}>{(execution) => <p role="status">{execution().phase === "running" ? tr("本轮正在执行", "Run in progress") : (RUN_REASON[execution().reason] || ["执行已停止，结果需核对", "Execution stopped; verify the result"])[zh() ? 0 : 1]} · {tr("已确认效果", "Confirmed effects")}: {execution().successful_effects ?? "—"}</p>}</Show>
+    <Show when={modelFailure(current())}>{(diagnostic) => <p role="status">{diagnostic()} {tr("不会自动重试或重置预算；后续执行仍受原预算和期限限制。", "There is no automatic retry or budget reset; further execution remains subject to the original budget and deadline.")}</p>}</Show>
     <p>{tr("已占用调用预算 / token", "Call budget used / tokens reserved")}: {current().calls_spent ?? "—"} / {current().tokens_reserved ?? "—"}</p>
     <Show when={current().error_code}><p role="status">{message(current().error_code)}</p></Show>
     <Show when={!capabilities()?.executor_available}><p role="status">{message("executor_unavailable")}</p></Show>
