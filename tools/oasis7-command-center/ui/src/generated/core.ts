@@ -51,6 +51,12 @@ duplicateFiles: number,
  * Stable path sample, at most 20; duplicate_files is the full count.
  */
 duplicatePaths: Array<string>, };
+export type DocumentAllocation = { declarationLine: number,
+/**
+ * At most 512 characters of the original Markdown row, never rendered as HTML.
+ */
+rawSample: string, upstream: DocumentPairings, design: DocumentPairings, };
+export type DocumentAllocations = { rows: Array<DocumentAllocation>, issue: string | null, };
 export type IndexedDocument = {
 /**
  * Explicit file-header ID; None in older caches or unread files.
@@ -63,7 +69,11 @@ pairings: DocumentPairings | null,
 /**
  * Explicit design-header upstream declarations; None means not yet parsed.
  */
-upstream: DocumentPairings | null, };
+upstream: DocumentPairings | null,
+/**
+ * Explicit body allocation tables; None in older caches/unread or non-design files.
+ */
+allocations: DocumentAllocations | null, };
 export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
 /**
  * all / read / omitted
