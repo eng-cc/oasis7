@@ -92,7 +92,11 @@ lifecycleFilter?: string,
 /**
  * Omitted keeps all eligible document kinds.
  */
-kindFilter?: string, };
+kindFilter?: string,
+/**
+ * Omitted preserves all explicit pairing states.
+ */
+pairingFilter?: string, };
 export type DocumentDirectoryEntry = { path: string, name: string,
 /**
  * directory / prd / design / entry. No semantic ownership is inferred.
@@ -118,7 +122,7 @@ matchingFiles: number,
 /**
  * History matches excluded by the current filter, before pagination.
  */
-hiddenHistoryFiles: number, lifecycleFilter: string, kindFilter: string, totalChildren: number, entries: Array<DocumentDirectoryEntry>, nextCursor: string | null, };
+hiddenHistoryFiles: number, lifecycleFilter: string, kindFilter: string, pairingFilter: string, totalChildren: number, entries: Array<DocumentDirectoryEntry>, nextCursor: string | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };

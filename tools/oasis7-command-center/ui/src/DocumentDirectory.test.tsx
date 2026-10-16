@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({documentDirectory:vi.fn()}));
 vi.mock('./bridge', () => ({bridge:api,errorMessage:String,observedTime:()=>'核验时间'}));
 const file: IndexedDocument = {fileKey:'file',path:'doc/a/design.md',title:'A设计',kind:'design',state:'read',reason:null,revision:'rev',bytes:10,dirty:false,lifecycle:null,identity:null,pairings:null,upstream:null,allocations:null};
 const snapshot = (id='project',generation='1'): Snapshot => ({project:{id,path:'/repo',head:'head',branch:'main',gitCommonDir:'/repo/.git',environment:'local'},sources:[{kind:'local',generation,state:'partial',lastAttempt:'1',lastSuccess:'1',sourceRevision:'head',coverage:'',error:null}],sections:[],decisions:[],preferences:{projectPath:'/repo',query:'',view:'rules'},associations:[],readingPositions:[],git:{status:'',worktrees:''}});
-const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:null}],nextCursor:null,...extra});
+const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:null}],nextCursor:null,...extra});
 beforeEach(() => api.documentDirectory.mockReset()); afterEach(cleanup);
 it('navigates candidate ancestors with bound snapshots and selects the original file', async () => {
   api.documentDirectory.mockResolvedValueOnce(page()).mockResolvedValueOnce(page({parentPath:'doc',entries:[{path:file.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file}]})).mockResolvedValue(page());
@@ -101,4 +101,20 @@ it('applies type filters explicitly and preserves applied type through paging an
   expect(kind).toHaveValue('design');expect(screen.getByText(/类型筛选：设计/)).toBeInTheDocument();
   setData(snapshot('other'));await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({kindFilter:'all'})));
   expect(kind).toHaveValue('all');
+});
+
+it('binds pairing gap paging and history reveal to the applied filter and resets by source', async () => {
+  api.documentDirectory.mockResolvedValue(page({pairingFilter:'missing',nextCursor:'next',hiddenHistoryFiles:2}));
+  const [data,setData]=createSignal(snapshot());render(()=><DocumentDirectory snapshot={data()} selectFile={vi.fn()}/>);
+  await screen.findByRole('button',{name:'显示历史匹配'});
+  const gaps=screen.getByRole('combobox',{name:'目录配对缺口'});
+  fireEvent.change(gaps,{target:{value:'missing'}});fireEvent.submit(gaps.closest('form')!);
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({pairingFilter:'missing',parentPath:''})));
+  await screen.findByRole('button',{name:'显示历史匹配'});fireEvent.change(gaps,{target:{value:'unpaired'}});fireEvent.click(screen.getByRole('button',{name:'下一页目录（最多 100 项）'}));
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({pairingFilter:'missing',inventory:expect.objectContaining({cursor:'next'})})));
+  await screen.findByRole('button',{name:'显示历史匹配'});fireEvent.click(screen.getByRole('button',{name:'显示历史匹配'}));
+  await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({pairingFilter:'missing',lifecycleFilter:'all'})));
+  expect(gaps).toHaveValue('missing');expect(screen.getByText(/配对筛选：配对目标或章节缺失/)).toBeInTheDocument();
+  setData(snapshot('project','2'));await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({pairingFilter:'all'})));
+  expect(gaps).toHaveValue('all');
 });
