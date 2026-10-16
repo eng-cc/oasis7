@@ -124,3 +124,16 @@ it('does not let an old saved-filter restore clear a newer source’s pending re
   const[data,setData]=createSignal(snapshot());render(()=><DocumentSemanticTree snapshot={data()} view="product" selectFile={vi.fn()}/>);await waitFor(()=>expect(api.documentSemanticTree).toHaveBeenCalledTimes(2));setData(snapshot('new'));await waitFor(()=>expect(api.loadDocumentTreeReading).toHaveBeenCalledTimes(2));
   finishFiltered(page());await Promise.resolve();expect(screen.getByRole('tree')).toHaveAttribute('aria-busy','true');expect(api.saveDocumentTreeReading).not.toHaveBeenCalled();finishNew({status:'missing',state:null,notice:null,resolvedSectionId:null});await ready();
 });
+
+it('does not expand an old last-level restore when the new project reuses the same occurrence ID',async()=>{
+  let finish!:(value:DocumentSemanticTreePage)=>void;
+  api.loadDocumentTreeReading.mockResolvedValueOnce({status:'ready',state:state({expandedRoutes:[route]}),notice:null,resolvedSectionId:null}).mockResolvedValue({status:'missing',state:null,notice:null,resolvedSectionId:null});
+  api.documentSemanticTree.mockImplementation(async(query)=>query.inventory.projectId==='project'&&query.parentOccurrence==='module'?new Promise(resolve=>{finish=resolve;}):page({projectId:query.inventory.projectId}));
+  const[data,setData]=createSignal(snapshot());render(()=><DocumentSemanticTree snapshot={data()} view="product" selectFile={vi.fn()}/>);await waitFor(()=>expect(api.documentSemanticTree).toHaveBeenCalledTimes(2));
+  setData(snapshot('new'));await ready();expect(screen.getByRole('treeitem',{name:'模块需求'})).toHaveAttribute('aria-expanded','false');
+  finish(page({parentOccurrence:'module',parentRoute:route,entries:[child]}));await Promise.resolve();await Promise.resolve();expect(screen.getByRole('treeitem',{name:'模块需求'})).toHaveAttribute('aria-expanded','false');expect(screen.queryByRole('treeitem',{name:'专题需求'})).not.toBeInTheDocument();expect(api.saveDocumentTreeReading).not.toHaveBeenCalled();
+});
+it('leaves a restored branch collapsed when its child query failed',async()=>{
+  api.loadDocumentTreeReading.mockResolvedValue({status:'ready',state:state({expandedRoutes:[route]}),notice:null,resolvedSectionId:null});api.documentSemanticTree.mockResolvedValueOnce(page()).mockRejectedValue(new Error('branch unavailable'));
+  render(()=><DocumentSemanticTree snapshot={snapshot()} view="product" selectFile={vi.fn()}/>);await ready();expect(screen.getByRole('treeitem',{name:'模块需求'})).toHaveAttribute('aria-expanded','false');expect(screen.getByRole('alert')).toHaveTextContent('branch unavailable');expect(api.saveDocumentTreeReading).not.toHaveBeenCalled();
+});

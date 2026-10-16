@@ -217,10 +217,16 @@ export default function DocumentSemanticTree(props: {
       for(const route of state.expandedRoutes.slice(0,MAX_EXPANDED).sort((a,b)=>a.length-b.length)){
         if(epoch!==generation || intent!==interaction) return;
         const entry=await ensureRoute(route);
-        if(entry && !levels().has(entry.occurrenceId) && calls<MAX_RESTORE_CALLS && entry.hasChildren && !entry.cycle && !entry.depthLimited && !entry.boundary){++calls;await fetchLevel(entry.occurrenceId,false,entry.stableRoute,epoch);}
-        if(entry?.hasChildren && !entry.cycle && !entry.depthLimited && !entry.boundary){if(!expanded().has(entry.occurrenceId)&&expanded().size>=MAX_EXPANDED){setNotice('阅读恢复达到 128 个展开位置预算；保留已恢复祖先。');break;}setExpanded(old=>new Set(old).add(entry.occurrenceId));}
+        if(epoch!==generation||intent!==interaction)return;
+        if(entry?.hasChildren && !entry.cycle && !entry.depthLimited && !entry.boundary){
+          if(!levels().has(entry.occurrenceId)&&calls<MAX_RESTORE_CALLS){++calls;await fetchLevel(entry.occurrenceId,false,entry.stableRoute,epoch);}
+          if(epoch!==generation||intent!==interaction)return;
+          if(!levels().has(entry.occurrenceId)){if(calls>=MAX_RESTORE_CALLS)setNotice('阅读恢复达到 256 次查询预算；保留已恢复祖先。');continue;}
+          if(!expanded().has(entry.occurrenceId)&&expanded().size>=MAX_EXPANDED){setNotice('阅读恢复达到 128 个展开位置预算；保留已恢复祖先。');break;}
+          setExpanded(old=>new Set(old).add(entry.occurrenceId));
+        }
       }
-      const focus=await ensureRoute(state.parentRoute);if(focus)setFocused(focus.occurrenceId);
+      const focus=await ensureRoute(state.parentRoute);if(epoch!==generation||intent!==interaction)return;if(focus)setFocused(focus.occurrenceId);
       if(state.selection){
         const entry=await ensureRoute(state.selection.route);
         if(epoch!==generation || intent!==interaction)return;
