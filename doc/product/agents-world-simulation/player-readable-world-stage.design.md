@@ -2,164 +2,171 @@
 
 ## 文档身份
 
-- 结构裁剪：理由：阅读、对象和空间章节共同组织舞台体验，验收沿PRD映射；范围：世界舞台产品体验，不承诺renderer实现；风险：长期可探索舞台不能误作当前交付；映射：[目标与设计命题](#1-阅读顺序)、[验证与追踪](#prd-reqac-fragment-mapping)、[决策与风险边界](#6-非承诺)
+- 配对产品 PRD：[玩家可读的世界舞台](player-readable-world-stage.prd.md)；上位产品 PRD：[`prd.md`](prd.md)。
+- 生命周期：`active`；Owner role：`producer_system_designer`；Last reviewed：2026-10-16。
+- 专业 authority：[Viewer 手册](../../world-simulator/viewer/viewer-manual.manual.md)、[页面模块设计](../../world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md)、[视觉规范](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md)、[大世界系统设计](../../world-simulator/viewer/external-agent-world-view.design.md)。
+- 结构裁剪：本设计按阅读顺序、对象、空间、反馈与恢复组织产品体验，不使用技术十二段骨架；目标见 §1，状态/交互见 §2–4，验收见末表。具体布局、DTO、renderer、平台和性能回到专业 authority。
 
-- 配对产品 PRD：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](player-readable-world-stage.prd.md)
-- 上位产品 PRD：[`prd.md`](prd.md)
-- 生命周期：`active`
-- Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
-- 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`玩家可读渲染`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)、[`Viewer 视觉规范`](../../world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md)
-
-本文定义跨 surface 的玩家阅读顺序与视觉语义，不冻结历史 Bevy/EGUI 控件、2D/3D 模式、renderer 算法或布局参数。当前 surface 和视觉实现由 Viewer 手册、视觉规范及对应代码/测试 authority 定义。
+本设计描述可验收的目标体验，不把未来地图、多尺度、原生世界窗口或截图写成已交付。现有 Shell 的世界优先方向和 Player/Director 边界不变。
 
 ## 1. 阅读顺序
 
-1. 当前目的、关键 blocker 与下一决策。
-2. 与当前目的相关的 Agent、地点、路线或关系。
-3. 已接受行动的主要结果、成本与恢复路径。
-4. 世界背景与次级支持信息。
-5. 按需展开的诊断和原始数据。
+玩家应先辨认当前世界与目的、相关行动者/路线、主要 blocker 和下一决策，再看原行动结果及支持信息，最后按需读诊断。命令路径一步可发现，但不以三张平级卡片、常驻多栏或长日志压过世界。
 
-surface 可以采用地图、舞台、列表、详情或响应式组合，但不能让诊断、环境装饰或信息密度压过玩家目的与因果。
+首次进入、回访和故障恢复共用同一概念结构：世界舞台是主面，目标/下一步是紧邻上下文，选中详情按需展开，Action Receipt 解释原操作，World Feed 只是环境活动。没有目标、没有可见对象、没有回执都是有解释的状态，不填充“看起来完整”的假数据。
 
 ## 1.1 P0 冻结与 P1-A Agent Context Lite
 
 ### P0：稳定框架，不扩大常驻界面
 
-P0 的设计收口是稳定阅读位置和层级，而不是固定占据空间的三栏。世界舞台继续承担
-primary read；目的、关键 blocker、下一步、相关对象和 Action Receipt 构成相邻但可按需
-展开的解释路径。后续设计不以重新安排 Shell、增加常驻栏位或直接动作入口作为前置条件。
-
-Focused 的信任、来源时效、权限披露、回执唯一性和窄屏可读性修正可以继续进行，但必须
-保持世界优先、间接控制和单一因果锚点不变。
+保持单一世界舞台、Next Move 主区、从属 Objective/Player Leverage、按需 Targets/Command 和次级 Diagnostics。允许来源、授权、回执唯一性、窄屏与恢复的 focused 修正，不借本次设计重排 Shell。
 
 ### P1 有序组合
 
-产品设计按 P1-A、P1-B、P1-C 依次展开：
+P1-A 先确立一个选中 Agent 的身份、来源/时效、适用目标、Activity、Intent、回执与权限；P1-B 再加入具有独立权威的对象、关系/路线、位置；P1-C 最后处理具有身份、来源、时效和生命周期的重大事件注意力。后一阶段不能用未成立的前置代替验收。
 
-1. **P1-A Agent Context Lite**：先让一个选中的 Agent 具备可读身份、状态、来源/时效、
-   目标、下一步、阻塞、Activity、Intent、单一因果回执和权限边界。它依赖已有的 Agent
-   身份/绑定与权威投影；选中或可见不等于控制。
-2. **P1-B World semantic presentation**：在 P1-A 的对象、来源和首读语义稳定后，才加入
-   有明确 authority 的世界对象、关系/路线和位置语义。关系必须保留种类、状态、来源与
-   时效；本阶段不以视觉邻近或关系表达创造动作资格、控制权或新的 Agent 语义。
-3. **P1-C Major World Event**：在事件身份、种类/严重度、来源、因果锚点、时效、生命周期
-   与重放/重组边界稳定后，才加入重大事件的注意力语义。事件提示下一次观察或决策，但
-   不成为 Action Receipt，也不创建第二条因果链。
-
-P1-B 和 P1-C 的依赖是产品语义和专业证据均已准备；不以局部 surface、技术信号或设计
-稿名称声称阶段已实现。每一阶段都保留上一阶段的世界优先、间接控制和单一因果锚点。
-当前专业实现收据已覆盖 P1-B stage cues 与 P1-C crisis-only ambient projection；crisis 没有
-权威空间位置时不绘制 marker/highlight。runtime/operator audience policy 是独立显式输入，
-默认 Unknown 不披露，不能从登录、选择、控制或 Director 权限推导。
+专业实现收据已有 P1-B stage cues 和 P1-C crisis-only ambient projection；crisis 缺空间锚点时没有 marker/highlight。Major Event 消费独立显式 runtime/operator audience policy，默认 Unknown 不披露；登录、控制、selection、Director 不产生披露资格。局部实现不代签全部阶段。
 
 ### P1-A：只从选中的 Agent 开始
 
-Agent Context Lite 的设计对象是“当前选中的一个 Agent”，不是所有实体的统一详情模板。
-它的阅读组合遵循以下顺序：
+| 阅读步骤 | 应呈现的内容 | 缺失/不适用时 |
+| --- | --- | --- |
+| 辨认 | Agent 可读身份、公开且有来源的所在/父级上下文和状态。 | 明确未知/不可用，不挑另一 Agent 替代。 |
+| 理解局势 | 仅明确绑定该 Agent 的 Objective、Next Move、blocker、Player Leverage。 | 全局玩家目标保留全局标签，不重命名成私有目标。 |
+| 区分运行 | Activity、权威 Intent、未提交草稿各自状态。 | local_pending 不是已接受 Intent，通信成功不是世界执行成功。 |
+| 确认结果 | 原 Player/Cinematic 单一因果锚点中确实属于该主体的结果。 | 无绑定回执；非因果反馈独立，不补效果/成功。 |
+| 继续/恢复 | 具有适用来源、权限、时效的 capability 或下一入口。 | 说明待同步/无权/不适用；可只读，不制造按钮可用性。 |
 
-1. **辨认**：可读身份，以及有权威来源的所在/父级上下文和状态；从世界或目标上下文选中
-   后，目标语义应在 0–1 次情境转换内可读。
-2. **理解当前局势**：只有明确绑定并适用于该 Agent 的 Objective、推荐 Next Move、blocker
-   与 Player Leverage/执行状态；global summary/primary intent 保持玩家层上下文，不改名
-   为该 Agent 的私有状态。
-3. **区分运行语义**：Activity 表示 Agent 正在做什么，Intent 表示明确匹配该 Agent 的权威
-   接受或阻断；`local_pending` 仍是玩家未提交草稿，二者都不能代替世界结果。
-4. **确认结果**：只引用现有 Player/Cinematic 因果锚点中的单一 Action Receipt。非因果反馈
-   可以独立出现但不能补成回执、效果或成功；没有该锚点就明确保持无回执。
-5. **继续或恢复**：只有在 capability 来源、权限、时效和恢复路径完整时，才表达下一受支持
-   入口；否则说明不可用、待同步或应重新确认。选中、可见或视觉强调只帮助辨认，不授予控制。
-
-账号绑定、认领和当前控制资格沿用[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)
-与[`Agent 自治、委托与责任连续性`](agent-authority-ownership-and-accountability.prd.md)；本专题
-不把 selection/visibility 变成控制 authority，也不把 global summary 变成 Agent 私有事实。
-
-该顺序可以跨舞台、目标、列表、详情或响应式 surface 保持，但不规定控件、栏位、动画、
-布局参数或具体手势。选中和视觉强调只帮助辨认，不会产生控制权、ownership、关系或动作
-资格。
-
-Location、Facility、Territory、Organization、Depot 和 Module 不得复用 Agent 的默认语义。
-它们后续需要各自的身份、来源、权限、时效、因果和恢复合同；缺少合同时应保持为空或不可用，
-而不是用邻近 Agent 的数据填充。
+从选中到辨认相关上下文保持 0–1 次情境转换。选中/可见不等于认领或控制；账号和授权沿[Agent 对话与 Prompt 控制](agent-conversation-and-prompt-control.prd.md)与[自治、委托与责任连续性](agent-authority-ownership-and-accountability.prd.md)。不从距离、同屏、Feed、名称、raw object 推断计划、关系、资源、成功或权限。
 
 ### P1-A 组合验收映射
 
 | 设计检查 | 可观察承诺 | 产品验收 |
 | --- | --- | --- |
-| Agent identity/context | 选中的 Agent 与其相关状态可辨认，缺失时不制造默认目标。 | P1A-CTX-01 / RW-1 / RW-6 |
-| Source and freshness | 当前确认、最近已知、冲突和未知保持不同语义，并提供适用的恢复方向。 | P1A-CTX-02 / RW-8 / RW-9 |
-| Activity/Intent/Receipt | Agent 活动、明确匹配的权威意图、Player/Cinematic 单一因果锚点和非因果反馈不会合并；环境活动不能代签回执。 | P1A-CTX-03 / RW-3 / RW-4 |
-| Capability boundary | 只有明确绑定、适用来源和权限的 Agent capability 才能进入玩家语义；选中/可见不等于可控，global summary 不会改变控制边界。 | P1A-CTX-04 / RW-2 / RW-6 |
-| World-first readability | 解释层保持次级且可按需访问，首读仍是世界、目的、阻塞和下一步。 | P1A-CTX-05 / RW-1 / RW-4 / RW-5 |
+| Agent identity/context | 正确主体、适用状态和空状态，不制造默认目标。 | P1A-CTX-01 / RW-1 / RW-6 |
+| Source and freshness | 当前、最近已知、冲突、未知及恢复方向可辨。 | P1A-CTX-02 / RW-8 / RW-9 |
+| Activity/Intent/Receipt | 三者与草稿、通信反馈不合并；切换对象不改归属。 | P1A-CTX-03 / RW-3 / RW-4 |
+| Capability boundary | 只有明确适用的权威能力；全局信息不改变控制。 | P1A-CTX-04 / RW-2 / RW-6 |
+| World-first readability | 解释层次级，目的/blocker/下一步可读。 | P1A-CTX-05 / RW-1 / RW-4 / RW-5 |
 
 ### P1-A 非承诺
 
-- 不定义 Agent 之外实体的详情结构或统一 Inspector schema。
-- 不定义新的世界动作、hotbar、global inventory、经济/治理面板或数值平衡。
-- 不把 global summary、global primary intent 或 `local_pending` 草稿改名为选中 Agent 的私有状态、
-  已接受 Intent 或因果回执。
-- 不把关系线、距离、同屏、环境事件或视觉强调当作关系、Trust、ownership 或 capability 来源。
-- 不把 plan、rationale、ETA、memory、provider、prompt、auth 或 runtime 诊断当作默认玩家详情。
-- 不在本切片设计 Major World Event 的 marker、highlight、toast 或第二个因果反馈面。
-- 不定义 DTO、坐标、renderer 层级、布局参数、断点、颜色或具体可访问性控件；这些继续由
-  对应专业 authority 负责。
+不建立所有实体的通用 Inspector；Facility/Territory/Organization/Depot/Module/Location 不继承 Agent 控制或私有目标；不新增 hotbar、inventory、经济/治理数值、直接动作；不把 plan/rationale/ETA/memory/provider/prompt/auth 诊断作为默认详情；不在此定义新的 Major Event 因果面、DTO、坐标、颜色或布局断点。
 
 ## 2. 对象辨认与聚焦
 
-- 当前相关对象及选中、聚焦或不可用状态必须可辨认，且不能只依赖颜色或运动。
-- 没有相关 Agent、地点或路线时，明确显示为空、不可用或等待权威数据；不得用任意 fallback 对象制造虚假目标。
-- 选中或视觉强调只改变呈现，不自动授予控制权、交互能力或世界事实。
-- surface 可以简化背景或父级上下文来降低噪声，但仍要让玩家理解当前对象与世界、目标或关系的联系；被隐藏的环境细节不能被误解为世界事实已经消失。
+可见对象可以观察，有权对象才可能被指导，当前行动对象与当前选中对象可以不同。初始构图的默认视点必须是展示行为，不暗示认领、控制或已有目标。
+
+<a id="subject-continuity"></a>
+### 2.1 主体连续性
+
+玩家对 A 提交指导，再选择 B：舞台和详情进入 B 的观察上下文，原操作继续关联 A。A 的回执回来时，在现有回执位置说明 A/原目标及结果，不重新把视点拉回 A，也不污染 B 的私有结果。可提供“查看原对象/原操作”，但只有仍获准披露时可进入；撤权后删除受限内容而非显示旧详情。
+
+无 Agent 绑定的玩家级结果保持玩家级；同一结果在详情/回执引用不是两次效果。推荐对象改变、过滤、列表重排、重连和页面重载都不改变已提交对象。缺明确行动对象时，Next Move 引导合法选择或同步，不静默借用首项。
+
+### 2.2 对象能力矩阵
+
+| 对象/状态 | 可提供的观察 | 指导边界 |
+| --- | --- | --- |
+| 自己当前有权 Agent | 适用身份、来源、活动、目标及原回执。 | 只进入现有合法高层目标/Prompt/委托/审批/stop。 |
+| 可见但不可控 Agent | 只读、已授权公开的内容。 | 明确只读，不复用另一个 Agent 的能力。 |
+| Location/设施/Depot/路线 | 该实体 authority 已提供的身份、状态、位置/关系与来源。 | 不自动套 Agent 模板；地图点击无采集/建造/移动。 |
+| terrain/Fragment block | 世界背景及允许的材料语境。 | 非交互背景不显示可点击手势或控制暗示。 |
+| 有权威 anchor 的世界事件 | 事件自身身份、来源、时效及检查入口。 | 环境提示不是玩家因果回执。 |
+| 无 anchor 的事件 | 相邻 Feed 的可访问事件内容。 | 不放置估算 marker/highlight。 |
+| 聚合符号/重叠对象 | 已授权成员的下钻或候选列表；说明聚合范围/部分性。 | 聚合不是新实体，不批量授予操作权。 |
+
+### 2.3 选择、遮挡与消失
+
+选中反馈同时有形状/文本/焦点等信号，不仅依赖颜色或动画。重叠时给稳定候选列表或等价选择方式，不靠重复像素试点。tooltip/选中标签避让主要操作和文本，无法放置则转入相邻详情，不让画布截断唯一信息。
+
+对象被过滤、离开视点、所在区域未加载、来源失效、权限撤销和权威删除分别解释。过滤当前选中对象时保留“已被过滤”的上下文与清除过滤入口；跟随失去可信位置时暂停追踪，不选另一个对象。撤权时立即清除不可披露内容；可保留的只是经授权的通用不可用提示。
 
 ## 3. 空间与比例诚实
 
-- 权威位置、派生关系位置和纯呈现布局必须可区分。
-- 当 surface 放大 marker、halo、标签或 overview 表示以保证可读性时，文本或权威数值优先；呈现尺寸不得冒充物理几何。
-- 关系线、箭头、流向或其他视觉辅助只解释专业 authority 已支持的关系或效果，不创造路线、因果、所有权或动作入口。
-- 高密度时优先保留当前目标、选中对象和关键 blocker；次级标签可以渐进隐藏，但不得通过无差别缩小使首读对象不可辨认。
-- overview 与 detail 可以使用不同密度、尺度和标注，但切换后仍保持目的、选中对象、关键 blocker 和下一步连续；这项原则不要求存在专用地图模式、自动缩放或历史 Viewer 控件。
+权威几何、派生关系布局、最近已知和未知必须可区分。几何来源与新鲜度独立：刚收到的派生坐标不是精确位置；旧的权威坐标不是实时位置。放大 marker/halo 不表示真实尺寸，关系线不创造关系或可执行距离。
+
+高密度优先保留当前目标、选中对象、关键 blocker 和相关路线；次级标签渐退。overview/detail 改变信息密度但保持身份、目的和下一步，不把画面裁剪当世界数据消失。未知不是零库存、空地图或不存在。
 
 ### 3.1 大世界可操作视觉体验与两端同义
 
-玩家的默认旅程是“世界概览 → 区域/Fragment → 搜索定位自己的 Agent/设施/路线 → 选择检查 → 阅读权威结果 → 合法指导 → 返回总览/当前目标”。原有 2D 俯视像素工业舞台是长期视觉方向，不为本产品合同冻结地图组件、缩放值或渲染技术。
+默认旅程为“概览 → 区域/Fragment → 授权搜索 → 定位/选择 → 检查 → 合法指导 → 原结果 → 返回目标”。这是未来可验收目标，不是当前 2D/zoom/native 已交付声明。
 
-| 玩家操作 | 最小产品反馈 | 必须保留的界限 |
+| 玩家操作 | 最小反馈 | 失败或中断 |
 | --- | --- | --- |
-| 平移/缩放、区域下钻与返回 | 世界范围、选中身份、主目标、当前尺度与主要 blocker | 不将未知区域表现为全知地图 |
-| 搜索、定位、选择或跟随 Agent | 当前可见/最近已知的位置或关系、活动、合法退出跟随 | 地图选择不改变世界位置或取得控制权 |
-| 检查工厂/路线/世界事件 | 可追踪的身份、状态、来源、工业与回执 | 环境活动/动画不代签 committed |
-| 打开合法 Agent 的指导上下文 | 目标/Prompt/委托提交与 accepted/applied，后续世界结果 | 地图点击不直接移动/采集/建造 |
-| Renderer 失败或连接中断 | 已确认结果、可访问文本、返回/刷新/等待 | 不用空白或本地缓存改写真值 |
+| 平移/缩放/下钻 | 当前范围、尺度、选中身份、目标及返回入口。 | 旧范围可标最近已知；新范围加载失败不是空世界。 |
+| 搜索 | 明确当前列表过滤还是全授权范围搜索，显示加载/无结果/部分结果。 | 旧查询不覆盖新查询，不泄漏未授权对象数量。 |
+| 定位 | 有可信位置才定位；关系位置明确抽象。 | 已知对象暂不能定位时，仍能读获准详情并刷新/返回。 |
+| 跟随 | 明确正在跟随哪个对象，随时退出。 | 手动浏览退出跟随；位置失效暂停，恢复需明确重新跟随。 |
+| 选择/检查 | 所选对象、相关状态、来源/时效与适用能力。 | 选择不执行，晚到详情不覆盖新对象。 |
+| 返回总览/当前目标 | 两个意图可区分，保留合法目标上下文。 | 目标不可定位时返回其文本上下文，不跳到任意对象。 |
+| 提交指导 | 方案、主体、适用授权及保存/接受/生效/结果区别。 | 版本冲突/观察过期先解释与重验，不自动批准变化方案。 |
 
-浏览器和受支持原生桌面客户端需分别在自己界面完成上述最小交互；桌面内嵌 Web 舞台可复用代码，但唤起外部浏览器不能代签客户端。逐项验收由 [REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003)、[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004)、[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) 承担，配对 AC 和专业证据在对应 PRD 中。本设计不声称地图/原生端或 Event spatial marker 当前已交付。
+Web 与原生端分别在自己的界面完成，原生可复用 Web 实现，但外部浏览器不能代签。
+
+<a id="exploration-transitions"></a>
+### 3.2 关键状态转换
+
+| 当前状态 | 触发 | 下一状态与保留内容 |
+| --- | --- | --- |
+| 初始同步 | 获得授权的首份一致读模型 | 可浏览；明确完整/部分/未知，无默认控制对象。 |
+| 自由浏览 | 选择授权对象 | 选择上下文打开，目标/原回执不改，camera 不必自动跳转。 |
+| 已选择 | 明确开始跟随 | 跟随该身份；仅可信位置更新可移动视点。 |
+| 跟随中 | 手动平移/尺度浏览或退出跟随 | 自由浏览，保留选中身份；后台更新不抢回视点。 |
+| 跟随中 | 位置失效/断连 | 跟随暂停，最近已知标记；不得推演当前位置。 |
+| 任意浏览 | 详情/搜索旧响应晚到 | 丢弃不适用结果，不改变当前视点、选择或权限。 |
+| 已选择 | 局部数据暂未加载/过滤 | 保留获准上下文并说明原因；有刷新/清过滤/返回。 |
+| 任意状态 | 换账号/世界或撤权 | 清除不适用私有数据、交互和旧请求，再按新范围初始化。 |
+| 提交等待 | 网络/renderer 失效 | 保留原操作身份、结果待确认及回查入口，不重投。 |
+
+drawer/Focus/IME 的 Escape 顺序与焦点返回继续遵守[页面交互合同](../../world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md#27-interaction-state-machine-and-focus-contract)：先最内层 drawer，再 Focus；输入法合成中不截获。跟随退出提供独立可访问入口，不能抢占既有 Escape 语义。
+
+### 3.3 输入方式与探索可达性
+
+鼠标拖动和触控手势不是唯一操作。通过可聚焦的方向/缩放/尺度/返回控件或等价列表，单指针不拖拽与键盘也可到达相同授权对象。画布快捷键仅在画布上下文生效，不吞掉输入框、聊天、文本选择和 IME。
+
+触控选择保留明确的 Selected 上下文，说明不只依赖 hover；tooltip 可显式关闭并返回触发点。支持的屏幕与输入方式在同一候选矩阵声明，未验证的组合不标支持。
 
 ## 4. 支持文本与诊断
 
-- 玩家目标、blocker、回执和恢复路径应能以可访问文本或等价语义读取。
-- 支持信息可以被选择、复制或导出，但只有当前 surface authority 明确支持时才展示对应动作。
-- 原始 DTO、renderer 状态、性能指标与调试记录默认次级，不得成为产品成功的代签证据。
-- 选中对象详情只解释当前 surface authority 已支持的上下文和因果；原始 LLM 输入输出、模型、token、延迟或 runtime 诊断不自动成为玩家层详情。
+目标、blocker、回执和恢复有文本/等价语义；原始 DTO、LLM 输入输出、模型、token、延迟和内部 source 默认次级。只有专业 surface 明确支持才展示复制/导出动作，导出不得夹带 token、私有观察或其他账号内容。
+
+<a id="failure-experience"></a>
+### 4.1 故障与恢复体验
+
+| 情况 | 玩家解释 | 可用下一步 |
+| --- | --- | --- |
+| 初次没有 snapshot | 正在同步或尚无授权世界数据。 | 等待、刷新、返回；不是世界为空。 |
+| 查询部分完成 | 仅当前已加载/获准范围，部分对象待加载。 | 重试本范围/继续浏览，不清空全世界。 |
+| 陈旧或冲突 | 最近已知/信息冲突，说明对当前决策的影响。 | 刷新、等待、改道；高后果生效由权威重验。 |
+| Renderer 不可用 | 图形原因与任务/网络状态分别说明。 | 文本/目标列表、原操作回查、合法控制和显式重试。 |
+| ready 后图形失效 | 当前画面不再实时，不能继续命中旧像素。 | 重建图形会话；恢复后重新验证来源、选择和命中。 |
+| 断连 | 新信息不可确认，既有获准历史结果仍可查。 | 重连/回查；不把已完成改成 pending 并重做。 |
+| 权限撤销/换账号 | 当前内容不可继续披露。 | 清理旧内容后按新身份进入；不展示旧私有缓存。 |
+| 原操作结果不确定 | 正在恢复确认，不写成普通失败或成功。 | 查询原操作，禁止以新键重复副作用。 |
+
+文本降级不绘制第二套 JS 世界；故障恢复不自动提交指导、切换世界、增加权限或调用模型。未获准的内容不因“保留上下文”而继续展示。
 
 ## 5. 响应式与可访问性
 
-- CJK、窄屏和低高度下仍应保持首读对象、主要状态与下一步可辨认。
-- 颜色、图标、大小或动效不能成为唯一状态信号。
-- 布局可改变，但阅读顺序、权威来源与无虚假交互的边界保持稳定。
+CJK、长名称、低高度、窄屏和放大文本下保持主读、下一步与恢复。状态同时有文本/形状/位置等信号，颜色和运动不是唯一载体。减少动效时仍能辨认选中、阻塞和结果；装饰闪动不能夺取注意力。
+
+键盘能够进入/离开画布和详情，有可见焦点和合理返回；不在每次数据刷新时抢焦点或播报所有实体更新。局部状态变化优先简短汇总，关键结果可读且不重复宣告成功。图形缺失时，文本入口仍能完成受支持的观察与安全返回。
+
+密度、视口、DPR、语言、焦点、触控与低性能组合按[专项验证手册](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-accessibility)执行。产品不以一张桌面截图代替移动、辅助技术、实际 renderer 或真人理解。
 
 ## 6. 非承诺
 
-- 不将 `Locate Agent`、overview-map、专用缩放控件、原生大世界客户端或空间事件标记当作当前已实现能力；本次新增的是未来可验收目标。
-- 不定义 centimetre 字段、比例/clamp、marker 几何、箭头、LOD 阈值、标签容量或截图基线。
-- 不把历史完成状态、EGUI/Bevy 组件、测试命令或截图提升为当前产品能力。
+不把 Locate Agent、overview、native、空间事件标记或具体手势当已实现；不新增世界动作、游戏规则、所有权或通用 Inspector；不定义厘米字段、LOD 阈值、shader、像素资产及帧率。实体/工业信息只在对应 authority 支持时展示，不用设计图补事实。
+
 ## PRD REQ/AC fragment mapping
 
-This design delegates product requirements and acceptance semantics to its paired PRD. Every row below is a navigable fragment mapping; this design does not create a second requirement authority.
+| PRD requirement | PRD acceptance | 本设计承接 |
+| --- | --- | --- |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) | 阅读顺序、主体连续性、原结果与反馈恢复。 |
+| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) | 来源/时效独立、冲突、提交重验与失败解释。 |
+| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003) | [AC-AGENT-STAGE-003](player-readable-world-stage.prd.md#ac-agent-stage-003) | 探索旅程、跟随、重叠、部分加载和多输入。 |
+| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004) | [AC-AGENT-STAGE-004](player-readable-world-stage.prd.md#ac-agent-stage-004) | 两端自身界面交互、重连、图形与权限恢复。 |
+| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) | [AC-AGENT-STAGE-005](player-readable-world-stage.prd.md#ac-agent-stage-005) | 观察/指导分离、主体绑定和无副作用浏览。 |
 
-| PRD requirement | PRD acceptance |
-| --- | --- |
-| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) |
-| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) |
-| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003) | [AC-AGENT-STAGE-003](player-readable-world-stage.prd.md#ac-agent-stage-003) |
-| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004) | [AC-AGENT-STAGE-004](player-readable-world-stage.prd.md#ac-agent-stage-004) |
-| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) | [AC-AGENT-STAGE-005](player-readable-world-stage.prd.md#ac-agent-stage-005) |
+验收方法见[像素世界验证手册](../../testing/manual/pixel-world-visualization-validation.manual.md)，运行记录在实际 PR/Task。产品设计完成不代替系统实现、独立评审、真人理解或发行批准。
