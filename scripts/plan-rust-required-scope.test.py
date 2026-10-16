@@ -243,7 +243,7 @@ class Selection(unittest.TestCase):
             'new-task-worktree.sh': {'baseline', 'cargo_tooling_contracts', 'fleet_health'},
             'worktree-gc-report.sh': {'baseline', 'workflow_governance'},
             'pr-review-thread-closeout.py': {'baseline', 'workflow_governance'},
-            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts'},
+            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts', 'command_center'},
         }
         for filename, expected in cases.items():
             with self.subTest(filename=filename):
