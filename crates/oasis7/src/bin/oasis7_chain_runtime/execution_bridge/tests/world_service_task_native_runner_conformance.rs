@@ -42,6 +42,51 @@ impl ModelProvider for ScriptedFactoryChain {
         );
         assert!(!context["actor_observation"].is_null());
         assert!(!context["capability_catalog"].is_null());
+        assert_eq!(
+            context["native_authorization_read_commit"],
+            context["current_read_commit"]
+        );
+        assert!(
+            context["native_delegation_authorizations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a["grant"]["object_id"] == FACTORY
+                    && a["grant"]["action_kinds"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|kind| kind == "BuildFactory"))
+        );
+        if call == 0 {
+            // Deliberately propose an ungranted object, then a physical effect
+            // in the same stale plan. The signed rejection must suppress that
+            // effect and reach the next model invocation on the same context.
+            return Ok(ModelProviderResponse {
+                request_digest: request.request_digest.clone(),
+                turns: ["quote_build", "build"].into_iter().map(|name|ModelProviderTurn::ToolCall {
+                    name:name.into(), arguments:json!({"site":SITE,"factory":"invented-no-grant","kind":"factory.smelter.mk1"})
+                }).collect(), output:String::new(), model:Some("unpaid-scripted-conformance".into()),
+                usage:ModelProviderUsage::default(),trace:ModelProviderTrace::default(),
+            });
+        }
+        if call == 1 {
+            assert_eq!(prompt["tool_results"].as_array().unwrap().len(), 1);
+            assert_eq!(
+                prompt["tool_results"][0]["result"]["status"],
+                "selection_rejected"
+            );
+            assert_eq!(
+                prompt["tool_results"][0]["result"]["reason"],
+                "factory_not_authorized"
+            );
+            assert_eq!(
+                prompt["tool_results"][0]["result"]["no_action_submitted"],
+                true
+            );
+            assert!(prompt["operation"].as_str().unwrap().ends_with(":0"));
+        }
+
         // A rejected immutable slot is not a successful business stage. Only
         // the runner's authenticated, original-matched feedback permits this
         // new invocation to choose the same business operation in a NEW slot.

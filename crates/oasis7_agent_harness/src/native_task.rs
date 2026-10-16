@@ -101,6 +101,9 @@ pub struct NativeTaskContext {
 pub struct NativeTaskToolResult {
     pub value: Value,
     pub effect: Option<NativeTaskRecovery>,
+    /// Only a host-verified, no-write quote rejection requests a fresh model
+    /// decision. Never derive this from an HTTP status or provider text.
+    pub decision_required: bool,
 }
 /// A host is an authenticated service adapter, never a local execution authority.
 /// Implementations must preserve immutable originals and fail on corrupt state.
@@ -338,7 +341,9 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                             return Ok(report);
                         }
                     };
-                    if result.effect.is_some() != tool.side_effect() {
+                    if result.effect.is_some() != tool.side_effect()
+                        || (result.decision_required && tool.side_effect())
+                    {
                         report.stop_reason = NativeTaskStopReason::HostFailure;
                         return Ok(report);
                     }
@@ -348,6 +353,12 @@ impl<H: NativeTaskHost> NativeTaskRunner<H> {
                             call_id: call.call_id.clone(),
                             content: result.value.clone(),
                         });
+                    }
+                    if result.decision_required {
+                        // Remaining calls came from the plan made before this
+                        // rejection. Preserve their supplier IDs but do not run
+                        // them; the model must consume this result first.
+                        break;
                     }
                     if let Some(effect) = result.effect {
                         effect_result = Some((effect, matches!(tool, NativeTaskTool::Abort(_))));
