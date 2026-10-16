@@ -84,12 +84,24 @@ export type DocumentDirectoryQuery = { inventory: DocumentInventoryQuery,
 /**
  * Empty for root; otherwise an exact repository-relative directory path.
  */
-parentPath: string, };
+parentPath: string,
+/**
+ * Omitted preserves the original unfiltered query contract.
+ */
+lifecycleFilter?: string, };
 export type DocumentDirectoryEntry = { path: string, name: string,
 /**
  * directory / prd / design / entry. No semantic ownership is inferred.
  */
-kind: string, matchingFiles: number, depthLimited: boolean, file: IndexedDocument | null, };
+kind: string, matchingFiles: number, depthLimited: boolean,
+/**
+ * Non-historical read source files with verified explicit links, only in current view.
+ */
+historicalReferenceFiles: number,
+/**
+ * Stable sample of at most 20 distinct source paths; not proof of authority.
+ */
+historicalReferencePaths: Array<string>, file: IndexedDocument | null, };
 export type DocumentDirectoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, parentPath: string,
 /**
  * Full scan coverage, independent of filters and this projection's kind scope.
@@ -98,7 +110,11 @@ candidates: number, read: number, omitted: number, stale: boolean, error: string
 /**
  * Matching unique files across the full projection, not just this page/parent.
  */
-matchingFiles: number, totalChildren: number, entries: Array<DocumentDirectoryEntry>, nextCursor: string | null, };
+matchingFiles: number,
+/**
+ * History matches excluded by the current filter, before pagination.
+ */
+hiddenHistoryFiles: number, lifecycleFilter: string, totalChildren: number, entries: Array<DocumentDirectoryEntry>, nextCursor: string | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };

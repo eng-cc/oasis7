@@ -19,6 +19,7 @@ struct State {
     settlement: Option<NativeTaskRecovery>,
     known_feedback: BTreeMap<String, oasis7_game_client::AuthorizedFeedbackRecord>,
     effects: std::collections::VecDeque<NativeTaskRecovery>,
+    read_results: std::collections::VecDeque<Result<Value, &'static str>>,
 }
 struct FakeHost {
     state: Mutex<State>,
@@ -174,9 +175,19 @@ impl NativeTaskHost for FakeHost {
                 },
             );
         }
+        let value = if !t.side_effect() {
+            s.read_results
+                .pop_front()
+                .unwrap_or_else(|| Ok(json!({"observed_result":"fresh observation sentinel"})))?
+        } else {
+            json!({"observed_result":"fresh observation sentinel"})
+        };
+        let decision_required = !t.side_effect()
+            && value.get("status").and_then(Value::as_str) == Some("selection_rejected");
         Ok(NativeTaskToolResult {
-            value: json!({"observed_result":"fresh observation sentinel"}),
+            value,
             effect,
+            decision_required,
         })
     }
 }

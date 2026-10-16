@@ -1,6 +1,7 @@
 //! On-demand path projection of the existing inventory, never a filesystem read.
 use crate::{
     CommandCenter, Error, Result,
+    document_directory_references::{historical_references, is_history},
     document_inventory::{DocumentInventoryQuery, IndexedDocument},
     index,
 };
@@ -14,6 +15,10 @@ pub struct DocumentDirectoryQuery {
     pub inventory: DocumentInventoryQuery,
     /// Empty for root; otherwise an exact repository-relative directory path.
     pub parent_path: String,
+    /// Omitted preserves the original unfiltered query contract.
+    #[serde(default)]
+    #[ts(optional)]
+    pub lifecycle_filter: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +29,10 @@ pub struct DocumentDirectoryEntry {
     pub kind: String,
     pub matching_files: usize,
     pub depth_limited: bool,
+    /// Non-historical read source files with verified explicit links, only in current view.
+    pub historical_reference_files: usize,
+    /// Stable sample of at most 20 distinct source paths; not proof of authority.
+    pub historical_reference_paths: Vec<String>,
     pub file: Option<IndexedDocument>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -44,6 +53,9 @@ pub struct DocumentDirectoryPage {
     pub eligible_files: usize,
     /// Matching unique files across the full projection, not just this page/parent.
     pub matching_files: usize,
+    /// History matches excluded by the current filter, before pagination.
+    pub hidden_history_files: usize,
+    pub lifecycle_filter: String,
     pub total_children: usize,
     pub entries: Vec<DocumentDirectoryEntry>,
     pub next_cursor: Option<String>,
@@ -73,6 +85,25 @@ impl CommandCenter {
                 "invalid document directory parent or depth limit".into(),
             ));
         }
+        let lifecycle = request.lifecycle_filter.as_deref().unwrap_or("all");
+        if lifecycle.len() > 1024
+            || !(matches!(
+                lifecycle,
+                "all"
+                    | "current"
+                    | "proposed"
+                    | "draft"
+                    | "active"
+                    | "superseded"
+                    | "retired"
+                    | "other"
+                    | "unknown"
+            ) || lifecycle
+                .strip_prefix("raw:")
+                .is_some_and(|raw| !raw.is_empty()))
+        {
+            return Err(Error::Invalid("invalid document lifecycle filter".into()));
+        }
         let inventory = self.load_document_inventory(query)?;
         let eligible: Vec<_> = inventory
             .files
@@ -91,10 +122,11 @@ impl CommandCenter {
         }
         let text = query.query.trim().to_lowercase();
         let filter = index::digest(&serde_json::to_vec(&(
-            "document-directory-v1",
+            "document-directory-v2",
             parent,
             &text,
             &query.read_filter,
+            lifecycle,
         ))?);
         let offset = if let Some(cursor) = &query.cursor {
             let cursor: Cursor = serde_json::from_str(cursor)
@@ -108,10 +140,30 @@ impl CommandCenter {
         } else {
             0
         };
-        let matching: Vec<_> = eligible
+        let filtered: Vec<_> = eligible
             .iter()
             .copied()
             .filter(|f| f.matches_filter(&text, &query.read_filter))
+            .collect();
+        let references = if lifecycle == "current" {
+            historical_references(&eligible)
+        } else {
+            BTreeMap::new()
+        };
+        let hidden_history_files = if lifecycle == "current" {
+            filtered
+                .iter()
+                .filter(|f| is_history(f) && !references.contains_key(&f.path))
+                .count()
+        } else {
+            0
+        };
+        let matching: Vec<_> = filtered
+            .into_iter()
+            .filter(|f| {
+                matches_lifecycle(f, lifecycle)
+                    || (lifecycle == "current" && references.contains_key(&f.path))
+            })
             .collect();
         let mut children: BTreeMap<String, DocumentDirectoryEntry> = BTreeMap::new();
         for file in &matching {
@@ -129,6 +181,8 @@ impl CommandCenter {
                             path,
                             kind: "directory".into(),
                             matching_files: 0,
+                            historical_reference_files: 0,
+                            historical_reference_paths: vec![],
                             file: None,
                         });
                 entry.matching_files += 1;
@@ -141,6 +195,19 @@ impl CommandCenter {
                         kind: file.kind.clone(),
                         matching_files: 1,
                         depth_limited: false,
+                        historical_reference_files: if lifecycle == "current" {
+                            references.get(&file.path).map_or(0, |paths| paths.len())
+                        } else {
+                            0
+                        },
+                        historical_reference_paths: if lifecycle == "current" {
+                            references
+                                .get(&file.path)
+                                .map(|paths| paths.iter().take(20).cloned().collect())
+                                .unwrap_or_default()
+                        } else {
+                            vec![]
+                        },
                         file: Some((*file).clone()),
                     },
                 );
@@ -178,9 +245,28 @@ impl CommandCenter {
             error: source.and_then(|s| s.error.clone()),
             eligible_files: eligible.len(),
             matching_files: matching.len(),
+            hidden_history_files,
+            lifecycle_filter: lifecycle.into(),
             total_children,
             entries: children.into_values().skip(offset).take(100).collect(),
             next_cursor,
         })
+    }
+}
+
+fn matches_lifecycle(file: &IndexedDocument, filter: &str) -> bool {
+    let lifecycle = file.lifecycle.as_ref();
+    match filter {
+        "all" => true,
+        "current" => !is_history(file),
+        raw if raw.starts_with("raw:") => {
+            lifecycle.and_then(|l| l.raw_status.as_deref()) == raw.strip_prefix("raw:")
+        }
+        category => {
+            lifecycle
+                .and_then(|l| l.category.as_deref())
+                .unwrap_or("unknown")
+                == category
+        }
     }
 }

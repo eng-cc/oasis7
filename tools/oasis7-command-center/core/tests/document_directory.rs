@@ -32,6 +32,7 @@ fn fixture(files: &[(&str, &str)]) -> (tempfile::TempDir, CommandCenter, Documen
     let snapshot = core.open_project(&root).unwrap();
     let query = DocumentDirectoryQuery {
         parent_path: String::new(),
+        lifecycle_filter: None,
         inventory: DocumentInventoryQuery {
             schema_version: 1,
             project_id: snapshot.project.unwrap().id,
@@ -164,4 +165,203 @@ fn invalid_parents_are_rejected_and_deep_paths_remain_visible_as_limited_entries
     assert_eq!(page.entries[0].matching_files, 1);
     query.parent_path = page.entries[0].path.clone();
     assert!(core.document_directory(query).is_err());
+}
+
+#[test]
+fn lifecycle_filters_keep_unknowns_and_bind_cursors_without_changing_coverage() {
+    let files: Vec<_> = (0..105)
+        .map(|i| {
+            (
+                format!("doc/current/{i:03}.design.md"),
+                "# Current\n- 状态：draft\n".to_owned(),
+            )
+        })
+        .chain([
+            (
+                "doc/history/old.design.md".into(),
+                "# Old\n- 状态：superseded\n".into(),
+            ),
+            (
+                "doc/history/retired.design.md".into(),
+                "# Retired\n- 状态：retired\n".into(),
+            ),
+            ("doc/unknown/design.md".into(), "# Unknown\n".into()),
+            (
+                "doc/professional/design.md".into(),
+                "# Professional\n- 状态：target-contract\n".into(),
+            ),
+        ])
+        .collect();
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c)| (p.as_str(), c.as_str()))
+        .collect();
+    let (_tmp, core, mut query) = fixture(&refs);
+    let legacy = core.document_directory(query.clone()).unwrap();
+    assert_eq!(legacy.matching_files, 109);
+    query.lifecycle_filter = Some("current".into());
+    let current = core.document_directory(query.clone()).unwrap();
+    assert_eq!(current.matching_files, 107);
+    assert_eq!(current.hidden_history_files, 2);
+    assert_eq!(current.candidates, legacy.candidates);
+    assert_eq!(current.eligible_files, legacy.eligible_files);
+    query.parent_path = "doc".into();
+    assert!(
+        !core
+            .document_directory(query.clone())
+            .unwrap()
+            .entries
+            .iter()
+            .any(|e| e.name == "history")
+    );
+    query.parent_path = "doc/current".into();
+    query.inventory.cursor = core.document_directory(query.clone()).unwrap().next_cursor;
+    assert!(query.inventory.cursor.is_some());
+    query.lifecycle_filter = Some("draft".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.inventory.cursor = None;
+    query.parent_path.clear();
+    query.lifecycle_filter = Some("unknown".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.lifecycle_filter = Some("raw:target-contract".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    query.lifecycle_filter = Some("all".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        109
+    );
+    query.lifecycle_filter = Some("superseded".into());
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        1
+    );
+    let legacy_json = serde_json::to_value(&query).unwrap();
+    let mut legacy_json = legacy_json.as_object().unwrap().clone();
+    legacy_json.remove("lifecycleFilter");
+    let legacy_request: DocumentDirectoryQuery =
+        serde_json::from_value(legacy_json.into()).unwrap();
+    assert_eq!(
+        core.document_directory(legacy_request)
+            .unwrap()
+            .matching_files,
+        109
+    );
+    query.lifecycle_filter = Some(format!("raw:{}", "界".repeat(340)));
+    assert_eq!(
+        core.document_directory(query.clone())
+            .unwrap()
+            .matching_files,
+        0
+    );
+    query.lifecycle_filter = Some(format!("raw:{}", "界".repeat(341)));
+    assert!(core.document_directory(query.clone()).is_err());
+    query.lifecycle_filter = Some("invented".into());
+    assert!(core.document_directory(query.clone()).is_err());
+    query.lifecycle_filter = Some("raw:".into());
+    assert!(core.document_directory(query).is_err());
+}
+
+#[test]
+fn current_view_keeps_only_verified_historical_references_and_their_ancestors() {
+    let (_tmp, core, mut query) = fixture(&[
+        (
+            "doc/old/design.md",
+            "# Old\n- 状态：retired\n\n<a id='OLD-1'></a>\n\n## Old clause\n",
+        ),
+        ("doc/hidden/design.md", "# Hidden\n- 状态：superseded\n"),
+        (
+            "doc/current/design.md",
+            "# Current\n- 状态：draft\n- 上游：[old](../old/design.md#OLD-1)、[same](../old/design.md#OLD-1)、[bad fragment](../hidden/design.md#absent)\n- 配对系统设计：[old](../old/design.md#OLD-1)\n",
+        ),
+        (
+            "doc/retired-source/design.md",
+            "# Retired source\n- 状态：retired\n- 上游：[hidden](../hidden/design.md)\n",
+        ),
+        ("doc/plain.md", "# Plain\n[ordinary](hidden/design.md)\n"),
+    ]);
+    query.lifecycle_filter = Some("current".into());
+    let root = core.document_directory(query.clone()).unwrap();
+    assert_eq!(root.matching_files, 2);
+    assert_eq!(root.hidden_history_files, 2);
+    query.parent_path = "doc".into();
+    let doc = core.document_directory(query.clone()).unwrap();
+    assert_eq!(
+        doc.entries
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>(),
+        ["current", "old"]
+    );
+    query.parent_path = "doc/old".into();
+    let old = core.document_directory(query.clone()).unwrap();
+    assert_eq!(old.entries[0].historical_reference_files, 1);
+    assert_eq!(
+        old.entries[0].historical_reference_paths,
+        ["doc/current/design.md"]
+    );
+    assert_eq!(
+        old.entries[0]
+            .file
+            .as_ref()
+            .unwrap()
+            .lifecycle
+            .as_ref()
+            .unwrap()
+            .category
+            .as_deref(),
+        Some("retired")
+    );
+    query.inventory.query = "Old".into();
+    let searched = core.document_directory(query.clone()).unwrap();
+    assert_eq!(searched.matching_files, 1);
+    assert_eq!(searched.entries[0].historical_reference_files, 1);
+    query.lifecycle_filter = Some("all".into());
+    let all = core.document_directory(query).unwrap();
+    assert_eq!(all.entries[0].historical_reference_files, 0);
+}
+
+#[test]
+fn history_reference_counts_deduplicate_sources_and_bound_path_samples() {
+    let mut files: Vec<_> = (0..25)
+        .map(|i| {
+            (
+                format!("doc/{i:02}.design.md"),
+                "# Source\n- 上游：[old](old/design.md)、[duplicate](old/design.md)\n".into(),
+            )
+        })
+        .collect();
+    files.push((
+        "doc/old/design.md".into(),
+        "# Old\n- 状态：retired\n".into(),
+    ));
+    files.push(("doc/table.design.md".into(), "# Allocation\n\n## 需求承接与分配表\n\n| 上游条款 | 本设计条款 |\n| --- | --- |\n| [old](old/design.md) | [old](old/design.md) |\n".into()));
+    let refs: Vec<_> = files
+        .iter()
+        .map(|(p, c): &(String, String)| (p.as_str(), c.as_str()))
+        .collect();
+    let (_tmp, core, mut query) = fixture(&refs);
+    query.lifecycle_filter = Some("current".into());
+    query.parent_path = "doc/old".into();
+    let page = core.document_directory(query).unwrap();
+    let entry = &page.entries[0];
+    assert_eq!(entry.historical_reference_files, 26);
+    assert_eq!(entry.historical_reference_paths.len(), 20);
+    assert_eq!(entry.historical_reference_paths[0], "doc/00.design.md");
+    assert_eq!(entry.historical_reference_paths[19], "doc/19.design.md");
+    assert_eq!(page.hidden_history_files, 0);
+    assert_eq!(page.matching_files, 27);
 }

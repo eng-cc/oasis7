@@ -545,3 +545,133 @@ fn task_context_read_refuses_delivery_head_drift() {
     drop(f.store);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn task_factory_selection_denial_is_signed_read_only_and_bound_to_exact_request() {
+    use oasis7_client_api::world_service::task_context::verify_private_reply;
+    let mut f = fixture(false);
+    let (path, value) = f.quote(false, false);
+    let mut proof: SignedReadRequest<TaskFactoryQuoteRequestV1> =
+        serde_json::from_value(value).unwrap();
+    proof.request.factory_id = "ungranted-model-choice".into();
+    proof = sign_read_request(path, proof.request, &f.delegate).unwrap();
+    let before = f
+        .driver
+        .execution_world
+        .current_cognition_base_binding()
+        .unwrap();
+    let results = f
+        .driver
+        .execution_world
+        .capability_revocation_state()
+        .world_service_results
+        .clone();
+    let (status, body) = http(
+        &f.dir,
+        &f.runtime,
+        &f.signer,
+        Some(&f.store),
+        path,
+        &proof,
+        "",
+    );
+    assert_eq!(status, 200);
+    let response: SignedServiceResponse<TaskFactoryQuoteResponseV1> =
+        serde_json::from_value(body).unwrap();
+    verify_private_reply(path, &proof, &response, &f.signer.public_key_hex).unwrap();
+    response.payload.validate_against(&proof).unwrap();
+    let TaskFactoryQuoteResponseV1::Denied(denial) = &response.payload else {
+        panic!("selection must be denied")
+    };
+    assert_eq!(denial.reason, FactoryQuoteDenialV1::FactoryNotAuthorized);
+    assert!(denial.no_action_submitted);
+    let mut changed = proof.clone();
+    changed.request.factory_id = "other-choice".into();
+    changed = sign_read_request(path, changed.request, &f.delegate).unwrap();
+    assert!(verify_private_reply(path, &changed, &response, &f.signer.public_key_hex).is_err());
+    let mut tampered = response.clone();
+    let TaskFactoryQuoteResponseV1::Denied(denial) = &mut tampered.payload else {
+        unreachable!()
+    };
+    denial.no_action_submitted = false;
+    assert!(tampered.payload.validate_against(&proof).is_err());
+    assert!(verify_private_reply(path, &proof, &tampered, &f.signer.public_key_hex).is_err());
+    let mut wrong_context = response.clone();
+    let TaskFactoryQuoteResponseV1::Denied(denial) = &mut wrong_context.payload else {
+        unreachable!()
+    };
+    denial.context.fence.agent_id = "other-agent".into();
+    assert!(wrong_context.payload.validate_against(&proof).is_err());
+    let foreign = sign_read_request("key", (), &hex::encode([24; 32]))
+        .unwrap()
+        .subject_public_key;
+    assert!(verify_private_reply(path, &proof, &response, &foreign).is_err());
+    assert_eq!(
+        before,
+        f.driver
+            .execution_world
+            .current_cognition_base_binding()
+            .unwrap()
+    );
+    assert!(
+        results
+            == f.driver
+                .execution_world
+                .capability_revocation_state()
+                .world_service_results
+    );
+    assert!(
+        f.driver
+            .execution_world
+            .state()
+            .pending_factory_builds
+            .is_empty()
+    );
+    let control = game_task::current_control(&f.driver.execution_world, "agent-a")
+        .unwrap()
+        .unwrap();
+    let stop = request(
+        &f.world,
+        WorldServicePayloadV1::GameExecutorControl(
+            sign_read_request(
+                GAME_EXECUTOR_CONTROL_DOMAIN,
+                GameExecutorControlV1 {
+                    api_rev: 1,
+                    client_operation_id: "denial-delivery-stop".into(),
+                    fence: GameTaskFenceV1::from_control(&control),
+                    operation: GameExecutorOperationV1::Stop,
+                },
+                &f.owner,
+            )
+            .unwrap(),
+        ),
+    );
+    let (status, _) = http_with_hook(
+        &f.dir,
+        &f.runtime,
+        &f.signer,
+        Some(&f.store),
+        path,
+        &proof,
+        "",
+        || {
+            commit(&mut f.driver, f.height, stop);
+        },
+    );
+    assert!(
+        matches!(status, 403 | 409),
+        "revoked fence cannot deliver a correctable denial"
+    );
+    let (status, _) = http(
+        &f.dir,
+        &f.runtime,
+        &f.signer,
+        Some(&f.store),
+        path,
+        &proof,
+        "",
+    );
+    assert!(matches!(status, 403 | 409));
+    drop(f.store);
+    std::fs::remove_dir_all(f.dir).unwrap();
+}

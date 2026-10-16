@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -80,16 +81,98 @@ class Selection(unittest.TestCase):
                 Path(path).unlink()
                 self.commit()
 
-    def test_command_center_unknown_sibling_and_control_stay_full(self):
+    def test_hosted_local_mock_production_guard_is_owned_before_introduction(self):
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
-        for path in ('tools/new-tool/src/lib.rs',
-                     'tools/oasis7-command-center/Cargo.lock',
+        path = 'scripts/hosted-local-mock-production-guard.py'
+        self.assertNotIn(path, self.git('ls-tree', '-r', '--name-only', self.base).splitlines())
+        self.write(path, '# trusted-scope selector fixture')
+
+        plan = self.plan()
+
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'workflow_governance'})
+        self.assertTrue(any(path in reason for reason in plan['reasons']))
+
+    def test_command_center_control_stays_full(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('tools/oasis7-command-center/Cargo.lock',
                      'tools/oasis7-command-center/core/build.rs'):
             with self.subTest(path=path):
                 self.write(path, 'unknown or shared control')
                 self.assertEqual(self.plan()['scope'], 'full')
                 Path(path).unlink()
                 self.commit()
+
+    def test_unknown_inputs_block_even_with_full_control_or_extra_groups(self):
+        self.write('tools/new-tool/src/lib.rs', 'unregistered tool')
+        self.write('unknown.file', 'unregistered input')
+        self.write('Cargo.lock', 'known full control')
+        head = self.commit()
+        for additions in ((), tuple(self.config['groups'])):
+            with self.subTest(additions=additions), self.assertRaises(ValueError) as error:
+                selector.select(self.config, self.base, head, additions=additions)
+            self.assertIn('tools/new-tool/src/lib.rs', str(error.exception))
+            self.assertIn('unknown.file', str(error.exception))
+            self.assertNotIn('Cargo.lock', str(error.exception))
+
+    def test_unknown_deleted_and_renamed_endpoints_block(self):
+        self.write('unknown-old.file', 'unique unknown file content')
+        self.base = self.commit()
+        self.git('mv', 'unknown-old.file', 'doc/moved.md')
+        with self.assertRaisesRegex(ValueError, 'unknown-old.file'):
+            self.plan()
+        self.base = self.git('rev-parse', 'HEAD')
+        self.git('mv', 'doc/moved.md', 'unknown-new.file')
+        with self.assertRaisesRegex(ValueError, 'unknown-new.file'):
+            self.plan()
+        self.base = self.git('rev-parse', 'HEAD')
+        Path('unknown-new.file').unlink()
+        with self.assertRaisesRegex(ValueError, 'unknown-new.file'):
+            self.plan()
+
+    def test_unknown_input_cli_fails_without_success_outputs(self):
+        self.write('unknown.file', 'unregistered input')
+        head = self.commit()
+        config = Path('config.json')
+        config.write_text(json.dumps(self.config))
+        process = subprocess.run([sys.executable, str(HERE / 'plan-rust-required-scope.py'),
+                                  '--config', str(config), '--base-ref', self.base,
+                                  '--head-ref', head, '--github-output', 'github-output',
+                                  '--output', 'plan.json'], text=True, capture_output=True)
+        self.assertEqual(process.returncode, 2, process.stderr)
+        self.assertIn('unknown.file', process.stderr)
+        self.assertIn('trusted baseline', process.stderr)
+        self.assertEqual(process.stdout, '')
+        self.assertFalse(Path('github-output').exists())
+        self.assertFalse(Path('plan.json').exists())
+
+    def test_workflow_uses_trusted_rules_and_emits_no_success_on_unknown(self):
+        for name in ('plan-rust-required-scope.py', 'ci-required-result.py'):
+            self.write('scripts/' + name, (HERE / name).read_text())
+        self.write('scripts/ci-required-scope.json', json.dumps(self.config))
+        self.base = self.commit()
+        self.write('unknown.file', 'unregistered input')
+        candidate = dict(self.config, rules=[*self.config['rules'],
+                         {'match': ['unknown.file'], 'groups': [], 'reason': 'self exemption'}])
+        self.write('scripts/ci-required-scope.json', json.dumps(candidate))
+        head = self.commit()
+        workflow = (HERE.parent / '.github/workflows/rust.yml').read_text()
+        step = workflow.split('        name: Select using trusted baseline Git data', 1)[1]
+        script = textwrap.dedent(step.split('        run: |\n', 1)[1]
+                                .split('      - id: formal-select', 1)[0])
+        with tempfile.TemporaryDirectory() as temporary:
+            runner = Path(temporary)
+            (runner / 'bin').mkdir()
+            (runner / 'bin/python3').symlink_to(sys.executable)
+            env = dict(os.environ, BASE_SHA=self.base, SOURCE_SHA=head, EVENT_NAME='pull_request',
+                       RUNNER_TEMP=str(runner), GITHUB_OUTPUT=str(runner / 'outputs'),
+                       GITHUB_STEP_SUMMARY=str(runner / 'summary'),
+                       PATH=str(runner / 'bin') + os.pathsep + os.environ['PATH'])
+            process = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True)
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn('unknown.file', process.stderr)
+            self.assertFalse((runner / 'outputs').exists())
+            self.assertFalse((runner / 'selection.json').exists())
 
     def test_docs_baseline_only(self):
         self.write('doc/readme.md', 'changed')
@@ -136,8 +219,8 @@ class Selection(unittest.TestCase):
         self.write('doc/readme.md', 'changed consumer input')
         self.assertIn('consumer', self.plan()['groups'])
 
-    def test_build_lock_control_unknown_and_graph_failure_full(self):
-        for path in ['Cargo.lock', 'crates/core/build.rs', '.github/workflows/test.yml', 'unknown.file']:
+    def test_build_lock_control_and_graph_failure_full(self):
+        for path in ['Cargo.lock', 'crates/core/build.rs', '.github/workflows/test.yml']:
             with self.subTest(path=path):
                 self.write(path, 'change')
                 self.assertEqual(self.plan()['scope'], 'full')
@@ -273,7 +356,8 @@ class Selection(unittest.TestCase):
                 self.assertEqual(plan['scope'], 'targeted')
                 self.base = head
         self.write('scripts/local-signer/new-production.py', 'fixture')
-        self.assertEqual(selector.select(config, self.base, self.commit())['scope'], 'full')
+        with self.assertRaisesRegex(ValueError, 'scripts/local-signer/new-production.py'):
+            selector.select(config, self.base, self.commit())
 
     def test_local_signer_deletion_and_rename(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
