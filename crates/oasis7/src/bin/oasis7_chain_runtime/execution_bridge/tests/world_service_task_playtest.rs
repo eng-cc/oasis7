@@ -140,6 +140,146 @@ fn settle_cleanup_original(
     }
     Err("cleanup original deadline exceeded")
 }
+// Only an exact, still-live terminal stale decision can omit the redundant
+// public abort. Other rejected operations retain their existing cleanup lane.
+fn verified_terminal_stale_action(
+    client: &RemoteWorldServiceClient,
+    world: &RuntimeWorld,
+    identity: &oasis7_agent_api::game::TaskContextIdentityV1,
+    original: &SubmitIntentRequest<WorldServicePayloadV1>,
+) -> bool {
+    let canonical = world
+        .capability_revocation_state()
+        .world_service_results
+        .values()
+        .filter_map(|value| serde_json::from_value::<CanonicalIntentResultV1>(value.clone()).ok())
+        .filter(|result| result.request.correlation == original.correlation)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        canonical.len(),
+        1,
+        "original rejection must have one canonical result"
+    );
+    assert!(
+        serde_json::to_value(&canonical[0].request).unwrap()
+            == serde_json::to_value(original).unwrap(),
+        "canonical rejection must retain the entire signed original"
+    );
+    let stale = format!(
+        "{:?}",
+        oasis7::runtime::WorldError::DistributedValidationFailed {
+            reason: "stale_base".into()
+        }
+    );
+    if canonical[0].rejected.as_deref() != Some(stale.as_str()) {
+        return false;
+    }
+    let WorldServicePayloadV1::Cognition(signed) = &original.signed_payload else {
+        panic!("terminal stale proof requires cognition");
+    };
+    assert!(
+        original.correlation
+            == correlation::derive_correlation(
+                original.correlation.key.world.clone(),
+                &original.signed_payload
+            )
+            .unwrap()
+    );
+    assert!(signed.request.task_fence.as_ref() == Some(&identity.fence));
+    assert!(
+        world.state().time <= identity.valid_until_tick.0,
+        "terminal proof must not rely on context expiry"
+    );
+    let control =
+        oasis7::world_service::game_task::current_control(world, &identity.fence.agent_id)
+            .unwrap()
+            .unwrap();
+    assert!(
+        GameTaskFenceV1::from_control(&control) == identity.fence,
+        "terminal proof must not rely on a changed fence"
+    );
+    let replay = client
+        .lookup(
+            LookupIntentRequest {
+                contract_version: 1,
+                key: original.correlation.key.clone(),
+            },
+            original.signed_payload.clone(),
+        )
+        .unwrap_or_else(|_| panic!("exact rejected original lookup must verify"));
+    assert!(
+        matches!(
+            replay.outcome,
+            IntentOutcome::Rejected {
+                reason: oasis7_client_api::world_service::WorldServiceErrorKind::Conflict
+            }
+        ),
+        "exact original must retain its terminal conflict result"
+    );
+    let view = client
+        .read_view(ReadWorldViewRequest {
+            contract_version: 1,
+            world: original.correlation.key.world.clone(),
+            scope_id: format!("agent:{}", identity.fence.agent_id),
+            observation_nonce: None,
+            formal_anchor: None,
+            min_commit: None,
+            fixed_commit: None,
+            deadline_unix_ms: None,
+        })
+        .unwrap_or_else(|_| panic!("terminal stale feedback requires a verified scoped read"));
+    assert!(
+        view.projection()
+            .game_task_control
+            .as_ref()
+            .is_some_and(|control| GameTaskFenceV1::from_control(control) == identity.fence),
+        "verified feedback must retain the current original fence"
+    );
+    assert!(
+        view.projection().state.time <= identity.valid_until_tick.0,
+        "verified feedback must arrive within the original context TTL"
+    );
+    let history = view
+        .projection()
+        .feedback_history
+        .as_ref()
+        .expect("scoped feedback history required");
+    let r = &signed.request.request;
+    let matching = history
+        .records
+        .iter()
+        .filter(|record| {
+            let f = &record.feedback;
+            f.agent_subject == r.agent_id
+                && f.agent_session_id == r.agent_session_id
+                && f.agent_turn_id == r.agent_turn_id
+                && f.decision_request_id == r.decision_request_id
+                && f.request_digest.to_string() == r.request_digest
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(matching.len(), 1, "exact terminal stale feedback required");
+    let f = &matching[0].feedback;
+    assert!(
+        f.status == "rejected"
+            && f.reject_reason.as_deref() == Some("stale_base")
+            && f.provenance == "runtime_authoritative"
+            && f.candidate_action_id.is_none()
+            && f.runtime_receipt_id.is_none()
+            && matching[0].receipt_lineage.is_none(),
+        "terminal stale feedback disposition must verify"
+    );
+    assert!(
+        oasis7::world_service::game_task::validate_task_context_capture(
+            world,
+            identity,
+            &signed.subject_public_key
+        )
+        .is_err(),
+        "still-live old context must already be terminal before fresh preparation"
+    );
+    true
+}
+
 #[test]
 #[ignore = "explicit 360-second prepared-world service; independent player uses shipped task Skill"]
 fn private_task_prepared_world_live_service() {
