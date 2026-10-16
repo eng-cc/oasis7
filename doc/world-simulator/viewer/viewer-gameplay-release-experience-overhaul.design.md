@@ -146,7 +146,7 @@ Facility、Territory、Organization、Depot、Module 的 generalized Inspector �
 它不把当前 Player shell 扩成常驻三栏，也不声称已实现完整的 Agent Console V2。
 
 - **Composition seam**：设计绑定现有
-  `crates/oasis7_viewer/software_safe_src/main.jsx` `InteractionPanel`。该组件继续负责
+  `crates/oasis7_viewer/software_safe_src/viewer_app.jsx` `InteractionPanel`。该组件继续负责
   Command/chat 的 route 和 control boundary；Agent Context Lite 作为其中的 selected-Agent
   display region，而不是新的 dock 或独立 runtime surface。
 - **Display-model seam**：canonical extraction 固定为
