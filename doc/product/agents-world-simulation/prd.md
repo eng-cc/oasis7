@@ -118,6 +118,7 @@ Trace ID: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448
 - 功能点：SC-1，本卡成功标准原文与 §5.1 对应行共同限定范围。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[场景加载约束](../../world-simulator/scenario/scenario-files.design.md#scenario-loading-design)及[生成来源与固定输入重建](../../world-simulator/scenario/scenario-files.design.md#generated-world-provenance-design)承接初始化与来源重建切片；五列承接及六列验证反链本SC。
+- 初始化切片补充：[分块生成既有义务与验证](../../world-simulator/scenario/chunked-fragment-generation.design.md#chunk-generation-existing-obligations)接收同一有效 seed/config/chunk trigger order 的初始化确定性；只补反链，不改变本卡组合状态或全部权威事件及交互重现的剩余范围。该专题的[回放规范冲突](../../world-simulator/scenario/chunked-fragment-generation.design.md#chunk-replay-conflict-register)仍待裁决，不由本反链消解。
 - 实现状态：未核实
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
