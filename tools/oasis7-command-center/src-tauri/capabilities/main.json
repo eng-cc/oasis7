@@ -11,6 +11,7 @@
     "allow-search-rules",
     "allow-query-document-inventory",
     "allow-query-document-directory",
+    "allow-query-document-semantic-tree",
     "allow-save-decision-draft",
     "allow-save-preference",
     "allow-read-source",

@@ -123,6 +123,7 @@ fn main() {
             commands::search_rules,
             commands::query_document_inventory,
             commands::query_document_directory,
+            commands::query_document_semantic_tree,
             commands::save_decision_draft,
             commands::save_preference,
             commands::read_source,

@@ -6,7 +6,7 @@ import type { DocumentDirectoryPage, IndexedDocument } from './generated/core';
 import type { Snapshot } from './types';
 const api = vi.hoisted(() => ({documentDirectory:vi.fn()}));
 vi.mock('./bridge', () => ({bridge:api,errorMessage:String,observedTime:()=>'核验时间'}));
-const file: IndexedDocument = {fileKey:'file',path:'doc/a/design.md',title:'A设计',kind:'design',state:'read',reason:null,revision:'rev',bytes:10,dirty:false,lifecycle:null,identity:null,pairings:null,upstream:null,allocations:null};
+const file: IndexedDocument = {fileKey:'file',path:'doc/a/design.md',title:'A设计',kind:'design',state:'read',reason:null,revision:'rev',bytes:10,dirty:false,lifecycle:null,identity:null,pairings:null,upstream:null,allocations:null,navigation:null};
 const snapshot = (id='project',generation='1'): Snapshot => ({project:{id,path:'/repo',head:'head',branch:'main',gitCommonDir:'/repo/.git',environment:'local'},sources:[{kind:'local',generation,state:'partial',lastAttempt:'1',lastSuccess:'1',sourceRevision:'head',coverage:'',error:null}],sections:[],decisions:[],preferences:{projectPath:'/repo',query:'',view:'rules'},associations:[],readingPositions:[],git:{status:'',worktrees:''}});
 const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:null}],nextCursor:null,...extra});
 beforeEach(() => api.documentDirectory.mockReset()); afterEach(cleanup);
@@ -16,7 +16,7 @@ it('navigates candidate ancestors with bound snapshots and selects the original 
   fireEvent.click(await screen.findByRole('button',{name:'进入目录：doc（匹配 2 个文件）'}));
   await screen.findByRole('button',{name:'A设计 · doc/a/design.md'});
   expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({parentPath:'doc',inventory:expect.objectContaining({snapshotId:'snapshot',cursor:null})}));
-  fireEvent.click(screen.getByRole('button',{name:'A设计 · doc/a/design.md'})); expect(select).toHaveBeenLastCalledWith(file);
+  fireEvent.click(screen.getByRole('button',{name:'A设计 · doc/a/design.md'})); expect(select).toHaveBeenLastCalledWith(file,expect.any(HTMLElement));
   fireEvent.click(screen.getByRole('button',{name:'目录根'}));
   await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({parentPath:'',inventory:expect.objectContaining({snapshotId:null})})));
 });
@@ -82,7 +82,7 @@ it('shows historical reference evidence and keeps the original historical file s
   expect(screen.getByText(/来源路径样本.*doc\/source.design.md/)).toBeInTheDocument();
   expect(screen.getByText('生命周期：已退役')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'A设计 · doc/a/design.md'}));
-  expect(select).toHaveBeenLastCalledWith(historical);
+  expect(select).toHaveBeenLastCalledWith(historical,expect.any(HTMLElement));
 });
 
 it('applies type filters explicitly and preserves applied type through paging and history reveal', async () => {
