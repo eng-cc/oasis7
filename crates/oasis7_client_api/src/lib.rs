@@ -6,6 +6,7 @@
 
 pub mod bootstrap;
 pub mod config;
+pub mod formal_projection;
 pub mod provider;
 pub mod signing;
 pub mod world_service;

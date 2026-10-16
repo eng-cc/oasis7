@@ -36,7 +36,7 @@ impl FormalReadPublication {
             .strip_prefix("blake3:")
             .ok_or("formal publication governing encoding")?
             .to_owned();
-        let tree = ProjectionCommitmentsV1::for_world(&world)?;
+        let tree = crate::world_service::formal_projection::commitments_for_world(&world)?;
         if governing != record.governing_manifest_digest || tree.root()? != record.projection_root {
             return Err(
                 "formal publication governing/projection root differs from canonical cut".into(),

@@ -158,7 +158,7 @@ run_oasis7_test_tier_with_viewer() {
   fi
   local viewer_binary
   viewer_binary="$(build_oasis7_viewer_binary "$features")"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 "$@" --features "$features"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime "$@" --features "$features"
 }
 
 run_oasis7_required_tier_tests() {
@@ -174,7 +174,7 @@ run_scenario_regression_tests() {
 }
 
 run_oasis7_required_tier_clippy() {
-  run_cargo_clippy -p oasis7 --tests --features test_tier_required
+  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime --tests --features test_tier_required
 }
 
 run_oasis7_full_tier_tests() {
@@ -184,7 +184,7 @@ run_oasis7_full_tier_tests() {
 run_oasis7_production_mock_guard() {
   local manifest
   manifest="$(mktemp)"
-  if run_cargo build -p oasis7 --bin oasis7_chain_runtime --bin oasis7_game_launcher --features wasmtime --message-format=json > "$manifest"; then
+  if run_cargo build -p oasis7_chain_runtime -p oasis7 --bin oasis7_chain_runtime --bin oasis7_game_launcher --features wasmtime --message-format=json > "$manifest"; then
     :
   else
     local status=$?
@@ -679,7 +679,7 @@ run_full_support_tier_tests() {
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
-  run_cargo test -p oasis7 --features wasmtime --lib --bins
+  run_cargo test -p oasis7 -p oasis7_chain_runtime --features wasmtime --lib --bins
 }
 
 run_full_required_superset() {

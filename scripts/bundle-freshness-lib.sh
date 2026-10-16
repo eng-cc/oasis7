@@ -25,6 +25,8 @@ scope = [
     "Cargo.toml",
     "Cargo.lock",
     "crates/oasis7/Cargo.toml",
+    "crates/oasis7_chain_runtime/Cargo.toml",
+    "crates/oasis7_chain_runtime/src",
     "crates/oasis7/src/viewer",
     "crates/oasis7/src/bin/oasis7_game_launcher.rs",
     "crates/oasis7/src/bin/oasis7_game_launcher",

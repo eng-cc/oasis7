@@ -287,9 +287,10 @@ impl InitialWorldClosure {
             roots,
             objects,
             event_root: blake3_hex(&to_cbor(&world.journal().events)?),
-            projection_root:
-                oasis7::world_service::formal_projection::ProjectionCommitmentsV1::for_world(world)?
-                    .root()?,
+            projection_root: oasis7::world_service::formal_projection::commitments_for_world(
+                world,
+            )?
+            .root()?,
             result_root,
             business_contract,
             retained_history_initialized: snapshot.state.retained_history_root.is_some(),

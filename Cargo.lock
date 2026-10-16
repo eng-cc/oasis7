@@ -6393,6 +6393,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_chain_runtime"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ctrlc",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "oasis7",
+ "oasis7_agent_api",
+ "oasis7_agent_harness",
+ "oasis7_client_api",
+ "oasis7_distfs",
+ "oasis7_game_client",
+ "oasis7_node",
+ "oasis7_proto",
+ "oasis7_wasm_abi",
+ "oasis7_wasm_executor",
+ "oasis7_wasm_router",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_cbor",
+ "serde_ignored",
+ "serde_json",
+ "sha2 0.11.0",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "oasis7_client_api"
 version = "0.1.0"
 dependencies = [

@@ -15,6 +15,7 @@ mkdir -p \
   "$tmp_repo/bundle/web" \
   "$tmp_repo/bundle/web-launcher" \
   "$tmp_repo/crates/oasis7_proto/src" \
+  "$tmp_repo/crates/oasis7_chain_runtime/src" \
   "$tmp_repo/crates/oasis7_viewer" \
   "$tmp_repo/scripts"
 
@@ -31,7 +32,11 @@ printf 'console.log("bundle viewer");\n' > "$tmp_repo/bundle/web/viewer.js"
 printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp_repo/bundle/web-launcher/index.html"
 printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 
+printf '[package]\nname = "oasis7_chain_runtime"\nversion = "0.1.0"\n' > "$tmp_repo/crates/oasis7_chain_runtime/Cargo.toml"
+printf 'fn main() {}\n' > "$tmp_repo/crates/oasis7_chain_runtime/src/main.rs"
+
 required_scope_entries=(
+  "crates/oasis7_chain_runtime/Cargo.toml"
   "crates/oasis7_viewer/viewer.html"
   "crates/oasis7_viewer/viewer_first_agent_claim_evidence.html"
   "scripts/copy-viewer-web-dist.sh"
@@ -56,7 +61,7 @@ for retired_root_alias in \
   fi
 done
 
-for entry in "${required_scope_entries[@]}"; do
+for entry in "${required_scope_entries[@]}" "crates/oasis7_chain_runtime/src/main.rs"; do
   rm -f "$(bundle_manifest_path "$tmp_repo/bundle")"
   bundle_write_manifest "$tmp_repo" "$tmp_repo/bundle"
 

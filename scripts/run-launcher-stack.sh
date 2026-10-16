@@ -1155,7 +1155,7 @@ else
     oasis7_viewer_live
   )
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
-    SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
+    SOURCE_BUILD_ARGS+=(-p oasis7_chain_runtime --bin oasis7_chain_runtime)
   fi
   if [[ "$LOCAL_TEST_PROVIDER_ADMISSION" == "hosted_local_mock_test_tier" ]]; then
     SOURCE_BUILD_ARGS+=(--features test_tier_required)

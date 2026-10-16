@@ -8,7 +8,6 @@ use oasis7::{
     runtime::{ChainResourceDerivationContext, World, blake3_hex},
     world_service::{
         authority,
-        formal_projection::ProjectionCommitmentsV1,
         formal_read::{FormalReadHistoryV1, FormalReadStepV1, MAX_FORMAL_HISTORY_STEPS},
         formal_read_service::FormalReadPublication,
         wire::SignedServiceResponse,
@@ -370,7 +369,7 @@ fn full_sync_fixture() -> (
     let mut roots = role_roots;
     roots.insert(ArtifactRole::Input, payload_digest.clone());
     role_bytes.insert(ArtifactRole::Input, input_bytes);
-    let projection_root = ProjectionCommitmentsV1::for_world(&world)
+    let projection_root = oasis7::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
