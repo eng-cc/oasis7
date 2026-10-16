@@ -189,6 +189,14 @@ curl -sS -X POST http://127.0.0.1:5852/v1/bridge/bind \
   - `user_snapshot/project_snapshot/topup_log_snapshot`
 
 ### 6.6 provider / gameplay 消费验证
+
+先核实 [Remote Provider Bridge 认证与授权前提](../../world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md#认证与授权前提)：
+`newapi_user_ref` / 公钥 fingerprint 是路由 selector，不是调用者持有私钥或拥有
+对应额度的证明。自动映射必须置于独立主体认证与 selector 授权绑定之后，或严格
+隔离于获准操作这些用户额度的可信调用方。TLS、限流和全局 bridge auth token
+不补足自动映射分支的该项前提；只验证映射/usage 成功不等于验证调用者授权。
+此处只维护操作前提，不确认现网配置、实际风险发生或安全问题已经关闭。
+
 - 使用同一个 `newapi_user_ref` 作为 provider bearer selector：
   - `newapi_user_ref:pk_<public-key-fingerprint>`
 - remote provider bridge 必须从受控 `bridge-state.json` 自动解析到对应 project `token_key`。
