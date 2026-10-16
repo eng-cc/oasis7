@@ -199,19 +199,8 @@ impl IdentityService {
             return IdentityReply::error(reject("authentication_failed"));
         }
         let writing = method != "GET";
-        if writing
-            && (header(headers, "origin")
-                .is_none_or(|v| !self.config.rp.allowed_origins.iter().any(|o| o == v))
-                || header(headers, "sec-fetch-site").is_some_and(|v| v != "same-origin"))
-        {
-            return IdentityReply::error(reject("origin_rejected"));
-        }
-        if writing
-            && (header(headers, "x-oasis7-csrf") != Some(csrf.as_str())
-                || header(headers, "content-type")
-                    .is_none_or(|v| v.split(';').next() != Some("application/json")))
-        {
-            return IdentityReply::error(reject("csrf_failed"));
+        if writing && let Err(error) = self.validate_json_write(headers, &csrf) {
+            return IdentityReply::error(error);
         }
         if let Some(result) =
             self.world_route(method, relative, sid.as_deref(), &payload, issuer, now)
@@ -292,6 +281,21 @@ impl IdentityService {
             reply.cookies.push(set_cookie(SID, "", 0));
         }
         reply
+    }
+    pub(super) fn validate_json_write(&self, headers: &str, csrf: &str) -> Result<(), StoreError> {
+        if header(headers, "origin")
+            .is_none_or(|v| !self.config.rp.allowed_origins.iter().any(|o| o == v))
+            || header(headers, "sec-fetch-site").is_some_and(|v| v != "same-origin")
+        {
+            return Err(reject("origin_rejected"));
+        }
+        if header(headers, "x-oasis7-csrf") != Some(csrf)
+            || header(headers, "content-type")
+                .is_none_or(|v| v.split(';').next() != Some("application/json"))
+        {
+            return Err(reject("csrf_failed"));
+        }
+        Ok(())
     }
     pub fn session(
         &mut self,

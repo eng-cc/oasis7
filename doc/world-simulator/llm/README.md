@@ -54,6 +54,13 @@ All four designs consume the existing product requirements and preserve Runtime
 world authority. The new Game API is not the old Provider callback under an alias;
 its rollout may retire unnecessary Bridge code after checking real consumers.
 
+## Session-scoped BYOK consumption
+
+[Deployment and validation runbook](byok-model-consumption.runbook.md) documents
+the experimental model session layer, default-off authenticated receiver and
+remaining native executor integration. Fixture checks are separate from real
+provider and gameplay acceptance.
+
 ## First-party Harness as a game client
 
 The [product boundary](../../product/agents-world-simulation/provider-agent-experience-continuity.prd.md#first-party-agent-client)
