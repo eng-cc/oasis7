@@ -41,7 +41,7 @@
 - 完整专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/core/*.prd.md` 与同名 `*.design.md` 的活跃专题；已迁入产品层的主题从 `doc/product/README.md` 进入。
+- 纳入规则：纳入 core 的活跃专题 PRD 与实际承接其义务的专业设计（包括共享设计）；不以同名或一对一配对作为收录条件；已迁入产品层的主题从 `doc/product/README.md` 进入。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 cross-module 入口，可在“活跃补充文档”区定向列出，但不并入 review / template / checklist 清单。
 - 排除规则：不纳入 Git history、`doc/core/templates/**`、`doc/core/checklists/**` 与 `doc/devlog/**` 的非三件套材料。
 - 按需进入：ROUND 审查、go/no-go 留痕、采证板、模板与 checklist 继续保留可检索性；除非重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
@@ -60,7 +60,7 @@ core 根目录当前无独立活跃专题三件套。跨模块治理规则进入
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md` 与同名 `*.design.md`；可变任务状态和执行历史只在 PR、实际 CI 与评审记录（Issue 按需）。
+- 文档关系按[专业设计关系规范](../engineering/doc-governance/system-design-writing-standard.design.md#product-system-design-relations)链接真实承接的要求与设计条款，允许多对多；产品体验层配对规则仍只约束其适用范围。可变任务状态和执行历史只在 PR、实际 CI 与评审记录（Issue 按需）。
 - 玩家访问模式与统一持久大世界术语已收口到产品层对应模块 PRD；已完成的一次性 docs hub 同步专题和 2026-03 release-candidate 根目录三件套不再作为活跃专题入口。
 - 2026-03 core 根目录 release-candidate 三件套与一次性 producer/QA/LiveOps handoff 文件已全量退役删除；当前追溯以 Git history、PR、实际 CI 与评审记录（Issue 按需） 与 pre-PR local role review evidence 为准，其中 TASK-CORE-005 ROUND 收口从 Git history 进入。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。

@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 site 模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/site/prd.md` 的任务映射。
+- 覆盖稳定站点要求及验证方法；本次要求与执行证据的关联由对应 PR/已有 Task 承接。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/site/prd.md`
-- 项目管理入口: `doc/site/prd.md`
+- 项目管理入口: 对应 PR、实际 CI 与评审记录（Issue 按需）；分工见[开发流程规范](../engineering/workflow/source-of-truth.md#information-record-placement)
 - 文件级索引: `doc/site/prd.index.md`
 - 追踪主键: `PRD-SITE-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -36,7 +36,7 @@ M1–M3 仅是 2026-03 的历史建档/同步记录，未核到唯一原执行 T
   - SC-1: 首页关键信息架构与模块设计口径保持一致。
   - SC-2: 发布下载链接在版本发布后可用率达到 100%。
   - SC-3: 关键页面的可访问性与性能指标持续满足目标阈值。
-  - SC-4: 站点改动任务全部映射到 PRD-SITE-ID。
+  - SC-4: 站点改动关联实际适用要求与验证证据；已有 PRD-SITE-ID 用于需求追踪，不是普通任务准入身份，不为简单编辑虚构要求。
   - SC-5: 首页与文档入口页 100% 统一标注 `limited playable technical preview`，并明确它不是 closed beta、public launch、season live、普通玩家正式版本或公开网页加入流程。
   - SC-6: 首页不得出现与真实状态冲突的“已可玩/赛季进行中”表述（违规数 0）。
   - SC-7: `doc/site/github-pages/**` 活跃专题中的当前校验命令、viewer crate 路径与 wasm 包名必须统一使用 `oasis7_viewer` / `crates/oasis7*` 口径；旧品牌 viewer 包名与源码路径仅允许保留在历史证据或外部原文引用中。
@@ -98,7 +98,7 @@ Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；既有产品结果由 
 | 首页游戏优先叙事 | 游戏定位、玩家角色、局势后果链、真实证据、预览边界、下载/深读路径 | 访客按单一阅读路径理解游戏，再按意图进入证据、下载或文档 | `dense -> compressed -> evidenced -> gated` | 首屏与后果链优先；builder、架构和信任链细节渐进披露；最多五个首要导航入口 | 模块维护者可改，视觉交互与对外口径角色复核 |
 - Acceptance Criteria:
   - AC-1: site PRD 定义页面层级、内容同步和发布链路。
-  - AC-2: site project 文档任务映射 PRD-SITE-ID。
+  - AC-2: 对应 PR/已有 Task 记录本次范围、适用要求、验证版本与结果；Issue/Project 按需，长期 PRD 不承载可变任务状态。
   - AC-3: 与 `site/doc` 与 GitHub Pages 相关设计文档口径一致。
   - AC-4: 发布前完成链接有效性与基础质量检查。
   - AC-5: 首页与文档入口页（`site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html`）对“是否可玩”状态的表达必须一致且与真实状态相符。
@@ -210,6 +210,8 @@ Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；既有产品结果由 
   - 风险-3: 对外文案过度承诺导致信任流失与社区负反馈。
 
 ## 6. Validation & Decision Record
+以下 TASK-SITE 标识与旧切片名称保留历史来源关系，不作为新任务身份、现行排期或完成证明；未核到准确原 PR/Task 接收方前不迁移或改写原映射。新变更按实际适用要求关联当前 PR/已有 Task。
+
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
