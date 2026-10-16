@@ -173,9 +173,7 @@ pub(super) fn validate_call_ids(
         }
         match turn {
             ModelProviderTurn::ToolCall { name, arguments }
-                if name == &call.name && arguments == &call.arguments =>
-            {
-            }
+                if name == &call.name && arguments == &call.arguments => {}
             _ => return Err("supplier call does not match model turn".into()),
         }
     }

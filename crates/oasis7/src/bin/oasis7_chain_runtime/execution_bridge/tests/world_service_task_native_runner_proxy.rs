@@ -1,6 +1,6 @@
 //! Test-only delivery race. Forward exact signed bytes; never replace a request.
 use super::*;
-use std::net::{Shutdown, TcpStream};
+use std::net::TcpStream;
 
 pub(super) struct OriginalDeliveryRace {
     endpoint: String,
@@ -94,7 +94,6 @@ impl OriginalDeliveryRace {
                     .set_read_timeout(Some(Duration::from_secs(15)))
                     .unwrap();
                 outgoing.write_all(&bytes).unwrap();
-                outgoing.shutdown(Shutdown::Write).unwrap();
                 let mut response = Vec::new();
                 outgoing
                     .take(4 * 1024 * 1024 + 1)
