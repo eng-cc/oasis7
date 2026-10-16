@@ -14,7 +14,7 @@ rtk git rev-parse HEAD > "$artifact_dir/head.txt"
 rtk proxy git diff --binary > "$artifact_dir/candidate.patch"
 rtk proxy python3 - "$artifact_dir" <<'PY_SOURCE'
 import hashlib,json,pathlib,sys
-paths=[pathlib.Path('Cargo.lock'),pathlib.Path('Cargo.toml'),pathlib.Path('crates/oasis7/Cargo.toml'),pathlib.Path('crates/oasis7/scripts/world-service-conformance.sh'),*sorted(pathlib.Path('crates/oasis7/src').rglob('*.rs'))]
+paths=[pathlib.Path('Cargo.lock'),pathlib.Path('Cargo.toml'),pathlib.Path('crates/oasis7/Cargo.toml'),pathlib.Path('crates/oasis7_chain_runtime/Cargo.toml'),*sorted(pathlib.Path('crates/oasis7_chain_runtime/src').rglob('*.rs')),pathlib.Path('crates/oasis7/scripts/world-service-conformance.sh'),*sorted(pathlib.Path('crates/oasis7/src').rglob('*.rs'))]
 snapshot={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 (pathlib.Path(sys.argv[1])/'source-before.json').write_text(json.dumps(snapshot,indent=2)+'\n')
 PY_SOURCE
@@ -29,14 +29,14 @@ PY_BINARY
 )"
 export PRE2_VIEWER_BINARY="$viewer_binary"
 set +e
-rtk proxy ./scripts/cargo-dev.sh test --locked -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
+rtk proxy ./scripts/cargo-dev.sh test --locked -p oasis7_chain_runtime --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
 result=$?
 set -e
 rtk proxy python3 - "$artifact_dir" "$result" <<'PY_REPORT'
 import hashlib,json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]); result=int(sys.argv[2]); log=(root/'conformance.log').read_text()
 source_before=json.loads((root/'source-before.json').read_text())
-source_after={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in [pathlib.Path('Cargo.lock'),pathlib.Path('Cargo.toml'),pathlib.Path('crates/oasis7/Cargo.toml'),pathlib.Path('crates/oasis7/scripts/world-service-conformance.sh'),*sorted(pathlib.Path('crates/oasis7/src').rglob('*.rs'))]}
+source_after={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in [pathlib.Path('Cargo.lock'),pathlib.Path('Cargo.toml'),pathlib.Path('crates/oasis7/Cargo.toml'),pathlib.Path('crates/oasis7_chain_runtime/Cargo.toml'),*sorted(pathlib.Path('crates/oasis7_chain_runtime/src').rglob('*.rs')),pathlib.Path('crates/oasis7/scripts/world-service-conformance.sh'),*sorted(pathlib.Path('crates/oasis7/src').rglob('*.rs'))]}
 source_stable=source_before==source_after
 expected=['real_tcp_strict_guarantee_fields_defaults_and_opaque_gameplay_bytes','real_tcp_cross_subject_lookup_and_protected_cursor_are_denied','real_tcp_same_world_name_wrong_genesis_is_not_same_identity','real_tcp_disposable_world_cache_eviction_preserves_exact_result_and_view','real_tcp_fixed_projection_remains_one_generation_during_publication','real_tcp_production_listener_pressure_deadline_and_recovery','real_tcp_application_resource_drift_wake_rejected','real_tcp_restart_rejects_tampered_setup_boundary','real_tcp_restart_rejects_missing_setup_boundary','real_tcp_application_genuine_wait_wake_no_node_directory','real_tcp_five_operations_delegation_and_minimum_commit','real_tcp_rejects_forged_delegation_and_cursor','real_tcp_lost_response_signed_gameplay_and_driver_restart','real_tcp_application_artifact_with_os_denied_node_directory','real_tcp_controlled_agent_cognition_receipt_and_read','real_tcp_conflicting_key_and_revoked_delegate_leave_canonical_result_unchanged','real_tcp_tampered_service_response_is_not_trusted','real_tcp_live_writer_lock_excludes_second_writer','real_tcp_full_node_server_process_restart_recovers_exact_receipt','real_tcp_service_bootstrap_rejects_tampered_record_root','real_tcp_service_bootstrap_rejects_missing_cas_material']
 observed=all(re.search(r'test [^\n]*::'+re.escape(name)+r' \.\.\.(?!\s*ignored)',log) for name in expected)

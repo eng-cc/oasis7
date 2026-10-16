@@ -124,8 +124,7 @@
     ],
     "oasis7": [
       "oasis7_required",
-      "launcher_web",
-      "formal_process"
+      "launcher_web"
     ],
     "oasis7_consensus": [
       "consensus",
@@ -205,6 +204,10 @@
     "oasis7_secure_envelope": [
       "workspace_support",
       "command_center"
+    ],
+    "oasis7_chain_runtime": [
+      "oasis7_required",
+      "formal_process"
     ]
   },
   "rules": [

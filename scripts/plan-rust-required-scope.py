@@ -55,6 +55,16 @@ def changed_paths(base, head):
     return list(dict.fromkeys(result))
 
 
+def independent_target_input(path, directory, manifest):
+    """These Cargo target roots do not form part of the package library."""
+    relative = posixpath.relpath(path, directory or '.')
+    roots = ('src/bin/', 'tests/', 'examples/', 'benches/')
+    if not relative.startswith(roots):
+        return False
+    library = manifest.get('lib', {}).get('path', 'src/lib.rs')
+    return not library.startswith(roots)
+
+
 def cargo_graph(ref):
     """Resolve workspace path edges including dev/build/target and renamed dependencies.
 
@@ -129,22 +139,68 @@ def cargo_graph(ref):
                     if dependency.get('package', target) != target:
                         raise ValueError('path dependency identity mismatch')
                     reverse[target].add(name)
-    # Embedded documents/schema are compilation inputs, even outside a crate.
+    # A library may explicitly import a nominally independent target source.
+    # Widen the whole referenced directory, including implicit child modules.
+    library_directories = set()
+    source_owners = {path: {n for n, (d, _) in manifests.items()
+                          if d and path.startswith(d + '/')}
+                     for path in paths if path.endswith('.rs')}
+    while True:
+        before = set(library_directories)
+        for path, owners in source_owners.items():
+            source = blobs[path].decode('utf-8', 'replace')
+            library_owners = {n for n in owners
+                              if not independent_target_input(path, *manifests[n])
+                              or any(path.startswith(d + '/') for d in library_directories)}
+            if not library_owners:
+                continue
+            for token in re.findall(r'"([^"\n]+)"', source):
+                for owner in library_owners:
+                    directory = manifests[owner][0]
+                    for root in ('', directory, posixpath.dirname(path)):
+                        candidate = posixpath.normpath(posixpath.join(root, token.lstrip('/')))
+                        if candidate in tracked_paths and independent_target_input(candidate, *manifests[owner]):
+                            library_directories.add(posixpath.dirname(candidate))
+            if re.search(r'\bmod\s+bin\s*[;{]', source):
+                for owner in library_owners:
+                    library_directories.add(manifests[owner][0] + '/src/bin')
+            # A computed include/path can reach any target source. Keep all edges.
+            includes = len(re.findall(r'include(?:_str|_bytes)?!\s*\(', source))
+            literal_includes = len(re.findall(r'include(?:_str|_bytes)?!\s*\(\s*"[^"\n]+"\s*,?\s*\)', source))
+            manifest_includes = len(re.findall(r'include(?:_str|_bytes)?!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,\s*"[^"\n]+"\s*,?\s*\)\s*,?\s*\)', source))
+            if (includes > literal_includes + manifest_includes
+                    or re.search(r'#\[(?:path|cfg_attr\([^;\n]*,\s*path)\s*=\s*(?![\s"])[A-Za-z_]', source)):
+                for owner in library_owners:
+                    library_directories.add(manifests[owner][0])
+        if library_directories == before:
+            break
+    leaf_inputs = {path for path, owners in source_owners.items() if owners
+                   and all(independent_target_input(path, *manifests[n]) for n in owners)
+                   and not any(path.startswith(d + '/') for d in library_directories)}
+    # Embedded inputs retain whether their reader is a library or a leaf target.
     embedded = {}
+    library_embeds = {}
+
     for path in paths:
         owners = [n for n, (d, _) in manifests.items()
                   if (d and path.startswith(d + '/')) or (not d and path.startswith(('src/', 'tests/', 'examples/', 'benches/')))]
         if not path.endswith('.rs') or not owners:
             continue
         source = blobs[path].decode('utf-8', 'replace')
+        library_owners = set(owners) if path not in leaf_inputs else set()
         literal = list(re.finditer(r'include_(?:str|bytes)!\s*\(\s*"([^"\n]+)"\s*,?\s*\)', source))
         concatenated = list(re.finditer(r'include_(?:str|bytes)!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,\s*"([^"\n]+)"\s*,?\s*\)\s*,?\s*\)', source))
         for match in literal:
-            embedded.setdefault(posixpath.normpath(posixpath.join(posixpath.dirname(path), match.group(1))), set()).update(owners)
+            candidate = posixpath.normpath(posixpath.join(posixpath.dirname(path), match.group(1)))
+            embedded.setdefault(candidate, set()).update(owners)
+            library_embeds.setdefault(candidate, set()).update(library_owners)
         for match in concatenated:
             for owner in owners:
                 directory = manifests[owner][0]
-                embedded.setdefault(posixpath.normpath(directory + '/' + match.group(1).lstrip('/')), set()).add(owner)
+                candidate = posixpath.normpath(directory + '/' + match.group(1).lstrip('/'))
+                embedded.setdefault(candidate, set()).add(owner)
+                if owner in library_owners:
+                    library_embeds.setdefault(candidate, set()).add(owner)
         # Tests often read fixtures through manifest-relative or repo-relative literals.
         for token in re.findall(r'"([^"\n]+)"', source):
             if '/' not in token or '\\' in token or len(token) > 512:
@@ -155,8 +211,13 @@ def cargo_graph(ref):
                     candidate = posixpath.normpath(posixpath.join(root, token.lstrip('/')))
                     if candidate in tracked_paths:
                         embedded.setdefault(candidate, set()).add(owner)
+                        if owner in library_owners:
+                            library_embeds.setdefault(candidate, set()).add(owner)
         if len(re.findall(r'include_(?:str|bytes)!', source)) > len(literal) + len(concatenated):
             embedded.setdefault('__unresolved_embed__', set()).update(owners)
+    embedded['__leaf_inputs__'] = leaf_inputs
+    embedded['__library_directories__'] = library_directories
+    embedded['__library_embeds__'] = library_embeds
     return manifests, reverse, embedded
 
 
@@ -231,7 +292,15 @@ def select(config, base, source_head, test_head=None, additions=()):
                 owners.update(embedded.get(path, ()))
                 if owners:
                     matched = True
-                    affected.update(reverse_consumers(owners, reverse))
+                    leaf = all(independent_target_input(path, *manifests[n]) for n in owners) and not any(
+                        path.startswith(d + '/') for d in embedded.get('__library_directories__', ()))
+                    # An external fixture has no direct source owner; its readers
+                    # determine whether reverse consumers are affected.
+                    direct = {name for name, (directory, _) in manifests.items()
+                              if directory and path.startswith(directory + '/')}
+                    library_owners = (set() if leaf else direct) | embedded.get('__library_embeds__', {}).get(path, set())
+                    affected.update(owners)
+                    affected.update(reverse_consumers(library_owners, reverse))
             for rule in config['rules']:
                 if any(fnmatch.fnmatchcase(path, pattern) for pattern in rule['match']):
                     matched = True
