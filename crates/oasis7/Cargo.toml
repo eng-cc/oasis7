@@ -13,6 +13,7 @@ path = "src/bin/oasis7_chain_runtime.rs"
 required-features = ["node-libp2p"]
 
 [dependencies]
+oasis7_agent_harness = { version = "0.1.0", path = "../oasis7_agent_harness" }
 oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }
 oasis7_agent_api = { version = "0.1.0", path = "../oasis7_agent_api" }
 oasis7_proto = { version = "0.1.0", path = "../oasis7_proto" }
@@ -43,7 +44,6 @@ uuid = { version = "1", features = ["serde", "v4"] }
 base64 = "0.22"
 oasis7_game_client = { path = "../oasis7_game_client" }
 oasis7_model_provider = { path = "../oasis7_model_provider" }
-oasis7_agent_harness = { version = "0.1.0", path = "../oasis7_agent_harness" }
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 zeroize = "1"
 cap-std = "4"

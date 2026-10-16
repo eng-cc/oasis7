@@ -111,10 +111,22 @@ pub(super) fn serve_payload(
                 }
             }
         };
-        let signed: SignedReadRequest<Value> =
-            serde_json::from_slice(&request[head_end..head_end + length]).unwrap();
-        authority::verify_read_request(path, &signed).unwrap();
-        let digest = authority::request_digest(path, &signed).unwrap();
+        let digest = if path == LOOKUP_PATH {
+            let lookup: oasis7_client_api::world_service_wire::AuthenticatedLookup =
+                serde_json::from_slice(&request[head_end..head_end + length]).unwrap();
+            let expected = oasis7_client_api::world_service_correlation::derive_correlation(
+                lookup.request.key.world.clone(),
+                &lookup.original,
+            )
+            .unwrap();
+            assert_eq!(lookup.request.key, expected.key);
+            authority::request_digest(path, &lookup).unwrap()
+        } else {
+            let signed: SignedReadRequest<Value> =
+                serde_json::from_slice(&request[head_end..head_end + length]).unwrap();
+            authority::verify_read_request(path, &signed).unwrap();
+            authority::request_digest(path, &signed).unwrap()
+        };
         let mut response =
             authority::sign_service_response(path, digest, payload, &hex::encode([9; 32])).unwrap();
         transform(&mut response);

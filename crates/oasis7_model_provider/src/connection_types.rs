@@ -48,6 +48,9 @@ impl Clock for MonotonicClock {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct BindingTarget {
+    /// Opaque complete-authority binding minted by the trusted host. A browser
+    /// target reference must never supply this value or become an authority.
+    pub full_fence_digest: String,
     pub world_id: String,
     pub agent_id: String,
     pub task_id: String,
@@ -161,6 +164,8 @@ pub struct ConnectionSnapshot {
     pub preset_id: String,
     pub version: u64,
     pub generation: u64,
+    /// Immutable active-run revision; lease renewal only advances `version`.
+    pub active_version: Option<u64>,
     pub state: ConnectionState,
     pub run_state: RunState,
     pub expires_at_ms: u64,

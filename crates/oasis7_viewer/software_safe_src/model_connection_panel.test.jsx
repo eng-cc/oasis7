@@ -17,7 +17,7 @@ describe("model connection panel", () => {
  });
  it("separates ready from running and blocks start when no game executor exists", async () => {
   const api = client(); const result = panel(api);
-  await waitFor(() => expect(result.container.textContent).toContain("Model ready; not started"));
+  await waitFor(() => expect(result.container.textContent).toContain("Model ready"));
   expect(result.getByText(/No game executor is available/)).toBeTruthy();
   expect(result.getByRole("button", { name: "Confirm start" }).disabled).toBe(true);
   expect(result.getByRole("button", { name: "Test connection" }).disabled).toBe(true);
@@ -25,6 +25,13 @@ describe("model connection panel", () => {
   fireEvent.click(result.getByRole("button", { name: "Test connection" }));
   await waitFor(() => expect(api.probe).toHaveBeenCalledTimes(1));
   expect(api.activate).not.toHaveBeenCalled();
+ });
+ it("shows an active run without also claiming it has not started", async () => {
+  const api = client([{ ...connection(), run_state: "running", execution: { phase: "running" } }], { ...capabilities(), executor_available: true });
+  const result = panel(api);
+  await waitFor(() => expect(result.container.textContent).toContain("Executor running"));
+  expect(result.container.textContent).toContain("Run in progress");
+  expect(result.container.textContent).not.toContain("not started");
  });
  it("clears the password synchronously and never renders a failed key or upstream error", async () => {
   const api = client([]); api.create.mockRejectedValue(new Error("canary-private-key")); const result = panel(api);

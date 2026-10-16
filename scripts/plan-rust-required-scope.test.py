@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -58,6 +59,109 @@ class Selection(unittest.TestCase):
     def plan(self, head=None):
         return selector.select(self.config, self.base, head or self.commit())
 
+    def test_command_center_pr4790_paths_are_targeted(self):
+        # Exact paths from 4f12acc; fixture stays usable without its Git object.
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        paths = ['doc/.governance/document-corpus/objects/30/307677361b6dc1927f90fb3a6ff9960fbadaa3816a721dea819ab00c86f658c1.json', 'doc/.governance/document-corpus/objects/d2/d2970f104b5996a9da0e9ac9c3b6494bfe0ffb20419f0d60f9c77bb97ee5d772.json', 'doc/engineering/command-center/README.md', 'doc/engineering/command-center/document-tree.design.md', 'tools/oasis7-command-center/README.md', 'tools/oasis7-command-center/core/examples/export_types.rs', 'tools/oasis7-command-center/core/src/document_allocations.rs', 'tools/oasis7-command-center/core/src/document_inventory.rs', 'tools/oasis7-command-center/core/src/document_pairings.rs', 'tools/oasis7-command-center/core/src/index.rs', 'tools/oasis7-command-center/core/tests/document_allocations.rs', 'tools/oasis7-command-center/ui/src/DocumentAllocations.tsx', 'tools/oasis7-command-center/ui/src/DocumentInventory.test.tsx', 'tools/oasis7-command-center/ui/src/DocumentInventory.tsx', 'tools/oasis7-command-center/ui/src/DocumentRelations.tsx', 'tools/oasis7-command-center/ui/src/generated/core.ts']
+        self.assertEqual(len(paths), 16)
+        for path in paths:
+            self.write(path, 'changed allocation input')
+        plan = self.plan()
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'command_center'})
+        self.assertFalse(any('unknown input:' in reason for reason in plan['reasons']))
+
+    def test_command_center_shared_tools_keep_dedicated_checks(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('scripts/cargo-dev.sh', 'scripts/cargo-cache.py',
+                     'scripts/find-python-with-module.sh'):
+            with self.subTest(path=path):
+                self.write(path, 'shared tool changed')
+                self.assertIn('command_center', self.plan()['groups'])
+                Path(path).unlink()
+                self.commit()
+
+    def test_command_center_control_stays_full(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ('tools/oasis7-command-center/Cargo.lock',
+                     'tools/oasis7-command-center/core/build.rs'):
+            with self.subTest(path=path):
+                self.write(path, 'unknown or shared control')
+                self.assertEqual(self.plan()['scope'], 'full')
+                Path(path).unlink()
+                self.commit()
+
+    def test_unknown_inputs_block_even_with_full_control_or_extra_groups(self):
+        self.write('tools/new-tool/src/lib.rs', 'unregistered tool')
+        self.write('unknown.file', 'unregistered input')
+        self.write('Cargo.lock', 'known full control')
+        head = self.commit()
+        for additions in ((), tuple(self.config['groups'])):
+            with self.subTest(additions=additions), self.assertRaises(ValueError) as error:
+                selector.select(self.config, self.base, head, additions=additions)
+            self.assertIn('tools/new-tool/src/lib.rs', str(error.exception))
+            self.assertIn('unknown.file', str(error.exception))
+            self.assertNotIn('Cargo.lock', str(error.exception))
+
+    def test_unknown_deleted_and_renamed_endpoints_block(self):
+        self.write('unknown-old.file', 'unique unknown file content')
+        self.base = self.commit()
+        self.git('mv', 'unknown-old.file', 'doc/moved.md')
+        with self.assertRaisesRegex(ValueError, 'unknown-old.file'):
+            self.plan()
+        self.base = self.git('rev-parse', 'HEAD')
+        self.git('mv', 'doc/moved.md', 'unknown-new.file')
+        with self.assertRaisesRegex(ValueError, 'unknown-new.file'):
+            self.plan()
+        self.base = self.git('rev-parse', 'HEAD')
+        Path('unknown-new.file').unlink()
+        with self.assertRaisesRegex(ValueError, 'unknown-new.file'):
+            self.plan()
+
+    def test_unknown_input_cli_fails_without_success_outputs(self):
+        self.write('unknown.file', 'unregistered input')
+        head = self.commit()
+        config = Path('config.json')
+        config.write_text(json.dumps(self.config))
+        process = subprocess.run([sys.executable, str(HERE / 'plan-rust-required-scope.py'),
+                                  '--config', str(config), '--base-ref', self.base,
+                                  '--head-ref', head, '--github-output', 'github-output',
+                                  '--output', 'plan.json'], text=True, capture_output=True)
+        self.assertEqual(process.returncode, 2, process.stderr)
+        self.assertIn('unknown.file', process.stderr)
+        self.assertIn('trusted baseline', process.stderr)
+        self.assertEqual(process.stdout, '')
+        self.assertFalse(Path('github-output').exists())
+        self.assertFalse(Path('plan.json').exists())
+
+    def test_workflow_uses_trusted_rules_and_emits_no_success_on_unknown(self):
+        for name in ('plan-rust-required-scope.py', 'ci-required-result.py'):
+            self.write('scripts/' + name, (HERE / name).read_text())
+        self.write('scripts/ci-required-scope.json', json.dumps(self.config))
+        self.base = self.commit()
+        self.write('unknown.file', 'unregistered input')
+        candidate = dict(self.config, rules=[*self.config['rules'],
+                         {'match': ['unknown.file'], 'groups': [], 'reason': 'self exemption'}])
+        self.write('scripts/ci-required-scope.json', json.dumps(candidate))
+        head = self.commit()
+        workflow = (HERE.parent / '.github/workflows/rust.yml').read_text()
+        step = workflow.split('        name: Select using trusted baseline Git data', 1)[1]
+        script = textwrap.dedent(step.split('        run: |\n', 1)[1]
+                                .split('      - id: formal-select', 1)[0])
+        with tempfile.TemporaryDirectory() as temporary:
+            runner = Path(temporary)
+            (runner / 'bin').mkdir()
+            (runner / 'bin/python3').symlink_to(sys.executable)
+            env = dict(os.environ, BASE_SHA=self.base, SOURCE_SHA=head, EVENT_NAME='pull_request',
+                       RUNNER_TEMP=str(runner), GITHUB_OUTPUT=str(runner / 'outputs'),
+                       GITHUB_STEP_SUMMARY=str(runner / 'summary'),
+                       PATH=str(runner / 'bin') + os.pathsep + os.environ['PATH'])
+            process = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True)
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn('unknown.file', process.stderr)
+            self.assertFalse((runner / 'outputs').exists())
+            self.assertFalse((runner / 'selection.json').exists())
+
     def test_docs_baseline_only(self):
         self.write('doc/readme.md', 'changed')
         self.assertEqual(self.plan()['groups'], ['baseline'])
@@ -103,8 +207,8 @@ class Selection(unittest.TestCase):
         self.write('doc/readme.md', 'changed consumer input')
         self.assertIn('consumer', self.plan()['groups'])
 
-    def test_build_lock_control_unknown_and_graph_failure_full(self):
-        for path in ['Cargo.lock', 'crates/core/build.rs', '.github/workflows/test.yml', 'unknown.file']:
+    def test_build_lock_control_and_graph_failure_full(self):
+        for path in ['Cargo.lock', 'crates/core/build.rs', '.github/workflows/test.yml']:
             with self.subTest(path=path):
                 self.write(path, 'change')
                 self.assertEqual(self.plan()['scope'], 'full')
@@ -210,7 +314,7 @@ class Selection(unittest.TestCase):
             'new-task-worktree.sh': {'baseline', 'cargo_tooling_contracts', 'fleet_health'},
             'worktree-gc-report.sh': {'baseline', 'workflow_governance'},
             'pr-review-thread-closeout.py': {'baseline', 'workflow_governance'},
-            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts'},
+            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts', 'command_center'},
         }
         for filename, expected in cases.items():
             with self.subTest(filename=filename):
@@ -240,7 +344,8 @@ class Selection(unittest.TestCase):
                 self.assertEqual(plan['scope'], 'targeted')
                 self.base = head
         self.write('scripts/local-signer/new-production.py', 'fixture')
-        self.assertEqual(selector.select(config, self.base, self.commit())['scope'], 'full')
+        with self.assertRaisesRegex(ValueError, 'scripts/local-signer/new-production.py'):
+            selector.select(config, self.base, self.commit())
 
     def test_local_signer_deletion_and_rename(self):
         config = json.loads((HERE / 'ci-required-scope.json').read_text())
@@ -330,6 +435,35 @@ class Selection(unittest.TestCase):
                     expected_profiles = {'oasis7_game_client'}
                     if package == 'oasis7_client_api':
                         expected_profiles.add('oasis7_client_api')
+                    self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
+                    self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
+                                     'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})
+                    base = self.git('rev-parse', 'HEAD')
+
+    def test_model_provider_integration_tests_route_to_support_and_server_consumer(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        packages = ('oasis7_agent_harness', 'oasis7_model_provider', 'oasis7')
+        for package in packages:
+            self.write(f'crates/{package}/Cargo.toml',
+                       f'[package]\nname="{package}"\nversion="0.1.0"\n')
+            self.write(f'crates/{package}/src/lib.rs', '')
+            self.write(f'crates/{package}/tests/transport.rs', '')
+        base = self.commit()
+        manifests = {name: (f'crates/{name}', {}) for name in packages}
+        graph = (manifests, {
+            'oasis7_agent_harness': {'oasis7_model_provider', 'oasis7'},
+            'oasis7_model_provider': {'oasis7'}, 'oasis7': set(),
+        }, {})
+        with patch.object(selector, 'cargo_graph', return_value=graph):
+            for package, path in [('oasis7_model_provider', 'tests/transport.rs'),
+                                  ('oasis7_agent_harness', 'src/lib.rs')]:
+                with self.subTest(package=package):
+                    self.write(f'crates/{package}/{path}', '// changed')
+                    plan = selector.select(config, base, self.commit())
+                    self.assertEqual(plan['scope'], 'targeted')
+                    expected_profiles = {'oasis7_model_provider'}
+                    if package == 'oasis7_agent_harness':
+                        expected_profiles.add('oasis7_agent_harness')
                     self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
                     self.assertEqual(set(plan['groups']), {'baseline', 'rust_baseline',
                                      'workspace_support', 'oasis7_required', 'launcher_web', 'formal_process'})

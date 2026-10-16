@@ -2,6 +2,7 @@ import { modelConnectionStyles } from "./model_connection_styles.js";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { acceptsModelCredentials, createViewerModelConnectionClient } from "./viewer_model_connection_client.js";
 const COPY = {
+ executor_busy: ["同一执行设备正在处理原运行，请先核对状态。", "This device is handling an existing run. Check its status first."],
  deployment_unavailable: ["当前部署尚未启用模型连接，暂不接收凭证。", "Model connections are not enabled on this deployment; credentials are not accepted."],
  authentication_required: ["请先登录当前玩家账号。", "Sign in to the current player account."],
  authentication_failed: ["模型凭证认证失败，请重新输入或到供应商检查。", "Model authentication failed. Re-enter the key or check the provider account."],
@@ -18,8 +19,22 @@ const COPY = {
  invalid_request: ["连接请求无效，请刷新并重新确认。", "The connection request is invalid. Refresh and confirm again."],
  request_failed: ["连接服务暂不可用，请刷新状态或稍后重试。", "The connection service is unavailable. Refresh status or try again later."],
 };
+const RUN_REASON = {
+ completed: ["本轮执行上限已达到；尚未证明目标完成", "Run limit reached; goal completion is unverified"],
+ budget_exhausted: ["调用预算已用尽", "Call budget exhausted"],
+ pending_original: ["原操作结果待确认", "Original operation result pending"],
+ rejected_original: ["原操作已拒绝", "Original operation rejected"],
+ expired_original: ["原操作已过期", "Original operation expired"],
+ control_changed: ["授权或运行状态已改变", "Authority or run state changed"],
+ context_expired: ["决策上下文已过期", "Decision context expired"],
+ model_failed: ["模型调用未完成", "Model call did not complete"],
+ model_timeout: ["模型调用超时", "Model call timed out"],
+ invalid_model_output: ["模型工具输出不受支持", "Unsupported model tool output"],
+ aborted: ["执行器已结束本轮", "Executor ended this run"],
+ host_failure: ["执行端暂不可用", "Executor unavailable"],
+};
 const STATE = {
- checking: ["检查中", "Checking"], ready: ["模型可用，尚未开始", "Model ready; not started"],
+ checking: ["检查中", "Checking"], ready: ["模型可用", "Model ready"],
  blocked: ["模型连接受限", "Model connection blocked"], revoked: ["已断开并忘记", "Disconnected and forgotten"], expired: ["会话已过期", "Session expired"],
  running: ["执行器正在运行", "Executor running"], stopped: ["已停止新决策", "New decisions stopped"],
  idle: ["尚未开始执行", "Execution not started"], unavailable: ["游戏执行器不可用", "Game executor unavailable"],
@@ -134,6 +149,7 @@ export function ModelConnectionPanel(props) {
    <Show when={connections().length}><label>{tr("本会话连接", "Session connections")}<select value={selectedId()} onChange={(event) => setSelectedId(event.currentTarget.value)} disabled={busy()}><For each={connections()}>{(item) => <option value={item.id}>{capabilities()?.presets.find((value) => value.id === item.preset_id)?.model_id || tr("模型配置", "Model configuration")} · {stateLabel(item.state)}</option>}</For></select></label></Show>
    <Show when={selected()}>{(current) => <div class="model-connection-panel__connection">
     <p role="status">{current().state === "revoked" ? stateLabel("revoked") : expired(current()) ? stateLabel("expired") : stateLabel(current().state)} · {stateLabel(current().run_state)}</p>
+    <Show when={current().execution}>{(execution) => <p role="status">{execution().phase === "running" ? tr("本轮正在执行", "Run in progress") : (RUN_REASON[execution().reason] || ["执行已停止，结果需核对", "Execution stopped; verify the result"])[zh() ? 0 : 1]} · {tr("已确认效果", "Confirmed effects")}: {execution().successful_effects ?? "—"}</p>}</Show>
     <p>{tr("已占用调用预算 / token", "Call budget used / tokens reserved")}: {current().calls_spent ?? "—"} / {current().tokens_reserved ?? "—"}</p>
     <Show when={current().error_code}><p role="status">{message(current().error_code)}</p></Show>
     <Show when={!capabilities()?.executor_available}><p role="status">{message("executor_unavailable")}</p></Show>
