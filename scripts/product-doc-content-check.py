@@ -1491,8 +1491,7 @@ def check_document(
             check_minimum_topic_content(path, text, errors)
             check_active_topic_cardinality(path, text, errors)
             check_active_topic_trace_tables(root, path, text, errors, use_worktree_content)
-            if full_corpus:
-                check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
+            check_active_topic_design_contract(root, head, path, text, errors, use_worktree_content)
     if not is_root_document and path.endswith(".design.md"):
         if not inactive_lifecycle:
             check_minimum_design_content(path, text, errors)
