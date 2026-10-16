@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "735e39f6c096477aab1abaadc235ccff7968b9f7a15addae700e2c45ce061c4e",
+    "content_sha256": "fd5112252c008721f0977ffcadc9c118561126eba473d0d89bd80695b1fb708d",
     "current_authority": "doc/testing/prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current trend formula and collection contract; dated baselines remain window facts; developer workflow record projection updated, product authority retained",
+    "note": "current trend formula and collection contract; dated baselines remain window facts; developer workflow record projection updated, product authority retained; Bounded 2026-10-16 review: disclose missing current threshold adoption/version; retain formula/collection authority and SC-2/AC-1 unresolved threshold obligation. Historical thresholds are not adopted as current. No current traffic-light or runtime acceptance.",
     "path": "doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
