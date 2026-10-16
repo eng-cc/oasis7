@@ -14,7 +14,7 @@ from pathlib import Path
 
 PLATFORM_GROUPS = ('windows_rollout', 'macos_package_contract', 'fleet_health')
 SUPPORT_PROFILES = (
-    'oasis7_agent_api', 'oasis7_agent_harness', 'oasis7_client_api', 'oasis7_game_client',
+    'oasis7_agent_api', 'oasis7_agent_harness', 'oasis7_client_api', 'oasis7_game_client', 'oasis7_model_provider',
     'oasis7_local_signer', 'oasis7_launcher_ui', 'oasis7_proto',
     'oasis7_wasm_abi', 'oasis7_wasm_build', 'oasis7_wasm_router',
     'oasis7_wasm_sdk', 'oasis7_wasm_store', 'pixel_world_bridge',
@@ -24,6 +24,15 @@ SUPPORT_PROFILES = (
 CONTROL = ('Cargo.toml', 'Cargo.lock', '**/Cargo.toml', '**/Cargo.lock', '**/build.rs',
            '.cargo/**', 'rust-toolchain*', '.github/**', 'scripts/ci-*', 'scripts/build-*', '**/world/artifacts/**',
            'scripts/plan-rust-required-scope*', 'scripts/document_corpus.py')
+
+
+class UnknownInputsError(ValueError):
+    """Unregistered paths are a policy gap, not a request for broader tests."""
+
+    def __init__(self, paths):
+        super().__init__('unknown CI inputs: ' + json.dumps(sorted(set(paths)))
+                         + '; register ownership and validation in the trusted baseline '
+                         + 'before introducing these paths')
 
 
 def git(*args):
@@ -185,6 +194,7 @@ def select(config, base, source_head, test_head=None, additions=()):
     reasons = ['baseline always runs']
     paths = []
     affected = set()
+    unknown_paths = []
     full = False
     support_rule = False
     try:
@@ -210,10 +220,11 @@ def select(config, base, source_head, test_head=None, additions=()):
             graph_refs.extend([source_base, target])
         graphs = [cargo_graph(ref) for ref in dict.fromkeys(graph_refs)]
         for path in paths:
-            if any(fnmatch.fnmatchcase(path, pattern) for pattern in CONTROL):
+            controlled = any(fnmatch.fnmatchcase(path, pattern) for pattern in CONTROL)
+            if controlled:
                 full = True
                 reasons.append('shared build or CI control changed: ' + path)
-            matched = False
+            matched = controlled
             for manifests, reverse, embedded in graphs:
                 owners = {name for name, (directory, _) in manifests.items()
                           if directory and path.startswith(directory + '/')}
@@ -234,8 +245,7 @@ def select(config, base, source_head, test_head=None, additions=()):
                 full = True
                 reasons.append('unresolved embedded consumer input: ' + path)
             if not matched:
-                full = True
-                reasons.append('unknown input: ' + path)
+                unknown_paths.append(path)
         for package in sorted(affected):
             mapped = config['package_groups'].get(package)
             if not mapped:
@@ -249,6 +259,8 @@ def select(config, base, source_head, test_head=None, additions=()):
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, TypeError) as error:
         full = True
         reasons.append('uncertain Git/dependency inputs: ' + str(error))
+    if unknown_paths:
+        raise UnknownInputsError(unknown_paths)
     if full:
         chosen = set(groups)
         reasons.append('ordinary required fallback')
@@ -291,7 +303,10 @@ def main():
     parser.add_argument('--output')
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
-    plan = select(config, args.base_ref, args.head_ref, args.test_ref, args.add_group)
+    try:
+        plan = select(config, args.base_ref, args.head_ref, args.test_ref, args.add_group)
+    except UnknownInputsError as error:
+        parser.exit(2, f"CI scope planning failed: {error}\n")
     encoded = json.dumps(plan, ensure_ascii=True, separators=(',', ':'))
     if args.output:
         Path(args.output).write_text(encoded + '\n')

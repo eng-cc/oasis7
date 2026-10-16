@@ -34,6 +34,7 @@ fn main() {
         "query_view",
         "search_rules",
         "query_document_inventory",
+        "query_document_directory",
         "save_decision_draft",
         "save_preference",
         "read_source",

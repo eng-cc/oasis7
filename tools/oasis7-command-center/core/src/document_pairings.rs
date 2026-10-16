@@ -111,9 +111,16 @@ pub(super) fn resolve(
     }
     let mut fragments = HashMap::new();
     for file in files {
+        let allocation_groups = file.allocations.iter_mut().flat_map(|table| {
+            table
+                .rows
+                .iter_mut()
+                .flat_map(|row| [&mut row.upstream, &mut row.design])
+        });
         for pairings in [&mut file.pairings, &mut file.upstream]
             .into_iter()
             .flatten()
+            .chain(allocation_groups)
         {
             for edge in &mut pairings.targets {
                 let Some(target) = &edge.target else { continue };

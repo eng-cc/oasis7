@@ -6338,6 +6338,7 @@ dependencies = [
  "oasis7_distfs",
  "oasis7_game_client",
  "oasis7_launcher_ui",
+ "oasis7_model_provider",
  "oasis7_node",
  "oasis7_proto",
  "oasis7_wasm_abi",
@@ -6383,6 +6384,8 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "oasis7_agent_api",
+ "oasis7_client_api",
+ "oasis7_game_client",
  "oasis7_wasm_abi",
  "serde",
  "serde_json",
@@ -6523,6 +6526,24 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "oasis7_model_provider"
+version = "0.1.0"
+dependencies = [
+ "async-openai",
+ "eventsource-stream",
+ "futures-util",
+ "getrandom 0.4.3",
+ "hex",
+ "oasis7_agent_harness",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
  "zeroize",
 ]
 

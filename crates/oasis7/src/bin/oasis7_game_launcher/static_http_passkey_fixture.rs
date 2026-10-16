@@ -65,7 +65,8 @@ fn hosted_passkey_virtual_authenticator_fixture() {
     let runtime = StaticHttpRuntimeConfig {
         live_bind,
         viewer_runtime_config_json,
-        identity: Mutex::new(Some(IdentityService::new(config).unwrap())),
+        identity: Arc::new(Mutex::new(Some(IdentityService::new(config).unwrap()))),
+        model_client: None,
     };
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../oasis7_viewer/software_safe_src");
     for name in ["viewer_auth_crypto.js", "software_safe_constants.js"] {

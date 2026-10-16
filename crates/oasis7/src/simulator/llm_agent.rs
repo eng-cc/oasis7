@@ -1,11 +1,5 @@
 //! LLM-powered agent behavior and OpenAI-compatible completion client.
 
-use async_openai::Client as AsyncOpenAiClient;
-use async_openai::config::OpenAIConfig;
-use async_openai::types::responses::{
-    CreateResponse, CreateResponseArgs, FunctionTool, OutputItem, Response, Tool,
-    ToolChoiceOptions, ToolChoiceParam,
-};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -39,9 +33,8 @@ mod config_helpers;
 mod decision_flow;
 mod execution_controls;
 mod memory_selector;
+#[cfg(test)]
 mod openai_payload;
-mod openai_retry;
-mod openai_stream_diagnostics;
 mod prompt_assembly;
 mod recipe_coverage;
 use recipe_coverage::RecipeCoverageProgress;
@@ -61,68 +54,26 @@ use execution_controls::{
     ActionReplanGuardState, ActiveExecuteUntil, default_execute_until_conditions_for_action,
 };
 
+#[cfg(test)]
+use async_openai::types::responses::{OutputItem, Tool};
 use config_helpers::{
     goal_value, parse_non_negative_usize, parse_positive_i64, parse_positive_usize, required_env,
-    toml_value_to_string,
-};
-use openai_payload::{
-    build_responses_request_payload, build_text_probe_request_payload,
-    build_tool_probe_request_payload, normalize_openai_api_base_url,
 };
 #[cfg(test)]
-use openai_payload::{
-    completion_result_from_sdk_stream_events, output_item_to_completion_turn, responses_tools,
-    responses_tools_with_debug_mode,
-};
-use openai_retry::{RATE_LIMIT_RETRY_DELAY_MS, is_concurrency_limit_error, retry_attempts};
+use oasis7_model_provider::legacy_tool_names::*;
 #[cfg(test)]
-pub(super) use openai_stream_diagnostics::StreamTransportMetadata;
-use openai_stream_diagnostics::{OpenAiRequestError, format_stream_transport_diagnostics};
+use oasis7_model_provider::openai_payload::normalize_openai_api_base_url;
+#[cfg(test)]
+pub(super) use oasis7_model_provider::openai_stream_diagnostics::StreamTransportMetadata;
+#[cfg(test)]
+use oasis7_model_provider::openai_stream_diagnostics::format_stream_transport_diagnostics;
+#[cfg(test)]
+use openai_payload::{
+    build_responses_request_payload, completion_result_from_sdk_stream_events,
+    output_item_to_completion_turn, responses_tools, responses_tools_with_debug_mode,
+};
 
-pub const ENV_LLM_MODEL: &str = "OASIS7_LLM_MODEL";
-pub const ENV_LLM_BASE_URL: &str = "OASIS7_LLM_BASE_URL";
-pub const ENV_LLM_API_KEY: &str = "OASIS7_LLM_API_KEY";
-pub const ENV_LLM_TIMEOUT_MS: &str = "OASIS7_LLM_TIMEOUT_MS";
-pub const ENV_LLM_SYSTEM_PROMPT: &str = "OASIS7_LLM_SYSTEM_PROMPT";
-pub const ENV_LLM_SHORT_TERM_GOAL: &str = "OASIS7_LLM_SHORT_TERM_GOAL";
-pub const ENV_LLM_LONG_TERM_GOAL: &str = "OASIS7_LLM_LONG_TERM_GOAL";
-pub const ENV_LLM_MAX_MODULE_CALLS: &str = "OASIS7_LLM_MAX_MODULE_CALLS";
-pub const ENV_LLM_MAX_DECISION_STEPS: &str = "OASIS7_LLM_MAX_DECISION_STEPS";
-pub const ENV_LLM_MAX_REPAIR_ROUNDS: &str = "OASIS7_LLM_MAX_REPAIR_ROUNDS";
-pub const ENV_LLM_PROMPT_MAX_HISTORY_ITEMS: &str = "OASIS7_LLM_PROMPT_MAX_HISTORY_ITEMS";
-pub const ENV_LLM_PROMPT_PROFILE: &str = "OASIS7_LLM_PROMPT_PROFILE";
-pub const ENV_LLM_FORCE_REPLAN_AFTER_SAME_ACTION: &str =
-    "OASIS7_LLM_FORCE_REPLAN_AFTER_SAME_ACTION";
-pub const ENV_LLM_HARVEST_MAX_AMOUNT_CAP: &str = "OASIS7_LLM_HARVEST_MAX_AMOUNT_CAP";
-pub const ENV_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS: &str =
-    "OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS";
-pub const ENV_LLM_DEBUG_MODE: &str = "OASIS7_LLM_DEBUG_MODE";
-pub const ENV_LLM_STREAM_DIAGNOSTICS: &str = "OASIS7_LLM_STREAM_DIAGNOSTICS";
-const TOML_LLM_TABLE: &str = "llm";
-const TOML_LLM_MODEL: &str = "model";
-const TOML_LLM_BASE_URL: &str = "base_url";
-const TOML_LLM_API_KEY: &str = "api_key";
-const TOML_LLM_TIMEOUT_MS: &str = "timeout_ms";
-const TOML_LLM_SYSTEM_PROMPT: &str = "system_prompt";
-const TOML_LLM_SHORT_TERM_GOAL: &str = "short_term_goal";
-const TOML_LLM_LONG_TERM_GOAL: &str = "long_term_goal";
-const TOML_LLM_MAX_MODULE_CALLS: &str = "max_module_calls";
-const TOML_LLM_MAX_DECISION_STEPS: &str = "max_decision_steps";
-const TOML_LLM_MAX_REPAIR_ROUNDS: &str = "max_repair_rounds";
-const TOML_LLM_PROMPT_MAX_HISTORY_ITEMS: &str = "prompt_max_history_items";
-const TOML_LLM_PROMPT_PROFILE: &str = "prompt_profile";
-const TOML_LLM_FORCE_REPLAN_AFTER_SAME_ACTION: &str = "force_replan_after_same_action";
-const TOML_LLM_HARVEST_MAX_AMOUNT_CAP: &str = "harvest_max_amount_cap";
-const TOML_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS: &str = "execute_until_auto_reenter_ticks";
-const TOML_LLM_DEBUG_MODE: &str = "debug_mode";
-const TOML_LLM_PROFILE: &str = "profile";
-const TOML_LLM_MODEL_PROVIDER: &str = "model_provider";
-const TOML_MODEL_PROVIDERS_TABLE: &str = "model_providers";
-const TOML_PROFILES_TABLE: &str = "profiles";
-const TOML_MODEL_PROVIDER_AUTH_TOKEN: &str = "auth_token";
-const TOML_LLM_AGENT_OVERRIDES_TABLE: &str = "agent_overrides";
-const ENV_LLM_SHORT_TERM_GOAL_AGENT_PREFIX: &str = "OASIS7_LLM_SHORT_TERM_GOAL_";
-const ENV_LLM_LONG_TERM_GOAL_AGENT_PREFIX: &str = "OASIS7_LLM_LONG_TERM_GOAL_";
+pub use oasis7_model_provider::config_constants::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LlmPromptProfile {
@@ -362,13 +313,7 @@ pub struct LlmAgentConfig {
     pub llm_debug_mode: bool,
 }
 
-fn parse_debug_mode_flag(value: &str) -> Option<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => Some(true),
-        "0" | "false" | "no" | "off" => Some(false),
-        _ => None,
-    }
-}
+use oasis7_model_provider::parse_debug_mode_flag;
 
 impl LlmAgentConfig {
     pub fn from_default_sources() -> Result<Self, LlmConfigError> {
@@ -527,149 +472,7 @@ fn llm_env_var(key: &str) -> Option<String> {
     std::env::var(key).ok()
 }
 
-fn llm_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
-    table.get(TOML_LLM_TABLE).and_then(toml::Value::as_table)
-}
-
-fn non_empty_toml_string(table: &toml::value::Table, key: &str) -> Option<String> {
-    table
-        .get(key)
-        .and_then(toml_value_to_string)
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn selected_profile_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
-    let profile_name = llm_table(table)
-        .and_then(|llm| non_empty_toml_string(llm, TOML_LLM_PROFILE))
-        .or_else(|| non_empty_toml_string(table, TOML_LLM_PROFILE))?;
-    table
-        .get(TOML_PROFILES_TABLE)
-        .and_then(toml::Value::as_table)
-        .and_then(|profiles| profiles.get(profile_name.as_str()))
-        .and_then(toml::Value::as_table)
-}
-
-fn selected_model_provider_name(table: &toml::value::Table) -> Option<String> {
-    if let Some(provider) =
-        llm_table(table).and_then(|llm| non_empty_toml_string(llm, TOML_LLM_MODEL_PROVIDER))
-    {
-        return Some(provider);
-    }
-    if let Some(provider) = selected_profile_table(table)
-        .and_then(|profile| non_empty_toml_string(profile, TOML_LLM_MODEL_PROVIDER))
-    {
-        return Some(provider);
-    }
-    if let Some(provider) = non_empty_toml_string(table, TOML_LLM_MODEL_PROVIDER) {
-        return Some(provider);
-    }
-    let providers = table
-        .get(TOML_MODEL_PROVIDERS_TABLE)
-        .and_then(toml::Value::as_table)?;
-    if providers.len() == 1 {
-        return providers.keys().next().cloned();
-    }
-    None
-}
-
-fn selected_model_provider_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
-    let provider_name = selected_model_provider_name(table)?;
-    table
-        .get(TOML_MODEL_PROVIDERS_TABLE)
-        .and_then(toml::Value::as_table)
-        .and_then(|providers| providers.get(provider_name.as_str()))
-        .and_then(toml::Value::as_table)
-}
-
-fn resolve_model_from_config(table: &toml::value::Table) -> Option<String> {
-    llm_table(table)
-        .and_then(|llm| non_empty_toml_string(llm, TOML_LLM_MODEL))
-        .or_else(|| {
-            selected_profile_table(table)
-                .and_then(|profile| non_empty_toml_string(profile, TOML_LLM_MODEL))
-        })
-        .or_else(|| non_empty_toml_string(table, TOML_LLM_MODEL))
-}
-
-fn resolve_base_url_from_config(table: &toml::value::Table) -> Option<String> {
-    llm_table(table)
-        .and_then(|llm| non_empty_toml_string(llm, TOML_LLM_BASE_URL))
-        .or_else(|| {
-            selected_model_provider_table(table)
-                .and_then(|provider| non_empty_toml_string(provider, TOML_LLM_BASE_URL))
-        })
-}
-
-fn resolve_api_key_from_config(table: &toml::value::Table) -> Option<String> {
-    llm_table(table)
-        .and_then(|llm| non_empty_toml_string(llm, TOML_LLM_API_KEY))
-        .or_else(|| {
-            selected_model_provider_table(table).and_then(|provider| {
-                non_empty_toml_string(provider, TOML_MODEL_PROVIDER_AUTH_TOKEN)
-            })
-        })
-        .or_else(|| {
-            selected_model_provider_table(table)
-                .and_then(|provider| non_empty_toml_string(provider, TOML_LLM_API_KEY))
-        })
-}
-
-fn resolve_llm_key_from_config(table: &toml::value::Table, key: &str) -> Option<String> {
-    llm_table(table).and_then(|llm| non_empty_toml_string(llm, key))
-}
-
-fn resolve_agent_goal_override_from_config(
-    table: &toml::value::Table,
-    key: &str,
-) -> Option<String> {
-    let (normalized_agent, field) =
-        if let Some(suffix) = key.strip_prefix(ENV_LLM_SHORT_TERM_GOAL_AGENT_PREFIX) {
-            (suffix, TOML_LLM_SHORT_TERM_GOAL)
-        } else if let Some(suffix) = key.strip_prefix(ENV_LLM_LONG_TERM_GOAL_AGENT_PREFIX) {
-            (suffix, TOML_LLM_LONG_TERM_GOAL)
-        } else {
-            return None;
-        };
-    llm_table(table)
-        .and_then(|llm| llm.get(TOML_LLM_AGENT_OVERRIDES_TABLE))
-        .and_then(toml::Value::as_table)
-        .and_then(|overrides| overrides.get(normalized_agent))
-        .and_then(toml::Value::as_table)
-        .and_then(|override_entry| non_empty_toml_string(override_entry, field))
-}
-
-fn config_value_for_env_key(table: &toml::value::Table, key: &str) -> Option<String> {
-    match key {
-        ENV_LLM_MODEL => resolve_model_from_config(table),
-        ENV_LLM_BASE_URL => resolve_base_url_from_config(table),
-        ENV_LLM_API_KEY => resolve_api_key_from_config(table),
-        ENV_LLM_TIMEOUT_MS => resolve_llm_key_from_config(table, TOML_LLM_TIMEOUT_MS),
-        ENV_LLM_SYSTEM_PROMPT => resolve_llm_key_from_config(table, TOML_LLM_SYSTEM_PROMPT),
-        ENV_LLM_SHORT_TERM_GOAL => resolve_llm_key_from_config(table, TOML_LLM_SHORT_TERM_GOAL),
-        ENV_LLM_LONG_TERM_GOAL => resolve_llm_key_from_config(table, TOML_LLM_LONG_TERM_GOAL),
-        ENV_LLM_MAX_MODULE_CALLS => resolve_llm_key_from_config(table, TOML_LLM_MAX_MODULE_CALLS),
-        ENV_LLM_MAX_DECISION_STEPS => {
-            resolve_llm_key_from_config(table, TOML_LLM_MAX_DECISION_STEPS)
-        }
-        ENV_LLM_MAX_REPAIR_ROUNDS => resolve_llm_key_from_config(table, TOML_LLM_MAX_REPAIR_ROUNDS),
-        ENV_LLM_PROMPT_MAX_HISTORY_ITEMS => {
-            resolve_llm_key_from_config(table, TOML_LLM_PROMPT_MAX_HISTORY_ITEMS)
-        }
-        ENV_LLM_PROMPT_PROFILE => resolve_llm_key_from_config(table, TOML_LLM_PROMPT_PROFILE),
-        ENV_LLM_FORCE_REPLAN_AFTER_SAME_ACTION => {
-            resolve_llm_key_from_config(table, TOML_LLM_FORCE_REPLAN_AFTER_SAME_ACTION)
-        }
-        ENV_LLM_HARVEST_MAX_AMOUNT_CAP => {
-            resolve_llm_key_from_config(table, TOML_LLM_HARVEST_MAX_AMOUNT_CAP)
-        }
-        ENV_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS => {
-            resolve_llm_key_from_config(table, TOML_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS)
-        }
-        ENV_LLM_DEBUG_MODE => resolve_llm_key_from_config(table, TOML_LLM_DEBUG_MODE),
-        _ => resolve_agent_goal_override_from_config(table, key),
-    }
-}
+use oasis7_model_provider::config_value_for_env_key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LlmConfigError {
@@ -736,199 +539,23 @@ impl fmt::Display for LlmConfigError {
 
 impl Error for LlmConfigError {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LlmCompletionRequest {
-    pub model: String,
-    pub system_prompt: String,
-    pub user_prompt: String,
-    pub debug_mode: bool,
-    /// Native request budgets count physical provider invocations.  When set,
-    /// the completion client must not hide another provider call inside its
-    /// transport retry loop.  `None` preserves the legacy unbudgeted client
-    /// behavior, including the bounded OpenAI concurrency retry.
-    pub max_model_calls: Option<u32>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum LlmCompletionTurn {
-    Decision {
-        payload: serde_json::Value,
-    },
-    ModuleCall {
-        module: String,
-        args: serde_json::Value,
-    },
-}
-
-pub trait LlmCompletionClient {
-    fn complete(
-        &self,
-        request: &LlmCompletionRequest,
-    ) -> Result<LlmCompletionResult, LlmClientError>;
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LlmCompletionResult {
-    pub turns: Vec<LlmCompletionTurn>,
-    pub output: String,
-    pub model: Option<String>,
-    pub prompt_tokens: Option<u64>,
-    pub completion_tokens: Option<u64>,
-    pub total_tokens: Option<u64>,
-}
-
-#[derive(Clone)]
-pub struct OpenAiChatCompletionClient {
-    client: AsyncOpenAiClient<OpenAIConfig>,
-    diagnostic_http_client: reqwest::Client,
-    api_base: String,
-    api_key: String,
-    request_timeout_ms: u64,
-    stream_diagnostics_enabled: bool,
-}
-
-impl OpenAiChatCompletionClient {
-    pub fn from_config(config: &LlmAgentConfig) -> Result<Self, LlmClientError> {
-        let request_timeout_ms = config.timeout_ms.max(1);
-        let api_base = normalize_openai_api_base_url(config.base_url.as_str());
-        let http_client = Self::build_http_client(request_timeout_ms)?;
-        let client = Self::build_client_with_http_client(
-            api_base.as_str(),
-            config.api_key.as_str(),
-            http_client.clone(),
-        )?;
-
-        Ok(Self {
-            client,
-            diagnostic_http_client: http_client,
-            api_base,
-            api_key: config.api_key.clone(),
-            request_timeout_ms,
-            stream_diagnostics_enabled: std::env::var(ENV_LLM_STREAM_DIAGNOSTICS)
-                .ok()
-                .and_then(|value| parse_debug_mode_flag(value.as_str()))
-                .unwrap_or(false),
-        })
+#[cfg(test)]
+pub use oasis7_model_provider::LlmCompletionResult;
+pub use oasis7_model_provider::{
+    LlmClientError, LlmCompletionClient, LlmCompletionRequest, LlmCompletionTurn,
+    OpenAiChatCompletionClient,
+};
+impl oasis7_model_provider::CompletionClientConfig for LlmAgentConfig {
+    fn base_url(&self) -> &str {
+        &self.base_url
     }
-
-    pub fn probe_hello_response(&self, model: &str) -> Result<String, LlmClientError> {
-        let payload = build_text_probe_request_payload(model, "hello")?;
-        match self.send_responses_request_for_text(&self.client, payload) {
-            Ok(text) => Ok(text),
-            Err(OpenAiRequestError::ParseBody(raw_body)) => Err(LlmClientError::DecodeResponse {
-                message: format!(
-                    "responses sdk decode failed (text probe): {}",
-                    summarize_trace_text(raw_body.as_str(), 320)
-                ),
-            }),
-            Err(OpenAiRequestError::Timeout(err)) => Err(LlmClientError::Http {
-                message: format!(
-                    "request timed out after {}ms: {}",
-                    self.request_timeout_ms, err
-                ),
-            }),
-            Err(OpenAiRequestError::Completion(err)) => Err(err),
-            Err(OpenAiRequestError::StreamTransport(metadata)) => Err(LlmClientError::Http {
-                message: format_stream_transport_diagnostics(&metadata),
-            }),
-            Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
-        }
+    fn api_key(&self) -> &str {
+        &self.api_key
     }
-
-    pub fn probe_required_tool_response(
-        &self,
-        model: &str,
-    ) -> Result<LlmCompletionResult, LlmClientError> {
-        let payload = build_tool_probe_request_payload(model)?;
-        match self.send_responses_request(&self.client, payload) {
-            Ok(result) => Ok(result),
-            Err(OpenAiRequestError::ParseBody(raw_body)) => Err(LlmClientError::DecodeResponse {
-                message: format!(
-                    "responses sdk decode failed (tool probe): {}",
-                    summarize_trace_text(raw_body.as_str(), 320)
-                ),
-            }),
-            Err(OpenAiRequestError::Timeout(err)) => Err(LlmClientError::Http {
-                message: format!(
-                    "request timed out after {}ms: {}",
-                    self.request_timeout_ms, err
-                ),
-            }),
-            Err(OpenAiRequestError::Completion(err)) => Err(err),
-            Err(OpenAiRequestError::StreamTransport(metadata)) => Err(LlmClientError::Http {
-                message: format_stream_transport_diagnostics(&metadata),
-            }),
-            Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
-        }
-    }
-
-    fn build_http_client(timeout_ms: u64) -> Result<reqwest::Client, LlmClientError> {
-        #[cfg(target_arch = "wasm32")]
-        let builder = {
-            let _ = timeout_ms;
-            reqwest::Client::builder()
-        };
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let builder =
-            reqwest::Client::builder().timeout(std::time::Duration::from_millis(timeout_ms.max(1)));
-
-        builder.build().map_err(|err| LlmClientError::BuildClient {
-            message: err.to_string(),
-        })
-    }
-
-    fn build_client_with_http_client(
-        api_base: &str,
-        api_key: &str,
-        http_client: reqwest::Client,
-    ) -> Result<AsyncOpenAiClient<OpenAIConfig>, LlmClientError> {
-        let config = OpenAIConfig::new()
-            .with_api_base(api_base.to_string())
-            .with_api_key(api_key.to_string());
-
-        Ok(AsyncOpenAiClient::with_config(config).with_http_client(http_client))
+    fn timeout_ms(&self) -> u64 {
+        self.timeout_ms
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LlmClientError {
-    BuildClient { message: String },
-    Http { message: String },
-    HttpStatus { code: u16, message: String },
-    DecodeResponse { message: String },
-    EmptyChoice,
-}
-
-impl fmt::Display for LlmClientError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LlmClientError::BuildClient { message } => write!(f, "client build failed: {message}"),
-            LlmClientError::Http { message } => write!(f, "http request failed: {message}"),
-            LlmClientError::HttpStatus { code, message } => {
-                write!(f, "http status {code}: {message}")
-            }
-            LlmClientError::DecodeResponse { message } => {
-                write!(f, "decode response failed: {message}")
-            }
-            LlmClientError::EmptyChoice => write!(f, "empty completion choice"),
-        }
-    }
-}
-
-impl Error for LlmClientError {}
-
-const OPENAI_TOOL_AGENT_MODULES_LIST: &str = "agent_modules_list";
-const OPENAI_TOOL_ENVIRONMENT_CURRENT_OBSERVATION: &str = "environment_current_observation";
-const OPENAI_TOOL_MEMORY_SHORT_TERM_RECENT: &str = "memory_short_term_recent";
-const OPENAI_TOOL_MEMORY_LONG_TERM_SEARCH: &str = "memory_long_term_search";
-const OPENAI_TOOL_WORLD_RULES_GUIDE: &str = "world_rules_guide";
-const OPENAI_TOOL_MODULE_LIFECYCLE_STATUS: &str = "module_lifecycle_status";
-const OPENAI_TOOL_POWER_ORDER_BOOK_STATUS: &str = "power_order_book_status";
-const OPENAI_TOOL_MODULE_MARKET_STATUS: &str = "module_market_status";
-const OPENAI_TOOL_SOCIAL_STATE_STATUS: &str = "social_state_status";
-const OPENAI_TOOL_AGENT_SUBMIT_DECISION: &str = "agent_submit_decision";
-const OPENAI_TOOL_AGENT_DEBUG_GRANT_RESOURCE: &str = "agent_debug_grant_resource";
 
 fn sanitize_prompt_override(value: Option<String>) -> Option<String> {
     let value = value?;
@@ -937,60 +564,6 @@ fn sanitize_prompt_override(value: Option<String>) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
-    }
-}
-
-impl LlmCompletionClient for OpenAiChatCompletionClient {
-    fn complete(
-        &self,
-        request: &LlmCompletionRequest,
-    ) -> Result<LlmCompletionResult, LlmClientError> {
-        let payload = build_responses_request_payload(request)?;
-        let retry_attempts = retry_attempts(request.max_model_calls);
-        for attempt in 0..=retry_attempts {
-            match self.send_responses_request(&self.client, payload.clone()) {
-                Ok(result) => return Ok(result),
-                Err(OpenAiRequestError::ParseBody(raw_body))
-                    if attempt < retry_attempts
-                        && is_concurrency_limit_error(raw_body.as_str()) =>
-                {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    std::thread::sleep(std::time::Duration::from_millis(RATE_LIMIT_RETRY_DELAY_MS));
-                    continue;
-                }
-                Err(OpenAiRequestError::ParseBody(raw_body)) => {
-                    return Err(LlmClientError::DecodeResponse {
-                        message: format!(
-                            "responses sdk decode failed (primary request): {}",
-                            summarize_trace_text(raw_body.as_str(), 320)
-                        ),
-                    });
-                }
-                Err(OpenAiRequestError::Timeout(err)) => {
-                    return Err(LlmClientError::Http {
-                        message: format!(
-                            "request timed out after {}ms: {}",
-                            self.request_timeout_ms, err
-                        ),
-                    });
-                }
-                Err(OpenAiRequestError::Completion(err)) => {
-                    return Err(err);
-                }
-                Err(OpenAiRequestError::StreamTransport(metadata)) => {
-                    return Err(LlmClientError::Http {
-                        message: format_stream_transport_diagnostics(&metadata),
-                    });
-                }
-                Err(OpenAiRequestError::Other(err)) => {
-                    return Err(LlmClientError::Http { message: err });
-                }
-            }
-        }
-
-        Err(LlmClientError::Http {
-            message: "responses request exhausted retry budget".to_string(),
-        })
     }
 }
 

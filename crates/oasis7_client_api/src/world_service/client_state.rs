@@ -11,6 +11,8 @@ pub enum ClientStateKind {
     Prefix,
     Action,
     Outcome,
+    /// Local caller-persisted feedback journal, not a public intent kind.
+    FeedbackAcceptance,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(

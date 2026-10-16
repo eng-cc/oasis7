@@ -37,13 +37,13 @@
 
 ## 3. 当前状态、目标状态与差距
 
-本表是固定基线源码事实与目标差距，不是执行台账。
+本表是固定基线源码事实与目标差距，不是执行台账。已迁出文件链接固定在原基线；当前共享客户端实现见 [SDK](../../../crates/oasis7_game_client/src/device_client.rs)，交付及剩余范围见 [Game API 当前实施范围](external-agent-game-api.design.md)。
 
 | 对象 | 固定基线事实及定位 | 目标与差距 |
 | --- | --- | --- |
 | Harness | [`oasis7_agent_harness`](../../../crates/oasis7_agent_harness/src/lib.rs) 已导出 actor、TurnEngine、记忆/continuation 与 ModelProvider；[`Cargo.toml`](../../../crates/oasis7_agent_harness/Cargo.toml) 不依赖主应用 | 保留算法，把仍在应用内的模型/prompt/策略接线移为客户端实现；crate 存在不等于路径统一 |
 | 内置接线 | [`agent_harness_adapter`](../../../crates/oasis7/src/simulator/agent_harness_adapter.rs)、[`llm_agent`](../../../crates/oasis7/src/simulator/llm_agent.rs)、[`llm_sidecar`](../../../crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs) 仍使用 simulator/runtime 类型 | 按权威拆分，客户端只消费合法投影；不能整体搬走 World 权威或以 shadow kernel 补观察 |
-| 普通客户端 | [`client.rs`](../../../crates/oasis7/src/bin/oasis7_game_client/client.rs)、[`client_build.rs`](../../../crates/oasis7/src/bin/oasis7_game_client/client_build.rs) 已实现签名、报价和原操作恢复，但 import 主 crate 的 runtime/world_service/private_goal_store | 抽轻量客户端与必要公共合同，CLI 变薄；仅换目录而保留反向依赖不算完成 |
+| 普通客户端 | [`client.rs`](https://github.com/eng-cc/oasis7/blob/d6f6ff3d10f0f2990bf17a111d55c7b36ebf0a5d/crates/oasis7/src/bin/oasis7_game_client/client.rs)、[`client_build.rs`](https://github.com/eng-cc/oasis7/blob/d6f6ff3d10f0f2990bf17a111d55c7b36ebf0a5d/crates/oasis7/src/bin/oasis7_game_client/client_build.rs) 已实现签名、报价和原操作恢复，但 import 主 crate 的 runtime/world_service/private_goal_store | 抽轻量客户端与必要公共合同，CLI 变薄；仅换目录而保留反向依赖不算完成 |
 | 外部能力 | [`oasis7-play`](../../../skills/oasis7-play/SKILL.md) 是 prepared-world 普通签名客户端 profile，覆盖移动、转运、内置建厂/配方和原结果查询 | 不等于完整 Game HTTP 写目录、冷进入、通用模块或两个真实 Runtime 全首局已交付 |
 | 权威接缝 | [`RuntimeAuthority`](../../../crates/oasis7_agent_harness/src/authority.rs) 要求宿主验证 lease/receipt/continuation；[`共享 API`](../../../crates/oasis7_agent_api/src/lib.rs) 只承载提案和投影 | 以受信客户端适配供给已验证读模型，不能让客户端自签世界最终性或创建执行许可 |
 
@@ -141,6 +141,8 @@ SDK 统一严格编码、签名、世界/主体/服务绑定验证、有限响�
 切换先经现有 task executor 控制使旧 epoch 失效，并围栏旧入口；当前授权下最多一个活动 turn。两个 Harness 的进程锁、不同 session ID 或启动顺序不能取代世界侧互斥。目标变化后旧计算可被丢弃，但新世界效果只接收当前许可；已提交原结果按原关联保留。原结果查询与新行动资格分别校验。
 
 反馈按世界/Agent/task/fence/请求关联隔离，重复与乱序不重复应用记忆投影或世界效果；客户端恢复不是一套第二世界回放引擎。缓存格式、密钥文件与历史目标的兼容必须沿用既有保护；抽 `PrivateGoalStore` 的纯本地能力不能让客户端读取服务器私有存储。
+
+canonical 远端 cognition 的 `stale_base` 恢复反馈只在现有签名、任务与当前执行资格校验通过，且 Runtime 返回结构化的对应拒绝后发布。执行桥丢弃失败的业务 candidate，从原世界仅保留既有拒绝终结和幂等记录、生成与该原件精确关联的 rejected feedback，并与空 receipt 的 canonical 拒绝结果同块提交；不能提交失败 candidate 的业务变更，也不为任意鉴权、fence 或有效期错误生成可恢复反馈。SDK 同时校验原件终态和当前授权投影中的反馈，缺失或不匹配时继续停止。只有确认拒绝的执行方策略才可另开 slot、读取新 Context 并重新决策，原签名不替换，既有预算不重置。
 
 ## 8. 部署、安全与运行约束
 

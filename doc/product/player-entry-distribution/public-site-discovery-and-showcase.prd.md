@@ -13,6 +13,17 @@
 - 专业系统设计：[`官网发现与展示系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
 - 专业权威：[`site PRD`](../../site/prd.md)、[`site 设计`](../../site/design.md#homepage-layout-authority)、[`公开口径`](release-communications-and-public-claims.prd.md#public-claim-four-layer-model)、[`README`](../../../README.md)
 
+<a id="paired-document-navigation"></a>
+## 配套文档与阅读顺序
+
+这三份文档属于同一个官网专题，按产品与专业实现职责分别维护；以下导航只聚合入口，不复制正文。
+
+| 产品需求 | 产品体验与视觉设计（设计师首读） | 系统实现设计（开发首读） |
+| --- | --- | --- |
+| [目标、范围与验收](public-site-discovery-and-showcase.prd.md) | [文案、布局、素材、分镜与交付物](public-site-discovery-and-showcase.design.md) | [结构、状态、资源与验证](../../site/github-pages/public-site-discovery-and-showcase.design.md) |
+
+设计师从产品体验与视觉设计开始，再按需核对产品要求；开发者从系统实现设计开始，并回查上游体验。文件位置不改变上述职责，文档存在不表示实现或验收完成。
+
 ## 1. 问题与目标
 
 一位没参与过开发的访客听说 oasis7，打开官网。他先想知道自己在游戏里做什么、AI 替自己做什么、一个选择会带来什么后果，再决定观看、了解预览或继续关注。他不应先学会读测试日志、PR 和架构文档，也不应把设计稿、示例回放或小说当作当前可玩的能力。
@@ -90,7 +101,7 @@
 | 既有要求 | 新细化的产品结果 | 产品体验承接 | 系统设计承接 |
 | --- | --- | --- | --- |
 | [001](#req-site-discovery-001) | 说清玩家收益、一次取舍与合适下一步，而非只识别游戏名或技术名词 | [价值与入口](public-site-discovery-and-showcase.design.md#value-and-entry-contract) | [入口与案例](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-value-path) |
-| [002](#req-site-discovery-002) | 统一四步顺序；同一案例呈现初始约束、玩家调整和结果；未执行选项不冒充已发生后果 | [案例叙事](public-site-discovery-and-showcase.design.md#decision-walkthrough) | [入口与案例](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-value-path) |
+| [002](#req-site-discovery-002) | 统一四步顺序；同一案例呈现初始约束、实际调整主体及结果；未执行选项不冒充已发生后果 | [案例叙事](public-site-discovery-and-showcase.design.md#decision-walkthrough) | [入口与案例](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-value-path) |
 | [003](#req-site-discovery-003) | 进展讲玩家价值；案例、文章与预览决策点存在真实的继续阅读/关注入口，分享不丢范围 | [回访与分享](public-site-discovery-and-showcase.design.md#editorial-return-path) | [编辑与分享](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-return-sharing) |
 | [004](#req-site-discovery-004) | 访客可区分观看、下载候选和源码复现；预览速览帮助判断条件与成本，不制造开箱可玩承诺 | [预览决策](public-site-discovery-and-showcase.design.md#preview-decision) | [预览适配](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-preview-fit) |
 | [005](#req-site-discovery-005) | 世界观有吸引人的短导读及可返回路径，页面和分享摘要都保持小说身份与实际语言 | [回访与分享](public-site-discovery-and-showcase.design.md#editorial-return-path) | [编辑与分享](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-return-sharing) |
@@ -188,7 +199,9 @@ Trace ID: O7-REQ-a4f7d9b0-6c28-4e15-a90d-3b62c5e87401
 - 功能点：F-SITE-DISCOVERY-007；CN/EN 首页主视觉及到案例、预览、世界观的连续阅读；验收 [AC-SITE-DISCOVERY-007](#ac-site-discovery-007)。
 - 要求：科技感、沉浸感和视觉冲击分别满足[视觉体验目标](#visual-experience-outcomes)。首屏有原创世界的尺度与主焦点；后续图文延续同一视觉身份，以由远及近的节奏把氛围接到可理解的决策，不暗示概念镜头是连续实机。静态版必须成立，动效增强可暂停或关闭，不能阻塞正文、导航、阶段提示或主动作。视觉减配不等于手机只剩文字，窄屏仍应保留主体轮廓和品牌识别。
 - 系统设计状态：已覆盖
-- 系统设计依据：[沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion)、[验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)；产品体验见[多屏分镜与动效](public-site-discovery-and-showcase.design.md#cinematic-experience)。
+- 系统设计依据：[沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion)。
+- 产品体验依据：[多屏分镜与动效](public-site-discovery-and-showcase.design.md#cinematic-experience)。
+- 验证计划：[视觉与动效验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)；尚未执行。
 - 实现状态：未核实
 - 实现与验证依据：当前条款为新增视觉要求，尚无逐项候选实现核对、多屏稿、滚动录像或访客观察；既有素材和页面不能自动认定为不足，也不能代签本要求。
 - 核对日期与基线：2026-10-16；原文档基线 `62e1314368752726e85a050794c8f9b0dcebe123`；本次为设计条款核对，无页面视觉验收。
@@ -280,4 +293,4 @@ Trace ID: O7-REQ-a4f7d9b0-6c28-4e15-a90d-3b62c5e87401
 | [REQ-SITE-DISCOVERY-004](#req-site-discovery-004) / [AC-SITE-DISCOVERY-004](#ac-site-discovery-004) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
 | [REQ-SITE-DISCOVERY-005](#req-site-discovery-005) / [AC-SITE-DISCOVERY-005](#ac-site-discovery-005) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
 | [REQ-SITE-DISCOVERY-006](#req-site-discovery-006) / [AC-SITE-DISCOVERY-006](#ac-site-discovery-006) | `viewer_engineer` / `qa_engineer` | [site authority](../../site/design.md#homepage-layout-authority) | [系统验证计划](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)，实现后取得同候选结果；本 PR 只验证文档 | `test_tier_required`；页面实现另按 S6 选择真实浏览器范围 |
-| [REQ-SITE-DISCOVERY-007](#req-site-discovery-007) / [AC-SITE-DISCOVERY-007](#ac-site-discovery-007) | `game_visual_interaction_designer` / `viewer_engineer` / `qa_engineer` | [沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion) | [视觉与动效验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)，同候选多屏、录像、性能与访客记录；均待实施 | 文档关系检查；页面实现沿现有 S6，不新增工作流 |
+| [REQ-SITE-DISCOVERY-007](#req-site-discovery-007) / [AC-SITE-DISCOVERY-007](#ac-site-discovery-007) | `game_visual_interaction_designer` / `viewer_engineer` / `qa_engineer` | [沉浸交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-immersion) | [视觉与动效验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#immersion-verification)，同候选多屏、录像、性能与访客记录；均待实施 | `test_tier_required`；页面实现沿现有 S6，不新增工作流 |

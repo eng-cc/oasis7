@@ -6,6 +6,9 @@
 //! effects cross this boundary only through host-supplied opaque values and
 //! callbacks.
 
+/// Shared portable model-selection default; transport stays native.
+pub const DEFAULT_LLM_MODEL: &str = "gpt-5.4-mini";
+
 mod actor;
 mod authority;
 mod cognition;
@@ -34,11 +37,20 @@ pub use memory::{
 };
 pub use model_provider::{
     ModelProvider, ModelProviderError, ModelProviderRequest, ModelProviderResponse,
-    ModelProviderTool, ModelProviderTrace, ModelProviderTraceEntry, ModelProviderTurn,
-    ModelProviderUsage,
+    ModelProviderTool, ModelProviderToolCall, ModelProviderToolResult, ModelProviderTrace,
+    ModelProviderTraceEntry, ModelProviderTurn, ModelProviderUsage,
 };
 pub use provider::{DecisionProvider, DecisionProviderError, cognition_response_digest};
 pub use turn_engine::{
     MemoryProjectionReport, RuntimeReadbackProof, TurnEngine, TurnEngineError, TurnEngineEvent,
     TurnEnginePhase, TurnRequest,
+};
+
+#[cfg(not(target_arch = "wasm32"))]
+mod native_task;
+#[cfg(not(target_arch = "wasm32"))]
+pub use native_task::{
+    NativeTaskContext, NativeTaskControl, NativeTaskHost, NativeTaskRecovery, NativeTaskRunConfig,
+    NativeTaskRunReport, NativeTaskRunner, NativeTaskStopReason, NativeTaskTool,
+    NativeTaskToolResult, SdkNativeTaskHost,
 };

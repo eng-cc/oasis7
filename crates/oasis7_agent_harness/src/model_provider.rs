@@ -19,6 +19,20 @@ pub struct ModelProviderTool {
     pub parameters: Value,
 }
 
+/// Protocol identity retained outside world DTOs. Tool execution still requires
+/// the host's current game authority; a provider call ID is not an action ID.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelProviderToolCall {
+    pub call_id: String,
+    pub name: String,
+    pub arguments: Value,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelProviderToolResult {
+    pub call_id: String,
+    pub content: Value,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelProviderRequest {
     pub request_digest: Digest32,
@@ -179,10 +193,36 @@ impl Error for ModelProviderError {}
 pub trait ModelProvider: Send {
     fn provider_id(&self) -> &str;
 
+    /// Recheck the trusted executor lease/run before a tool may execute.
+    /// Ordinary providers have no additional execution authority.
+    fn check_execution(&self) -> Result<(), ModelProviderError> {
+        Ok(())
+    }
+
     fn complete(
         &mut self,
         request: &ModelProviderRequest,
     ) -> Result<ModelProviderResponse, ModelProviderError>;
+
+    /// Structured tool causality for adapters which maintain protocol history.
+    /// Legacy single-call providers expose no pending protocol calls.
+    fn pending_tool_calls(&self) -> Vec<ModelProviderToolCall> {
+        Vec::new()
+    }
+
+    fn record_tool_results(
+        &mut self,
+        results: &[ModelProviderToolResult],
+    ) -> Result<(), ModelProviderError> {
+        if results.is_empty() {
+            return Ok(());
+        }
+        Err(ModelProviderError::new(
+            "tool_history_unsupported",
+            "provider does not accept structured tool history",
+            false,
+        ))
+    }
 
     fn complete_checked(
         &mut self,

@@ -364,17 +364,8 @@ impl World {
         let authority = self.current_cognition_runtime_authority()?;
         let base_binding = self.cognition_runtime_base_binding(&authority);
         if request.captured_base_binding != base_binding {
-            let stale_digest = cognition_digest_v1(
-                "oasis7.cognition.stale-envelope.v1",
-                &json!({"request": &request, "action": &action_value}),
-            );
-            let stale_key = cognition_digest_v1(
-                "oasis7.cognition.stale-idempotency.v1",
-                &json!({
-                    "request_digest": &request.request_digest,
-                    "envelope_digest": stale_digest
-                }),
-            );
+            let (stale_digest, stale_key) =
+                Self::stale_cognition_rejection_identity(&request, &action)?;
             let mut transaction = self.clone();
             transaction.record_stale_cognition_rejection(
                 &request.agent_id,

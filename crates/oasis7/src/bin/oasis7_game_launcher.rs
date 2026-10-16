@@ -32,6 +32,8 @@ mod hosted_account_identity;
 mod hosted_account_store_backend;
 #[path = "oasis7_game_launcher/hosted_identity/mod.rs"]
 mod hosted_identity;
+#[path = "oasis7_game_launcher/hosted_model_client/mod.rs"]
+mod hosted_model_client;
 #[path = "oasis7_game_launcher/hosted_player_session.rs"]
 mod hosted_player_session;
 #[path = "oasis7_game_launcher/hosted_strong_auth.rs"]

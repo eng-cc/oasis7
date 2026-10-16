@@ -1093,6 +1093,685 @@ function Portal(props) {
 	return marker;
 }
 //#endregion
+//#region software_safe_src/model_connection_styles.js
+var modelConnectionStyles = ".model-connection-panel { margin-block: 1rem; padding: .8rem; border: 1px solid var(--border, #777); border-radius: .5rem; min-width: 0; }\n.model-connection-panel summary { cursor: pointer; font-weight: 600; }\n.model-connection-panel p { overflow-wrap: anywhere; line-height: 1.5; }\n.model-connection-panel label { display: grid; gap: .4rem; margin-block: .7rem; min-width: 0; }\n.model-connection-panel select, .model-connection-panel input[type=password] { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: .5rem; }\n.model-connection-panel .model-connection-panel__check { display: flex; align-items: flex-start; gap: .5rem; }\n.model-connection-panel__check input { flex: 0 0 auto; margin-top: .25rem; }\n.model-connection-panel__actions { display: flex; flex-wrap: wrap; gap: .6rem; }\n.model-connection-panel button { white-space: normal; overflow-wrap: anywhere; min-height: 2.75rem; font: inherit; margin-block: .25rem; }\n.model-connection-panel :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }\n\n";
+//#endregion
+//#region software_safe_src/viewer_model_connection_client.js
+var API$1 = "/v1/agent-client";
+var IDENTITY = "/api/public/hosted-account/v2/capabilities";
+var CODES = /* @__PURE__ */ new Set([
+	"authentication_required",
+	"authentication_failed",
+	"quota_unavailable",
+	"budget_exhausted",
+	"rate_limited",
+	"model_unavailable",
+	"capability_unsupported",
+	"transport_failed",
+	"session_expired",
+	"version_conflict",
+	"executor_unavailable",
+	"executor_busy",
+	"game_executor_unavailable",
+	"deployment_unavailable",
+	"untrusted_executor",
+	"invalid_request",
+	"request_failed"
+]);
+var ModelConnectionError = class extends Error {
+	constructor(code, status = 0) {
+		super(CODES.has(code) ? code : "request_failed");
+		this.code = this.message;
+		this.status = status;
+	}
+};
+var text$3 = (value, max = 256) => typeof value === "string" && value.length <= max ? value : "";
+var number$1 = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+var RUN_REASONS = /* @__PURE__ */ new Set([
+	"completed",
+	"budget_exhausted",
+	"pending_original",
+	"rejected_original",
+	"expired_original",
+	"control_changed",
+	"context_expired",
+	"model_failed",
+	"model_timeout",
+	"invalid_model_output",
+	"aborted",
+	"host_failure"
+]);
+function executionSnapshot(value) {
+	if (!value || ![
+		"running",
+		"finished",
+		"stopped"
+	].includes(value.phase)) return null;
+	return {
+		phase: value.phase,
+		reason: RUN_REASONS.has(value.reason) ? value.reason : null,
+		successful_effects: number$1(value.successful_effects),
+		model_calls_spent: number$1(value.model_calls_spent)
+	};
+}
+function modelConnectionSnapshot(value) {
+	if (!value || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.id || "") || !Number.isSafeInteger(value.version) || value.version < 1) throw new ModelConnectionError("request_failed");
+	return {
+		execution: executionSnapshot(value.execution),
+		id: value.id,
+		version: value.version,
+		preset_id: text$3(value.preset_id),
+		state: [
+			"checking",
+			"ready",
+			"blocked",
+			"revoked",
+			"expired"
+		].includes(value.state) ? value.state : "unknown",
+		run_state: [
+			"running",
+			"stopped",
+			"idle",
+			"unavailable"
+		].includes(value.run_state) ? value.run_state : "unknown",
+		run_generation: number$1(value.run_generation),
+		expires_at_ms: number$1(value.expires_at_ms),
+		absolute_expires_at_ms: number$1(value.absolute_expires_at_ms),
+		calls_spent: number$1(value.calls_spent),
+		tokens_reserved: number$1(value.tokens_reserved),
+		error_code: CODES.has(value.error_code) ? value.error_code : value.error_code ? "request_failed" : ""
+	};
+}
+function acceptsModelCredentials(capabilities, origin = globalThis.location?.origin) {
+	const executor = capabilities?.trusted_executor;
+	return capabilities?.ok === true && capabilities.enabled === true && capabilities.authenticated === true && executor?.trusted === true && executor.origin === origin && !!executor.display_name && !!executor.location && capabilities.presets?.length > 0 && [
+		"max_calls",
+		"max_input_tokens",
+		"max_output_tokens",
+		"max_concurrent",
+		"lease_ms",
+		"absolute_ms",
+		"renew_interval_ms"
+	].every((key) => Number.isSafeInteger(capabilities.limits?.[key]) && capabilities.limits[key] > 0);
+}
+function createViewerModelConnectionClient({ fetch: fetchImpl = globalThis.fetch, operationId = () => globalThis.crypto.randomUUID() } = {}) {
+	const pending = /* @__PURE__ */ new Map();
+	async function request(path, body, method = body === void 0 ? "GET" : "POST", identity = false) {
+		let csrf;
+		if (body !== void 0) {
+			csrf = text$3((await request(IDENTITY, void 0, "GET", true)).csrf_token, 4096);
+			if (!csrf) throw new ModelConnectionError("authentication_required");
+		}
+		let response;
+		try {
+			response = await fetchImpl(identity ? path : API$1 + path, {
+				method,
+				credentials: "same-origin",
+				mode: "same-origin",
+				cache: "no-store",
+				redirect: "error",
+				referrerPolicy: "no-referrer",
+				headers: {
+					Accept: "application/json",
+					...body === void 0 ? {} : {
+						"Content-Type": "application/json",
+						"X-Oasis7-CSRF": csrf
+					}
+				},
+				...body === void 0 ? {} : { body: JSON.stringify(body) }
+			});
+		} catch {
+			throw new ModelConnectionError("transport_failed");
+		}
+		let value;
+		try {
+			value = await response.json();
+		} catch {
+			throw new ModelConnectionError("request_failed", response.status);
+		}
+		if (!response.ok || value?.ok === false) throw new ModelConnectionError(CODES.has(value?.error_code) ? value.error_code : response.status === 401 ? "authentication_required" : response.status === 409 ? "version_conflict" : "request_failed", response.status);
+		return value;
+	}
+	const path = (connection) => {
+		if (!/^[a-zA-Z0-9_-]{1,128}$/.test(connection?.id || "") || !Number.isSafeInteger(connection.version) || connection.version < 1) throw new ModelConnectionError("invalid_request");
+		return `/model-connections/${encodeURIComponent(connection.id)}`;
+	};
+	async function mutate(connection, action, extra = {}, method = "POST") {
+		const key = `${connection.id}:${connection.version}:${action}`;
+		const needsId = action === "probe" || action === "stop";
+		if (needsId && !pending.has(key)) pending.set(key, operationId());
+		const result = modelConnectionSnapshot((await request(path(connection) + (action ? `/${action}` : ""), {
+			expected_version: connection.version,
+			...extra,
+			...needsId ? { operation_id: pending.get(key) } : {}
+		}, method)).connection);
+		pending.delete(key);
+		return result;
+	}
+	return {
+		async capabilities() {
+			const value = await request("/capabilities");
+			const executor = value.trusted_executor;
+			const limits = Object.fromEntries([
+				"max_calls",
+				"max_tokens",
+				"max_input_tokens",
+				"max_output_tokens",
+				"max_concurrent",
+				"lease_ms",
+				"absolute_ms",
+				"renew_interval_ms"
+			].map((key) => [key, number$1(value.limits?.[key])]));
+			return {
+				ok: value.ok === true,
+				enabled: value.enabled === true,
+				authenticated: value.authenticated === true,
+				executor_available: value.executor_available === true,
+				reason: CODES.has(value.reason) ? value.reason : value.reason ? "request_failed" : "",
+				trusted_executor: executor ? {
+					trusted: executor.trusted === true,
+					display_name: text$3(executor.display_name),
+					location: text$3(executor.location),
+					origin: text$3(executor.origin, 2048)
+				} : null,
+				limits,
+				presets: Array.isArray(value.presets) ? value.presets.slice(0, 64).filter((preset) => preset && /^[a-zA-Z0-9_.:-]{1,128}$/.test(preset.id || "") && ["deepseek", "openrouter"].includes(preset.provider_id)).map((preset) => ({
+					id: preset.id,
+					provider_id: preset.provider_id,
+					model_id: text$3(preset.model_id),
+					protocol: text$3(preset.protocol, 64)
+				})) : []
+			};
+		},
+		async list() {
+			const value = await request("/model-connections");
+			if (!Array.isArray(value.connections) || value.connections.length > 64) throw new ModelConnectionError("request_failed");
+			return value.connections.map(modelConnectionSnapshot);
+		},
+		async create({ preset_id, raw_key, consent }) {
+			try {
+				return modelConnectionSnapshot((await request("/model-connections", {
+					preset_id,
+					raw_key,
+					consent: consent === true
+				})).connection);
+			} finally {
+				raw_key = "";
+			}
+		},
+		probe(connection) {
+			return mutate(connection, "probe", { consent: true });
+		},
+		activate(connection, { target_ref, limits }) {
+			return mutate(connection, "activate", {
+				consent: true,
+				target_ref,
+				limits
+			});
+		},
+		lease(connection) {
+			return mutate(connection, "lease");
+		},
+		stop(connection) {
+			return mutate(connection, "stop");
+		},
+		forget(connection) {
+			return mutate(connection, "", {}, "DELETE");
+		}
+	};
+}
+//#endregion
+//#region software_safe_src/model_connection_panel.jsx
+var _tmpl$$35 = /*#__PURE__*/ template(`<p role=alert>`);
+var _tmpl$2$33 = /*#__PURE__*/ template(`<div class=model-connection-panel__boundary><p>: </p><p>: <!> · </p><p></p><p></p><p>: <!> / </p><p>: <!> / <!> / `);
+var _tmpl$3$26 = /*#__PURE__*/ template(`<form class=model-connection-panel__form><label><select required><option value></option></select></label><label><input type=password name=model-inference-key autocomplete=off maxlength=4096 required></label><label class=model-connection-panel__check><input type=checkbox></label><button type=submit>`);
+var _tmpl$4$23 = /*#__PURE__*/ template(`<label><select>`);
+var _tmpl$5$22 = /*#__PURE__*/ template(`<details class=model-connection-panel data-testid=model-connection-panel><style></style><summary></summary><p></p><button type=button>`);
+var _tmpl$6$15 = /*#__PURE__*/ template(`<p role=status>`);
+var _tmpl$7$11 = /*#__PURE__*/ template(`<option> · <!> · `);
+var _tmpl$8$7 = /*#__PURE__*/ template(`<option> · `);
+var _tmpl$9$6 = /*#__PURE__*/ template(`<div class=model-connection-panel__connection><p role=status> · </p><p>: <!> / </p><label class=model-connection-panel__check><input type=checkbox></label><button type=button></button><label class=model-connection-panel__check><input type=checkbox></label><div class=model-connection-panel__actions><button type=button></button><button type=button></button><button type=button></button></div><p>`);
+var _tmpl$0$6 = /*#__PURE__*/ template(`<p role=status> · <!>: `);
+var COPY = {
+	executor_busy: ["同一执行设备正在处理原运行，请先核对状态。", "This device is handling an existing run. Check its status first."],
+	deployment_unavailable: ["当前部署尚未启用模型连接，暂不接收凭证。", "Model connections are not enabled on this deployment; credentials are not accepted."],
+	authentication_required: ["请先登录当前玩家账号。", "Sign in to the current player account."],
+	authentication_failed: ["模型凭证认证失败，请重新输入或到供应商检查。", "Model authentication failed. Re-enter the key or check the provider account."],
+	quota_unavailable: ["供应商额度不可用，请到供应商账户处理。", "Provider quota is unavailable. Check the provider account."],
+	budget_exhausted: ["本次模型调用限制已用尽，新推理已受限。", "This session's model budget is exhausted; new inference is blocked."],
+	rate_limited: ["供应商限流；仅可在原期限和预算内重试。", "Provider rate limit reached. Retry only within the original deadline and budget."],
+	model_unavailable: ["当前模型不可用，请选择已支持配置。", "This model is unavailable. Choose a supported configuration."],
+	capability_unsupported: ["模型工具能力尚未就绪，不能开始游戏执行。", "Model tool support is not ready; game execution cannot start."],
+	transport_failed: ["请求结果尚未确认。请刷新状态；不要假定检查或停止已经完成。", "The request result is unconfirmed. Refresh status; do not assume probing or stopping completed."],
+	session_expired: ["连接会话已过期，请重新连接并确认开始。", "The connection expired. Reconnect and explicitly confirm any new run."],
+	version_conflict: ["连接已被其他页面修改，请核对刷新后的状态再操作。", "Another page changed this connection. Review the refreshed state before continuing."],
+	executor_unavailable: ["本部署尚无可用游戏执行器。可检查模型连接，但不能开始行动。", "No game executor is available on this deployment. Model checks are available; actions cannot start."],
+	untrusted_executor: ["尚未建立可信执行端，不能提交凭证。", "A trusted executor has not been established. Credentials cannot be submitted."],
+	invalid_request: ["连接请求无效，请刷新并重新确认。", "The connection request is invalid. Refresh and confirm again."],
+	request_failed: ["连接服务暂不可用，请刷新状态或稍后重试。", "The connection service is unavailable. Refresh status or try again later."]
+};
+var RUN_REASON = {
+	completed: ["本轮执行上限已达到；尚未证明目标完成", "Run limit reached; goal completion is unverified"],
+	budget_exhausted: ["调用预算已用尽", "Call budget exhausted"],
+	pending_original: ["原操作结果待确认", "Original operation result pending"],
+	rejected_original: ["原操作已拒绝", "Original operation rejected"],
+	expired_original: ["原操作已过期", "Original operation expired"],
+	control_changed: ["授权或运行状态已改变", "Authority or run state changed"],
+	context_expired: ["决策上下文已过期", "Decision context expired"],
+	model_failed: ["模型调用未完成", "Model call did not complete"],
+	model_timeout: ["模型调用超时", "Model call timed out"],
+	invalid_model_output: ["模型工具输出不受支持", "Unsupported model tool output"],
+	aborted: ["执行器已结束本轮", "Executor ended this run"],
+	host_failure: ["执行端暂不可用", "Executor unavailable"]
+};
+var STATE = {
+	checking: ["检查中", "Checking"],
+	ready: ["模型可用", "Model ready"],
+	blocked: ["模型连接受限", "Model connection blocked"],
+	revoked: ["已断开并忘记", "Disconnected and forgotten"],
+	expired: ["会话已过期", "Session expired"],
+	running: ["执行器正在运行", "Executor running"],
+	stopped: ["已停止新决策", "New decisions stopped"],
+	idle: ["尚未开始执行", "Execution not started"],
+	unavailable: ["游戏执行器不可用", "Game executor unavailable"]
+};
+function ModelConnectionPanel(props) {
+	const client = props.client || createViewerModelConnectionClient();
+	const read = (value) => typeof value === "function" ? value() : value;
+	const zh = () => String(read(props.locale) || "en").startsWith("zh");
+	const tr = (cn, en) => zh() ? cn : en;
+	const message = (code) => (COPY[code === "game_executor_unavailable" ? "executor_unavailable" : code] || COPY.request_failed)[zh() ? 0 : 1];
+	const stateLabel = (state) => (STATE[state] || ["状态未知", "Status unknown"])[zh() ? 0 : 1];
+	const [capabilities, setCapabilities] = createSignal(null);
+	const [connections, setConnections] = createSignal([]);
+	const [preset, setPreset] = createSignal("");
+	const [selectedId, setSelectedId] = createSignal("");
+	const [consent, setConsent] = createSignal(false);
+	const [probeConsent, setProbeConsent] = createSignal(false);
+	const [runConsent, setRunConsent] = createSignal(false);
+	const [busy, setBusy] = createSignal(false);
+	const [error, setError] = createSignal("");
+	const [now, setNow] = createSignal(Date.now());
+	let keyInput, previousAgent, disposed = false, refreshGeneration = 0, renewing = false;
+	const available = () => acceptsModelCredentials(capabilities());
+	const agentId = () => read(props.agentId) || "";
+	const canControl = () => read(props.canControl) === true && !!agentId();
+	const selected = () => connections().find((connection) => connection.id === selectedId());
+	const expired = (connection) => !connection || ["expired", "revoked"].includes(connection.state) || !connection.expires_at_ms || !connection.absolute_expires_at_ms || now() >= Math.min(connection.expires_at_ms, connection.absolute_expires_at_ms);
+	const apply = (connection) => {
+		if (disposed) return;
+		refreshGeneration++;
+		setConnections((previous) => {
+			const current = previous.find((value) => value.id === connection.id);
+			if (current && current.version > connection.version) return previous;
+			return current ? previous.map((value) => value.id === connection.id ? connection : value) : [...previous, connection];
+		});
+	};
+	async function refresh() {
+		const generation = ++refreshGeneration;
+		try {
+			const cap = await client.capabilities();
+			if (disposed || generation !== refreshGeneration) return;
+			setCapabilities(cap);
+			if (!acceptsModelCredentials(cap)) {
+				setConnections([]);
+				if (keyInput) keyInput.value = "";
+				return;
+			}
+			const items = await client.list();
+			if (disposed || generation !== refreshGeneration) return;
+			setConnections(items);
+			if (!items.some((item) => item.id === selectedId())) setSelectedId(items[0]?.id || "");
+		} catch (failure) {
+			if (!disposed && generation === refreshGeneration) {
+				setError(message(failure.code));
+				setCapabilities(null);
+				if (keyInput) keyInput.value = "";
+			}
+		}
+	}
+	async function act(action) {
+		if (busy()) return;
+		setBusy(true);
+		setError("");
+		try {
+			await action();
+		} catch (failure) {
+			if (!disposed) {
+				setError(message(failure.code));
+				setProbeConsent(false);
+				setRunConsent(false);
+				await refresh();
+			}
+		} finally {
+			if (!disposed) setBusy(false);
+		}
+	}
+	function create(event) {
+		event.preventDefault();
+		if (busy() || !available() || !canControl() || !preset() || !consent()) return;
+		let raw = keyInput.value;
+		keyInput.value = "";
+		act(async () => {
+			try {
+				const connection = await client.create({
+					preset_id: preset(),
+					raw_key: raw,
+					consent: true
+				});
+				apply(connection);
+				setSelectedId(connection.id);
+				setConsent(false);
+				setProbeConsent(false);
+				setRunConsent(false);
+			} finally {
+				raw = "";
+			}
+		});
+	}
+	onMount(() => {
+		refresh();
+		const clock = setInterval(() => setNow(Date.now()), 1e3);
+		const renew = setInterval(async () => {
+			setNow(Date.now());
+			if (disposed || renewing || busy() || !available() || document.visibilityState !== "visible") return;
+			renewing = true;
+			try {
+				for (const connection of connections()) {
+					if (expired(connection)) continue;
+					const interval = capabilities()?.limits?.renew_interval_ms;
+					if (!Number.isFinite(interval) || interval < 1e3) continue;
+					if (connection.expires_at_ms - Date.now() > capabilities().limits.lease_ms - interval) continue;
+					try {
+						apply(await client.lease(connection));
+					} catch (failure) {
+						if (!disposed) setError(message(failure.code));
+					}
+				}
+			} finally {
+				renewing = false;
+			}
+		}, 1e3);
+		const visible = () => {
+			setNow(Date.now());
+			if (document.visibilityState === "visible") refresh();
+		};
+		document.addEventListener("visibilitychange", visible);
+		onCleanup(() => {
+			disposed = true;
+			refreshGeneration++;
+			clearInterval(clock);
+			clearInterval(renew);
+			document.removeEventListener("visibilitychange", visible);
+			if (keyInput) keyInput.value = "";
+		});
+	});
+	createEffect(() => {
+		selectedId();
+		setProbeConsent(false);
+		setRunConsent(false);
+	});
+	createEffect(() => {
+		const id = agentId();
+		if (id !== previousAgent || !canControl() || !available()) {
+			if (keyInput) keyInput.value = "";
+			setConsent(false);
+			setProbeConsent(false);
+			setRunConsent(false);
+		}
+		previousAgent = id;
+	});
+	return (() => {
+		var _el$ = _tmpl$5$22(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling, _el$34 = _el$4.nextSibling;
+		insert(_el$2, modelConnectionStyles);
+		insert(_el$3, () => tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor"));
+		insert(_el$4, () => tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run."));
+		insert(_el$, createComponent(Show, {
+			get when() {
+				return error();
+			},
+			get children() {
+				var _el$5 = _tmpl$$35();
+				insert(_el$5, error);
+				return _el$5;
+			}
+		}), _el$34);
+		insert(_el$, createComponent(Show, {
+			get when() {
+				return available();
+			},
+			get fallback() {
+				return (() => {
+					var _el$35 = _tmpl$6$15();
+					insert(_el$35, (() => {
+						var _c$ = memo(() => !!capabilities());
+						return () => _c$() ? message(capabilities().reason || (capabilities().authenticated ? "untrusted_executor" : "authentication_required")) : tr("正在核对部署与登录状态；暂不接收凭证。", "Checking deployment and sign-in; credentials are not accepted yet.");
+					})());
+					return _el$35;
+				})();
+			},
+			get children() {
+				return [
+					(() => {
+						var _el$6 = _tmpl$2$33(), _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$7.nextSibling, _el$0 = _el$9.firstChild, _el$10 = _el$0.nextSibling;
+						_el$10.nextSibling;
+						var _el$11 = _el$9.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$13.firstChild, _el$16 = _el$14.nextSibling;
+						_el$16.nextSibling;
+						var _el$17 = _el$13.nextSibling, _el$18 = _el$17.firstChild, _el$21 = _el$18.nextSibling, _el$22 = _el$21.nextSibling.nextSibling;
+						_el$22.nextSibling;
+						insert(_el$7, () => tr("凭证接收方", "Credential recipient"), _el$8);
+						insert(_el$7, () => capabilities()?.trusted_executor?.display_name, null);
+						insert(_el$9, () => tr("执行位置", "Execution location"), _el$0);
+						insert(_el$9, () => capabilities()?.trusted_executor?.location, _el$10);
+						insert(_el$9, () => capabilities()?.trusted_executor?.origin, null);
+						insert(_el$11, () => tr("模型数据将发送至所选 DeepSeek/OpenRouter 预设。供应商账户由你付费；费用未知不等于零，本应用不能限制 Key 在其他应用的支出。", "Model data goes to the selected DeepSeek/OpenRouter preset. Your provider account pays; unknown cost is not zero, and this app cannot cap spending by other apps."));
+						insert(_el$12, () => tr("Key 仅在本次执行端会话内存中使用。关闭网页后续期可能失效，不提供长期托管；已受理世界作业仍按世界规则推进。", "The key is held in executor session memory only. Closing the page may end renewal; long-term hosting is not provided. Accepted world jobs follow world rules."));
+						insert(_el$13, () => tr("会话有效期 / 绝对上限（秒）", "Session lease / absolute limit (seconds)"), _el$14);
+						insert(_el$13, () => Math.floor((capabilities()?.limits?.lease_ms || 0) / 1e3), _el$16);
+						insert(_el$13, () => Math.floor((capabilities()?.limits?.absolute_ms || 0) / 1e3), null);
+						insert(_el$17, () => tr("调用 / token / 并发上限", "Call / token / concurrency limits"), _el$18);
+						insert(_el$17, () => capabilities()?.limits?.max_calls ?? "—", _el$21);
+						insert(_el$17, () => capabilities()?.limits?.max_tokens ?? "—", _el$22);
+						insert(_el$17, () => capabilities()?.limits?.max_concurrent ?? "—", null);
+						return _el$6;
+					})(),
+					createComponent(Show, {
+						get when() {
+							return canControl();
+						},
+						get fallback() {
+							return (() => {
+								var _el$36 = _tmpl$6$15();
+								insert(_el$36, () => tr("先选中你有权控制的 Agent；连接不能补授权限。", "Select an Agent you may control; a model connection cannot grant authority."));
+								return _el$36;
+							})();
+						},
+						get children() {
+							var _el$23 = _tmpl$3$26(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$27.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$29.nextSibling;
+							_el$23.addEventListener("submit", create);
+							insert(_el$24, () => tr("供应商与模型", "Provider and model"), _el$25);
+							_el$25.addEventListener("change", (event) => setPreset(event.currentTarget.value));
+							insert(_el$26, () => tr("请选择本部署配置", "Choose a configured preset"));
+							insert(_el$25, createComponent(For, {
+								get each() {
+									return capabilities()?.presets;
+								},
+								children: (item) => (() => {
+									var _el$37 = _tmpl$7$11(), _el$38 = _el$37.firstChild, _el$40 = _el$38.nextSibling;
+									_el$40.nextSibling;
+									insert(_el$37, () => item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter", _el$38);
+									insert(_el$37, () => item.model_id, _el$40);
+									insert(_el$37, (() => {
+										var _c$2 = memo(() => item.protocol === "chat_completions");
+										return () => _c$2() ? tr("工具对话", "Chat tools") : "Responses";
+									})(), null);
+									createRenderEffect(() => _el$37.value = item.id);
+									return _el$37;
+								})()
+							}), null);
+							insert(_el$27, () => tr("推理 API Key", "Inference API key"), _el$28);
+							var _ref$ = keyInput;
+							typeof _ref$ === "function" ? use(_ref$, _el$28) : keyInput = _el$28;
+							setAttribute(_el$28, "spellcheck", false);
+							_el$30.addEventListener("change", (event) => setConsent(event.currentTarget.checked));
+							insert(_el$29, () => tr("我知晓凭证接收方、会话隐私和供应商账户费用，同意本次连接使用。", "I understand the recipient, session privacy and provider charges, and consent to this connection."), null);
+							insert(_el$31, () => tr("保存本次连接", "Create session connection"));
+							createRenderEffect((_p$) => {
+								var _v$ = busy(), _v$2 = busy(), _v$3 = busy() || !consent() || !preset();
+								_v$ !== _p$.e && (_el$25.disabled = _p$.e = _v$);
+								_v$2 !== _p$.t && (_el$28.disabled = _p$.t = _v$2);
+								_v$3 !== _p$.a && (_el$31.disabled = _p$.a = _v$3);
+								return _p$;
+							}, {
+								e: void 0,
+								t: void 0,
+								a: void 0
+							});
+							createRenderEffect(() => _el$25.value = preset());
+							createRenderEffect(() => _el$30.checked = consent());
+							return _el$23;
+						}
+					}),
+					createComponent(Show, {
+						get when() {
+							return connections().length;
+						},
+						get children() {
+							var _el$32 = _tmpl$4$23(), _el$33 = _el$32.firstChild;
+							insert(_el$32, () => tr("本会话连接", "Session connections"), _el$33);
+							_el$33.addEventListener("change", (event) => setSelectedId(event.currentTarget.value));
+							insert(_el$33, createComponent(For, {
+								get each() {
+									return connections();
+								},
+								children: (item) => (() => {
+									var _el$41 = _tmpl$8$7(), _el$42 = _el$41.firstChild;
+									insert(_el$41, () => capabilities()?.presets.find((value) => value.id === item.preset_id)?.model_id || tr("模型配置", "Model configuration"), _el$42);
+									insert(_el$41, () => stateLabel(item.state), null);
+									createRenderEffect(() => _el$41.value = item.id);
+									return _el$41;
+								})()
+							}));
+							createRenderEffect(() => _el$33.disabled = busy());
+							createRenderEffect(() => _el$33.value = selectedId());
+							return _el$32;
+						}
+					}),
+					createComponent(Show, {
+						get when() {
+							return selected();
+						},
+						children: (current) => (() => {
+							var _el$43 = _tmpl$9$6(), _el$44 = _el$43.firstChild, _el$45 = _el$44.firstChild, _el$46 = _el$44.nextSibling, _el$47 = _el$46.firstChild, _el$49 = _el$47.nextSibling;
+							_el$49.nextSibling;
+							var _el$52 = _el$46.nextSibling, _el$53 = _el$52.firstChild, _el$54 = _el$52.nextSibling, _el$55 = _el$54.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$55.nextSibling, _el$58 = _el$57.firstChild, _el$59 = _el$58.nextSibling, _el$60 = _el$59.nextSibling, _el$61 = _el$57.nextSibling;
+							insert(_el$44, (() => {
+								var _c$3 = memo(() => current().state === "revoked");
+								return () => _c$3() ? stateLabel("revoked") : memo(() => !!expired(current()))() ? stateLabel("expired") : stateLabel(current().state);
+							})(), _el$45);
+							insert(_el$44, () => stateLabel(current().run_state), null);
+							insert(_el$43, createComponent(Show, {
+								get when() {
+									return current().execution;
+								},
+								children: (execution) => (() => {
+									var _el$62 = _tmpl$0$6(), _el$63 = _el$62.firstChild, _el$65 = _el$63.nextSibling;
+									_el$65.nextSibling;
+									insert(_el$62, (() => {
+										var _c$4 = memo(() => execution().phase === "running");
+										return () => _c$4() ? tr("本轮正在执行", "Run in progress") : (RUN_REASON[execution().reason] || ["执行已停止，结果需核对", "Execution stopped; verify the result"])[zh() ? 0 : 1];
+									})(), _el$63);
+									insert(_el$62, () => tr("已确认效果", "Confirmed effects"), _el$65);
+									insert(_el$62, () => execution().successful_effects ?? "—", null);
+									return _el$62;
+								})()
+							}), _el$46);
+							insert(_el$46, () => tr("已占用调用预算 / token", "Call budget used / tokens reserved"), _el$47);
+							insert(_el$46, () => current().calls_spent ?? "—", _el$49);
+							insert(_el$46, () => current().tokens_reserved ?? "—", null);
+							insert(_el$43, createComponent(Show, {
+								get when() {
+									return current().error_code;
+								},
+								get children() {
+									var _el$50 = _tmpl$6$15();
+									insert(_el$50, () => message(current().error_code));
+									return _el$50;
+								}
+							}), _el$52);
+							insert(_el$43, createComponent(Show, {
+								get when() {
+									return !capabilities()?.executor_available;
+								},
+								get children() {
+									var _el$51 = _tmpl$6$15();
+									insert(_el$51, () => message("executor_unavailable"));
+									return _el$51;
+								}
+							}), _el$52);
+							_el$53.addEventListener("change", (event) => setProbeConsent(event.currentTarget.checked));
+							insert(_el$52, () => tr("同意一次有界、可能计费的模型检查；不写游戏世界。", "Consent to a bounded, potentially billable model check; it does not write the world."), null);
+							_el$54.$$click = () => void act(async () => {
+								apply(await client.probe(current()));
+								setProbeConsent(false);
+								setRunConsent(false);
+							});
+							insert(_el$54, () => tr("测试连接", "Test connection"));
+							_el$56.addEventListener("change", (event) => setRunConsent(event.currentTarget.checked));
+							insert(_el$55, () => tr("确认当前 Agent、目标与上述运行限制，开始后供应商账户继续计费。", "Confirm this Agent, goal and limits; starting permits further provider charges."), null);
+							_el$58.$$click = () => void act(async () => {
+								apply(await client.activate(current(), {
+									target_ref: { agent_id: agentId() },
+									limits: capabilities().limits
+								}));
+								setRunConsent(false);
+							});
+							insert(_el$58, () => tr("确认开始", "Confirm start"));
+							_el$59.$$click = () => void act(async () => {
+								apply(await client.stop(current()));
+								setRunConsent(false);
+							});
+							insert(_el$59, () => tr("停止新决策", "Stop new decisions"));
+							_el$60.$$click = () => void act(async () => {
+								apply(await client.forget(current()));
+								setProbeConsent(false);
+								setRunConsent(false);
+							});
+							insert(_el$60, () => tr("断开并忘记", "Disconnect and forget"));
+							insert(_el$61, () => tr("停止保留本次有效连接；忘记会停用凭证。两者都不撤销供应商 Key、不保证已发调用退款，也不取消已提交世界作业。未知结果须按原操作核对。", "Stop retains the valid session connection; forget disables its credential. Neither revokes the provider key, refunds sent calls, nor cancels submitted world jobs. Unknown outcomes require original-operation lookup."));
+							createRenderEffect((_p$) => {
+								var _v$4 = busy() || expired(current()), _v$5 = busy() || expired(current()) || !probeConsent(), _v$6 = busy() || expired(current()) || !capabilities()?.executor_available, _v$7 = busy() || expired(current()) || current().state !== "ready" || !runConsent() || !canControl() || !capabilities()?.executor_available, _v$8 = busy() || expired(current()), _v$9 = busy() || current().state === "revoked";
+								_v$4 !== _p$.e && (_el$53.disabled = _p$.e = _v$4);
+								_v$5 !== _p$.t && (_el$54.disabled = _p$.t = _v$5);
+								_v$6 !== _p$.a && (_el$56.disabled = _p$.a = _v$6);
+								_v$7 !== _p$.o && (_el$58.disabled = _p$.o = _v$7);
+								_v$8 !== _p$.i && (_el$59.disabled = _p$.i = _v$8);
+								_v$9 !== _p$.n && (_el$60.disabled = _p$.n = _v$9);
+								return _p$;
+							}, {
+								e: void 0,
+								t: void 0,
+								a: void 0,
+								o: void 0,
+								i: void 0,
+								n: void 0
+							});
+							createRenderEffect(() => _el$53.checked = probeConsent());
+							createRenderEffect(() => _el$56.checked = runConsent());
+							return _el$43;
+						})()
+					})
+				];
+			}
+		}), _el$34);
+		_el$34.$$click = () => void refresh();
+		insert(_el$34, () => tr("刷新连接状态", "Refresh connection status"));
+		createRenderEffect(() => _el$34.disabled = busy());
+		return _el$;
+	})();
+}
+delegateEvents(["click"]);
+//#endregion
 //#region software_safe_src/software_safe_constants.js
 var RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
 var VIEWER_RENDER_MODE = "viewer";
@@ -26555,6 +27234,11 @@ function InteractionPanel() {
 				get fixtureMetadata() {
 					return selectedAgentContextFixtureMetadata();
 				}
+			}), _el$318);
+			insert(_el$305, createComponent(ModelConnectionPanel, {
+				locale,
+				agentId,
+				canControl: canControlSelectedAgent
 			}), _el$318);
 			insert(_el$305, createComponent(Show, {
 				get when() {

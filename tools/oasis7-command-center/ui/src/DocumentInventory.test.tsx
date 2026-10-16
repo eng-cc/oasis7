@@ -4,12 +4,12 @@ import { createSignal } from 'solid-js';
 import DocumentInventory from './DocumentInventory';
 import type { Snapshot, DocumentSection } from './types';
 import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
-const api = vi.hoisted(() => ({ documentInventory: vi.fn() }));
+const api = vi.hoisted(() => ({ documentInventory: vi.fn(), documentDirectory: vi.fn() }));
 vi.mock('./bridge', () => ({ bridge: api, errorMessage: (error: unknown) => String(error), observedTime: () => '核验时间' }));
 const section: DocumentSection = { id: 'source', path: 'doc/design.md', title: '设计章节', revision: 'rev', committedRevision: 'head', dirty: false, content: '# 设计', line: 1, factKind: 'sourceFact', lifecycle: null };
 const file = (path = 'doc/design.md', extra: Partial<IndexedDocument> = {}): IndexedDocument => ({
   fileKey: path, path, title: path === section.path ? '设计文档' : path,
-  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, upstream: null, identity: null, ...extra,
+  kind: 'design', state: 'read', reason: null, revision: 'rev', bytes: 10, dirty: false, lifecycle: null, pairings: null, upstream: null, identity: null, allocations: null, ...extra,
 });
 const snapshot = (id = 'project', generation = '1'): Snapshot => ({
   project: { id, path: '/repo', head: 'head', branch: 'main', gitCommonDir: '/repo/.git', environment: 'local' },
@@ -204,4 +204,61 @@ it('distinguishes unparsed, absent, invalid and unread document identities', asy
   expect(screen.getByText(/ID 为空或格式不支持/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', {name:'doc/unread.md'}));
   expect(screen.queryByRole('region', {name:'文档身份声明'})).not.toBeInTheDocument();
+});
+it('keeps allocation rows and sides distinct and navigates only exact candidate chapters', async () => {
+  const upstream = {...section,id:'requirement',path:'doc/prd.md',title:'上游要求'};
+  const edge = (target: string, targetSection: string, targetRevision = 'rev') => ({declarationLine:8,destination:target,target,resolution:'resolved',targetSection,targetRevision,targetKind:target.startsWith('doc/prd')?'prd':'design'});
+  const allocations = {issue:null,rows:[{declarationLine:8,rawSample:'| requirement | <script>bad()</script> | design |',upstream:{issue:null,targets:[edge('doc/prd.md#REQ-1','requirement')]},design:{issue:null,targets:[edge('doc/design.md#DES-1','source')]}},{declarationLine:9,rawSample:'second row',upstream:{issue:'allocation cell has no explicit Markdown link',targets:[]},design:{issue:null,targets:[edge('doc/design.md#wrong','source','old-revision')]}}]};
+  api.documentInventory.mockResolvedValue(page([file(undefined,{allocations})]));
+  const showSource = vi.fn();
+  const data = snapshot(); data.sections.push(upstream);
+  const result = render(() => <DocumentInventory snapshot={data} showSource={showSource} />);
+  await screen.findByRole('button',{name:'设计文档'});
+  fireEvent.click(screen.getByRole('button',{name:'设计文档'}));
+  expect(screen.getByRole('region',{name:'承接表第 8 行'})).toBeInTheDocument();
+  expect(screen.getByRole('region',{name:'承接表第 9 行'})).toBeInTheDocument();
+  expect(screen.getByText(/<script>bad\(\)<\/script>/)).toBeInTheDocument();
+  expect(result.container.querySelector('script')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'打开承接上游章节：上游要求'}));
+  expect(showSource).toHaveBeenLastCalledWith(upstream,expect.any(HTMLElement));
+  expect(screen.getAllByRole('button',{name:'打开承接设计章节：设计章节'})).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button',{name:'打开承接设计章节：设计章节'}));
+  expect(showSource).toHaveBeenLastCalledWith(section,expect.any(HTMLElement));
+  expect(screen.getByText(/未推断条款关系/)).toBeInTheDocument();
+});
+it('distinguishes unparsed absent and incomplete allocation tables', async () => {
+  api.documentInventory.mockResolvedValue(page([file(),file('doc/none.design.md',{allocations:{issue:null,rows:[]}}),file('doc/limited.design.md',{allocations:{issue:'allocation row limit 32 exceeded',rows:[]}})]));
+  render(() => <DocumentInventory snapshot={snapshot()} showSource={vi.fn()} />);
+  await screen.findByRole('button',{name:'设计文档'});
+  fireEvent.click(screen.getByRole('button',{name:'设计文档'}));
+  expect(screen.getByText('旧清单尚未解析承接表，请刷新本地事实。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'doc/none.design.md'}));
+  expect(screen.getByText('本次明确章节范围未发现需求承接表行。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'doc/limited.design.md'}));
+  expect(screen.getByText(/承接表解析不完整：超过每文件 32 行/)).toBeInTheDocument();
+  expect(screen.queryByText('本次明确章节范围未发现需求承接表行。')).not.toBeInTheDocument();
+});
+
+it('reuses file details when selecting a directory leaf', async () => {
+  api.documentInventory.mockResolvedValue(page());
+  const selected = file();
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  const showSource=vi.fn();render(()=><DocumentInventory snapshot={snapshot()} showSource={showSource}/>);
+  fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
+  fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
+  fireEvent.click(screen.getByRole('button',{name:'设计章节 · 第 1 行'}));
+  expect(showSource).toHaveBeenLastCalledWith(section,expect.any(HTMLElement));
+  expect(screen.getByRole('button',{name:'文档目录'})).toHaveAttribute('aria-pressed','true');
+});
+it('does not let a late file-list response clear the selected directory leaf', async () => {
+  let finish!: (value:DocumentInventoryPage)=>void;
+  api.documentInventory.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  const selected=file();
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  render(()=><DocumentInventory snapshot={snapshot()} showSource={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
+  fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
+  await screen.findByRole('button',{name:'设计章节 · 第 1 行'});
+  finish(page()); await Promise.resolve();
+  expect(screen.getByRole('button',{name:'设计章节 · 第 1 行'})).toBeInTheDocument();
 });

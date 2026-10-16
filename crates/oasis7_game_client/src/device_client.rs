@@ -109,7 +109,12 @@ impl Client {
                 fixed_commit: None,
                 deadline_unix_ms: None,
             })
-            .map_err(|_| "signed Agent read unavailable".to_owned())
+            .map_err(|error| {
+                format!(
+                    "signed Agent read unavailable ({})",
+                    polling::failure_tag(&error)
+                )
+            })
     }
     pub fn capabilities(&self) -> Result<Value, String> {
         let view = self.public_view()?;
@@ -495,6 +500,9 @@ use validation::*;
 #[path = "device_client_tests.rs"]
 mod tests;
 
+#[path = "device_client_outcome.rs"]
+mod outcomes;
+
 #[path = "device_client_poll.rs"]
 mod polling;
 
@@ -508,3 +516,6 @@ mod prepare_retry;
 
 #[path = "device_client_context_read_retry.rs"]
 mod context_read_retry;
+
+#[path = "device_client_stale_rejection.rs"]
+mod stale_rejection;

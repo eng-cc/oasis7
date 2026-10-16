@@ -6,9 +6,6 @@ on:
       - .gitattributes
       - .gitignore
       - .github/workflows/document-corpus-platform.yml
-      - doc/.governance/document-corpus-inventory.json
-      - doc/.governance/document-corpus/**
-      - doc/testing/evidence/inventory.json
       - scripts/ci-required-scope.json
       - scripts/document-corpus-inventory*
       - scripts/document_corpus.py
@@ -22,9 +19,6 @@ on:
       - .gitattributes
       - .gitignore
       - .github/workflows/document-corpus-platform.yml
-      - doc/.governance/document-corpus-inventory.json
-      - doc/.governance/document-corpus/**
-      - doc/testing/evidence/inventory.json
       - scripts/ci-required-scope.json
       - scripts/document-corpus-inventory*
       - scripts/document_corpus.py

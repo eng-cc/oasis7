@@ -27,6 +27,26 @@ pub struct IndexedDocument {
     /// Explicit design-header upstream declarations; None means not yet parsed.
     #[serde(default)]
     pub upstream: Option<DocumentPairings>,
+    /// Explicit body allocation tables; None in older caches/unread or non-design files.
+    #[serde(default)]
+    pub allocations: Option<DocumentAllocations>,
+}
+
+/// Bounded source-declared rows; does not establish implementation acceptance.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentAllocations {
+    pub rows: Vec<DocumentAllocation>,
+    pub issue: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentAllocation {
+    pub declaration_line: usize,
+    /// At most 512 characters of the original Markdown row, never rendered as HTML.
+    pub raw_sample: String,
+    pub upstream: DocumentPairings,
+    pub design: DocumentPairings,
 }
 
 /// Header declaration only; never used as a file key or proof of authority.
@@ -93,7 +113,19 @@ impl IndexedDocument {
             lifecycle: None,
             pairings: None,
             upstream: None,
+            allocations: None,
         }
+    }
+    pub(crate) fn matches_filter(&self, text: &str, read_filter: &str) -> bool {
+        (read_filter == "all" || (read_filter == "read") == (self.state == "read"))
+            && (text.is_empty()
+                || self.path.to_lowercase().contains(text)
+                || self.title.to_lowercase().contains(text)
+                || self
+                    .identity
+                    .as_ref()
+                    .and_then(|i| i.declared_id.as_ref())
+                    .is_some_and(|id| id.to_lowercase().contains(text)))
     }
     pub(crate) fn omit(&mut self, reason: &str) {
         self.state = match reason {
@@ -180,6 +212,72 @@ impl CommandCenter {
         &self,
         query: DocumentInventoryQuery,
     ) -> Result<DocumentInventoryPage> {
+        let inventory = self.load_document_inventory(&query)?;
+        let source = self.current.sources.iter().find(|s| s.kind == "local");
+        let text = query.query.trim().to_lowercase();
+        let filter = index::digest(&serde_json::to_vec(&(&text, &query.read_filter))?);
+        let offset = if let Some(cursor) = &query.cursor {
+            let cursor: Cursor = serde_json::from_str(cursor)
+                .map_err(|_| Error::Invalid("invalid document inventory cursor".into()))?;
+            if cursor.snapshot != inventory.snapshot_id || cursor.filter != filter {
+                return Err(Error::Invalid(
+                    "document inventory cursor expired; reload the first page".into(),
+                ));
+            }
+            cursor.offset
+        } else {
+            0
+        };
+        let matches: Vec<_> = inventory
+            .files
+            .iter()
+            .filter(|file| file.matches_filter(&text, &query.read_filter))
+            .collect();
+        if offset > matches.len() {
+            return Err(Error::Invalid(
+                "document inventory cursor outside result range".into(),
+            ));
+        }
+        let end = offset.saturating_add(100).min(matches.len());
+        let next_cursor = (end < matches.len())
+            .then(|| {
+                serde_json::to_string(&Cursor {
+                    snapshot: inventory.snapshot_id.clone(),
+                    filter,
+                    offset: end,
+                })
+            })
+            .transpose()?;
+        let read = inventory
+            .files
+            .iter()
+            .filter(|file| file.state == "read")
+            .count();
+        Ok(DocumentInventoryPage {
+            schema_version: 1,
+            project_id: inventory.project_id.clone(),
+            snapshot_id: inventory.snapshot_id.clone(),
+            baseline_oid: inventory.baseline_oid.clone(),
+            generated_at: inventory.generated_at.clone(),
+            candidates: inventory.files.len(),
+            read,
+            omitted: inventory.files.len() - read,
+            read_bytes: inventory.files.iter().filter_map(|file| file.bytes).sum(),
+            total_matches: matches.len(),
+            partial: read != inventory.files.len(),
+            stale: source.is_none_or(|s| s.error.is_some()),
+            error: source.and_then(|s| s.error.clone()),
+            files: matches[offset..end]
+                .iter()
+                .map(|file| (*file).clone())
+                .collect(),
+            next_cursor,
+        })
+    }
+    pub(crate) fn load_document_inventory(
+        &self,
+        query: &DocumentInventoryQuery,
+    ) -> Result<Inventory> {
         if query.schema_version != 1 {
             return Err(Error::Invalid(
                 "unsupported document inventory schema".into(),
@@ -238,75 +336,6 @@ impl CommandCenter {
                 "document inventory expired; reload the first page".into(),
             ));
         }
-        let text = query.query.trim().to_lowercase();
-        let filter = index::digest(&serde_json::to_vec(&(&text, &query.read_filter))?);
-        let offset = if let Some(cursor) = &query.cursor {
-            let cursor: Cursor = serde_json::from_str(cursor)
-                .map_err(|_| Error::Invalid("invalid document inventory cursor".into()))?;
-            if cursor.snapshot != inventory.snapshot_id || cursor.filter != filter {
-                return Err(Error::Invalid(
-                    "document inventory cursor expired; reload the first page".into(),
-                ));
-            }
-            cursor.offset
-        } else {
-            0
-        };
-        let matches: Vec<_> = inventory
-            .files
-            .iter()
-            .filter(|file| {
-                (query.read_filter == "all"
-                    || (query.read_filter == "read") == (file.state == "read"))
-                    && (text.is_empty()
-                        || file.path.to_lowercase().contains(&text)
-                        || file.title.to_lowercase().contains(&text)
-                        || file
-                            .identity
-                            .as_ref()
-                            .and_then(|i| i.declared_id.as_ref())
-                            .is_some_and(|id| id.to_lowercase().contains(&text)))
-            })
-            .collect();
-        if offset > matches.len() {
-            return Err(Error::Invalid(
-                "document inventory cursor outside result range".into(),
-            ));
-        }
-        let end = offset.saturating_add(100).min(matches.len());
-        let next_cursor = (end < matches.len())
-            .then(|| {
-                serde_json::to_string(&Cursor {
-                    snapshot: inventory.snapshot_id.clone(),
-                    filter,
-                    offset: end,
-                })
-            })
-            .transpose()?;
-        let read = inventory
-            .files
-            .iter()
-            .filter(|file| file.state == "read")
-            .count();
-        Ok(DocumentInventoryPage {
-            schema_version: 1,
-            project_id: inventory.project_id.clone(),
-            snapshot_id: inventory.snapshot_id.clone(),
-            baseline_oid: inventory.baseline_oid.clone(),
-            generated_at: inventory.generated_at.clone(),
-            candidates: inventory.files.len(),
-            read,
-            omitted: inventory.files.len() - read,
-            read_bytes: inventory.files.iter().filter_map(|file| file.bytes).sum(),
-            total_matches: matches.len(),
-            partial: read != inventory.files.len(),
-            stale: source.is_none_or(|s| s.error.is_some()),
-            error: source.and_then(|s| s.error.clone()),
-            files: matches[offset..end]
-                .iter()
-                .map(|file| (*file).clone())
-                .collect(),
-            next_cursor,
-        })
+        Ok(inventory)
     }
 }

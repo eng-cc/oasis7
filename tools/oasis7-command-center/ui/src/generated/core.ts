@@ -51,6 +51,12 @@ duplicateFiles: number,
  * Stable path sample, at most 20; duplicate_files is the full count.
  */
 duplicatePaths: Array<string>, };
+export type DocumentAllocation = { declarationLine: number,
+/**
+ * At most 512 characters of the original Markdown row, never rendered as HTML.
+ */
+rawSample: string, upstream: DocumentPairings, design: DocumentPairings, };
+export type DocumentAllocations = { rows: Array<DocumentAllocation>, issue: string | null, };
 export type IndexedDocument = {
 /**
  * Explicit file-header ID; None in older caches or unread files.
@@ -63,13 +69,44 @@ pairings: DocumentPairings | null,
 /**
  * Explicit design-header upstream declarations; None means not yet parsed.
  */
-upstream: DocumentPairings | null, };
+upstream: DocumentPairings | null,
+/**
+ * Explicit body allocation tables; None in older caches/unread or non-design files.
+ */
+allocations: DocumentAllocations | null, };
 export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
 /**
  * all / read / omitted
  */
 readFilter: string, cursor: string | null, };
 export type DocumentInventoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, candidates: number, read: number, omitted: number, readBytes: number, totalMatches: number, partial: boolean, stale: boolean, error: string | null, files: Array<IndexedDocument>, nextCursor: string | null, };
+export type DocumentDirectoryQuery = { inventory: DocumentInventoryQuery,
+/**
+ * Empty for root; otherwise an exact repository-relative directory path.
+ */
+parentPath: string,
+/**
+ * Omitted preserves the original unfiltered query contract.
+ */
+lifecycleFilter?: string, };
+export type DocumentDirectoryEntry = { path: string, name: string,
+/**
+ * directory / prd / design / entry. No semantic ownership is inferred.
+ */
+kind: string, matchingFiles: number, depthLimited: boolean, file: IndexedDocument | null, };
+export type DocumentDirectoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, parentPath: string,
+/**
+ * Full scan coverage, independent of filters and this projection's kind scope.
+ */
+candidates: number, read: number, omitted: number, stale: boolean, error: string | null, eligibleFiles: number,
+/**
+ * Matching unique files across the full projection, not just this page/parent.
+ */
+matchingFiles: number,
+/**
+ * History matches excluded by the current filter, before pagination.
+ */
+hiddenHistoryFiles: number, lifecycleFilter: string, totalChildren: number, entries: Array<DocumentDirectoryEntry>, nextCursor: string | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };

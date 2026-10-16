@@ -1,0 +1,46 @@
+pub const ENV_LLM_MODEL: &str = "OASIS7_LLM_MODEL";
+pub const ENV_LLM_BASE_URL: &str = "OASIS7_LLM_BASE_URL";
+pub const ENV_LLM_API_KEY: &str = "OASIS7_LLM_API_KEY";
+pub const ENV_LLM_TIMEOUT_MS: &str = "OASIS7_LLM_TIMEOUT_MS";
+pub const ENV_LLM_SYSTEM_PROMPT: &str = "OASIS7_LLM_SYSTEM_PROMPT";
+pub const ENV_LLM_SHORT_TERM_GOAL: &str = "OASIS7_LLM_SHORT_TERM_GOAL";
+pub const ENV_LLM_LONG_TERM_GOAL: &str = "OASIS7_LLM_LONG_TERM_GOAL";
+pub const ENV_LLM_MAX_MODULE_CALLS: &str = "OASIS7_LLM_MAX_MODULE_CALLS";
+pub const ENV_LLM_MAX_DECISION_STEPS: &str = "OASIS7_LLM_MAX_DECISION_STEPS";
+pub const ENV_LLM_MAX_REPAIR_ROUNDS: &str = "OASIS7_LLM_MAX_REPAIR_ROUNDS";
+pub const ENV_LLM_PROMPT_MAX_HISTORY_ITEMS: &str = "OASIS7_LLM_PROMPT_MAX_HISTORY_ITEMS";
+pub const ENV_LLM_PROMPT_PROFILE: &str = "OASIS7_LLM_PROMPT_PROFILE";
+pub const ENV_LLM_FORCE_REPLAN_AFTER_SAME_ACTION: &str =
+    "OASIS7_LLM_FORCE_REPLAN_AFTER_SAME_ACTION";
+pub const ENV_LLM_HARVEST_MAX_AMOUNT_CAP: &str = "OASIS7_LLM_HARVEST_MAX_AMOUNT_CAP";
+pub const ENV_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS: &str =
+    "OASIS7_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS";
+pub const ENV_LLM_DEBUG_MODE: &str = "OASIS7_LLM_DEBUG_MODE";
+pub const ENV_LLM_STREAM_DIAGNOSTICS: &str = "OASIS7_LLM_STREAM_DIAGNOSTICS";
+pub const TOML_LLM_TABLE: &str = "llm";
+pub const TOML_LLM_MODEL: &str = "model";
+pub const TOML_LLM_BASE_URL: &str = "base_url";
+pub const TOML_LLM_API_KEY: &str = "api_key";
+pub const TOML_LLM_TIMEOUT_MS: &str = "timeout_ms";
+pub const TOML_LLM_SYSTEM_PROMPT: &str = "system_prompt";
+pub const TOML_LLM_SHORT_TERM_GOAL: &str = "short_term_goal";
+pub const TOML_LLM_LONG_TERM_GOAL: &str = "long_term_goal";
+pub const TOML_LLM_MAX_MODULE_CALLS: &str = "max_module_calls";
+pub const TOML_LLM_MAX_DECISION_STEPS: &str = "max_decision_steps";
+pub const TOML_LLM_MAX_REPAIR_ROUNDS: &str = "max_repair_rounds";
+pub const TOML_LLM_PROMPT_MAX_HISTORY_ITEMS: &str = "prompt_max_history_items";
+pub const TOML_LLM_PROMPT_PROFILE: &str = "prompt_profile";
+pub const TOML_LLM_FORCE_REPLAN_AFTER_SAME_ACTION: &str = "force_replan_after_same_action";
+pub const TOML_LLM_HARVEST_MAX_AMOUNT_CAP: &str = "harvest_max_amount_cap";
+pub const TOML_LLM_EXECUTE_UNTIL_AUTO_REENTER_TICKS: &str = "execute_until_auto_reenter_ticks";
+pub const TOML_LLM_DEBUG_MODE: &str = "debug_mode";
+pub const TOML_LLM_PROFILE: &str = "profile";
+pub const TOML_LLM_MODEL_PROVIDER: &str = "model_provider";
+pub const TOML_MODEL_PROVIDERS_TABLE: &str = "model_providers";
+pub const TOML_PROFILES_TABLE: &str = "profiles";
+pub const TOML_MODEL_PROVIDER_AUTH_TOKEN: &str = "auth_token";
+pub const TOML_LLM_AGENT_OVERRIDES_TABLE: &str = "agent_overrides";
+pub const ENV_LLM_SHORT_TERM_GOAL_AGENT_PREFIX: &str = "OASIS7_LLM_SHORT_TERM_GOAL_";
+pub const ENV_LLM_LONG_TERM_GOAL_AGENT_PREFIX: &str = "OASIS7_LLM_LONG_TERM_GOAL_";
+
+pub use oasis7_agent_harness::DEFAULT_LLM_MODEL;

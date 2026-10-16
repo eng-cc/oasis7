@@ -1,5 +1,6 @@
 use oasis7_command_center_core::codex::*;
 use oasis7_command_center_core::context::*;
+use oasis7_command_center_core::document_directory::*;
 use oasis7_command_center_core::document_inventory::*;
 use oasis7_command_center_core::domain::*;
 use oasis7_command_center_core::github::{Check, GitHubSnapshot, PullRequest};
@@ -32,9 +33,14 @@ fn main() {
         DocumentPairing::decl(),
         DocumentPairings::decl(),
         DocumentIdentity::decl(),
+        DocumentAllocation::decl(),
+        DocumentAllocations::decl(),
         IndexedDocument::decl(),
         DocumentInventoryQuery::decl(),
         DocumentInventoryPage::decl(),
+        DocumentDirectoryQuery::decl(),
+        DocumentDirectoryEntry::decl(),
+        DocumentDirectoryPage::decl(),
         Preferences::decl(),
         DecisionDraft::decl(),
         DecisionRecord::decl(),
