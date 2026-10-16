@@ -1,11 +1,11 @@
 {
   "record": {
-    "content_set_sha256": "979f3d49572890ea4325dcd66430d00e29427b489340d34bdb64855145727b08",
+    "content_set_sha256": "de3de858f609a15a378612a18ce5248aa483211858c94ea10c3e9246abb5bdc7",
     "current_authority": "doc/testing/templates/README.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_active_template_or_example",
     "id": "testing-templates-and-examples",
-    "note": "reviewed all 38 reusable template/example members and #4438 L4 summary execution-result, unreviewed judgment and portable authority-link changes; explicitly legacy rehearsal material remains non-live; current authority, full member set and non-readiness boundaries retained; no execution or release claim",
+    "note": "Historical review retained from base 080488ab902802d9d92a10f6f6e561a6ddf684fc: reviewed all 38 reusable template/example members and #4438 L4 summary execution-result, unreviewed judgment and portable authority-link changes; explicitly legacy rehearsal material remains non-live; current authority, full member set and non-readiness boundaries retained; no execution or release claim. Delta review covers only external-verifier-light-client-lite-v1-template.md and its single-proof helper/verifier boundary: sampled head, requested range, no continuous-window claim. The other 37 members are byte-identical to that base; their prior review is retained, not newly repeated. Independent delta review confirmed these boundaries; no browser, proof execution, deployment, release or readiness acceptance is claimed.",
     "paths": [
       "doc/testing/templates/chain-proof-evidence-v1-template.md",
       "doc/testing/templates/external-verifier-light-client-lite-v1-template.md",
