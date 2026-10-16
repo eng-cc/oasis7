@@ -412,6 +412,11 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。当前 workflow 中 `all_existing` 仍只生成 `linux-x64`、`macos-x64`、`windows-x64`；完整 managed-fleet packaging 必须对同一 requested ref/commit 协调执行 `all_existing` plus `linux_macos_arm64` runs，并记录两组 run ID、BUILDINFO 与 SHA256SUMS。验收以 runtime hash、commit lineage、status health 和高度对齐为准。
 
 Wasmtime48.0.3 → 49.0.3 不得采用运行中 rolling/restart/单节点 rollback；完整 fleet 的审读授权计划、quiescence、identity/checkpoint/closure admission 和 recovery hold 依 [协调维护分册](wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance) 执行，条件不满足保持 `hold`。
+### Routine observer rollout capability hold
+本节 observer mutation 分支当前保持 **hold**。现有 `p2p-public-testnet-package-rollout.py` 的 `canonical_provider_status_urls` 要求 sequencer/storage 都提供 `/v1/chain/status`，生成的 observer gate 也读取该 full-status checkpoint；这与 2.2 对 204 部署证据的禁止条款不兼容。不能用 local diagnostic exception、改 URL 为 `/v1/chain/rebuild-proof`、手写字段投影或跳过 wrapper 解除 hold。
+
+解除该分支 hold 前，必须先完成并独立评审受治理的 proof-aware gate 接线，使其消费独立验证、同窗绑定的 204 signed proof，并保留既有双 provider checkpoint identity、高度兼容、完整 closure probe 和 identity-v2 capability 要求；随后以实际候选验证拒绝缺失、过期、错误签名/绑定与 closure 不完整等情况。本说明没有实现该 adapter，也不授权部署。下列顺序保留原验收条件，用于能力修复后的执行；不是当前可执行的 observer 放行路径。
+
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
 2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。
@@ -810,17 +815,11 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 确认“节点已跑起来”和“整个 fleet 真正 ready”不是一回事，并分别打结论。
 
 ### Required final snapshot
-需要同时保留所有 current operator inventory 节点的状态快照，至少包括：
+需要同时保留所有 current operator inventory 节点的原始状态快照；204 使用 bounded proof，不能用 full-status 路径抄表：
 
-1. `running`
-2. `last_error`
-3. `committed_height`
-4. `network_committed_height`
-5. `last_execution_height`
-6. `connected_peers`
-7. `readiness.ready`
-8. `readiness.failed_gates`
-9. `consensus.network_head.decision`
+- 204 proof：`liveness.running`、`liveness.last_error`、`heights.committed_height`、`heights.network_committed_height`、`heights.last_execution_height`、`connected_peers`、`readiness.status`、`readiness.failed_gates`、`network_head.decision`，以及原 `checkpoint` 和独立 proof-verification receipt。
+- storage / observers full status：`running`、`last_error`、`consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height`、`replication.connected_peers`、`readiness.status`、`readiness.failed_gates`、`consensus.network_head.decision`。
+- 缺失字段必须记为采集/结构错误，不能把错误路径得到的 `null` 当作无故障或 ready；合法 `liveness.last_error: null` 与字段缺失分别记录。原始 proof 和独立 verification receipt 必须保留，投影本身不提供验证或部署 authority。
 
 在作出 `Fleet healthy` 或 recovery update 结论前，必须保留一个
 bounded same-window artifact。204 的输入先按 2.2.1 采集、独立验证并
@@ -965,7 +964,7 @@ ssh <windows-observer> 'powershell -NoProfile -Command "Invoke-RestMethod -UseBa
 curl -fsS http://127.0.0.1:19083/v1/chain/status
 ```
 
-For the 204 proof, record `schema_version`, `running`, `last_error`,
+For the 204 proof, record `schema_version`, `liveness.running`, `liveness.last_error`,
 `readiness.status`, `readiness.failed_gates`, the three fields under
 `heights`, `network_head.decision`, `checkpoint`, `local_peer_id`, and the
 `oasis7.rebuild_proof_verification.v1` receipt. Record the separate identity

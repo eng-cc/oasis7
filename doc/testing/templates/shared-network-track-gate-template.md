@@ -24,9 +24,9 @@
 ## Track Required Lanes
 | Track | Required lanes |
 | --- | --- |
-| `public_testnet_rehearsal` | `candidate_bundle_integrity` / `shared_access` / `multi_entry_closure` / `governance_live_drill` / `short_window_longrun` / `rollback_target_ready` |
-| `staging` | `candidate_bundle_integrity` / `shared_access` / `unified_candidate_gate` / `governance_live_drill` / `upgrade_rehearsal` / `rollback_rehearsal` / `incident_template` |
-| `canary` | `candidate_bundle_integrity` / `promotion_record` / `canary_window` / `rollback_rehearsal` / `incident_review` / `exit_decision` |
+| `public_testnet_rehearsal` | `candidate_bundle_integrity` / `shared_access` / `multi_entry_closure` / `mixed_topology_baseline` / `governance_live_drill` / `short_window_longrun` / `rollback_target_ready` |
+| `staging` | `candidate_bundle_integrity` / `shared_access` / `unified_candidate_gate` / `mixed_topology_rehearsal` / `governance_live_drill` / `upgrade_rehearsal` / `rollback_rehearsal` / `incident_template` |
+| `canary` | `candidate_bundle_integrity` / `promotion_record` / `canary_window` / `mixed_topology_claim_review` / `rollback_rehearsal` / `incident_review` / `exit_decision` |
 
 ## TSV 列格式
 ```tsv
@@ -34,16 +34,18 @@ lane_id<TAB>owner<TAB>status<TAB>evidence_path<TAB>note
 ```
 
 ## 模板文件
-- `public_testnet_rehearsal`: `doc/testing/templates/network-rehearsal-track-gate-lanes.public_testnet_rehearsal.template.tsv`
-- `staging`: `doc/testing/templates/network-rehearsal-track-gate-lanes.staging.template.tsv`
-- `canary`: `doc/testing/templates/network-rehearsal-track-gate-lanes.canary.template.tsv`
+- `public_testnet_rehearsal`: `doc/testing/templates/shared-network-track-gate-lanes.shared_devnet.template.tsv`
+- `staging`: `doc/testing/templates/shared-network-track-gate-lanes.staging.template.tsv`
+- `canary`: `doc/testing/templates/shared-network-track-gate-lanes.canary.template.tsv`
+
+`shared_devnet` 是保留的模板文件名；当前脚本的对应 track 参数为 `public_testnet_rehearsal`，不是新的 live network tier。三份模板分别包含 7 / 8 / 7 条 required lane。先复制并按同一候选的真实证据填写；模板中的状态和路径仅为示例，不能作为运行通过记录。
 
 ## 最小命令
 ```bash
 ./scripts/network-rehearsal-track-gate.sh \
   --track public_testnet_rehearsal \
   --candidate-bundle output/release-candidates/legacy-public-testnet-rehearsal-01.json \
-  --lanes-tsv doc/testing/templates/network-rehearsal-track-gate-lanes.public_testnet_rehearsal.template.tsv \
+  --lanes-tsv doc/testing/templates/shared-network-track-gate-lanes.shared_devnet.template.tsv \
   --out-dir output/network-rehearsal-gates
 ```
 
