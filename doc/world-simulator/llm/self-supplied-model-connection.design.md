@@ -1,7 +1,9 @@
 # 网页自带模型连接：Agent 客户端侧系统设计
 
-- 生命周期：`active`；状态：目标合同，未声明实现、部署、真实供应商兼容或安全验收完成。
-- Owner role：`agent_engineer`；协作：`viewer_engineer`、`runtime_engineer`、`qa_engineer`、`producer_system_designer`。
+- 生命周期：`active`
+- 文档状态：目标合同，未声明实现、部署、真实供应商兼容或安全验收完成。
+- Owner role：`agent_engineer`
+- 协作：`viewer_engineer`、`runtime_engineer`、`qa_engineer`、`producer_system_designer`。
 - 固定审读基线：`nil-studio/oasis7@35961e32b7e7ad3469b7cd7db2e718fb1d6795b1`；2026-10-16。
 - 产品主责：[网页自带模型连接 PRD](../../product/agents-world-simulation/self-supplied-model-connection.prd.md)；[配对产品设计](../../product/agents-world-simulation/self-supplied-model-connection.design.md)。
 - 系统入口：[LLM/provider](README.md)；既有分层：[Agent Game Client](agent-game-client-boundary.design.md#des-agc-001)。
@@ -33,6 +35,7 @@
 [第一方客户端边界](agent-game-client-boundary.design.md#des-agc-001)拥有依赖方向；[Game API](external-agent-game-api.design.md#api-composition)拥有游戏接口；[Provider Switch](provider-switch-intent-continuity.design.md#des-psw-003)拥有在途意图连续性。这里的 Web 模型管理 API 既不是 Game API，也不是 operator/control API 的对外开放。它只能在用户自己的受限第一方执行上下文内管理模型连接。
 
 <a id="current-state"></a>
+
 ## 3. 当前状态、目标状态与差距
 
 | 对象 | 固定基线事实与源码入口 | 本设计增加的目标及尚未证明的部分 |
@@ -48,6 +51,7 @@
 ## 4. 边界与结构
 
 <a id="des-byok-001"></a>
+
 ### DES-BYOK-001：模型连接是第一方客户端的接入层
 
 Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；[上游要求](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-001)。
@@ -103,6 +107,7 @@ DeepSeek / OpenRouter       Harness / 第一方 Game Client
 所有写接口校验应用认证、精确 Origin 与 CSRF，响应 `Cache-Control: no-store`；不使用 URL/query/Referer 传 Key。跨账号读取返回不暴露对象是否存在的错误。并发更新用版本比较，冲突返回当前脱敏版本和刷新指引；禁止 last-write-wins 隐式替换。
 
 <a id="des-byok-005"></a>
+
 ### DES-BYOK-005：按能力适配，而非只替换 base_url
 
 Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[上游要求](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-005)。
@@ -120,6 +125,7 @@ OpenRouter Responses 按官方无状态合同携带必要历史，使用 `store:
 ## 7. 关键流程
 
 <a id="des-byok-002"></a>
+
 ### DES-BYOK-002：凭证、预算和数据流隔离
 
 Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；[上游要求](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-002)。
@@ -135,6 +141,7 @@ Key 只从已认证网页提交到已明确展示的第一方执行端，随后�
 Prompt 只含当前授权的目标与世界投影，禁止注入凭证、其他用户目标/记忆和管理配置。新供应商/路由的数据去向重新确认；模型输出不能要求读取凭证、改支付来源或扩大允许的上游域名。
 
 <a id="des-byok-003"></a>
+
 ### DES-BYOK-003：会话内执行与唯一世界权限
 
 Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[上游要求](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-003)。
@@ -148,11 +155,12 @@ Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[上游要求](../../p
 ## 8. 失败、恢复与一致性
 
 <a id="des-byok-004"></a>
+
 ### DES-BYOK-004：停用、切换与迟到结果
 
 Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-004)。
 
-停用先原子标记 connection/version 不可再用并停止续期，再通知执行控制取消待发模型工作；已发请求尽力取消，但不能保证供应商不继续计费。停止状态必须回读确认，未确认不能只靠乐观 UI 宣称成功。执行端在模型返回后、产生新游戏提交前重查绑定、租约与 Runtime fence；已停用或过期结果只可成为受限诊断，不进入新决策。
+停止当前运行先原子撤销 ActiveBinding 的 run generation，使该代待发工作与迟到结果永久失去执行资格；连接和凭证可在原有期限内保留，重新开始必须由用户确认并创建新代绑定，不能复活旧代结果。断开并忘记、退出账号、凭证撤销或租约到期则原子标记 connection/version 不可再用并停止续期、销毁凭证，再通知执行控制取消待发模型工作；已发请求尽力取消，但不能保证供应商不继续计费。停止状态必须回读确认，未确认不能只靠乐观 UI 宣称成功。执行端在模型返回后、产生新游戏提交前重查绑定、租约与 Runtime fence；已停用或过期结果只可成为受限诊断，不进入新决策。
 
 切换以新连接完成检查为前提，版本 CAS 确认后执行既有[Provider Switch](provider-switch-intent-continuity.design.md#des-psw-003)停止/交接。新模型只读取授权的当前目标和世界结果，不自动复用旧模型私有推理；旧 provider 的未知世界 operation 必须保留原身份并先查询。读不到、超时、鉴权失败不能推定未发生；世界操作幂等性由现有 Game API/Runtime 合同保证，不由模型连接层重新实现。
 
@@ -179,18 +187,16 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../p
 ## 11. 验证与验收
 
 <a id="verification-mapping"></a>
+
 ### 11.1 验证映射表
 
-| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 验证项 / 场景 | 方法与测试层级 | 证据与判定边界 | 状态 / 未覆盖范围 |
+| 上游 requirement（path#fragment） | 本设计条款（path#anchor） | 验证项 / 场景 | 验证方法与测试/手册源 | 证据与判定边界 | 状态 / 未覆盖范围 |
 | --- | --- | --- | --- | --- | --- |
-| Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；[AC-BYOK-001](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-001) | [DES-BYOK-001](#des-byok-001) | BYOK-01 无 LetAI/CLI 的网页主流程；静态/缺服务入口 | Web E2E + 部署能力负例 | 两家逐一从表单至明确开始；未支持入口不收 Key | 计划验证；未运行真实网页 |
-| Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；[AC-BYOK-002](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-002) | [DES-BYOK-002](#des-byok-002) | BYOK-02 租户隔离、CSRF、SSRF、重定向、日志与内存生命周期 | 单元/HTTP 集成 + 部署安全评审 | canary secret 不出授权端；不读全局 Key；销毁/脱敏覆盖异常路径 | 计划验证；文档存在不等于安全批准 |
-| Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；[AC-BYOK-002](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-002) | [DES-BYOK-002](#des-byok-002) | BYOK-03 并发预留、probe/重试计费、未知 usage、预算耗尽 | 假时钟/计费 stub/故障注入 | 无超出本地许可的新请求；不把 unknown 当零；不承诺外部账户封顶 | 计划验证；真实费用需供应商记录 |
-| Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[AC-BYOK-003](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-003) | [DES-BYOK-003](#des-byok-003) | BYOK-04 观察→工具→合法意图→回执，越权/过期目标 | Game Client 集成 + prepared-world 闭环 | 同一 Runtime 准入路径；模型成功不能越权；实际世界结果另核验 | 计划验证；不代签全量游戏能力 |
-| Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[AC-BYOK-003](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-003) | [DES-BYOK-003](#des-byok-003) | BYOK-05 浏览器关闭/节流、租约到期、服务重启 | 假时钟 + Web/服务故障注入 | 到期后新上游调用为零；世界作业照原规则；恢复需确认 | 计划验证；不是长期托管测试 |
-| Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[AC-BYOK-004](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-004) | [DES-BYOK-004](#des-byok-004) | BYOK-06 换 Key/供应商、停用、双标签页 CAS、迟到回复与原结果未知 | 并发/中断恢复集成 + Web E2E | 旧版本不发新请求、不产生新提交；原 operation 不重放且可追读 | 计划验证；上游取消/退费不作保证 |
-| Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[AC-BYOK-005](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-005) | [DES-BYOK-005](#des-byok-005) | BYOK-07 Responses/Chat 工具往返、流式终态、路由/字段约束 | 固定响应 fixture + adapter 合同测试 | 协议可配不是已支持；不丢 tools/安全路由条件 | 计划验证；不硬编码全部模型支持 |
-| Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[AC-BYOK-005](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#ac-byok-005) | [DES-BYOK-005](#des-byok-005) | BYOK-08 两家独立真实模型 + BYOK-01/04 场景组合 | 授权真实 Key、有限预算、固定构建和部署 | 分供应商/模型/协议/路由/浏览器证据；无 LetAI/NewAPI 依赖 | 计划验证；未调用真实模型，未升级公开 claim |
+| Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；[REQ-BYOK-001](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-001) | [DES-BYOK-001](#des-byok-001) | BYOK-01 网页主流程与缺执行端负例 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-01)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 两家逐一从表单至明确开始；不支持入口不收 Key | 计划验证；功能、真实供应商与网页均未验收 |
+| Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；[REQ-BYOK-002](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-002) | [DES-BYOK-002](#des-byok-002) | BYOK-02 租户/凭证隔离；BYOK-03 并发预算与未知用量 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-02)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | canary secret 不泄漏；未知 usage 不按零返还；不承诺账户硬封顶 | 计划验证；功能、真实供应商与网页均未验收 |
+| Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[REQ-BYOK-003](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-003) | [DES-BYOK-003](#des-byok-003) | BYOK-04 合法工具/游戏闭环；BYOK-05 会话失效与重启 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-04)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 同一 Runtime 准入；到期后无新调用，世界作业按原规则推进 | 计划验证；功能、真实供应商与网页均未验收 |
+| Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[REQ-BYOK-004](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-004) | [DES-BYOK-004](#des-byok-004) | BYOK-06 换 Key、Stop、双标签页 CAS、迟到结果与原件恢复 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-06)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 旧运行代永久失效；不替换未知原操作，不保证上游退费 | 计划验证；功能、真实供应商与网页均未验收 |
+| Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[REQ-BYOK-005](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-005) | [DES-BYOK-005](#des-byok-005) | BYOK-07 双协议工具往返/路由；BYOK-08 两家授权真实模型闭环 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-07)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 协议可配不等于已支持；分供应商/模型/协议/路由/浏览器取证 | 计划验证；功能、真实供应商与网页均未验收 |
 
 本表都是待执行场景，不是新增 CI 状态或流程材料。实现 PR 记录实际测试命令、版本和结果；费用调用另获真实凭证/预算授权。fixture 不使用真实 Key；截图、HAR、日志和回执证据必须先脱敏。普通 CI 可验证确定性安全与协议合同，真实付费模型和真实玩家体验不能由其代签。
 

@@ -5,7 +5,8 @@
 - 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[模块 PRD](prd.md)
 - 配对产品 PRD：[网页自带模型连接](self-supplied-model-connection.prd.md)
-- 生命周期：`active`；目标体验，不声明已经上线。
+- 生命周期：`active`
+- 文档状态：目标体验，不声明已经上线。
 - Owner role：`producer_system_designer`
 - Last reviewed：2026-10-16
 - 专业域权威：[模型连接系统设计](../../world-simulator/llm/self-supplied-model-connection.design.md)；[统一客户端](../../world-simulator/llm/agent-game-client-boundary.design.md)
@@ -26,6 +27,7 @@
 ## 3. 机制与体验关系
 
 <a id="experience-connect"></a>
+
 ### 3.1 连接入口与字段
 
 Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；承接 [REQ-BYOK-001](self-supplied-model-connection.prd.md#req-byok-001)。
@@ -42,6 +44,7 @@ Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；承接 [REQ-BYOK-001](
 | 开始 | 检查后仍单独确认；复用已有目标/委托信息 | 只运行确认的 Agent、任务和限制；无权限则解释阻塞 |
 
 <a id="experience-secrets"></a>
+
 ### 3.2 凭证和费用信息
 
 Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；承接 [REQ-BYOK-002](self-supplied-model-connection.prd.md#req-byok-002)。

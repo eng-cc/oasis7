@@ -6,7 +6,8 @@
 - 上位产品 PRD：[模块 PRD](prd.md)
 - 上位专题：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md#first-party-agent-client)
 - 配对产品 design：[连接与运行体验](self-supplied-model-connection.design.md)
-- 生命周期：`active`；性质：目标产品合同，不是当前可用性公告。
+- 生命周期：`active`
+- 文档状态：目标产品合同，不是当前可用性公告。
 - Owner role：`producer_system_designer`
 - Last reviewed：2026-10-16
 - 专业域权威：[LLM/provider](../../world-simulator/llm/README.md)；[模型连接系统设计](../../world-simulator/llm/self-supplied-model-connection.design.md)
@@ -55,6 +56,7 @@
 ## 4. 产品要求
 
 <a id="req-byok-001"></a>
+
 ### REQ-BYOK-001：网页完成模型接入
 
 Trace ID: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8
@@ -66,14 +68,15 @@ Trace ID: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8
 - 上位承诺：[Agent 产品范围](prd.md#2-范围与玩家边界)；[第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client)。
 - 专业权威：[DES-BYOK-001](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-001)。
 - 验收：[AC-BYOK-001](#ac-byok-001)。
-- 系统设计状态：已覆盖。
+- 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-001](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-001)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实。
+- 实现状态：未核实
 - 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
 - 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
 - 剩余范围：模型连接表单、预设、能力发现、真实网页路径均待实现/取证。
 
 <a id="req-byok-002"></a>
+
 ### REQ-BYOK-002：凭证去向与费用由玩家明确授权
 
 Trace ID: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca
@@ -85,14 +88,15 @@ Trace ID: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca
 - 上位承诺：[Agent 产品范围](prd.md#2-范围与玩家边界)；[第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client)。
 - 专业权威：[DES-BYOK-002](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-002)。
 - 验收：[AC-BYOK-002](#ac-byok-002)。
-- 系统设计状态：已覆盖。
+- 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-002](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-002)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实。
+- 实现状态：未核实
 - 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
 - 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
 - 剩余范围：凭证隔离、销毁、日志脱敏和预算边界需要安全评审及负向验证。
 
 <a id="req-byok-003"></a>
+
 ### REQ-BYOK-003：模型就绪不代替游戏授权或托管承诺
 
 Trace ID: O7-REQ-84294c93-3275-4d19-8faf-389950b87464
@@ -104,14 +108,15 @@ Trace ID: O7-REQ-84294c93-3275-4d19-8faf-389950b87464
 - 上位承诺：[Agent 产品范围](prd.md#2-范围与玩家边界)；[第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client)。
 - 专业权威：[DES-BYOK-003](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-003)。
 - 验收：[AC-BYOK-003](#ac-byok-003)。
-- 系统设计状态：已覆盖。
+- 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-003](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-003)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实。
+- 实现状态：未核实
 - 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
 - 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
 - 剩余范围：同一游戏客户端接线、会话租约、任务委托和世界回执联动待验证。
 
 <a id="req-byok-004"></a>
+
 ### REQ-BYOK-004：更换与断开不重放原行动
 
 Trace ID: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34
@@ -123,14 +128,15 @@ Trace ID: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34
 - 上位承诺：[Agent 产品范围](prd.md#2-范围与玩家边界)；[第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client)。
 - 专业权威：[DES-BYOK-004](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-004)。
 - 验收：[AC-BYOK-004](#ac-byok-004)。
-- 系统设计状态：已覆盖。
+- 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-004](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-004)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实。
+- 实现状态：未核实
 - 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
 - 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
 - 剩余范围：停用/重启/多标签页/在途调用与原操作恢复的组合验证待完成。
 
 <a id="req-byok-005"></a>
+
 ### REQ-BYOK-005：按供应商和模型能力分别证明可用
 
 Trace ID: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d
@@ -142,9 +148,9 @@ Trace ID: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d
 - 上位承诺：[Agent 产品范围](prd.md#2-范围与玩家边界)；[第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client)。
 - 专业权威：[DES-BYOK-005](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-005)。
 - 验收：[AC-BYOK-005](#ac-byok-005)。
-- 系统设计状态：已覆盖。
+- 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-005](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-005)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实。
+- 实现状态：未核实
 - 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
 - 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
 - 剩余范围：两个真实供应商、所选模型/协议、实际部署及浏览器的独立证据待取得。
@@ -152,6 +158,7 @@ Trace ID: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d
 ## 5. 验收与证据
 
 <a id="ac-byok-001"></a>
+
 ### AC-BYOK-001：网页完成接入
 
 Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；覆盖 [REQ-BYOK-001](#req-byok-001)。
@@ -163,6 +170,7 @@ Trace refs: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8；覆盖 [REQ-BYOK-001](
 则：网页可完成配置与启动；静态/缺执行端部署不能收集 Key，也不会伪报可运行。
 
 <a id="ac-byok-002"></a>
+
 ### AC-BYOK-002：凭证、费用与用户隔离
 
 Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；覆盖 [REQ-BYOK-002](#req-byok-002)。
@@ -174,6 +182,7 @@ Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；覆盖 [REQ-BYOK-002](
 则：只有授权主体可使用连接；费用/未知用量与剩余许可分开；凭证不进入日志、分享、世界数据或他人请求；无公共 Key/自动充值兜底。
 
 <a id="ac-byok-003"></a>
+
 ### AC-BYOK-003：有效执行与有界会话
 
 Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；覆盖 [REQ-BYOK-003](#req-byok-003)。
@@ -185,6 +194,7 @@ Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；覆盖 [REQ-BYOK-003](
 则：无委托不能行动；有效运行通过同一游戏接口取得真实回执；失效后无新模型调用，已受理作业与模型运行状态不混淆；恢复需重新确认。
 
 <a id="ac-byok-004"></a>
+
 ### AC-BYOK-004：切换、断开和未知结果恢复
 
 Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；覆盖 [REQ-BYOK-004](#req-byok-004)。
@@ -196,6 +206,7 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；覆盖 [REQ-BYOK-004](
 则：旧调用不再取得新执行资格；已发生世界效果保留且不重放；未知结果继续按原操作查询；本应用断开与供应商 Key 撤销分开说明。
 
 <a id="ac-byok-005"></a>
+
 ### AC-BYOK-005：独立支持与故障解释
 
 Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；覆盖 [REQ-BYOK-005](#req-byok-005)。
@@ -208,13 +219,13 @@ Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；覆盖 [REQ-BYOK-005](
 
 ### 5.1 追踪
 
-| 叶子要求 | 上位承诺 | 专业权威 | 验收场景 | 验证入口 |
-| --- | --- | --- | --- | --- |
-| [REQ-BYOK-001](#req-byok-001) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | [DES-BYOK-001](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-001) | [AC-BYOK-001](#ac-byok-001) | [验证映射](../../world-simulator/llm/self-supplied-model-connection.design.md#verification-mapping) |
-| [REQ-BYOK-002](#req-byok-002) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | [DES-BYOK-002](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-002) | [AC-BYOK-002](#ac-byok-002) | [验证映射](../../world-simulator/llm/self-supplied-model-connection.design.md#verification-mapping) |
-| [REQ-BYOK-003](#req-byok-003) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | [DES-BYOK-003](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-003) | [AC-BYOK-003](#ac-byok-003) | [验证映射](../../world-simulator/llm/self-supplied-model-connection.design.md#verification-mapping) |
-| [REQ-BYOK-004](#req-byok-004) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | [DES-BYOK-004](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-004) | [AC-BYOK-004](#ac-byok-004) | [验证映射](../../world-simulator/llm/self-supplied-model-connection.design.md#verification-mapping) |
-| [REQ-BYOK-005](#req-byok-005) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | [DES-BYOK-005](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-005) | [AC-BYOK-005](#ac-byok-005) | [验证映射](../../world-simulator/llm/self-supplied-model-connection.design.md#verification-mapping) |
+| 产品要求 REQ / 验收 AC | 上位承诺 | 专业 owner | 专业域权威 | 验证证据与边界 | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-BYOK-001](#req-byok-001) / [AC-BYOK-001](#ac-byok-001) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | `viewer_engineer / agent_engineer` | [DES-BYOK-001](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-001) | [BYOK-01](../../testing/manual/self-supplied-model-connection.manual.md#byok-01)：计划验证，不声明已运行；真实调用另需授权 | `test_tier_full` |
+| [REQ-BYOK-002](#req-byok-002) / [AC-BYOK-002](#ac-byok-002) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | `agent_engineer / qa_engineer` | [DES-BYOK-002](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-002) | [BYOK-02 / BYOK-03](../../testing/manual/self-supplied-model-connection.manual.md#byok-02)：计划验证，不声明已运行；真实调用另需授权 | `test_tier_required` |
+| [REQ-BYOK-003](#req-byok-003) / [AC-BYOK-003](#ac-byok-003) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | `agent_engineer / runtime_engineer` | [DES-BYOK-003](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-003) | [BYOK-04 / BYOK-05](../../testing/manual/self-supplied-model-connection.manual.md#byok-04)：计划验证，不声明已运行；真实调用另需授权 | `test_tier_full` |
+| [REQ-BYOK-004](#req-byok-004) / [AC-BYOK-004](#ac-byok-004) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | `agent_engineer / runtime_engineer` | [DES-BYOK-004](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-004) | [BYOK-06](../../testing/manual/self-supplied-model-connection.manual.md#byok-06)：计划验证，不声明已运行；真实调用另需授权 | `test_tier_full` |
+| [REQ-BYOK-005](#req-byok-005) / [AC-BYOK-005](#ac-byok-005) | [第一方客户端](provider-agent-experience-continuity.prd.md#first-party-agent-client) | `agent_engineer / qa_engineer` | [DES-BYOK-005](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-005) | [BYOK-07 / BYOK-08](../../testing/manual/self-supplied-model-connection.manual.md#byok-07)：计划验证，不声明已运行；真实调用另需授权 | `test_tier_full` |
 
 ### 5.2 效果与证据范围
 
