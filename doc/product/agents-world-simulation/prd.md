@@ -20,6 +20,7 @@
 - [外部 Agent Runtime 接入与持续游玩](external-agent-runtime-play.prd.md)：明确用户带 OpenClaw、Codex 等 Runtime 接入的产品目标、职责边界、首期完整游戏流程与分别验收；[配对产品设计](external-agent-runtime-play.design.md)承接接入、委托、运行和恢复体验。
 - [玩家与外部 Runtime 的持续协作](player-runtime-collaboration.prd.md)：细化 Web/桌面玩家与 OpenClaw/Codex 的任务绑定、目标版本确认、进度汇报、双向问答、授权申请及离线恢复；[配对产品设计](player-runtime-collaboration.design.md)承接协作交互。
 - [Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md)：只收敛玩家体验承诺；provider 组合的场景范围、评估方法与结论仍由专业域权威文档维护。
+- [网页自带模型连接](self-supplied-model-connection.prd.md)：承接玩家使用自己的 DeepSeek/OpenRouter 推理 Key 连接第一方执行方的目标体验；[配对产品设计](self-supplied-model-connection.design.md)区分凭证接收、检查、开始与停止，不声明当前已支持。
 - [玩家可读的世界舞台](player-readable-world-stage.prd.md)：约束正式世界表面的首读层级、空间关系来源、可归因玩家因果与按需诊断边界。
 - [玩家可读表面的连续性](player-readable-surface-continuity.prd.md)：约束 viewport、信息密度、语言与连接状态变化时，主要决策面仍可读、可操作且可恢复。
 - [Agent 对话与 Prompt 控制](agent-conversation-and-prompt-control.prd.md)：区分一次对话、预设/草稿与持续 Prompt/目标调整，并配对承载跨 surface 产品交互设计。
