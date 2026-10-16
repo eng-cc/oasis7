@@ -173,11 +173,11 @@ fn current_task_receipt(world: &oasis7::runtime::World, result: &CanonicalIntent
 // historical-layer validation, separate from complete snapshot restoration.
 // Snapshot restoration already validates every receipt; revalidate only the
 // owned cut's candidates before comparing them with current canonical history.
-fn historical_values_at_height<'a>(
-    values: &'a BTreeMap<String, serde_json::Value>,
+fn historical_values_at_height(
+    values: &BTreeMap<String, serde_json::Value>,
     height: u64,
     mut validate: impl FnMut(&str, &serde_json::Value) -> Result<(), String>,
-) -> Result<Vec<(&'a str, &'a serde_json::Value)>, String> {
+) -> Result<Vec<(&str, &serde_json::Value)>, String> {
     let mut selected = Vec::new();
     for (key, value) in values {
         let committed_height = value
