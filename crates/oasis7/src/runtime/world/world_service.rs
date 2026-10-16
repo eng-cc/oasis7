@@ -1,7 +1,10 @@
 use super::World;
+use crate::runtime::cognition_recovery::cognition_digest_v1;
+use crate::runtime::{RuntimeCognitionCommitRequestV1, WorldError};
 use crate::world_service::{
     AgentSignerDelegationChangeV1, CognitionIntentV1, SignedReadRequest, agent_authority,
 };
+use serde_json::json;
 #[path = "world_service_scheduler.rs"]
 mod scheduler;
 
@@ -112,6 +115,50 @@ impl World {
         Ok(serde_json::json!({"acknowledged": ack, "delivery_state": "acked"}))
     }
 
+    /// Exact Runtime identity shared by commit evaluation and the narrow
+    /// authenticated service rejection publisher. It grants no admission.
+    pub(crate) fn stale_cognition_rejection_identity(
+        request: &RuntimeCognitionCommitRequestV1,
+        action: &crate::runtime::Action,
+    ) -> Result<(String, String), WorldError> {
+        let action_value = serde_json::to_value(action).map_err(WorldError::from)?;
+        let digest = cognition_digest_v1(
+            "oasis7.cognition.stale-envelope.v1",
+            &json!({"request": request, "action": action_value}),
+        );
+        let key = cognition_digest_v1(
+            "oasis7.cognition.stale-idempotency.v1",
+            &json!({"request_digest": &request.request_digest, "envelope_digest": &digest}),
+        );
+        Ok((digest, key))
+    }
+
+    /// Only a token minted after authenticated, actually evaluated stale
+    /// cognition may close that exact turn and publish rejection feedback.
+    pub(crate) fn publish_authenticated_stale_cognition_rejection(
+        &mut self,
+        rejection: crate::world_service::ValidatedStaleCognitionRejection,
+    ) -> Result<(), String> {
+        let (feedback, envelope_digest, idempotency_key) = rejection.into_parts();
+        let mut transaction = self.clone();
+        transaction
+            .record_stale_cognition_rejection(
+                &feedback.agent_subject,
+                &feedback.agent_session_id,
+                &feedback.agent_turn_id,
+                &feedback.decision_request_id,
+                &feedback.request_digest,
+                &envelope_digest,
+                &idempotency_key,
+            )
+            .map_err(|_| "canonical rejected cognition terminal publication failed")?;
+        transaction
+            .allocate_runtime_feedback_with_projection(feedback, Default::default())
+            .map_err(|_| "canonical rejected cognition feedback publication failed")?;
+        *self = transaction;
+        Ok(())
+    }
+
     pub fn commit_authenticated_cognition(
         &mut self,
         signed: SignedReadRequest<CognitionIntentV1>,
@@ -123,6 +170,22 @@ impl World {
         signed: SignedReadRequest<CognitionIntentV1>,
         staged: &[crate::world_service::CanonicalIntentResultV1],
     ) -> Result<serde_json::Value, String> {
+        match self.commit_authenticated_cognition_disposition_staged(signed, staged)? {
+            crate::world_service::AuthenticatedCognitionDisposition::Committed(receipt) => {
+                Ok(receipt)
+            }
+            crate::world_service::AuthenticatedCognitionDisposition::RejectedStale(rejection) => {
+                Err(rejection.rejection_text())
+            }
+        }
+    }
+    /// Canonical adapters may preserve ONLY approved rejection metadata after
+    /// discarding this candidate. Every other validation failure stays an error.
+    pub fn commit_authenticated_cognition_disposition_staged(
+        &mut self,
+        signed: SignedReadRequest<CognitionIntentV1>,
+        staged: &[crate::world_service::CanonicalIntentResultV1],
+    ) -> Result<crate::world_service::AuthenticatedCognitionDisposition, String> {
         agent_authority::validate_cognition_staged(self, &signed, staged)?;
         let subject = signed.subject_public_key;
         let intent = signed.request;
@@ -191,6 +254,20 @@ impl World {
             )
             .map_err(|e| format!("{e:?}"))?;
         }
+        // The legacy commit checks action identity after base concurrency. A
+        // stale result must not promote an unrelated actor into feedback.
+        let actor_matches = intent.action.actor_id() == Some(intent.request.agent_id.as_str());
+        // This publication identity belongs ONLY to the early captured-base
+        // mismatch branch, never a later prepared-envelope stale error.
+        let captured_base_stale = self
+            .current_cognition_base_binding()
+            .ok()
+            .is_some_and(|current| intent.request.captured_base_binding != current);
+        let rejected_metadata =
+            crate::world_service::ValidatedStaleCognitionRejection::from_evaluated_request(
+                &intent.request,
+                &intent.action,
+            )?;
         let committed = if let Some(fence) = &intent.task_fence {
             self.commit_task_cognition_action(
                 intent.request,
@@ -202,7 +279,22 @@ impl World {
         } else {
             self.commit_cognition_action(intent.request, intent.action, intent.response_artifact)
         };
-        let (record, lineage) = committed.map_err(|e| format!("{e:?}"))?;
+        let (record, lineage) = match committed {
+            Ok(committed) => committed,
+            Err(crate::runtime::WorldError::DistributedValidationFailed { reason })
+                if actor_matches
+                    && captured_base_stale
+                    && reason
+                        == crate::runtime::CognitionCommitRejectReasonV1::StaleBase.code() =>
+            {
+                return Ok(
+                    crate::world_service::AuthenticatedCognitionDisposition::RejectedStale(
+                        rejected_metadata,
+                    ),
+                );
+            }
+            Err(error) => return Err(format!("{error:?}")),
+        };
         self.verify_runtime_receipt_lineage(&lineage)
             .map_err(|e| format!("{e:?}"))?;
         let action_id = lineage
@@ -247,7 +339,9 @@ impl World {
             .ok_or("canonical causal proposal index invalid")?;
         proposals.insert(key, proposal);
         Ok(
-            serde_json::json!({"commit_record": record, "lineage": lineage, "feedback": feedback.payload}),
+            crate::world_service::AuthenticatedCognitionDisposition::Committed(
+                serde_json::json!({"commit_record": record, "lineage": lineage, "feedback": feedback.payload}),
+            ),
         )
     }
 }

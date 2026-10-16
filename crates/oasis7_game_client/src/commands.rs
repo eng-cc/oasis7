@@ -1,8 +1,6 @@
 use crate::device_client::{Client, pending, print};
 use crate::operation_store::ClientStateKind;
-use oasis7_client_api::world_service as authority;
-use oasis7_client_api::world_service::{task_context::*, *};
-use oasis7_client_api::world_service_wire::{SchedulerOperationV1, WorldServicePayloadV1};
+use oasis7_client_api::world_service::*;
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
 const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
@@ -130,35 +128,7 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             if !["executor_aborted", "provider_failed", "transport_exhausted"].contains(&reason) {
                 return Err("unsupported outcome; expired contexts require a fresh context and original result queries".into());
             }
-            let request =
-                if let Some(request) = client.cached_intent(ClientStateKind::Outcome, operation)? {
-                    let WorldServicePayloadV1::Scheduler(signed) = &request.signed_payload else {
-                        return Err("invalid cached outcome".into());
-                    };
-                    let SchedulerOperationV1::TaskProviderFailure {
-                        reason: original, ..
-                    } = &signed.request.operation
-                    else {
-                        return Err("invalid cached outcome".into());
-                    };
-                    if original != reason {
-                        return Err("context already has a different original outcome".into());
-                    }
-                    request
-                } else {
-                    let captured = client.captured(operation)?;
-                    let signed = authority::sign_read_request(
-                        "scheduler",
-                        outcome_intent(&captured, reason)?,
-                        &client.key_hex,
-                    )?;
-                    client.cache_intent(
-                        ClientStateKind::Outcome,
-                        operation,
-                        WorldServicePayloadV1::Scheduler(signed),
-                    )?
-                };
-            print(&client.submit_and_poll(&request)?)
+            print(&client.outcome(operation, reason)?)
         }
         "lookup" => {
             let operation = required("--context")?;

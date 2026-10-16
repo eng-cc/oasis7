@@ -237,6 +237,17 @@ pub fn publish_bounded_record(
     validate_record_name(name)?;
     private_directory(dir)?;
     verify_key(dir, key)?;
+    let bytes = encode_record(key, magic, aad, plaintext, maximum)?;
+    publish_immutable(dir, name, &bytes)
+}
+
+fn encode_record(
+    key: &[u8; 32],
+    magic: &[u8; 8],
+    aad: &[u8],
+    plaintext: &[u8],
+    maximum: usize,
+) -> Result<Vec<u8>, String> {
     let nonce = random::<24>()?;
     let ciphertext = XChaCha20Poly1305::new(key.into())
         .encrypt(
@@ -254,7 +265,77 @@ pub fn publish_bounded_record(
     if bytes.len() > maximum {
         return Err("private prepared record file exceeds limit".into());
     }
-    publish_immutable(dir, name, &bytes)
+    Ok(bytes)
+}
+
+/// Lock a private regular file relative to the held directory. The returned
+/// handle must remain alive through the complete local read-modify-write.
+pub fn lock_record(dir: &Dir, key: &[u8; 32], name: &str) -> Result<(std::fs::File, bool), String> {
+    validate_record_name(name)?;
+    private_directory(dir)?;
+    verify_key(dir, key)?;
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .follow(FollowSymlinks::No)
+        .custom_flags(libc::O_NONBLOCK);
+    let (file, created) = match dir.open_with(name, &options) {
+        Ok(file) => (file, true),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let mut existing = OpenOptions::new();
+            existing
+                .read(true)
+                .write(true)
+                .follow(FollowSymlinks::No)
+                .custom_flags(libc::O_NONBLOCK);
+            (dir.open_with(name, &existing).map_err(io_error)?, false)
+        }
+        Err(error) => return Err(io_error(error)),
+    };
+    private_file(&file.metadata().map_err(io_error)?)?;
+    let file = file.into_std();
+    file.lock().map_err(io_error)?;
+    sync(dir)?;
+    Ok((file, created))
+}
+
+/// Atomic encrypted replacement for executor-local counters. Callers must
+/// hold lock_record for this namespace; immutable operation records use publish.
+pub fn replace_bounded_record(
+    dir: &Dir,
+    key: &[u8; 32],
+    name: &str,
+    magic: &[u8; 8],
+    aad: &[u8],
+    plaintext: &[u8],
+    maximum: usize,
+) -> Result<(), String> {
+    validate_record_name(name)?;
+    private_directory(dir)?;
+    verify_key(dir, key)?;
+    let bytes = encode_record(key, magic, aad, plaintext, maximum)?;
+    let temp = format!(".{}.tmp", hex::encode(random::<32>()?));
+    let mut options = OpenOptions::new();
+    options
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .follow(FollowSymlinks::No);
+    let mut file = dir.open_with(&temp, &options).map_err(io_error)?;
+    let result = (|| {
+        private_file(&file.metadata().map_err(io_error)?)?;
+        file.write_all(&bytes).map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        dir.rename(&temp, dir, name).map_err(io_error)?;
+        sync(dir)
+    })();
+    if result.is_err() {
+        let _ = dir.remove_file(&temp);
+    }
+    result
 }
 
 pub fn read_record(

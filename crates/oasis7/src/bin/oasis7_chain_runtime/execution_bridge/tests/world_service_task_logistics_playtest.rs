@@ -407,50 +407,66 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
                         20,
                         "rejected action must have no transfer effect"
                     );
-                    // A rejected action leaves its captured turn active. Close it through
-                    // the supported public failure lane before opening a fresh turn.
-                    let mut closed = false;
-                    for outcome_attempt in 0..8 {
-                        assert!(Instant::now() < deadline);
-                        let current_base = pin().world.current_cognition_base_binding().unwrap();
-                        let reason =
-                            if current_base.base_tick > prepared.identity.valid_until_tick.0 {
-                                "context_expired"
-                            } else {
-                                "executor_aborted"
-                            };
-                        let mut outcome =
-                            public_outcome_intent(&prepared.identity, current_base, reason)
-                                .unwrap();
-                        // Scheduler request identity is independent of the exact context
-                        // identity; each new operation follows a verified terminal result.
-                        outcome.request_id = format!(
-                            "{}:outcome:{outcome_attempt}",
-                            prepared.identity.decision_request_id
-                        );
-                        let abort = request(
-                            &world,
-                            WorldServicePayloadV1::Scheduler(
-                                sign_read_request("scheduler", outcome, &delegate).unwrap(),
-                            ),
-                        );
-                        match settle_cleanup_original(&client, &abort, deadline, &mut categories) {
-                            Ok(receipt) => {
-                                attempts.push(serde_json::json!({"phase":"abort","original":abort,"settled":receipt}));
-                                closed = true;
-                                break;
-                            }
-                            Err("canonical cleanup rejected") => retain_terminal_original(
+                    // Exact stale decisions now terminalize their original turn.
+                    // Generic rejection still requires the public cleanup lane.
+                    let already_terminal = verified_terminal_stale_action(
+                        &client,
+                        &pin().world,
+                        &prepared.identity,
+                        &original,
+                    );
+                    if !already_terminal {
+                        let mut closed = false;
+                        for outcome_attempt in 0..8 {
+                            assert!(Instant::now() < deadline);
+                            let current_base =
+                                pin().world.current_cognition_base_binding().unwrap();
+                            let reason =
+                                if current_base.base_tick > prepared.identity.valid_until_tick.0 {
+                                    "context_expired"
+                                } else {
+                                    "executor_aborted"
+                                };
+                            let mut outcome =
+                                public_outcome_intent(&prepared.identity, current_base, reason)
+                                    .unwrap();
+                            // Scheduler request identity is independent of the exact context
+                            // identity; each new operation follows a verified terminal result.
+                            outcome.request_id = format!(
+                                "{}:outcome:{outcome_attempt}",
+                                prepared.identity.decision_request_id
+                            );
+                            let abort = request(
+                                &world,
+                                WorldServicePayloadV1::Scheduler(
+                                    sign_read_request("scheduler", outcome, &delegate).unwrap(),
+                                ),
+                            );
+                            match settle_cleanup_original(
                                 &client,
                                 &abort,
-                                "abort",
-                                &root,
-                                &mut attempts,
-                            ),
-                            Err(reason) => panic!("original abort remains unresolved: {reason}"),
+                                deadline,
+                                &mut categories,
+                            ) {
+                                Ok(receipt) => {
+                                    attempts.push(serde_json::json!({"phase":"abort","original":abort,"settled":receipt}));
+                                    closed = true;
+                                    break;
+                                }
+                                Err("canonical cleanup rejected") => retain_terminal_original(
+                                    &client,
+                                    &abort,
+                                    "abort",
+                                    &root,
+                                    &mut attempts,
+                                ),
+                                Err(reason) => {
+                                    panic!("original abort remains unresolved: {reason}")
+                                }
+                            }
                         }
+                        assert!(closed, "bounded public abort attempts exhausted");
                     }
-                    assert!(closed, "bounded public abort attempts exhausted");
                     let subject = sign_read_request("key", (), &delegate)
                         .unwrap()
                         .subject_public_key;

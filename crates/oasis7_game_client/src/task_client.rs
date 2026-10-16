@@ -54,7 +54,8 @@ impl WorldServiceTaskClient {
         let response: ReadWorldViewResponse<Value> = self
             .transport
             .signed_call(VIEW_JSON_PATH, request.clone())?;
-        crate::VerifiedTaskWorldView::new(response, &request)
+        Ok(crate::VerifiedTaskWorldView::new(response, &request)?
+            .bind_read_authority(self.read_authority_identity().map_err(assurance)?))
     }
     pub fn describe(&self) -> Result<DescribeWorldResponse, Error> {
         let response: DescribeWorldResponse = self.transport.signed_call(

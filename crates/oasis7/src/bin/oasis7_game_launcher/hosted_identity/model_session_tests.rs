@@ -10,9 +10,9 @@ impl Drop for Directory {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-struct Fixture {
-    service: IdentityService,
-    token: String,
+pub(crate) struct Fixture {
+    pub(crate) service: IdentityService,
+    pub(crate) token: String,
     _directory: Directory,
 }
 fn service(config: IdentityConfig) -> IdentityService {
@@ -32,7 +32,7 @@ fn service(config: IdentityConfig) -> IdentityService {
         clock: ClockGuard::new(),
     }
 }
-fn fixture() -> Fixture {
+pub(crate) fn fixture() -> Fixture {
     let path = std::env::temp_dir().join(format!("model-principal-{}", random_token()));
     std::fs::create_dir(&path).unwrap();
     let config = IdentityConfig {
@@ -289,4 +289,49 @@ fn offline_instance_epoch_advance_invalidates_previous_cookie_and_principal() {
     drop(restarted);
     drop(token);
     drop(_directory);
+}
+
+#[test]
+fn model_executor_ownership_uses_existing_scoped_player_binding_without_allocating() {
+    let mut f = fixture();
+    assert!(!f.service.model_account_owns_player("a", "player-a"));
+    let scope = f.service.config.world_scope.clone();
+    let key = format!("binding:a:{scope}");
+    f.service
+        .store
+        .transaction(|tx| {
+            tx.create(
+                &key,
+                "binding",
+                Some("a"),
+                None,
+                &PlayerBinding {
+                    account_id: "a".into(),
+                    world_identity_scope: scope.clone(),
+                    player_id: "player-a".into(),
+                    source: "identity_v2".into(),
+                    binding_version: 1,
+                },
+            )
+        })
+        .unwrap();
+    assert!(f.service.model_account_owns_player("a", "player-a"));
+    assert!(!f.service.model_account_owns_player("a", "player-b"));
+    assert!(!f.service.model_account_owns_player("b", "player-a"));
+    f.service
+        .store
+        .transaction(|tx| {
+            let mut row = tx.get::<PlayerBinding>(&key)?.unwrap();
+            row.value.world_identity_scope = "another-scope".into();
+            tx.replace(
+                &key,
+                row.row_version,
+                "binding",
+                Some("a"),
+                None,
+                &row.value,
+            )
+        })
+        .unwrap();
+    assert!(!f.service.model_account_owns_player("a", "player-a"));
 }
