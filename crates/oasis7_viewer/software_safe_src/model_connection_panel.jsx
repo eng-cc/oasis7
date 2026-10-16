@@ -34,7 +34,7 @@ const RUN_REASON = {
  host_failure: ["执行端暂不可用", "Executor unavailable"],
 };
 const STATE = {
- checking: ["检查中", "Checking"], ready: ["模型可用，尚未开始", "Model ready; not started"],
+ checking: ["检查中", "Checking"], ready: ["模型可用", "Model ready"],
  blocked: ["模型连接受限", "Model connection blocked"], revoked: ["已断开并忘记", "Disconnected and forgotten"], expired: ["会话已过期", "Session expired"],
  running: ["执行器正在运行", "Executor running"], stopped: ["已停止新决策", "New decisions stopped"],
  idle: ["尚未开始执行", "Execution not started"], unavailable: ["游戏执行器不可用", "Game executor unavailable"],

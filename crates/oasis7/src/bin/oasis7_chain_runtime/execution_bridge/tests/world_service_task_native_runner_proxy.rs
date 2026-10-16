@@ -33,6 +33,7 @@ impl OriginalDeliveryRace {
                     }
                     Err(_) => panic!("conformance proxy accept failed"),
                 };
+                incoming.set_nonblocking(false).unwrap();
                 incoming
                     .set_read_timeout(Some(Duration::from_secs(15)))
                     .unwrap();
