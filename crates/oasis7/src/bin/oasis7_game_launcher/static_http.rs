@@ -162,7 +162,7 @@ pub(super) fn handle_http_connection(
     let mut parts = line.split_whitespace();
     let method = parts.next().unwrap_or("");
     let target = parts.next().unwrap_or("");
-    let request_body = extract_request_body(request.as_ref());
+    let request_body = extract_request_body(request);
 
     let head_only = method.eq_ignore_ascii_case("HEAD");
     let path_only = target.split('?').next().unwrap_or(target);
@@ -210,12 +210,12 @@ pub(super) fn handle_http_connection(
                 let source = identity_source(
                     peer,
                     service.config.trusted_proxy_loopback,
-                    request.as_ref(),
+                    request,
                 )?;
                 let reply = service.handle(
                     method,
                     path_only,
-                    request.as_ref(),
+                    request,
                     payload,
                     &source,
                     &mut *hosted_session_issuer
