@@ -87,6 +87,53 @@ fn no_operator_devices_never_resolve_browser_supplied_authority() {
     assert!(!registry.authorize(&p, &target(&fence())));
 }
 
+#[test]
+fn full_fence_digest_binds_authority_fields_omitted_from_partial_target() {
+    let original = fence();
+    let old = target(&original);
+    assert!(!old.full_fence_digest.is_empty());
+    for field in [
+        "branch",
+        "reorg",
+        "genesis",
+        "owner",
+        "owner_generation",
+        "owner_key",
+        "task_revision",
+        "latest_goal",
+        "goal_reference",
+        "delegation_generation",
+    ] {
+        let mut fresh = original.clone();
+        match field {
+            "branch" => fresh.branch_id = "fork".into(),
+            "reorg" => fresh.reorg_epoch = DecimalU64(1),
+            "genesis" => fresh.genesis_digest = "other-genesis".into(),
+            "owner" => fresh.owner_binding = "other-player".into(),
+            "owner_generation" => fresh.owner_generation = DecimalU64(2),
+            "owner_key" => fresh.owner_public_key = "e".repeat(64),
+            "task_revision" => fresh.task_revision = DecimalU64(2),
+            "latest_goal" => fresh.latest_goal_revision = DecimalU64(2),
+            "goal_reference" => {
+                fresh.active_goal_reference.as_mut().unwrap().goal_ref = "d".repeat(64)
+            }
+            "delegation_generation" => {
+                fresh
+                    .executor_binding
+                    .as_mut()
+                    .unwrap()
+                    .delegation_generation = DecimalU64(2)
+            }
+            _ => unreachable!(),
+        }
+        fresh.validate().unwrap();
+        let mut next = target(&fresh);
+        assert_ne!(next.full_fence_digest, old.full_fence_digest, "{field}");
+        next.full_fence_digest.clone_from(&old.full_fence_digest);
+        assert_eq!(next, old, "partial target omits {field}");
+    }
+}
+
 #[cfg(unix)]
 #[path = "executor_http_tests.rs"]
 mod signed_http;

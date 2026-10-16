@@ -109,7 +109,12 @@ impl Client {
                 fixed_commit: None,
                 deadline_unix_ms: None,
             })
-            .map_err(|_| "signed Agent read unavailable".to_owned())
+            .map_err(|error| {
+                format!(
+                    "signed Agent read unavailable ({})",
+                    polling::failure_tag(&error)
+                )
+            })
     }
     pub fn capabilities(&self) -> Result<Value, String> {
         let view = self.public_view()?;

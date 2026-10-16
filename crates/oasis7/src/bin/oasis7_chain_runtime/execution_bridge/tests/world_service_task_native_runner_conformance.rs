@@ -12,14 +12,13 @@ use oasis7_agent_harness::{
 use oasis7_game_client::{device_client::Client, operation_store::ClientStateKind};
 use serde_json::{Value, json};
 use std::{path::PathBuf, sync::atomic::AtomicUsize};
-#[path = "world_service_task_native_runner_proxy.rs"]
-mod delivery_race;
 
 const SITE: &str = "starter-site";
 const FACTORY: &str = STARTER_SMELTER_FACTORY_ID;
 
 struct ScriptedFactoryChain {
     calls: Arc<AtomicUsize>,
+    schedule_waited: AtomicBool,
 }
 impl ModelProvider for ScriptedFactoryChain {
     fn provider_id(&self) -> &str {
@@ -76,7 +75,6 @@ impl ModelProvider for ScriptedFactoryChain {
                 "amount":if stage == 1 { 8 } else { 2 }, "distance_km":1,"priority":"standard","routes":[]}),
             ),
             3 if reads == 0 => ("industry", json!({})),
-            3 if reads == 1 => ("wait", json!({"ticks": 1})),
             3 => (
                 "schedule",
                 json!({"factory":FACTORY,"recipe":STARTER_SMELTER_RECIPE_ID,"batches":1}),
@@ -84,17 +82,143 @@ impl ModelProvider for ScriptedFactoryChain {
             _ => panic!("script must stop after four successful business effects"),
         };
         assert!(request.tools.iter().any(|tool| tool.name == name));
+        let mut turns = Vec::new();
+        // Wait once for the fuel transit before the first schedule decision.
+        // SDK signing can refresh context afterwards; the frozen original
+        // below supplies the stale race. Fresh decisions never repeat this wait.
+        let wait_once = stage == 3 && !self.schedule_waited.swap(true, Ordering::SeqCst);
+        if wait_once {
+            turns.push(ModelProviderTurn::ToolCall {
+                name: "wait".into(),
+                arguments: json!({"ticks":1}),
+            });
+        }
+        turns.push(ModelProviderTurn::ToolCall {
+            name: name.into(),
+            arguments,
+        });
         Ok(ModelProviderResponse {
             request_digest: request.request_digest.clone(),
-            turns: vec![ModelProviderTurn::ToolCall {
-                name: name.into(),
-                arguments,
-            }],
+            turns,
             output: String::new(),
             model: Some("unpaid-scripted-conformance".into()),
             usage: ModelProviderUsage::default(),
             trace: ModelProviderTrace::default(),
         })
+    }
+}
+// Freeze exactly one signed original with the same public SDK construction and
+// durable cache sequence as submit_action, then delay ONLY its first delivery.
+// A model-side Wait alone cannot do this: submit_action refreshes captured()
+// afterwards, so that wait happens before signing and legitimately avoids stale.
+struct FrozenOriginalDelivery {
+    inner: SdkNativeTaskHost,
+    frozen: AtomicBool,
+}
+impl oasis7_agent_harness::NativeTaskHost for FrozenOriginalDelivery {
+    fn initialize_run(&self, c: &NativeTaskRunConfig) -> Result<u32, String> {
+        self.inner.initialize_run(c)
+    }
+    fn reserve_model_call(&self, c: &NativeTaskRunConfig, op: &str) -> Result<u32, String> {
+        self.inner.reserve_model_call(c, op)
+    }
+    fn recover(&self, op: &str) -> Result<oasis7_agent_harness::NativeTaskRecovery, String> {
+        self.inner.recover(op)
+    }
+    fn known_rejection_feedback(
+        &self,
+        op: &str,
+    ) -> Result<Option<oasis7_game_client::AuthorizedFeedbackRecord>, String> {
+        self.inner.known_rejection_feedback(op)
+    }
+    fn settle_exhausted_context(
+        &self,
+        op: &str,
+    ) -> Result<oasis7_agent_harness::NativeTaskRecovery, String> {
+        self.inner.settle_exhausted_context(op)
+    }
+    fn prepare(&self, op: &str) -> Result<oasis7_agent_harness::NativeTaskContext, String> {
+        self.inner.prepare(op)
+    }
+    fn current_control(&self) -> Result<oasis7_agent_harness::NativeTaskControl, String> {
+        self.inner.current_control()
+    }
+    fn initial_fence(&self) -> Result<oasis7_agent_api::game::GameTaskFenceV1, String> {
+        self.inner.initial_fence()
+    }
+    fn invoke(
+        &self,
+        context: &oasis7_agent_harness::NativeTaskContext,
+        tool: &oasis7_agent_harness::NativeTaskTool,
+    ) -> Result<oasis7_agent_harness::NativeTaskToolResult, String> {
+        use oasis7_agent_api::world_action::{Action, MaterialLedgerId, MaterialTransitPriority};
+        use oasis7_agent_harness::NativeTaskTool;
+        if let NativeTaskTool::Transfer(v) = tool
+            && !self.frozen.swap(true, Ordering::SeqCst)
+        {
+            assert_eq!(v.material, "iron_ore");
+            let client = self.inner.client();
+            assert!(
+                client
+                    .cached_intent(ClientStateKind::Action, &context.operation)?
+                    .is_none()
+            );
+            assert!(
+                client
+                    .cached_intent(ClientStateKind::Outcome, &context.operation)?
+                    .is_none()
+            );
+            let captured = client.captured(&context.operation)?;
+            let action = Action::TransferMaterial {
+                requester_agent_id: client.agent.clone(),
+                from_ledger: MaterialLedgerId::try_from(v.from.clone())
+                    .map_err(|_| "invalid fixture source")?,
+                to_ledger: MaterialLedgerId::try_from(v.to.clone())
+                    .map_err(|_| "invalid fixture destination")?,
+                kind: v.material.clone(),
+                amount: v.amount,
+                distance_km: v.distance_km,
+                priority: Some(match v.priority.as_str() {
+                    "standard" => MaterialTransitPriority::Standard,
+                    "urgent" => MaterialTransitPriority::Urgent,
+                    _ => return Err("invalid fixture priority".into()),
+                }),
+                route_id: None,
+                route_ids: v.routes.clone(),
+                auto_reroute: false,
+            };
+            let original = client.cache_intent(
+                ClientStateKind::Action,
+                &context.operation,
+                oasis7_client_api::world_service_wire::WorldServicePayloadV1::Cognition(
+                    oasis7_client_api::world_service::sign_read_request(
+                        "cognition",
+                        oasis7_client_api::world_service::task_context::cognition_intent(
+                            &captured, action,
+                        )?,
+                        &client.key_hex,
+                    )?,
+                ),
+            )?;
+            // Observe independent real-node progress through the ordinary host;
+            // no fixture World mutation, clock step or fabricated feedback.
+            self.inner.invoke(
+                context,
+                &NativeTaskTool::parse("wait", &json!({"ticks":1}))?,
+            )?;
+            let result = self.inner.invoke(context, tool)?;
+            assert!(
+                serde_json::to_value(
+                    client
+                        .cached_intent(ClientStateKind::Action, &context.operation)?
+                        .unwrap()
+                )
+                .unwrap()
+                    == serde_json::to_value(original).unwrap()
+            );
+            return Ok(result);
+        }
+        self.inner.invoke(context, tool)
     }
 }
 struct StopFixture(PathBuf);
@@ -114,20 +238,10 @@ fn run_config() -> NativeTaskRunConfig {
             "Deterministic conformance fixture; execute the prepared native factory chain.".into(),
         max_turns: 4,
         max_model_calls: 10,
-        max_tool_calls_per_call: 1,
+        max_tool_calls_per_call: 2,
         model_timeout_ms: 10_000,
         control_poll_ms: 100,
     }
-}
-fn conformance_client(config_path: &Path) -> Client {
-    let mut client = Client::open(config_path).unwrap();
-    let mut transport = client.remote.config().clone();
-    // This test deliberately holds one already-signed request across a normal
-    // five-second node tick. Keep that in-flight request bounded independently
-    // of the unchanged context TTL, cadence and scenario deadline.
-    transport.timeout = Duration::from_secs(15);
-    client.remote = oasis7_game_client::WorldServiceTaskClient::new(transport).unwrap();
-    client
 }
 fn operation_slots() -> u32 {
     (run_config().max_turns + run_config().max_model_calls).min(128)
@@ -258,24 +372,17 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
         let before = pin();
         assert!(before.world.state().factories.is_empty());
         assert!(cognition_results(&before.world).is_empty());
-        // The proxy delays only the first original Transfer submission until
-        // a real node commit advances. It never edits signed request bytes.
-        let proxy = delivery_race::OriginalDeliveryRace::start(
-            device["endpoint"].as_str().unwrap(),
-            root.clone(),
-            world.clone(),
-            deadline,
-        );
-        let mut proxy_device = device.clone();
-        proxy_device["endpoint"] = json!(proxy.endpoint());
-        let proxy_config = root.join("native-runner-proxy-config.json");
-        write_private(&proxy_config, &serde_json::to_vec(&proxy_device).unwrap());
         let calls = Arc::new(AtomicUsize::new(0));
-        let client = Arc::new(conformance_client(&proxy_config));
+        let client = Arc::new(Client::open(&config_path).unwrap());
+        let delivery_race = Arc::new(FrozenOriginalDelivery {
+            inner: SdkNativeTaskHost::new(client.clone()),
+            frozen: AtomicBool::new(false),
+        });
         let run_result = NativeTaskRunner::new(
-            Arc::new(SdkNativeTaskHost::new(client.clone())),
+            delivery_race.clone(),
             Box::new(ScriptedFactoryChain {
                 calls: calls.clone(),
+                schedule_waited: AtomicBool::new(false),
             }),
             run_config(),
         )
@@ -320,13 +427,18 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
             NativeTaskStopReason::Completed,
             "{report:?}"
         );
+        assert!(delivery_race.frozen.load(Ordering::SeqCst));
         assert_eq!(report.turns_completed, 4);
-        assert!(proxy.delayed_original());
         assert_eq!(
             report.model_calls_spent as usize,
             calls.load(Ordering::SeqCst)
         );
-        assert!((7..=run_config().max_model_calls).contains(&report.model_calls_spent));
+        // Four successful effects plus at least one rejected physical decision;
+        // quote/read-only batches can legitimately change the exact total.
+        assert!(
+            (5..=run_config().max_model_calls).contains(&report.model_calls_spent),
+            "{report:?}"
+        );
         assert!(
             client
                 .outcome(&run_config().operation_id(0), "executor_aborted")
@@ -520,11 +632,12 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
             }
         }
         drop(client);
-        let reopened = Arc::new(conformance_client(&proxy_config));
+        let reopened = Arc::new(Client::open(&config_path).unwrap());
         let resumed = NativeTaskRunner::new(
             Arc::new(SdkNativeTaskHost::new(reopened.clone())),
             Box::new(ScriptedFactoryChain {
                 calls: calls.clone(),
+                schedule_waited: AtomicBool::new(false),
             }),
             run_config(),
         )
@@ -576,7 +689,6 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
             3
         );
         drop(reopened);
-        drop(proxy);
         drop(stop);
         assert_eq!(service.join().unwrap(), root);
         fs::remove_file(&ready).unwrap();

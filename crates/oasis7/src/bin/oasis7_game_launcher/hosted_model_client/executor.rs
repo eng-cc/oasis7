@@ -7,14 +7,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+/// One immutable activation snapshot. It is never updated to revive a run.
 pub(super) struct Executor {
-    pub account_id: String,
     pub client: Arc<Client>,
     pub fence: GameTaskFenceV1,
 }
+struct ConfiguredDevice {
+    account_id: String,
+    client: Arc<Client>,
+}
 pub(super) struct Executors {
     identity: Identity,
-    entries: Vec<Arc<Executor>>,
+    entries: Vec<ConfiguredDevice>,
     running: Arc<Mutex<HashSet<String>>>,
 }
 impl Executors {
@@ -26,28 +30,19 @@ impl Executors {
                 Client::open(&configured.device_config_path)
                     .map_err(|_| "configured executor device unavailable")?,
             );
-            let fence = read_fence(&client)?;
-            let owner = identity
-                .lock()
-                .map_err(|_| "executor identity unavailable")?
-                .as_mut()
-                .is_some_and(|s| {
-                    s.model_account_owns_player(&configured.account_id, &fence.owner_binding)
-                });
-            if !owner
-                || !devices.insert((
-                    fence.world_id.clone(),
-                    fence.agent_id.clone(),
-                    client.public_key.clone(),
-                ))
-            {
-                return Err("configured executor ownership unavailable or duplicate".into());
+            // Provisioning validates the SDK device, not a transient active
+            // task. A stopped task or standby signer must not prevent startup.
+            if !devices.insert((
+                client.world.world_id.clone(),
+                client.agent.clone(),
+                client.public_key.clone(),
+            )) {
+                return Err("duplicate configured executor device".into());
             }
-            entries.push(Arc::new(Executor {
+            entries.push(ConfiguredDevice {
                 account_id: configured.account_id.clone(),
                 client,
-                fence,
-            }));
+            });
         }
         Ok(Self {
             identity,
@@ -58,37 +53,38 @@ impl Executors {
     pub fn available(&self, principal: &Principal) -> bool {
         self.entries
             .iter()
-            .any(|e| e.account_id == principal.account_id && self.current(e, principal))
+            .any(|device| self.current(device, principal).is_some())
     }
+    /// Resolve a fresh, authorized snapshot only for a new explicit activation.
+    /// Existing ActiveBindings retain their own immutable complete-fence digest.
     pub fn resolve(&self, principal: &Principal, agent: &str) -> Option<Arc<Executor>> {
-        self.entries
-            .iter()
-            .find(|e| {
-                e.account_id == principal.account_id
-                    && e.fence.agent_id == agent
-                    && self.current(e, principal)
-            })
-            .cloned()
-    }
-    pub fn authorize(&self, principal: &Principal, target: &BindingTarget) -> bool {
-        self.entries.iter().any(|e| {
-            target_matches(&e.fence, target)
-                && e.account_id == principal.account_id
-                && self.current(e, principal)
+        self.entries.iter().find_map(|device| {
+            if device.client.agent != agent {
+                return None;
+            }
+            let fence = self.current(device, principal)?;
+            Some(Arc::new(Executor {
+                client: Arc::clone(&device.client),
+                fence,
+            }))
         })
     }
-    fn current(&self, executor: &Executor, principal: &Principal) -> bool {
-        if executor.account_id != principal.account_id {
-            return false;
+    pub fn authorize(&self, principal: &Principal, target: &BindingTarget) -> bool {
+        self.entries.iter().any(|device| {
+            device.client.agent == target.agent_id
+                && self
+                    .current(device, principal)
+                    .is_some_and(|fresh| target_matches(&fresh, target))
+        })
+    }
+    fn current(&self, device: &ConfiguredDevice, principal: &Principal) -> Option<GameTaskFenceV1> {
+        if device.account_id != principal.account_id {
+            return None;
         }
         // Network is outside both identity and ConnectionManager locks.
-        let Ok(fresh) = read_fence(&executor.client) else {
-            return false;
-        };
-        if fresh != executor.fence {
-            return false;
-        }
-        self.identity
+        let fresh = read_fence(&device.client).ok()?;
+        let owns = self
+            .identity
             .lock()
             .ok()
             .and_then(|mut guard| {
@@ -98,7 +94,8 @@ impl Executors {
                             .model_account_owns_player(&principal.account_id, &fresh.owner_binding)
                 })
             })
-            .unwrap_or(false)
+            .unwrap_or(false);
+        owns.then_some(fresh)
     }
     pub fn claim(&self, executor: &Executor, connection: &str) -> Result<RunClaim, ()> {
         let device = format!(
@@ -159,10 +156,10 @@ fn validate_device_fence(
         || fence.agent_id != agent
         || fence.task_status != GameTaskStatusV1::Active
         || fence.active_goal_reference.is_none()
-        || !fence
+        || fence
             .executor_binding
             .as_ref()
-            .is_some_and(|b| b.executor_public_key == public_key)
+            .is_none_or(|b| b.executor_public_key != public_key)
     {
         return Err("configured executor Runtime authority mismatch".into());
     }
@@ -180,6 +177,7 @@ pub(super) fn target(fence: &GameTaskFenceV1) -> BindingTarget {
             .map(|b| b.executor_id.clone())
             .unwrap_or_default(),
         executor_epoch: fence.executor_epoch.0,
+        full_fence_digest: oasis7_agent_api::h_v1("oasis7.byok.active-fence.v1", fence).to_string(),
     }
 }
 fn target_matches(fence: &GameTaskFenceV1, candidate: &BindingTarget) -> bool {

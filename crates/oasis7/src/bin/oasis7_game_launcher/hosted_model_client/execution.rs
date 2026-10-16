@@ -22,10 +22,10 @@ struct TargetRef {
 impl HostedModelClient {
     pub(super) fn execution_snapshot(&self, connection: &ConnectionSnapshot) -> Value {
         let mut result = snapshot(connection);
-        if let Ok(executions) = self.executions.0.lock() {
-            if let Some(status) = executions.get(&connection.id) {
-                result["execution"] = status.clone();
-            }
+        if let Ok(executions) = self.executions.0.lock()
+            && let Some(status) = executions.get(&connection.id)
+        {
+            result["execution"] = status.clone();
         }
         result
     }

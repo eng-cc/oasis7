@@ -355,7 +355,8 @@ impl ConnectionManager {
         target: BindingTarget,
     ) -> Result<ConnectionSnapshot, ConnectionError> {
         self.authenticate(p)?;
-        if !valid_text(&target.world_id)
+        if !valid_text(&target.full_fence_digest)
+            || !valid_text(&target.world_id)
             || !valid_text(&target.agent_id)
             || !valid_text(&target.task_id)
             || !valid_text(&target.executor_id)

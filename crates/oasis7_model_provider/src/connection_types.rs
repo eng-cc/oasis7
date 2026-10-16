@@ -48,6 +48,9 @@ impl Clock for MonotonicClock {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct BindingTarget {
+    /// Opaque complete-authority binding minted by the trusted host. A browser
+    /// target reference must never supply this value or become an authority.
+    pub full_fence_digest: String,
     pub world_id: String,
     pub agent_id: String,
     pub task_id: String,

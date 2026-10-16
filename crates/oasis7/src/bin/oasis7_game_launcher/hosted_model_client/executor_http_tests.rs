@@ -15,6 +15,7 @@ struct SignedWorld {
     control: Arc<Mutex<GameTaskControlV1>>,
     stop: Arc<AtomicBool>,
     reads: Arc<AtomicUsize>,
+    read_authorized: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
 }
 impl SignedWorld {
@@ -28,6 +29,8 @@ impl SignedWorld {
         let control = Arc::new(Mutex::new(control));
         let stop = Arc::new(AtomicBool::new(false));
         let reads = Arc::new(AtomicUsize::new(0));
+        let read_authorized = Arc::new(AtomicBool::new(true));
+        let authorized = Arc::clone(&read_authorized);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -47,6 +50,12 @@ impl SignedWorld {
                 verify_read_request(VIEW_JSON_PATH, &proof).unwrap();
                 assert_eq!(proof.subject_public_key, expected_public);
                 assert_eq!(proof.request.scope_id, "agent:agent");
+                if !authorized.load(Ordering::SeqCst) {
+                    // Model a current canonical signer delegation rejection:
+                    // World Service does not expose a privileged public view.
+                    stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                    continue;
+                }
                 let control = c.lock().unwrap().clone();
                 let world = WorldIdentity {
                     world_id: control.world_id.clone(),
@@ -107,6 +116,7 @@ impl SignedWorld {
             control,
             stop,
             reads,
+            read_authorized,
             worker: Some(worker),
         }
     }
@@ -214,6 +224,20 @@ fn real_device_signed_registry_resolves_owner_and_rechecks_fence_before_activati
         device_config_path: device_path,
     }];
     let registry = Arc::new(Executors::load(&config, identity.clone()).unwrap());
+    assert_eq!(
+        server.reads.load(Ordering::SeqCst),
+        0,
+        "startup validates device files without requiring an active task"
+    );
+    let original_control = server.control.lock().unwrap().clone();
+    {
+        let mut control = server.control.lock().unwrap();
+        control.task_status = GameTaskStatusV1::Suspended;
+        control.executor_binding = None;
+    }
+    assert!(!registry.available(&principal));
+    assert!(registry.resolve(&principal, "agent").is_none());
+    *server.control.lock().unwrap() = original_control;
     let executor = registry
         .resolve(&principal, "agent")
         .expect("legal configured owner must resolve");
@@ -225,8 +249,8 @@ fn real_device_signed_registry_resolves_owner_and_rechecks_fence_before_activati
     assert!(!registry.authorize(&other, &target(&executor.fence)));
     let claim = registry.claim(&executor, "connection-one").unwrap();
     assert!(registry.claim(&executor, "connection-two").is_err());
-    drop(claim);
-    assert!(registry.claim(&executor, "connection-two").is_ok());
+    // Keep the old worker's claim until after authority changes, proving a new
+    // legal activation cannot race the still-unwinding original worker.
     // Use the actual host binding callback with the core's deterministic probe
     // lifecycle only; these permits never invoke a model/provider transport.
     let authority = identity.clone();
@@ -333,19 +357,136 @@ fn real_device_signed_registry_resolves_owner_and_rechecks_fence_before_activati
             allowed
         );
     }
-    server.control.lock().unwrap().task_revision = DecimalU64(2);
-    assert!(!registry.authorize(&principal, &target(&executor.fence)));
+    let target_a = target(&executor.fence);
+    {
+        let mut control = server.control.lock().unwrap();
+        control.task_revision = DecimalU64(2);
+        control.active_goal_reference.as_mut().unwrap().goal_ref = "d".repeat(64);
+    }
+    assert!(!registry.authorize(&principal, &target_a));
     assert!(oasis7_agent_harness::ModelProvider::check_execution(&provider).is_err());
     assert!(
         manager
-            .activate(
-                &principal,
-                &active.id,
-                active.version,
-                target(&executor.fence)
-            )
+            .activate(&principal, &active.id, active.version, target_a.clone())
             .is_err()
     );
+    let fresh = registry
+        .resolve(&principal, "agent")
+        .expect("new explicit activation resolves current legitimate authority without restart");
+    let target_b = target(&fresh.fence);
+    assert_ne!(target_a.full_fence_digest, target_b.full_fence_digest);
+    let mut without_digest = target_b.clone();
+    without_digest.full_fence_digest = target_a.full_fence_digest.clone();
+    assert_eq!(
+        without_digest, target_a,
+        "the old partial target fields alone miss this fence transition"
+    );
+    assert_ne!(
+        run_identity(&public, &executor.fence),
+        run_identity(&public, &fresh.fence)
+    );
+    assert!(
+        registry.claim(&fresh, &active.id).is_err(),
+        "old worker still owns the device"
+    );
+    drop(claim);
+    let fresh_claim = registry.claim(&fresh, &active.id).unwrap();
+    assert!(
+        manager
+            .activate(&principal, &active.id, active.version - 1, target_b.clone())
+            .is_err(),
+        "fresh authority does not bypass CAS"
+    );
+    let active_b = manager
+        .activate(&principal, &active.id, active.version, target_b)
+        .unwrap();
+    assert!(active_b.generation > active.generation);
+    let provider_b = oasis7_model_provider::harness_adapter::SessionModelProvider::new(
+        manager.clone(),
+        principal.clone(),
+        active_b.id.clone(),
+        active_b.active_version.unwrap(),
+        active_b.generation,
+    )
+    .unwrap();
+    assert!(oasis7_agent_harness::ModelProvider::check_execution(&provider).is_err());
+    oasis7_agent_harness::ModelProvider::check_execution(&provider_b).unwrap();
+    let stopped = manager
+        .stop(&principal, &active_b.id, active_b.version)
+        .unwrap();
+    assert!(oasis7_agent_harness::ModelProvider::check_execution(&provider_b).is_err());
+    {
+        let mut control = server.control.lock().unwrap();
+        control.task_status = GameTaskStatusV1::Suspended;
+        control.executor_binding = None;
+    }
+    assert!(registry.resolve(&principal, "agent").is_none());
+    {
+        let mut control = server.control.lock().unwrap();
+        control.task_status = GameTaskStatusV1::Active;
+        control.task_revision = DecimalU64(3);
+        control.executor_epoch = DecimalU64(2);
+        let mut binding = fresh.fence.executor_binding.clone().unwrap();
+        binding.executor_epoch = DecimalU64(2);
+        control.executor_binding = Some(binding);
+    }
+    let resumed = registry
+        .resolve(&principal, "agent")
+        .expect("Runtime resume permits a fresh explicit activation");
+    assert!(registry.claim(&resumed, &stopped.id).is_err());
+    drop(fresh_claim);
+    let resumed_claim = registry.claim(&resumed, &stopped.id).unwrap();
+    let active_c = manager
+        .activate(
+            &principal,
+            &stopped.id,
+            stopped.version,
+            target(&resumed.fence),
+        )
+        .unwrap();
+    manager
+        .check_execution(
+            &principal,
+            &active_c.id,
+            active_c.active_version.unwrap(),
+            active_c.generation,
+        )
+        .unwrap();
+    assert!(oasis7_agent_harness::ModelProvider::check_execution(&provider).is_err());
+    assert!(oasis7_agent_harness::ModelProvider::check_execution(&provider_b).is_err());
+    let resumed_control = server.control.lock().unwrap().clone();
+    {
+        let mut control = server.control.lock().unwrap();
+        control.active_goal_reference = None;
+        control.active_goal_revision = DecimalU64(0);
+        control.latest_goal_revision = DecimalU64(0);
+    }
+    assert!(
+        registry.resolve(&principal, "agent").is_none(),
+        "no goal is not executor authority"
+    );
+    *server.control.lock().unwrap() = resumed_control;
+    server
+        .control
+        .lock()
+        .unwrap()
+        .executor_binding
+        .as_mut()
+        .unwrap()
+        .executor_public_key = "e".repeat(64);
+    assert!(
+        registry.resolve(&principal, "agent").is_none(),
+        "standby device cannot impersonate the current signer"
+    );
+    server.read_authorized.store(false, Ordering::SeqCst);
+    assert!(
+        registry.resolve(&principal, "agent").is_none(),
+        "canonical read/delegation rejection fails closed"
+    );
+    drop(resumed_claim);
+    drop(resumed);
+    drop(fresh);
+    drop(provider_b);
     assert!(server.reads.load(Ordering::SeqCst) >= 7);
     drop(provider);
     drop(manager);

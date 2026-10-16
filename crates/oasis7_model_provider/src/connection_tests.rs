@@ -30,6 +30,7 @@ fn preset() -> ProviderPreset {
 }
 fn target() -> BindingTarget {
     BindingTarget {
+        full_fence_digest: "fixture-full-fence".into(),
         world_id: "world".into(),
         agent_id: "agent".into(),
         task_id: "task".into(),
