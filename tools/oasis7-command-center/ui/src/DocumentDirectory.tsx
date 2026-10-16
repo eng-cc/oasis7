@@ -46,7 +46,7 @@ export default function DocumentDirectory(props: { snapshot: Snapshot; selectFil
   }));
   const ancestors = () => parent().split('/').filter(Boolean).map((name,index,array) => ({name,path:array.slice(0,index+1).join('/')}));
   return <section aria-label="文档目录层级">
-    <p class="muted small">按当前清单路径组织 PRD、设计及结构入口（README / AGENTS），不推断产品归属或主责。搜索保留命中文件的目录入口；普通正文仍可从文件清单查询。逐层分页，目录深度最多 64，尚未提供产品树、专业系统树或持久阅读偏好。</p>
+    <p class="muted small">按当前清单路径组织 PRD、设计及结构入口（README / AGENTS），不推断产品归属或主责。隐藏历史时保留已核实显式引用的历史占位。搜索保留命中文件的目录入口；普通正文仍可从文件清单查询。逐层分页，目录深度最多 64，尚未提供产品树、专业系统树或持久阅读偏好。</p>
     <form class="inventory-filters" onSubmit={e => {e.preventDefault(); if (!composing() && (lifecycle() !== 'raw' || rawStatus())) void load('',false,true);}}>
       <label>标题、路径或文档 ID<input aria-label="筛选目录文档" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => {if ((composing() || e.isComposing || e.keyCode === 229) && e.key === 'Enter') e.preventDefault();}} /></label>
       <label>读取结果<select aria-label="目录读取结果" value={filter()} onChange={e => setFilter(e.currentTarget.value)}><option value="all">全部文件</option><option value="read">已读取</option><option value="omitted">仅看遗漏</option></select></label>
@@ -67,7 +67,7 @@ export default function DocumentDirectory(props: { snapshot: Snapshot; selectFil
       <Show when={result().stale}><p role="status" class="notice">目录使用过期清单，保留原版本：{result().error}</p></Show>
       <ul ref={list} tabindex="-1" aria-label="当前层目录项目">
         <For each={result().entries}>{entry => <li>
-          <Show when={entry.kind === 'directory'} fallback={<><button onClick={() => props.selectFile(entry.file ?? undefined)}>{entry.file?.title ?? entry.name} · {entry.path}</button><span class="muted small"> 生命周期：{lifecycleLabel(entry.file?.lifecycle?.category ?? 'unknown')}</span></>}>
+          <Show when={entry.kind === 'directory'} fallback={<><button onClick={() => props.selectFile(entry.file ?? undefined)}>{entry.file?.title ?? entry.name} · {entry.path}</button><span class="muted small"> 生命周期：{lifecycleLabel(entry.file?.lifecycle?.category ?? 'unknown')}</span><Show when={entry.historicalReferenceFiles > 0}><div class="notice"><p>历史引用占位：被 {entry.historicalReferenceFiles} 个非明确历史的已读文档显式引用；保留原生命周期，不代表现行、主责或实现完成。</p><p class="muted small">来源路径样本（最多 20）：{entry.historicalReferencePaths.join('、')}</p></div></Show></>}>
             <button disabled={entry.depthLimited} onClick={() => void load(entry.path)}>进入目录：{entry.name}（匹配 {entry.matchingFiles} 个文件）</button>
             <Show when={entry.depthLimited}><p class="muted small">已达目录深度预算：{entry.path}；深层文件仍保留在文件清单。</p></Show>
           </Show>

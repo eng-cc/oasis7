@@ -8,10 +8,10 @@ const api = vi.hoisted(() => ({documentDirectory:vi.fn()}));
 vi.mock('./bridge', () => ({bridge:api,errorMessage:String,observedTime:()=>'核验时间'}));
 const file: IndexedDocument = {fileKey:'file',path:'doc/a/design.md',title:'A设计',kind:'design',state:'read',reason:null,revision:'rev',bytes:10,dirty:false,lifecycle:null,identity:null,pairings:null,upstream:null,allocations:null};
 const snapshot = (id='project',generation='1'): Snapshot => ({project:{id,path:'/repo',head:'head',branch:'main',gitCommonDir:'/repo/.git',environment:'local'},sources:[{kind:'local',generation,state:'partial',lastAttempt:'1',lastSuccess:'1',sourceRevision:'head',coverage:'',error:null}],sections:[],decisions:[],preferences:{projectPath:'/repo',query:'',view:'rules'},associations:[],readingPositions:[],git:{status:'',worktrees:''}});
-const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,file:null}],nextCursor:null,...extra});
+const page = (extra: Partial<DocumentDirectoryPage> = {}): DocumentDirectoryPage => ({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:10,read:9,omitted:1,stale:false,error:null,eligibleFiles:8,matchingFiles:2,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:'doc',name:'doc',kind:'directory',matchingFiles:2,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:null}],nextCursor:null,...extra});
 beforeEach(() => api.documentDirectory.mockReset()); afterEach(cleanup);
 it('navigates candidate ancestors with bound snapshots and selects the original file', async () => {
-  api.documentDirectory.mockResolvedValueOnce(page()).mockResolvedValueOnce(page({parentPath:'doc',entries:[{path:file.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file}]})).mockResolvedValue(page());
+  api.documentDirectory.mockResolvedValueOnce(page()).mockResolvedValueOnce(page({parentPath:'doc',entries:[{path:file.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file}]})).mockResolvedValue(page());
   const select = vi.fn(); render(() => <DocumentDirectory snapshot={snapshot()} selectFile={select}/>);
   fireEvent.click(await screen.findByRole('button',{name:'进入目录：doc（匹配 2 个文件）'}));
   await screen.findByRole('button',{name:'A设计 · doc/a/design.md'});
@@ -44,7 +44,7 @@ it('ignores late project responses and does not reset on personal snapshot chang
   setData(snapshot('new','2'));await waitFor(()=>expect(api.documentDirectory).toHaveBeenCalledTimes(3));
 });
 it('shows stale coverage and depth limits, and recovers failed queries explicitly', async () => {
-  api.documentDirectory.mockRejectedValueOnce(new Error('expired')).mockResolvedValue(page({stale:true,error:'scan failed',entries:[{path:'deep',name:'deep',kind:'directory',matchingFiles:1,depthLimited:true,file:null}]}));
+  api.documentDirectory.mockRejectedValueOnce(new Error('expired')).mockResolvedValue(page({stale:true,error:'scan failed',entries:[{path:'deep',name:'deep',kind:'directory',matchingFiles:1,depthLimited:true,historicalReferenceFiles:0,historicalReferencePaths:[],file:null}]}));
   render(()=><DocumentDirectory snapshot={snapshot()} selectFile={vi.fn()}/>);
   await screen.findByRole('alert');fireEvent.click(screen.getByRole('button',{name:'重试当前目录'}));
   expect(await screen.findByRole('button',{name:'进入目录：deep（匹配 1 个文件）'})).toBeDisabled();
@@ -72,4 +72,15 @@ it('defaults to current, reveals hidden history with applied filters and binds l
   fireEvent.change(screen.getByRole('combobox',{name:'目录生命周期'}),{target:{value:'retired'}});
   fireEvent.click(screen.getByRole('button',{name:'下一页目录（最多 100 项）'}));
   await waitFor(()=>expect(api.documentDirectory).toHaveBeenLastCalledWith(expect.objectContaining({lifecycleFilter:'raw:target-contract',inventory:expect.objectContaining({cursor:'next'})})));
+});
+
+it('shows historical reference evidence and keeps the original historical file selectable', async () => {
+  const historical={...file,lifecycle:{status:'retired',category:'retired',rawStatus:'retired',successorDeclaration:null,successorTargets:[],successorReason:null,issue:null}};
+  api.documentDirectory.mockResolvedValue(page({entries:[{path:file.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:historical,historicalReferenceFiles:26,historicalReferencePaths:['doc/source.design.md']}]}));
+  const select=vi.fn();render(()=><DocumentDirectory snapshot={snapshot()} selectFile={select}/>);
+  expect(await screen.findByText(/历史引用占位：被 26 个/)).toBeInTheDocument();
+  expect(screen.getByText(/来源路径样本.*doc\/source.design.md/)).toBeInTheDocument();
+  expect(screen.getByText('生命周期：已退役')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'A设计 · doc/a/design.md'}));
+  expect(select).toHaveBeenLastCalledWith(historical);
 });

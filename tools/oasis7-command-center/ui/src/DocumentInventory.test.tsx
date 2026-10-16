@@ -242,7 +242,7 @@ it('distinguishes unparsed absent and incomplete allocation tables', async () =>
 it('reuses file details when selecting a directory leaf', async () => {
   api.documentInventory.mockResolvedValue(page());
   const selected = file();
-  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:selected}],nextCursor:null});
   const showSource=vi.fn();render(()=><DocumentInventory snapshot={snapshot()} showSource={showSource}/>);
   fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
   fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
@@ -254,7 +254,7 @@ it('does not let a late file-list response clear the selected directory leaf', a
   let finish!: (value:DocumentInventoryPage)=>void;
   api.documentInventory.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
   const selected=file();
-  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,file:selected}],nextCursor:null});
+  api.documentDirectory.mockResolvedValue({schemaVersion:1,projectId:'project',snapshotId:'snapshot',baselineOid:'head',generatedAt:'1',parentPath:'',candidates:1,read:1,omitted:0,stale:false,error:null,eligibleFiles:1,matchingFiles:1,hiddenHistoryFiles:0,lifecycleFilter:'current',totalChildren:1,entries:[{path:selected.path,name:'design.md',kind:'design',matchingFiles:1,depthLimited:false,historicalReferenceFiles:0,historicalReferencePaths:[],file:selected}],nextCursor:null});
   render(()=><DocumentInventory snapshot={snapshot()} showSource={vi.fn()}/>);
   fireEvent.click(screen.getByRole('button',{name:'文档目录'}));
   fireEvent.click(await screen.findByRole('button',{name:'设计文档 · doc/design.md'}));
