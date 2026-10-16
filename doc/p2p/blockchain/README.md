@@ -5,7 +5,7 @@
 - 想确认链 HTTP 提交的请求身份、accepted 后的处理责任，以及 Explorer 生命周期、独立查询与组合过滤：先读 [chain HTTP / Explorer 专业需求](chain-http-submit-explorer-contract.prd.md)，实现时进入[配对设计](chain-http-submit-explorer-contract.design.md)。
 - 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `formal-network-tiers-testnet-mechanism.prd.md`；执行时再进入 `formal-network-tiers-testnet-mechanism.runbook.md` 和 `public-testnet-governed-bootstrap.runbook.md`。
 - 想确认主链安全基线、剩余 mainnet-grade blocker、signer custody 或 genesis ceremony：先读 `p2p-mainnet-security-governance-readiness.prd.md`，再下钻到资产授权、registry drill 和 network-tier 专业证据。
-- 想确认普通玩家的 `hosted_public_join`、邮箱登录、托管 player signer 和后续自托管升级：先读 `hosted-public-join-managed-identity-custody.prd.md`。它不覆盖 node、validator 或 governance signer custody。
+- 想确认普通玩家的 `hosted_public_join` 账号接入：先读 `hosted-public-join-key-based-onboarding.prd.md`（P0 推荐 Passkey、邮箱可选）；托管 player signer 和后续自托管升级见 `hosted-public-join-managed-identity-custody.prd.md`。它不覆盖 node、validator 或 governance signer custody。
 - 想查看 `blockchain-p2pfs-hardening-phase*` 的历史合同与阶段追溯：先读 `p2p-blockchain-p2pfs-hardening.prd.md`，再按需进入同名 design/project；精确文件检索回到 `../prd.index.md`。
 
 ## 首读主题簇
@@ -15,12 +15,12 @@
 | Chain HTTP / Explorer | [chain-http-submit-explorer-contract.prd.md](chain-http-submit-explorer-contract.prd.md) | 同一 Node 的 HTTP 接纳、请求关联和 Explorer 后端查询合同；目标要求与实现验收分开，界面由 Launcher 专题承接。 |
 | Formal network tiers | `formal-network-tiers-testnet-mechanism.prd.md` | `local_devnet -> public_testnet -> mainnet` 的现行语义、promotion gate 与公开口径；operator 步骤见 companion runbook。 |
 | Mainnet-grade security | `p2p-mainnet-security-governance-readiness.prd.md` | 当前仍是 `not_mainnet_grade` 的 custody、governance、genesis 和 QA gate；不以历史规格完成态升级结论。 |
-| Hosted player identity | `hosted-public-join-managed-identity-custody.prd.md` | `hosted_public_join` 的玩家身份、邮箱登录与 managed player signer；不替代协议级 signer custody。 |
+| Hosted player identity | `hosted-public-join-managed-identity-custody.prd.md` | `hosted_public_join` 的身份 / custody 职责；账号接入推荐与多凭证归 key-based onboarding，managed player signer 不替代协议级 signer custody。 |
 | P2PFS / blockchain hardening history | `p2p-blockchain-p2pfs-hardening.prd.md` | phase2~8、production-grade roadmap、Phase B 与 Phase C 已收敛到稳定三件套；Phase C 网络证明仍是 future gap。 |
 
-## 待评审方案
+## 账号接入合同与阶段边界
 
-- [免邮箱注册与多凭证账号体系 PRD](hosted-public-join-key-based-onboarding.prd.md)与[配套系统设计](hosted-public-join-key-based-onboarding.design.md)：`draft`，覆盖通行密钥、可选邮箱、多凭证与恢复、账号会话和单世界控制、事务存储、迁移及撤销。入库只供评审，不覆盖现行托管身份合同，不表示已实现或已发布；正式采纳前须完成 PRD §6.4 与系统设计 §18.3 的条款同步和适用评审。
+- [免邮箱注册与多凭证账号体系 PRD](hosted-public-join-key-based-onboarding.prd.md)与[配套系统设计](hosted-public-join-key-based-onboarding.design.md)：P0 账号接入合同已采用，覆盖通行密钥、可选邮箱、多凭证与恢复、账号会话和单世界控制、事务存储、迁移及撤销；authority 分工见 PRD §6.4 与系统设计 §18.3。P1 原生密钥保持未发布；合同采用与源码交付不代表具体部署、真实环境验收或公开放量，剩余条件见系统设计 §18.4。
 
 ## 现行与历史边界
 

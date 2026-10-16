@@ -59,7 +59,8 @@ VRAM BUDGETS:
 ## Object Pooling
 
 ```csharp
-// ✅ Production-Ready: Generic Object Pool
+// Illustrative single-threaded pool: return each borrowed item exactly once.
+// maxSize limits retained idle items, not total live objects. Callbacks must not throw.
 public class ObjectPool<T> where T : class
 {
     private readonly Stack<T> _pool;
@@ -78,6 +79,8 @@ public class ObjectPool<T> where T : class
         int initialSize = 10,
         int maxSize = 100)
     {
+        if (maxSize < 0 || initialSize < 0 || initialSize > maxSize)
+            throw new ArgumentException("Require 0 <= initialSize <= maxSize");
         _createFunc = createFunc;
         _onGet = onGet;
         _onReturn = onReturn;
@@ -116,7 +119,8 @@ public class ObjectPool<T> where T : class
     public void Clear()
     {
         _pool.Clear();
-        CountActive = 0;
+        // Borrowed items remain active and may still be returned.
+        // Clearing idle storage must not reset CountActive.
     }
 }
 
@@ -318,6 +322,10 @@ public class StreamingManager : MonoBehaviour
         }
 
         operation.allowSceneActivation = true;
+        while (!operation.isDone)
+        {
+            yield return null;
+        }
         zone.State = ZoneState.Loaded;
     }
 }

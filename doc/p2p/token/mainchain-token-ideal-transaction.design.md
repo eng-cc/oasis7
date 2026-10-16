@@ -33,11 +33,11 @@ No field may be added merely as an optional string. `fee_payer` requires separat
 
 ## Rollout and residual risk
 
-Phase 1 is the implemented metadata-only closure. The residual risk is semantic, not an operational shortcut: presenting fee quote fields as charged fees, or future fields as supported sponsor/priority execution, is false. This design cannot be used as mainnet readiness, external-custody, or token-economics authority.
+Phase 1 implementation status is limited to the signed-metadata/API scope. It does not close UI quote-label or actual-rendering acceptance: native/wasm and Chinese/English consumers still need surface-specific evidence under [itx-surface](#itx-surface). The residual risk is semantic, not an operational shortcut: presenting fee quote fields as charged fees, or future fields as supported sponsor/priority execution, is false. This design cannot be used as mainnet readiness, external-custody, or token-economics authority.
 
 ## 追踪范围与未验收风险
 
-本次只追踪配对 PRD 已有的冻结专业合同，不重开经济或安全决定，不改变原有状态描述。源码字节重核固定 main `b32d4782b4d3dbcafa7c2cd0864fb16e8016bbc0`（与原静态审读源一致）；静态定义与已有测试断言仅是验证定位，本次未执行 Rust、UI、签名、真实交易、费用、部署或恢复测试。共享 runtime、publication、persistence、launcher 与 CI 在途变更不作为已验收证据；原文“已实现/complete”不因本次追踪新增而获得新验证。
+本次只追踪配对 PRD 已有的冻结专业合同，不重开经济或安全决定；完成范围按上文限定为 metadata/API，不将未验收 UI 算入闭环。源码字节重核固定 main `b32d4782b4d3dbcafa7c2cd0864fb16e8016bbc0`（与原静态审读源一致）；静态定义与已有测试断言仅是验证定位，本次未执行 Rust、UI、签名、真实交易、费用、部署或恢复测试。共享 runtime、publication、persistence、launcher 与 CI 在途变更不作为已验收证据；原文“已实现/complete”不因本次追踪新增而获得新验证。
 
 ### 2.1 需求承接与分配表
 
