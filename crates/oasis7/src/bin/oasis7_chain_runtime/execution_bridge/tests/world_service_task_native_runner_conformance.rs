@@ -114,6 +114,9 @@ impl ModelProvider for ScriptedFactoryChain {
 struct FrozenOriginalDelivery {
     inner: SdkNativeTaskHost,
     frozen: AtomicBool,
+    root: PathBuf,
+    world: WorldIdentity,
+    deadline: Instant,
 }
 impl oasis7_agent_harness::NativeTaskHost for FrozenOriginalDelivery {
     fn initialize_run(&self, c: &NativeTaskRunConfig) -> Result<u32, String> {
@@ -200,14 +203,37 @@ impl oasis7_agent_harness::NativeTaskHost for FrozenOriginalDelivery {
                     )?,
                 ),
             )?;
-            // Observe independent real-node progress through the ordinary host;
-            // no fixture World mutation, clock step or fabricated feedback.
-            self.inner
-                .invoke(
-                    context,
-                    &NativeTaskTool::parse("wait", &json!({"ticks":1}))?,
+            // The canonical test oracle observes normal node progress without
+            // generating a burst of public HTTP reads. It neither steps nor
+            // modifies the world. The frozen signed request is never refreshed.
+            let pin = || {
+                super::super::super::super::world_service_read::pin(
+                    &self.root.join("records"),
+                    &self.root.join("store"),
+                    &self.world,
+                    None,
                 )
-                .map_err(|error| frozen_step_error("wait_after_cache", error))?;
+            };
+            let before = pin()
+                .map_err(|_| "fixture canonical pin unavailable")?
+                .commit;
+            loop {
+                let current = pin().map_err(|_| "fixture canonical pin unavailable")?;
+                if current.commit != before {
+                    break;
+                }
+                if Instant::now() >= self.deadline {
+                    return Err("fixture canonical progress deadline".into());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let control = self
+                .inner
+                .current_control()
+                .map_err(|error| frozen_step_error("control_after_progress", error))?;
+            if control.fence != context.fence || control.logical_tick > context.valid_until_tick {
+                return Err("fixture control changed before original delivery".into());
+            }
             let result = self
                 .inner
                 .invoke(context, tool)
@@ -236,6 +262,8 @@ fn frozen_step_error(step: &'static str, error: String) -> String {
         "world_wait_timeout"
     } else if error == "wait would exceed original context validity" {
         "wait_exceeds_context"
+    } else if error.starts_with("signed Agent read unavailable") {
+        "signed_agent_read_unavailable"
     } else if error.contains("public read") || error.contains("task control") {
         "authenticated_read_unavailable"
     } else {
@@ -284,6 +312,120 @@ fn cognition_results(world: &RuntimeWorld) -> Vec<CanonicalIntentResultV1> {
         .collect::<Vec<_>>();
     results.sort_by_key(|result| result.action_id);
     results
+}
+
+// Diagnose only authenticated/oracle identity relations and fixed categories.
+// Counts distinguish absent Runtime outbox data from projection/index mismatch;
+// no request body, goal, key, digest or arbitrary reason text is printed.
+fn diagnose_rejected_feedback(
+    client: &Client,
+    world: &RuntimeWorld,
+    stage: u32,
+    original: &oasis7_client_api::world_service::SubmitIntentRequest<
+        oasis7_client_api::world_service_wire::WorldServicePayloadV1,
+    >,
+) {
+    use oasis7_client_api::world_service_wire::WorldServicePayloadV1 as WirePayload;
+    let WirePayload::Cognition(signed) = &original.signed_payload else {
+        return;
+    };
+    let request = &signed.request.request;
+    let identity_matches = |f: &oasis7_agent_api::FeedbackEnvelopeV1| {
+        f.agent_subject == request.agent_id
+            && f.agent_session_id == request.agent_session_id
+            && f.agent_turn_id == request.agent_turn_id
+            && f.decision_request_id == request.decision_request_id
+            && f.request_digest.to_string() == request.request_digest
+    };
+    let derived_matches = oasis7_client_api::world_service_correlation::derive_correlation(
+        client.world.clone(),
+        &original.signed_payload,
+    )
+    .is_ok_and(|derived| derived == original.correlation);
+    let canonical = cognition_results(world);
+    let matching = canonical
+        .iter()
+        .filter(|r| r.request.correlation == original.correlation)
+        .collect::<Vec<_>>();
+    let exact_requests = matching
+        .iter()
+        .filter(|r| {
+            matches!((serde_json::to_value(&r.request), serde_json::to_value(original)),
+                (Ok(actual), Ok(expected)) if actual == expected)
+        })
+        .count();
+    let stale = format!(
+        "{:?}",
+        oasis7::runtime::WorldError::DistributedValidationFailed {
+            reason: "stale_base".into()
+        }
+    );
+    let canonical_stale = matching
+        .iter()
+        .filter(|r| r.rejected.as_deref() == Some(stale.as_str()))
+        .count();
+    let canonical_committed = matching.iter().filter(|r| r.rejected.is_none()).count();
+    eprintln!(
+        "NATIVE_CONFORMANCE_FEEDBACK stage={stage} derived_matches={derived_matches} canonical_matches={} exact_requests={exact_requests} canonical_rejected_stale_base={canonical_stale} canonical_committed={canonical_committed}",
+        matching.len()
+    );
+    match world.runtime_feedback_outbox() {
+        Ok(records) => {
+            let mut agent_records = 0;
+            let mut matching_records = 0;
+            let mut rejected_stale = 0;
+            let mut invalid = 0;
+            for record in records {
+                if record.agent_subject != client.agent {
+                    continue;
+                }
+                agent_records += 1;
+                match serde_json::from_value::<oasis7_agent_api::FeedbackEnvelopeV1>(record.payload)
+                {
+                    Ok(feedback) if identity_matches(&feedback) => {
+                        matching_records += 1;
+                        if feedback.status == "rejected"
+                            && feedback.reject_reason.as_deref() == Some("stale_base")
+                        {
+                            rejected_stale += 1;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => invalid += 1,
+                }
+            }
+            eprintln!(
+                "NATIVE_CONFORMANCE_FEEDBACK stage={stage} source=canonical_outbox agent_records={agent_records} identity_matches={matching_records} rejected_stale_base={rejected_stale} invalid={invalid}"
+            );
+        }
+        Err(_) => eprintln!(
+            "NATIVE_CONFORMANCE_FEEDBACK stage={stage} source=canonical_outbox category=unavailable"
+        ),
+    }
+    match client.public_view() {
+        Ok(view) => {
+            let records = &view.projection().feedback_history;
+            let matching_records = records
+                .iter()
+                .filter(|r| identity_matches(&r.feedback))
+                .collect::<Vec<_>>();
+            let stale_records = matching_records
+                .iter()
+                .filter(|r| {
+                    r.feedback.status == "rejected"
+                        && r.feedback.reject_reason.as_deref() == Some("stale_base")
+                })
+                .count();
+            eprintln!(
+                "NATIVE_CONFORMANCE_FEEDBACK stage={stage} source=signed_projection records={} identity_matches={} rejected_stale_base={stale_records}",
+                records.len(),
+                matching_records.len()
+            );
+        }
+        Err(_) => eprintln!(
+            "NATIVE_CONFORMANCE_FEEDBACK stage={stage} source=signed_projection category=unavailable"
+        ),
+    }
 }
 
 // Failure diagnostics contain bounded categories only: never signed payloads,
@@ -400,6 +542,9 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
         let delivery_race = Arc::new(FrozenOriginalDelivery {
             inner: SdkNativeTaskHost::new(client.clone()),
             frozen: AtomicBool::new(false),
+            root: root.clone(),
+            world: world.clone(),
+            deadline,
         });
         let run_result = NativeTaskRunner::new(
             delivery_race.clone(),
@@ -423,6 +568,7 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
                 else {
                     continue;
                 };
+                diagnose_rejected_feedback(&client, &canonical.world, index, &original);
                 for result in cognition_results(&canonical.world) {
                     if result.request.correlation != original.correlation {
                         continue;
