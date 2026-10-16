@@ -7,7 +7,7 @@
 - 生命周期：active
 - 状态边界：静态实现与完整验收分别表达，不代表已经部署或发行升级
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-15
+- Last reviewed：2026-10-16
 - 设计判定：`paired-design`。
 - 配对产品设计：[`public-site-discovery-and-showcase.design.md`](public-site-discovery-and-showcase.design.md)
 - 专业系统设计：[`官网发现与展示系统设计`](../../site/github-pages/public-site-discovery-and-showcase.design.md)
@@ -22,6 +22,21 @@
 **已核对事实。** 以 `116c2e6d4f4891c316b305764a1f755a3005d3ae` 为只读基线，[首页源码](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html)已有危机场景切换、说明性事件、Viewer 截图、平台下载和文档入口；[小说页](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/story/index.html)已有阅读器。源码阅读不是线上浏览器、素材真实性或完整试玩验收。
 
 **设计假设。** 展示具体决策、集中说明参与条件、提供短篇进展，可能比继续增加宏观概念更帮助陌生访客理解。该假设由真实访客观察验证；若访客仍把自己理解为旁观者、认为公共世界已经开放，或找不到下一步，应修改对应展示而非仅美化页面。转化与留存基线未验证，不设虚构提升百分比。
+
+<a id="visitor-value-and-outcomes"></a>
+### 1.1 首要受众与值得继续看的理由
+
+首要受众是对 AI Agent 文明模拟、经营取舍和世界后果感兴趣、尚不了解项目的人，而非已经会运行工程脚本的人。宣传主张以“你决定方向与边界，Agent 在资源约束中行动，你根据结果继续判断”为中心。不能仅用“AI 原生”“持久世界”等名词替代玩家收益，也不能把目标态当作当前已验证能力。
+
+| 访问动机 | 本次访问应得到的价值 | 合适的下一步 |
+| --- | --- | --- |
+| 想知道是否好玩 | 看懂一个具体目标、一次取舍和已经发生或尚未发生的后果，知道自己不是仅观看日志 | 了解玩法，再自主了解技术预览 |
+| 想研究或接入 Agent | 在理解同一玩法后找到真实文档、Skill 与复现条件，不必重新浏览一套宣传首页 | 进入既有技术入口；不把接入工具当普通玩家主 CTA |
+| 想看世界观或持续关注 | 无需安装即可读懂小说导读或一篇变化说明，并保存有效的后续入口 | 小说、开发日志、RSS 或既有 GitHub 跟进 |
+
+上述动机是编辑与评估分组，不新增账户类型、访客画像、强制角色选择器或游戏模式。对前两类读者都必须说明当前配置和阶段限制；“无需编程”不能推导为“无需配置”。
+
+成功首先是**理解正确、选择合适、离开后有可找回的内容**，不是把更多人推向下载。沿用首屏 30 秒理解目标；完整案例后应能说出一次有意义的取舍；预览说明后应能判断自己是否具备条件。点击、下载、安装、完成游戏目标和回访是不同结果，不互相代签，也不为测量引入追踪服务。
 
 ## 2. 范围与 Non-Goals
 
@@ -44,9 +59,29 @@
 
 适用异常包括素材缺失、来源失效、记录撤回、文章为空、版本信息获取失败、不支持的平台、脚本不可用、语言目标不存在和小说加载失败。页面必须保留真实原因及安全下一步；不自动切换成别的世界、模式、版本或未声明语言，不以“成功”占位隐藏缺失。
 
+### 3.1 在决策点提供下一步，而非不断增加栏目
+
+首屏主动作仍为“了解玩法”，次链接仍为“了解技术预览”。案例结束处让读者选择了解预览或深读同案例；预览区允许继续看开发进展而不安装；文章结尾提供相关内容或现有订阅入口。不要求返回页首或读完整页才能作选择，也不在每段同时摆放一排等权按钮。
+
+官网观看、下载安装包和按源码复现实验是三条不同路径。后两条各自说明版本、条件和证据范围；下载按钮不能承诺自动复现首页案例。持续关注以回答“发生了什么变化、对玩家意味着什么、还有什么没解决”为价值，不用 PR 数量、假在线人数或空路线图制造活跃。
+
 ## 4. 产品要求与功能状态
 
 以下功能 ID 同时对应独立 REQ；状态只覆盖本专题定义的首期范围。共同核对基线为 2026-10-14、上述源提交、远程源码阅读环境；实现基线与对应检查范围见各功能点；尚未完成陌生访客理解和完整发行验收。系统设计“已覆盖”仅指条款可逐项定位，不等于已通过独立评审。
+
+<a id="discovery-refinement-scope"></a>
+### 本轮细化的范围与状态
+
+以下细化复用原六项要求及其 Trace ID，不新增平行需求体系。各功能点下的“已实现待验证”保留原静态范围与 2026-10-15 固定实现依据；**不覆盖下表新细化**。本轮细化的设计已经定义，代码覆盖待核实，验收未执行；不得用旧实现、旧截图或既有生成稿宣告细化已实现。
+
+| 既有要求 | 新细化的产品结果 | 产品体验承接 | 系统设计承接 |
+| --- | --- | --- | --- |
+| [001](#req-site-discovery-001) | 说清玩家收益、一次取舍与合适下一步，而非只识别游戏名或技术名词 | [价值与入口](public-site-discovery-and-showcase.design.md#value-and-entry-contract) | [入口与案例](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-value-path) |
+| [002](#req-site-discovery-002) | 统一四步顺序；同一案例呈现初始约束、玩家调整和结果；未执行选项不冒充已发生后果 | [案例叙事](public-site-discovery-and-showcase.design.md#decision-walkthrough) | [入口与案例](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-value-path) |
+| [003](#req-site-discovery-003) | 进展讲玩家价值；案例、文章与预览决策点存在真实的继续阅读/关注入口，分享不丢范围 | [回访与分享](public-site-discovery-and-showcase.design.md#editorial-return-path) | [编辑与分享](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-return-sharing) |
+| [004](#req-site-discovery-004) | 访客可区分观看、下载候选和源码复现；预览速览帮助判断条件与成本，不制造开箱可玩承诺 | [预览决策](public-site-discovery-and-showcase.design.md#preview-decision) | [预览适配](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-preview-fit) |
+| [005](#req-site-discovery-005) | 世界观有吸引人的短导读及可返回路径，页面和分享摘要都保持小说身份与实际语言 | [回访与分享](public-site-discovery-and-showcase.design.md#editorial-return-path) | [编辑与分享](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-return-sharing) |
+| [006](#req-site-discovery-006) | 科技感来自可读的工业世界与信息层级，不依赖假遥测、动效或重资源；中宽、手机和降级入口同样成立 | [视觉语言](public-site-discovery-and-showcase.design.md#visual-language) | [视觉交付](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-visual-delivery) |
 
 <a id="req-site-discovery-001"></a>
 ### REQ-SITE-DISCOVERY-001：访客理解与主路径
@@ -166,24 +201,43 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 
 验证方法由[系统设计验证矩阵](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)和现有 [testing-manual](../../../testing-manual.md)承接。自动结构检查不证明人类理解，生成稿不证明浏览器结果，页面合入不证明上线或游戏发行。
 
+<a id="refinement-acceptance"></a>
+### 5.1 细化验收：从“页面存在”到“访客能够判断”
+
+下表细化原 AC，不增加审批层、固定访客数量门禁或独立任务身份。实施时覆盖非项目成员及技术兴趣者，分别记录语言、设备、是否被提示、原话和阻塞点；小样本用于发现误解，不外推市场转化率。
+
+| 原 AC | 观察或反例 | 应得到的结果 |
+| --- | --- | --- |
+| 001 | 先看首屏，再问“你会做什么、AI 做什么、为什么想继续看？” | 能区分角色并说出一个具体兴趣点或不适合自己的理由；不能只复述宏观口号 |
+| 002 | 完整阅读四步后，问“哪里受阻、谁调整了什么、实际结果是什么？” | 用同一案例解释因果；未执行选项只能被理解为待考虑方向；日志与生成图不能替代答案 |
+| 003 | 从文章直接进入、或决定暂不安装，要求找到后续内容/关注方式；再撤回文章 | 不必回首页重新寻找；RSS、分享摘要与页面纠正一致；无内容不生成假推荐 |
+| 004 | 分别寻找安装包和源码案例的准备条件，模拟未知平台或未核验新版本 | 能区分两条路径与费用责任，知道下一步该查什么；未知不能被界面升级为通过 |
+| 005 | 从中文与英文入口及分享摘要进入小说 | 在进入前知道是小说和实际语言，读后能返回现有发现路径 |
+| 006 | 关闭脚本/动效、破坏媒体，覆盖既有三视口及 768–1024px 中宽 | 核心说服信息、阶段限制与动作仍可读；装饰不制造假控制台，不遮挡警示或焦点 |
+
+首轮记录理解错误、任务是否完成及放弃原因作为基线；后续在相近任务和条件下比较。没有实际观察或合法统计来源时，理解率、下载转化和留存均标为未知；不为了填指标新增采集。
+
 ## 6. 取舍与未决问题
 
 采用精选静态展示而非实时世界服务，牺牲即时性以减少首期依赖；类型、日期和范围必须显著。采用一个完整案例而非堆叠宏观场景，牺牲题材覆盖以验证因果可读性。采用现有静态技术栈而非 CMS，接受少量编辑同步成本，不引入运行服务。
 
 素材选择仍待当前证据决定：由 `game_visual_interaction_designer` 与 `qa_engineer` 在实施前选定可公开记录；未取得时只保留明确的说明性示例，不声明真实首产物、续接或真人结果。费用/平台信息由 `liveops_community` 对照当前发行文档核实，未知则明确未知。详细排期与执行事实只进入当前 PR 或后续实施 PR。
 
+<a id="official-site-benchmark"></a>
 ## 7. 官网参考及采纳边界
 
-核对日期：2026-10-14；官网公开页面读取，不是竞品实机或转化研究。
+核对日期：2026-10-16；重新读取以下官方公开页面，观察信息结构、文案和链接去向，不是竞品实机、像素级视觉审查或转化研究。竞品拥有某项能力不说明 oasis7 已具备；采纳的是可验证的传播方法。EVE Frontier 的可读取内容主要是导航，只据此判断分层。
 
-| 官方来源 | 观察到的结构 | 本专题采纳 / 不采纳 |
-| --- | --- | --- |
-| [SpaceMolt](https://spacemolt.com/) | 星图、战斗、经济、新闻和更新入口 | 采纳可观察世界的入口；首期不复制实时服务和全量导航 |
-| [Screeps](https://screeps.com/) | 明确程序员定位，区分 World/Arena 与参与节奏 | 采纳清晰玩家位置；不把编程当预览先决条件 |
-| [Colony](https://parallel.life/colony) | Quick Facts、具体动作、下载与 FAQ | 采纳动作和参与条件速览；不照搬已发售口径 |
-| [Factorio](https://factorio.com/) | 玩法介绍、Demo、版本、开发日志与 RSS | 采纳玩家视角进展和稳定内容入口；不承诺固定频率 |
-| [BitCraft Discover](https://bitcraftonline.com/discover) | 角色与分篇世界故事 | 采纳短导读连接小说；不把故事当运行历史 |
-| [EVE Frontier](https://evefrontier.com/en) | 游戏、Builders、Vision、Roadmap 与文档分层 | 采纳读者分流；不复制账户、市场或发布范围 |
+| 官方来源 | 观察到的结构 | 本专题采纳 / 不采纳 | 要求映射 |
+| --- | --- | --- | --- |
+| [SpaceMolt](https://spacemolt.com/) | 先解释 AI Agent 玩家定位，再提供星图、战斗回看、新内容与观察/指导 Agent 的入口 | 采纳“看懂一次发生的事，再决定参与”的入口与回访理由；首期只做有来源的静态记录，不复制实时服务、在线数或全量导航 | 001 / 002 / 003 |
+| [Screeps](https://screeps.com/) | 一句话说明程序员如何控制单位，World/Arena 分别解释参与方式和节奏 | 采纳角色、控制方式与适合人群的清晰表达；不因此把编程设为普通预览先决条件，不复制双产品结构 | 001 / 004 |
+| [Colony: Survival](https://parallel.life/colony) | Quick Facts 集中说明类型、平台与参与条件；具体动作、AI 交互、下载和 FAQ 相互衔接 | 采纳“动作—收益—条件”与预览速览；不复制已发售、移动平台、内购或生成装备能力，不恢复首屏三列事实条 | 001 / 002 / 004 |
+| [Factorio](https://factorio.com/) | 玩法说明、截图/视频、Demo、版本、开发日志与 RSS 分工明确 | 采纳观看、尝试、深读和持续关注的不同出口，以及讲玩家变化的进展；不复制其发行成熟度、销量背书或承诺固定频率 | 002 / 003 / 004 |
+| [BitCraft Discover](https://bitcraftonline.com/discover) | 先描述共同建设的玩家目标，再以角色和分篇世界故事承接兴趣 | 采纳有具体阅读动机的小说短导读和内容深链；不把小说当运行历史，不导入其多人世界承诺 | 001 / 005 |
+| [EVE Frontier](https://evefrontier.com/en) | 游戏、Builders、Vision、Roadmap 与文档入口分层 | 采纳玩家、技术读者和愿景的分流，技术材料下沉；不复制账户、市场、全量导航或发布范围 | 001 / 006 |
+
+先改价值表达、同案例叙事和预览选择，再打磨内容回访与视觉节奏；视频、媒体包和实时观测不是前置条件。没有合适素材时改善文字与已存在的入口，不扩张功能来填充版式。
 
 只借鉴信息组织与交互原则；不复制竞品美术、标志、截图或文案。生成设计稿是 oasis7 的方案表达，来源与非证据边界见配对产品设计。
 

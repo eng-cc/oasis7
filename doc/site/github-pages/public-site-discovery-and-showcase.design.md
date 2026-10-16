@@ -1,8 +1,9 @@
 # 官网发现与展示系统设计
 
-- 状态：active（当前静态实现合同；不表示部署或完整验收）
+- 状态：active（当前静态实现合同及待核实细化；不表示部署或完整验收）
 - Owner role：viewer_engineer
-- 审读基线：2026-10-14；`116c2e6d4f4891c316b305764a1f755a3005d3ae`；远程源码阅读，无线上浏览器结论
+- 文档审读基线：2026-10-16；`a8c7c97984839d32d6dac6013b16b307735482d2`；远程文档与首页源码阅读，无线上浏览器结论
+- 历史设计起点：2026-10-14；`116c2e6d4f4891c316b305764a1f755a3005d3ae`
 - 上游产品：[`官网发现、玩法展示与持续关注 PRD`](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md)
 - 产品体验设计：[`配对产品 design`](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md)
 - 专业入口：[`site PRD`](../prd.md)、[`当前布局与页面覆盖合同`](../design.md#homepage-layout-authority)、[`文件级索引`](../prd.index.md)
@@ -15,6 +16,8 @@
 
 静态实现沿本设计维护首页、内容列表/详情、RSS、下载增强及小说恢复；实现来源见上游产品功能状态。生成式概念稿继续只承担视觉方向。本文不升级发行状态、游戏规则或运行服务，也不以页面代码存在代替真人理解、完整浏览器验收或线上部署。
 
+本轮[官网对照](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#official-site-benchmark)只推动产品传播与静态体验细化；[第 13 节](#static-experience-refinement)定义具体承接和补充验证。新细化不继承旧实现的验证结论，状态以[PRD 的范围分离](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#discovery-refinement-scope)为准。
+
 ## 2. 上游约束与相关角色
 
 产品 owner 决定访客价值和范围；视觉 owner 决定信息层级与素材；viewer_engineer 承担静态实现；liveops_community 核对可公开内容与当前口径；qa_engineer 核对来源和验证范围。本文不要求固定 subagent 数量或新增审批流程。
@@ -23,12 +26,12 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| Trace refs: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19；[REQ-SITE-DISCOVERY-001](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-001) | 首页先解释玩家、Agent、资源压力及有效下一步 | [DES-SITE-ENTRY](#des-site-entry) | 产品/视觉；root 布局 | 不证明真人理解或游戏可玩 |
-| Trace refs: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822；[REQ-SITE-DISCOVERY-002](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-002) | 同一案例的四步与素材性质一致；来源缺失不补假事实 | [DES-SITE-EVIDENCE](#des-site-evidence) | QA/玩法 owner；可公开原始材料 | 不接实时世界写/读服务 |
-| Trace refs: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04；[REQ-SITE-DISCOVERY-003](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-003) | 稳定列表/详情/RSS 与纠正、空状态 | [DES-SITE-PUBLISHING](#des-site-publishing) | 内容 owner；公开口径 authority | 不做 CMS、订阅账户或投稿 |
-| Trace refs: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3；[REQ-SITE-DISCOVERY-004](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-004) | 版本、平台、成本及限制一致；缺资产不猜地址 | [DES-SITE-DOWNLOAD](#des-site-download) | 发行/Launcher；root 下载合同 | 不改安装器、签名或资产校验机制 |
-| Trace refs: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae；[REQ-SITE-DISCOVERY-005](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-005) | 小说导读与真实记录分离，失败/语言目标可恢复 | [DES-SITE-STORY](#des-site-story) | 小说 owner；现有 reader 合同 | 不翻译或重写正文 |
-| Trace refs: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb；[REQ-SITE-DISCOVERY-006](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-006) | 双语、无 JS、窄屏/键盘/动效降级不丢主路径 | [DES-SITE-ACCESSIBILITY](#des-site-accessibility) | 视觉/QA；现有 S6 | 概念稿不代签浏览器/性能证据 |
+| Trace refs: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19；[REQ-SITE-DISCOVERY-001](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-001) | 首页解释玩家收益、Agent、资源压力及有效下一步 | [DES-SITE-ENTRY](#des-site-entry)、[价值路径](#des-site-value-path) | 产品/视觉；root 布局 | 不证明真人理解或游戏可玩 |
+| Trace refs: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822；[REQ-SITE-DISCOVERY-002](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-002) | 同一案例的四步与素材性质一致；来源缺失不补假事实 | [DES-SITE-EVIDENCE](#des-site-evidence)、[案例语义](#des-site-value-path) | QA/玩法 owner；可公开原始材料 | 不接实时世界写/读服务 |
+| Trace refs: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04；[REQ-SITE-DISCOVERY-003](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-003) | 稳定列表/详情/RSS、回访入口与纠正，分享不丢范围 | [DES-SITE-PUBLISHING](#des-site-publishing)、[回访与分享](#des-site-return-sharing) | 内容 owner；公开口径 authority | 不做 CMS、订阅账户或投稿 |
+| Trace refs: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3；[REQ-SITE-DISCOVERY-004](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-004) | 版本、平台、成本及限制一致；下载与源码案例分流 | [DES-SITE-DOWNLOAD](#des-site-download)、[预览适配](#des-site-preview-fit) | 发行/Launcher；root 下载合同 | 不改安装器、签名或资产校验机制 |
+| Trace refs: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae；[REQ-SITE-DISCOVERY-005](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-005) | 小说导读与真实记录分离，失败/语言目标及分享身份正确 | [DES-SITE-STORY](#des-site-story)、[回访与分享](#des-site-return-sharing) | 小说 owner；现有 reader 合同 | 不翻译或重写正文 |
+| Trace refs: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb；[REQ-SITE-DISCOVERY-006](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-006) | 双语、无 JS、窄屏/中宽/键盘/动效降级不丢主路径 | [DES-SITE-ACCESSIBILITY](#des-site-accessibility)、[视觉交付](#des-site-visual-delivery) | 视觉/QA；现有 S6 | 概念稿不代签浏览器/性能证据 |
 | Trace refs: O7-REQ-6b906d19-8858-4b62-9526-5952cfc9ad8b；[REQ-ENTRY-CANDIDATE-001](../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001) | 版本、日期、Release 说明、实际资产与 checksum 以同一候选快照原子更新；失败不混版 | [已有设计](#des-site-download) | 发行/QA/LiveOps 与对应产品 owner | 两 primary mode、跨域 QA/经济/恢复及完整 release gate 不由网站下载片段覆盖 |
 | Trace refs: O7-REQ-e20ed8c7-6f8d-400a-a883-57b2e772acff；[REQ-ENTRY-CLAIM-001](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-001) | runtime_capture 绑定版本/场景/证据窗口与可公开来源；来源不足不背书运行事实 | [已有设计](#des-site-evidence) | 发行/QA/LiveOps 与对应产品 owner | 全渠道专业事实、QA verdict 和 LiveOps 审核闭包仍外部 |
 | Trace refs: O7-REQ-f71ac2e9-1586-44af-89b7-e98ff364e70c；[REQ-ENTRY-CLAIM-002](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-002) | 同 URL 纠正/撤回同步 CN/EN、详情/摘要/RSS，回滚不复活错误正文 | [已有设计](#des-site-publishing) | 发行/QA/LiveOps 与对应产品 owner | 其他 active public surfaces、自动漂移检测与第三方缓存收回不在本设计 |
@@ -36,15 +39,17 @@
 
 现行[公开事实四层模型](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)和[下载完整性/升级](../../product/player-entry-distribution/prd.md#download-integrity-and-upgrade)被消费，不在本设计重新定义。
 
-## 3. 当前状态、目标状态与差距
+## 3. 历史设计起点与现行状态入口
 
-| 对象/能力 | 当前状态（基线） | 目标状态 | 差距/假设 | 证据或 owner |
+下表保留 2026-10-14 的问题基线，不是当前待办清单。既有静态实现及其未验证范围读取[产品功能状态](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-001)；本轮细化读取[单独范围](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#discovery-refinement-scope)，不把历史缺口、新设计与已实现能力混列为同一当前状态。
+
+| 对象/能力 | 当前状态（历史基线） | 目标状态 | 差距/假设 | 证据或 owner |
 | --- | --- | --- | --- | --- |
 | 首页 | 静态 CN/EN HTML、共享 CSS/JS、场景切换与示例日志 | 角色优先、同一案例四步、清楚分流 | 需要内容重排与真实访客验证 | [固定首页源码](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/index.html) |
 | 记录/日志 | 首页链接 Release/文档；本专题独立内容链未核实 | 静态列表/详情、三条精选、纠正与 RSS | 需要可公开首篇内容，不用占位成功填充 | liveops_community |
 | 下载 | HTML 静态回退与 JS 最新 Release 刷新并存 | 速览和版本/资产一致处理 | 不能只凭静态旧日期判断运行显示过期 | [固定 app.js](https://github.com/eng-cc/oasis7/blob/116c2e6d4f4891c316b305764a1f755a3005d3ae/site/assets/app.js) |
 | 小说 | 中文阅读器与版本资料导航已存在 | 导读优先，语言/失败遵守现有合同 | 本文不宣布 reader 恢复缺陷已修复 | [reader 设计](../design.md#story-reader-design) |
-| 视觉证据 | 本 PR 增加生成式概念板 | 后续按路由/状态取得真实浏览器证据 | 图稿不证明实现或页面覆盖 | 视觉/QA |
+| 视觉证据 | 既有生成式概念板 | 后续按路由/状态取得真实浏览器证据 | 图稿不证明实现或页面覆盖 | 视觉/QA |
 
 ## 4. 边界与结构
 
@@ -138,7 +143,7 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 | 事件 | 当前视图/状态 | 处理及恢复边界 |
 | --- | --- | --- |
 | 首次/无 JS | 静态内容可读 | 直接锚点/链接；不存在必需的 loading 遮罩 |
-| 切换步骤 | 当前 record/step | 同步设置面板及可访问状态；不加载另一候选来补失败 |
+| 若详情存在步骤/媒体切换 | 当前 record/step | 同步设置面板及可访问状态；不加载另一候选来补失败；首页四步始终可读 |
 | 媒体加载错误 | 内容仍有效、媒体 error | 显示替代文字与原文；不切换素材类型 |
 | 撤回内容 | withdrawn | 安全纠正页、当前入口；不展示旧正文/错误推荐 |
 | Release 刷新成功 | verified metadata snapshot | 元数据/资产一起替换；仅代表来源元数据，不证明游戏验收 |
@@ -170,7 +175,7 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 
 ### 设计资产归档
 
-设计图文件：[public-site-discovery-and-showcase.webp](assets/public-site-discovery-and-showcase.webp)。生成方式为本次 ChatGPT 原生生图；保存压缩展示副本，未以脚本绘图冒充生图。图内全景/控件均属概念表达，原始生成图与提交的展示副本可以不同编码/尺寸。实际文件字节、尺寸、hash 以 PR 的资产核对和 Git 对象为准，不填写未知模型版本/seed。
+设计图文件：[public-site-discovery-and-showcase.webp](assets/public-site-discovery-and-showcase.webp)。既有概念板由 ChatGPT 原生生图生成；保存压缩展示副本，未以脚本绘图冒充生图。图内全景/控件均属概念表达，原始生成图与提交的展示副本可以不同编码/尺寸。实际文件字节、尺寸、hash 以原资产核对和 Git 对象为准，不填写未知模型版本/seed。本轮文档细化没有重新生成该资产。
 
 图稿负责视觉方向，配对产品 design 负责文案与体验，本系统设计负责实现和验证。图中与正文不一致的细节不自动成为要求；后续 HTML 和浏览器证据独立取得。生图样例不进入 runtime_capture 素材集合。
 
@@ -185,7 +190,7 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 ## 11. 验证设计与可追溯性
 
 <a id="verification"></a>
-下表是验证方法与证据目标，不是执行结果。沿用 [testing-manual](../../../testing-manual.md) 的 Site/S6 和现有站点脚本；操作方法见[官网发现验证手册](public-site-discovery-validation.manual.md)。静态检查与故障回归分别由现有站点门禁和 `scripts/site-discovery-browser.test.cjs` 承担；实际运行结果只在实施 PR 记录。
+下表是验证方法与证据目标，不是执行结果。沿用 [testing-manual](../../../testing-manual.md) 的 Site/S6 和现有站点脚本；操作方法见[官网发现验证手册](public-site-discovery-validation.manual.md)。静态检查与故障回归分别由现有站点门禁和 `scripts/site-discovery-browser.test.cjs` 承担；实际运行结果只在实施 PR 记录。本轮新增细化另按[补充验证](#refinement-verification)覆盖，不以既有脚本存在宣称新断言已实现。
 
 ### 11.1 验证映射表
 
@@ -239,3 +244,70 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 预览核验声明绑定发行 tag。只记录已查实的构建发布事实时，明确不能证明包安装或游戏目标；API 切到未知候选后，将其声明切为 unknown，旧候选来源不能代签新版本。起步建议与已验收能力分开。资产/校验和仍按同一 Release 快照选择，不由版本文案推导可用性。
 
 首页不再创建隐藏 Canvas 或初始化其绘图循环；旧说明性三场景切换器没有消费者时一并删除。分享封面使用 `site/assets/images/social/first-iron-batch-{zh,en}.svg` 的代码原稿及其 1200×630 PNG 导出，明确为案例图形摘要、非实机截图；文章使用独立 OG/Twitter 标题、摘要与封面。共享 CSS/JS 的消费者统一发布版本参数，中宽 768–1024px 单独核对两列步骤、入口和首屏。
+
+<a id="static-experience-refinement"></a>
+## 13. 宣传体验细化的静态实现合同
+
+本节承接原六项要求的[细化范围](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#discovery-refinement-scope)，不新增页面框架、运行 API、后台数据源或独立产品模块。第 2.1 节的 Trace refs 继续适用；字段与界面调整随对应页面实现，不能仅凭本文存在视为已完成。
+
+<a id="des-site-value-path"></a>
+### DES-SITE-VALUE-PATH：入口与同案例语义
+
+承接 REQ-SITE-DISCOVERY-001/002 与[价值入口](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#value-and-entry-contract)、[案例叙事](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#decision-walkthrough)。Hero、案例结尾、预览和内容页分别实现产品设计中的主次动作，不新增强制路由或访客分类。动作是有真实 `href` 的原生链接；站内深链遵守已有 ID、部署前缀和 disclosure 合同，不能只靠 onclick 导航。
+
+四步以同一案例下的有序内容表示，语义统一为 `goal / constraint / adjustment / outcome`，对应设定目标、遇到阻塞、调整行动、核对结果。可使用现有 HTML 结构、语义列表或 `data-*` 承载；不要求新 JSON 清单、浏览器模板引擎或状态机。四步、初始条件与结果共享 record 身份及来源版本；语言镜像不得自行更改阶段含义。结果后的下一步提示不属于第五个运行事件。
+
+每步说明行动主体及已知事实。玩家授权、Agent 解释与世界结果不能合并成一种“成功”状态；目标、限制或结果缺少来源时显示相应未知，不计算或生成缺失的前后值。未执行选择只可作为明确的讨论方向，不渲染伪造的第二条运行结果。结构化 CLI 摘要和概念插图继续分别标识，不能因为同处一面板就变成同次 GUI 证据。
+
+主路径不依赖 hover、自动轮播、横向拖动或滚动劫持。无需交互的四步保持同时可读；可选媒体操作仍按 record/media 身份隔离失败与迟到结果。页面浏览不发出模型调用、世界读写请求或连接账户。
+
+<a id="des-site-preview-fit"></a>
+### DES-SITE-PREVIEW-FIT：参与条件与候选范围
+
+承接 REQ-SITE-DISCOVERY-004 与[预览决策](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#preview-decision)。预览区先用静态短摘要/定义列表说明适合对象、已核实范围与准备条件，再保留原生平台/安装展开区。成本、签名与保留限制跟随对应动作；不新增勾选问卷、设备权限请求或 Key 输入框。
+
+展示上下文分为“官网观看”“下载候选”“源码案例”。这只是说明与来源的分离，不是新游戏模式或发行状态枚举。官网观看不要求账户或 provider；下载候选沿现有 Release 快照展示资产和该候选的已核实范围；源码案例保留固定源码、profile、预置条件与证据链接。不能把案例来源写入下载候选的验收字段，也不能由 assets 存在推导安装或首次进入成功。
+
+候选切换继续沿用现有下载读取层。更新 tag/assets/checksum 时，同步更新适用条件与核验说明；新候选无对应核验来源时降为 unknown。旧来源只允许留在明确标明旧版本的区域，不留在新下载按钮旁充当通过证明。无合法资产时不显示假下载动作；有真实资产但可玩范围未知时明确说明未知，不把“资产可获取”写成“已验证可玩”。
+
+条件与来源可复用现有 HTML 元数据及发布说明，不建立第二份 readiness 数据库。页面只说明缺口并指向实际存在的指南或发行说明，不自动修复客户端、切换 provider 或绕过安装信任警示。不安装的出口到已有开发进展/内容入口，缺内容时保留可读说明和现有 GitHub 链接。
+
+<a id="des-site-return-sharing"></a>
+### DES-SITE-RETURN-SHARING：编辑、回访与分享一致性
+
+承接 REQ-SITE-DISCOVERY-003/005 与[回访体验](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#editorial-return-path)。复用详情 HTML 这一编辑源；玩家问题、变化、影响与剩余限制以正文/摘要表达，不增加自动新闻生成器或从 PR 数量推导活跃。相关内容和同语言 RSS 链接随详情维护，缺条目时不展示占位推荐。直达详情必须独立说明项目、类型、日期/版本与有效回链。
+
+沿用现有页面 `<title>`、description、OG/Twitter、canonical 与语言映射，不另建分享配置源。记录摘要及封面文字继承真实来源范围；小说在标题/摘要中保留小说身份，英文入口保留正文实际语言。概念图、案例图形摘要与真实截图的性质在 alt/描述中保持一致；分享卡片不提供绕过正文 claim 的第二套文案。
+
+正文纠正或撤回时，在同一变更中核对详情、首页/列表推荐、RSS、相关链接及分享元数据。撤回页不得仍用成功故事作 OG 标题/封面；敏感素材按现有安全流程移除。不能承诺第三方抓取缓存即时更新；当前页面应提供正确解释，回滚仍保留纠正。
+
+canonical 使用已配置的公开站点与真实路由；同语言详情有自己的 URL。只为真实存在的语言对应页声明映射，不把所有详情的 canonical 指向首页，也不凭路径构造英文小说。站内链接继续支持项目子路径；不将任意 query/hash 或用户输入拼成新的外部跳转地址。
+
+复制链接或浏览器原生分享均是可选增强：只在明确点击后调用，取消/拒绝不显示“已分享”或阻断阅读；普通永久链接始终可用。无第三方分享 SDK、邮件收集、持久画像或隐形事件上报。观察测试结果只进入实施 PR 的实际记录，不以打点系统作为上线依赖。
+
+<a id="des-site-visual-delivery"></a>
+### DES-SITE-VISUAL-DELIVERY：视觉层级与资源边界
+
+承接 REQ-SITE-DISCOVERY-006 与[视觉语言](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#visual-language)。沿用共享 CSS/JS 和首页既有作用域，整理颜色、字号、间距与边框变量；文章/手册/reader 不被首页专用规则意外覆盖。网格、轨道、连接线用非交互装饰表达，不生成假遥测、不恢复隐藏 Canvas 或无消费者动效。状态、主体与操作意义不能只靠颜色。
+
+沿用首屏必要图片总传输量尽量 ≤500KB 的预算目标，统计范围包括实际首屏背景、poster 和其他必要图片，不给每个模块另开 500KB 额度。已存在缩略图优先；按需原图不牺牲证据可读性。图片有尺寸与替代文字，非首屏延后加载；第三方视频只在明确点击后加载且保留文字/海报。无视频、新图或字体不影响完整主路径。
+
+1440×900、390×844、360×800 之外，按现有中宽约束核对 768–1024px；检查中英标签、四步和图文比例，不只验两端宽度。预算与可读性冲突时先调整裁切、加载顺序和装饰，不缩小警示文字或隐藏素材类型。新增素材独立保存来源/许可，不复制竞品画面；本轮不新增素材资产。
+
+<a id="refinement-verification"></a>
+### 13.1 补充验证与实施顺序
+
+以下对应原 REQ/AC 与 S6-DISC-01–06，只细化验证场景，不新增 mandatory workflow 或通用门禁。后续实施在同候选静态服务器上扩充现有 `scripts/site-discovery-check.py`、其负例测试与 `scripts/site-discovery-browser.test.cjs` 的适用覆盖；已有脚本是否覆盖新增场景必须实际检查，不预写通过结论。
+
+| 上游 REQ / AC | 本节条款 | 同候选检查与负例 | 证据与未证明范围 |
+| --- | --- | --- | --- |
+| [001 / AC-001](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-001) | [VALUE-PATH](#des-site-value-path) | 首页、案例、预览、文章直达的主次链接；旧锚点、无 JS、子路径；重复强主 CTA 或无目标链接应被发现 | 结构/浏览器结果与访客原话分开；链接通不证明吸引力 |
+| [002 / AC-002](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-002) | [VALUE-PATH](#des-site-value-path) | 四步语义与顺序；跨 record/版本混用、缺结果、未执行分支、概念图误标；禁止世界/模型请求 | fixture、网络记录及素材审查；自动化不证明事实来源真实 |
+| [003 / AC-003](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-003) | [RETURN-SHARING](#des-site-return-sharing) | 零内容、文章直达、RSS、相关回链；撤回后错误 OG/封面、失效翻译、分享取消或复制失败 | 静态 HTML/XML 与浏览器结果；不证明外部缓存清除或回访增长 |
+| [004 / AC-004](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-004) | [PREVIEW-FIT](#des-site-preview-fit) | 旧候选有核验而新候选无核验、源码案例与下载版本不同、资产缺失、未知平台/费用 | mock Release、DOM 与人工条件复述；不代签包安装或游戏目标 |
+| [005 / AC-005](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-005) | [RETURN-SHARING](#des-site-return-sharing) | 英文入口到中文小说；正文/分享保留小说身份；无对应语言、原有 reader 失败与回链 | 路由、元数据与浏览器记录；不证明小说质量或新增翻译 |
+| [006 / AC-006](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-006) | [VISUAL-DELIVERY](#des-site-visual-delivery) | 三视口及 768–1024px、中英、200% 缩放、键盘、无 JS、reduced-motion、损坏图片、视频未点击 | 真实截图、焦点/网络/资源记录；概念板和预算文字不证明性能达标 |
+
+访客观察按[产品细化验收](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#refinement-acceptance)实施，记录入口、语言、设备、提示与原话；理解、选择和回访意愿不由结构断言代替。不新增固定访客数量审批，也不以点击率替代正确理解。
+
+实施顺序是先统一文案、四步和现有入口，再处理预览/分享的条件一致性，最后打磨视觉与按需媒体；能原子完成时保持单 PR，不为三层分工拆三个 PR。源码页面未修改的文档 PR只验证文本和关系，不要求伪造浏览器、安装或访客证据。
