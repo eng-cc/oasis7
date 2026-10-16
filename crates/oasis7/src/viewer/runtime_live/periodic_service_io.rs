@@ -71,12 +71,17 @@ impl Executor {
                 // The worker owns no server/Sidecar Arc. Closing the server's
                 // sender drains at most one queued job, then terminates it.
                 while let Ok(job) = receiver.recv() {
+                    let budget = job
+                        .token
+                        .config
+                        .timeout
+                        .clamp(Duration::from_secs(2), Duration::from_secs(30));
                     let outcome = prepare_world_service_update_until(
                         job.token.config.clone(),
                         Some(job.token.baseline.clone()),
                         job.pending.clone(),
                         job.query_state,
-                        Some(Instant::now() + Duration::from_secs(2)),
+                        Some(Instant::now() + budget),
                     );
                     let _ = job.destination.try_send(Completion {
                         token: job.token,
