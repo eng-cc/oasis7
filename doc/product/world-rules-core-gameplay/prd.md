@@ -589,6 +589,42 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 
 产品层不用新细则或数值静默改写专业域权威。跨域冲突由 `producer_system_designer` 协调，并按受影响合同邀请对应的 `gameplay_designer`、`runtime_engineer`、`agent_engineer` / `world-simulator` owner 或 `blockchain_ops_engineer` / P2P owner 形成显式裁决；不得只以 gameplay 判断覆盖执行、Agent、网络或治理专业结论。
 
+
+
+## 既有统一生成合同的有限产品接收
+
+本节为 [unified 原需求](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#3-requirements)中已经存在的消费者承诺登记精确身份；逐卡原句来源限定其范围，不新增世界生成、出生、字段、参数或资源承载选择。已有专业目标不是新的实现完成声明；正式 profile 的 [四个未决问题](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-decision-profile)继续未定，已采用本地子范围不重新待选。原产品组合、叶项状态与验收层级保持不变。
+
+<a id="generated-resource-source"></a>
+### 功能状态卡：生成地点与资源预算的同一来源
+
+Trace ID: O7-REQ-112440b1-da55-4443-b513-58dbf9056511
+
+- 主责范围与成功标准：可玩大世界地点和资源优先来自既有 Simulator chunk/fragment 生成；可采量使用原 fragment/chunk total/remaining 账本，不允许运行时临时重算。
+- 原义接收来源：[原 R2](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r2-复用现有-chunkfragmentresource-生成)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC1](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#32-seed-派生)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R2 的来源和可采量承诺；chunk_seed 随机根、seed offset、公式和生成参数仍由原专业合同拥有，不增加材料、数值或采矿前置。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
+<a id="committed-resource-continuity"></a>
+### 功能状态卡：正式资源的提交来源与余额连续性
+
+Trace ID: O7-REQ-2b3769ae-078a-4123-a0de-e20405b42c7c
+
+- 主责范围与成功标准：正式生成事实必须由链上可验证记录承载或引用（沿原 R6）；未提交 preview 不进入正式采矿、生产、provider 或交易账本；remaining 由链上 action/commit 驱动，刷新与 replay 不以本地重算恢复余额，readiness 证明同一 provenance。
+- 原义接收来源：[原 R6](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r6-资源生成全部链上化)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC5/AC6/AC7/AC8](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#43-资源变更权威)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R6 原资源权威结果；具体 action/event 或专用 resource record 保持正式未定，字段/hash/版本和共识规则仍归专业 owner，不由本卡新增。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
 ## 4. 路线图
 
 1. 首局可读：目标、动作、阻塞、反馈和下一步可见。

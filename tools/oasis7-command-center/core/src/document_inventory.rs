@@ -8,6 +8,9 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexedDocument {
+    /// Explicit file-header ID; None in older caches or unread files.
+    #[serde(default)]
+    pub identity: Option<DocumentIdentity>,
     pub file_key: String,
     pub path: String,
     pub title: String,
@@ -24,6 +27,20 @@ pub struct IndexedDocument {
     /// Explicit design-header upstream declarations; None means not yet parsed.
     #[serde(default)]
     pub upstream: Option<DocumentPairings>,
+}
+
+/// Header declaration only; never used as a file key or proof of authority.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentIdentity {
+    pub raw: Option<String>,
+    pub declared_id: Option<String>,
+    pub declaration_line: Option<usize>,
+    pub issue: Option<String>,
+    /// Other read files declaring the same exact, case-sensitive ID.
+    pub duplicate_files: usize,
+    /// Stable path sample, at most 20; duplicate_files is the full count.
+    pub duplicate_paths: Vec<String>,
 }
 
 /// Explicit header link declarations, grouped as pairings or design upstreams.
@@ -63,6 +80,7 @@ impl IndexedDocument {
             "other"
         };
         Self {
+            identity: None,
             file_key: index::digest(format!("{project_id}:{path}").as_bytes()),
             path: path.into(),
             title: path.into(),
@@ -242,7 +260,12 @@ impl CommandCenter {
                     || (query.read_filter == "read") == (file.state == "read"))
                     && (text.is_empty()
                         || file.path.to_lowercase().contains(&text)
-                        || file.title.to_lowercase().contains(&text))
+                        || file.title.to_lowercase().contains(&text)
+                        || file
+                            .identity
+                            .as_ref()
+                            .and_then(|i| i.declared_id.as_ref())
+                            .is_some_and(|id| id.to_lowercase().contains(&text)))
             })
             .collect();
         if offset > matches.len() {

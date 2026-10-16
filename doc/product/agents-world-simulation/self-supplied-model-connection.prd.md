@@ -6,6 +6,7 @@
 - 上位产品 PRD：[模块 PRD](prd.md)
 - 上位专题：[Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md#first-party-agent-client)
 - 配对产品 design：[连接与运行体验](self-supplied-model-connection.design.md)
+- 设计判定：`paired-design`。
 - 生命周期：`active`
 - 文档状态：目标产品合同，不是当前可用性公告。
 - Owner role：`producer_system_designer`
