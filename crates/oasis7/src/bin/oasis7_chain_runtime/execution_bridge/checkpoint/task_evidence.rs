@@ -1,12 +1,25 @@
 //! Derived live-task read dependencies. This scope is a GC cache, never authority.
 use super::*;
-use oasis7::world_service::{
-    CanonicalIntentResultV1, SchedulerOperationV1, WorldServicePayloadV1, correlation, game_task,
-};
+use oasis7::world_service::{CanonicalIntentResultV1, correlation, game_task};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io::Read;
 const SCOPE: &str = "execution_bridge_live_tasks_v1";
+#[cfg(test)]
+std::thread_local! {
+    static PROTECTED_HEIGHT_VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in super::super) fn reset_protected_height_validation_count() {
+    PROTECTED_HEIGHT_VALIDATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in super::super) fn protected_height_validation_count() -> usize {
+    PROTECTED_HEIGHT_VALIDATIONS.with(std::cell::Cell::get)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Shard {
@@ -71,6 +84,9 @@ pub(super) fn protected_heights(
     records: &Path,
     store: &LocalCasStore,
 ) -> Result<BTreeSet<u64>, String> {
+    #[cfg(test)]
+    PROTECTED_HEIGHT_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
+
     let directory = store.root().join("pin_scopes").join(SCOPE);
     match fs::symlink_metadata(&directory) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
@@ -144,35 +160,22 @@ pub(super) fn protected_heights(
 fn live_results(
     world: &oasis7::runtime::World,
 ) -> Result<BTreeMap<u64, Vec<CanonicalIntentResultV1>>, String> {
+    let history = game_task::validate_retention_history(world)?;
     let mut selected: BTreeMap<u64, Vec<CanonicalIntentResultV1>> = BTreeMap::new();
     for agent in world.state().agents.keys() {
-        if let Some(publication) = game_task::active_publish(world, agent)? {
+        if let Some(publication) = history.active_publish(agent)? {
             selected
                 .entry(publication.committed_height)
                 .or_default()
                 .push(publication);
         }
     }
-    for (key, value) in &world.capability_revocation_state().world_service_results {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 = serde_json::from_value(value.clone())
-            .map_err(|_| "invalid canonical task retention result")?;
-        if result.rejected.is_some() {
-            continue;
-        }
-        let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
-            continue;
-        };
-        let SchedulerOperationV1::TaskProviderPrefix { context } = &signed.request.operation else {
-            continue;
-        };
-        if game_task::validate_task_context_capture(world, context, &signed.subject_public_key)
-            .is_ok()
-        {
+    for (result, context, subject) in history.retained_prefixes() {
+        if history.validate_prefix_capture(context, subject).is_ok() {
             selected
                 .entry(result.committed_height)
                 .or_default()
-                .push(result);
+                .push(result.clone());
         }
     }
     Ok(selected)
@@ -184,7 +187,7 @@ pub(super) fn refresh(
     store: &LocalCasStore,
     world: &oasis7::runtime::World,
     hot: u64,
-) -> Result<(), String> {
+) -> Result<super::ValidatedTaskRetention, String> {
     let previous = protected_heights(records, store)?;
     let wanted = live_results(world)?;
     let latest = list_execution_bridge_record_heights(records)?
@@ -260,5 +263,13 @@ pub(super) fn refresh(
         }
         replace_execution_bridge_record_pin_shard(&record, archive, false, false, store)?;
     }
-    Ok(())
+    let durable_record = super::load_execution_bridge_record(
+        super::execution_bridge_record_path(records, latest).as_path(),
+    )?;
+    Ok(super::ValidatedTaskRetention::new(
+        records,
+        store,
+        durable_record,
+        wanted,
+    ))
 }

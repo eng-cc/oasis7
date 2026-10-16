@@ -108,7 +108,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
                         fence: GameTaskFenceV1::from_control(&c),
                         operation: GameExecutorOperationV1::Bind {
                             executor_id: "context-executor".into(),
-                            executor_public_key: delegate_public,
+                            executor_public_key: delegate_public.clone(),
                             delegation_generation: DecimalU64(1),
                         },
                     },
@@ -124,7 +124,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let fence = GameTaskFenceV1::from_control(&c);
     let signer = crate::feedback_submit_api::FeedbackSubmitSigner {
         private_key_hex: owner.clone(),
-        public_key_hex: owner_public,
+        public_key_hex: owner_public.clone(),
     };
     let runtime = Arc::new(Mutex::new(oasis7_node::NodeRuntime::new(
         oasis7_node::NodeConfig::new("node-a", "w1", NodeRole::Sequencer).unwrap(),
@@ -141,10 +141,23 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     // Active goal evidence survives both the normal 32-block window and full reconciliation.
-    for height in 7..=40 {
+    for height in 7..40 {
         commit(&mut driver, height, create.clone());
     }
+    super::super::super::checkpoint::task_evidence::reset_protected_height_validation_count();
+    commit(&mut driver, 40, create.clone());
+    assert_eq!(
+        super::super::super::checkpoint::task_evidence::protected_height_validation_count(),
+        1,
+        "one retention transaction must fully validate existing task-pin shards once"
+    );
     let cas = LocalCasStore::new(dir.join("store"));
+    assert_eq!(
+        cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap(),
+        vec![format!("record-{:020}", 4)],
+        "published task evidence shards must equal the current live dependency set"
+    );
     // An unchanged, fully verified task dependency must not be re-published.
     // A historical mtime distinguishes reuse from atomic rewriting without
     // depending on filesystem timestamp granularity or execution speed.
@@ -184,7 +197,55 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         )
         .is_err()
     );
+    let latest_record_path =
+        super::super::super::checkpoint::execution_bridge_record_path(&dir.join("records"), 40);
+    let latest_record =
+        super::super::super::checkpoint::load_execution_bridge_record(latest_record_path.as_path())
+            .unwrap();
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance(
+            &dir.join("records"),
+            &cas,
+            &latest_record,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "standalone incremental maintenance must revalidate a corrupt task-pin shard"
+    );
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+            &dir.join("records"),
+            &cas,
+            2,
+        )
+        .is_err(),
+        "full reconciliation must revalidate a corrupt task-pin shard"
+    );
     std::fs::write(&shard, &retained_bytes).unwrap();
+    let validated = super::super::super::checkpoint::refresh_live_task_read_evidence(
+        &dir.join("records"),
+        &cas,
+        &driver.execution_world,
+        2,
+    )
+    .unwrap();
+    let mut replacement_record = latest_record.clone();
+    replacement_record.node_block_hash = Some("replacement-head-hash".into());
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+            &dir.join("records"),
+            &cas,
+            &replacement_record,
+            validated,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "validated task-pin set must not be reused for a replaced same-height record"
+    );
     super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
         &dir.join("records"),
         &cas,
@@ -533,6 +594,12 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .unwrap()
             .contains(&format!("record-{:020}", 4))
     );
+    assert_eq!(
+        cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap(),
+        vec![format!("record-{:020}", AGE + 10)],
+        "retained task evidence shards must equal the live dependency set after goal replacement"
+    );
     let current = game_task::current_control(&driver.execution_world, "agent-a")
         .unwrap()
         .unwrap();
@@ -656,6 +723,135 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .rejected
             .is_none()
     );
+    {
+        let history = game_task::validate_retention_history(&driver.execution_world).unwrap();
+        let expiry_recorded = game_task_tests::recorded(&driver, &expiry_prefix);
+        assert_eq!(
+            history.active_publish("agent-a").unwrap(),
+            game_task::active_publish(&driver.execution_world, "agent-a").unwrap(),
+            "batched active publication must match the canonical single-agent API"
+        );
+        let prefixes = history.retained_prefixes().collect::<Vec<_>>();
+        assert!(prefixes.iter().any(|(result, context, signer)| {
+            *result == &expiry_recorded
+                && *context == &expiry.identity
+                && *signer == delegate_public.as_str()
+        }));
+        let mut canonical_selected = Vec::new();
+        let mut batched_selected = Vec::new();
+        for (result, context, signer) in prefixes {
+            let canonical =
+                game_task::validate_task_context_capture(&driver.execution_world, context, signer);
+            let batched = history.validate_prefix_capture(context, signer);
+            assert_eq!(canonical.is_ok(), batched.is_ok());
+            if canonical.is_ok() {
+                canonical_selected.push(result.committed_height);
+            }
+            if batched.is_ok() {
+                batched_selected.push(result.committed_height);
+            }
+        }
+        assert_eq!(canonical_selected, batched_selected);
+        let mut substituted = expiry.identity.clone();
+        substituted.agent_turn_id.push_str("-substituted");
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &substituted,
+            &delegate_public,
+        );
+        let batched = history.validate_prefix_capture(&substituted, &delegate_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(canonical.is_err());
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &expiry.identity,
+            &owner_public,
+        );
+        let batched = history.validate_prefix_capture(&expiry.identity, &owner_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(canonical.is_err());
+    }
+    let mut stopped_world = driver.execution_world.clone();
+    assert!(expiry.valid_until_tick.0 >= stopped_world.state().time);
+    let canonical = game_task::validate_task_context_capture(
+        &stopped_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let before_stop_history = game_task::validate_retention_history(&stopped_world).unwrap();
+    let batched = before_stop_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(canonical.is_ok(), "fresh context must pass before Stop");
+    let stop_request = request(
+        &world,
+        WorldServicePayloadV1::GameExecutorControl(
+            sign_read_request(
+                GAME_EXECUTOR_CONTROL_DOMAIN,
+                GameExecutorControlV1 {
+                    api_rev: 1,
+                    client_operation_id: "retention-stop-fence".into(),
+                    fence: expiry.identity.fence.clone(),
+                    operation: GameExecutorOperationV1::Stop,
+                },
+                &owner,
+            )
+            .unwrap(),
+        ),
+    );
+    let stop_height = game_task_tests::recorded(&driver, &expiry_prefix).committed_height + 1;
+    let stop_record = CanonicalIntentResultV1 {
+        receipt: game_task::prepare_executor_control(&stopped_world, &stop_request, []).unwrap(),
+        request: stop_request,
+        action_id: stop_height,
+        committed_height: stop_height,
+        rejected: None,
+    };
+    stopped_world
+        .record_world_service_result(stop_record)
+        .unwrap();
+    assert!(expiry.valid_until_tick.0 >= stopped_world.state().time);
+    let stopped_history = game_task::validate_retention_history(&stopped_world).unwrap();
+    let canonical = game_task::validate_task_context_capture(
+        &stopped_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let batched = stopped_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(canonical.is_err(), "Stop must reject a still-live context");
+    let mut revoked_world = driver.execution_world.clone();
+    revoked_world
+        .apply_agent_signer_delegation(
+            &sign_read_request(
+                "delegation",
+                AgentSignerDelegationChangeV1 {
+                    world_id: "w1".into(),
+                    branch_id: "main".into(),
+                    agent_id: "agent-a".into(),
+                    owner_binding: "owner-a".into(),
+                    agent_identity_generation: 1,
+                    delegate_public_key: delegate_public.clone(),
+                    generation: 2,
+                    revoked: true,
+                    nonce: 2,
+                },
+                &owner,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let revoked_history = game_task::validate_retention_history(&revoked_world).unwrap();
+    let canonical = game_task::validate_task_context_capture(
+        &revoked_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let batched = revoked_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(
+        canonical.is_err(),
+        "revoked delegation must fail in both paths"
+    );
     let expiry_get = sign_read_request(
         TASK_CONTEXT_READ_PATH,
         TaskContextGetV1 {
@@ -688,6 +884,20 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .unwrap();
     }
     assert!(driver.execution_world.state().time > expiry.valid_until_tick.0);
+    {
+        let history = game_task::validate_retention_history(&driver.execution_world).unwrap();
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &expiry.identity,
+            &delegate_public,
+        );
+        let batched = history.validate_prefix_capture(&expiry.identity, &delegate_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(
+            canonical.is_err(),
+            "expired context must fail closed in both paths"
+        );
+    }
     assert_eq!(
         http(
             &dir,
@@ -908,6 +1118,39 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         !bytes
             .windows(goal.request.content.goal_text.len())
             .any(|b| b == goal.request.content.goal_text.as_bytes())
+    );
+    let records = dir.join("records");
+    let stale_height =
+        super::super::super::checkpoint::list_execution_bridge_record_heights(&records)
+            .unwrap()
+            .last()
+            .copied()
+            .unwrap();
+    let stale_record = super::super::super::checkpoint::load_execution_bridge_record(
+        super::super::super::checkpoint::execution_bridge_record_path(&records, stale_height)
+            .as_path(),
+    )
+    .unwrap();
+    let stale_validation = super::super::super::checkpoint::refresh_live_task_read_evidence(
+        &records,
+        &cas,
+        &driver.execution_world,
+        2,
+    )
+    .unwrap();
+    commit(&mut driver, stale_height + 1, create.clone());
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+            &records,
+            &cas,
+            &stale_record,
+            stale_validation,
+            2,
+            32,
+            3,
+        )
+        .is_err(),
+        "task validation must not be reused after a higher durable record is appended"
     );
     std::fs::remove_dir_all(dir).unwrap();
 }

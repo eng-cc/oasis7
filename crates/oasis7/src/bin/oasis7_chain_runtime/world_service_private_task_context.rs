@@ -81,6 +81,14 @@ enum ReadCheckPoint {
     Delivery,
 }
 
+/// A validated history view and the exact immutable pin it was built from.
+/// Keeping these together prevents request handlers from accidentally using a
+/// view validated against one World as authority for another pin.
+struct ValidatedPinnedTask<'a> {
+    pinned: &'a PinnedWorld,
+    history: game_task::ValidatedRetentionHistory<'a>,
+}
+
 fn read_conflict(stage: ReadConflictStage) -> PrivateError {
     PrivateError::TaskContextReadConflict(stage)
 }
@@ -154,35 +162,42 @@ fn capture_validation_conflict(
     read_conflict(stage)
 }
 
-fn pinned(
+fn validate_pinned_task<'a>(
     service: &Service<'_>,
+    pinned: &'a PinnedWorld,
     fence: &GameTaskFenceV1,
     subject: &str,
     executor: bool,
-) -> Result<PinnedWorld, PrivateError> {
-    let pinned = service.pin(None)?;
+) -> Result<ValidatedPinnedTask<'a>, PrivateError> {
     if fence.world_id != service.identity.world_id
         || fence.genesis_digest != service.identity.genesis_digest
     {
         return Err(PrivateError::Forbidden);
     }
+    let history = game_task::validate_retention_history(&pinned.world)
+        .map_err(|_| PrivateError::Forbidden)?;
     if executor {
-        game_task::validate_task_executor(&pinned.world, fence, subject)
+        history.validate_task_executor(fence, subject)
     } else {
-        game_task::validate_task_reader(&pinned.world, fence, subject)
+        history.validate_task_reader(fence, subject)
     }
     .map_err(|_| PrivateError::Forbidden)?;
-    Ok(pinned)
+    Ok(ValidatedPinnedTask { pinned, history })
 }
 fn snapshot(
     service: &Service<'_>,
-    pinned: &PinnedWorld,
+    task: &ValidatedPinnedTask<'_>,
     fence: &GameTaskFenceV1,
     store: &PrivateGoalStore,
 ) -> Result<GoalExecutionSnapshotV1, PrivateError> {
-    let control = game_task::current_control(&pinned.world, &fence.agent_id)?
+    let pinned = task.pinned;
+    let control = task
+        .history
+        .current_control(&fence.agent_id)?
         .ok_or(PrivateError::Forbidden)?;
-    let publication = game_task::active_publish(&pinned.world, &fence.agent_id)?
+    let publication = task
+        .history
+        .active_publish(&fence.agent_id)?
         .ok_or(PrivateError::Unavailable)?;
     let WorldServicePayloadV1::GameGoalPublish(public) = &publication.request.signed_payload else {
         return Err(PrivateError::Recovery);
@@ -283,59 +298,39 @@ fn check_record_live(
     Ok(())
 }
 fn capture_result(
-    pinned: &PinnedWorld,
+    history: &game_task::ValidatedRetentionHistory<'_>,
     context: &TaskContextIdentityV1,
     subject: &str,
 ) -> Result<CanonicalIntentResultV1, PrivateError> {
-    // Public canonical records bind the opaque identity; no private data consulted.
-    let mut selected = None;
-    for (key, value) in &pinned
-        .world
-        .capability_revocation_state()
-        .world_service_results
-    {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 =
-            serde_json::from_value(value.clone()).map_err(|_| PrivateError::Recovery)?;
-        let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
-            continue;
-        };
-        let SchedulerOperationV1::TaskProviderPrefix { context: captured } =
-            &signed.request.operation
-        else {
-            continue;
-        };
-        if result.rejected.is_none()
-            && captured == context
-            && signed.subject_public_key == subject
-            && selected.replace(result).is_some()
-        {
-            return Err(PrivateError::Recovery);
-        }
-    }
-    selected.ok_or_else(|| read_conflict(ReadConflictStage::InitialCaptureMissingPrefix))
+    history
+        .matching_task_prefix(context, subject)
+        .map_err(|_| PrivateError::Recovery)?
+        .cloned()
+        .ok_or_else(|| read_conflict(ReadConflictStage::InitialCaptureMissingPrefix))
 }
 fn load_captured(
     service: &Service<'_>,
     store: &PrivateGoalStore,
     proof: &SignedReadRequest<TaskContextGetV1>,
-    pinned: &PinnedWorld,
+    task: &ValidatedPinnedTask<'_>,
 ) -> Result<CapturedTaskContextV1, PrivateError> {
+    let pinned = task.pinned;
     verify_get(proof).map_err(|_| PrivateError::Invalid)?;
-    game_task::validate_task_context_capture(
-        &pinned.world,
+    task.history
+        .validate_prefix_capture(&proof.request.context, &proof.subject_public_key)
+        .map_err(|error| {
+            capture_validation_conflict(
+                &pinned.world,
+                &proof.request.context,
+                ReadCheckPoint::Initial,
+                &error,
+            )
+        })?;
+    let result = capture_result(
+        &task.history,
         &proof.request.context,
         &proof.subject_public_key,
-    )
-    .map_err(|error| {
-        capture_validation_conflict(
-            &pinned.world,
-            &proof.request.context,
-            ReadCheckPoint::Initial,
-            &error,
-        )
-    })?;
-    let result = capture_result(pinned, &proof.request.context, &proof.subject_public_key)?;
+    )?;
     let historical = service
         .pin_at_height(result.committed_height)
         .map_err(|_| PrivateError::Recovery)?;
@@ -412,21 +407,25 @@ pub(super) fn process(
             let proof: SignedReadRequest<TaskGoalSnapshotRequestV1> =
                 parse(body).map_err(|_| PrivateError::Invalid)?;
             verify_snapshot_request(&proof).map_err(|_| PrivateError::Invalid)?;
-            let pinned = pinned(
+            let pinned = service.pin(None)?;
+            let task = validate_pinned_task(
                 service,
+                &pinned,
                 &proof.request.fence,
                 &proof.subject_public_key,
                 false,
             )?;
-            let output = snapshot(service, &pinned, &proof.request.fence, store)?;
+            let output = snapshot(service, &task, &proof.request.fence, store)?;
             before_delivery();
-            let fresh = pinned_check(
+            let fresh = service.pin(None)?;
+            let fresh_task = validate_pinned_task(
                 service,
+                &fresh,
                 &proof.request.fence,
                 &proof.subject_public_key,
                 false,
             )?;
-            if fresh.commit.binding != pinned.commit.binding {
+            if fresh_task.pinned.commit.binding != task.pinned.commit.binding {
                 return Err(PrivateError::Conflict);
             }
             service
@@ -437,8 +436,10 @@ pub(super) fn process(
             let proof: SignedReadRequest<TaskContextPrepareV1> =
                 parse(body).map_err(|_| PrivateError::Invalid)?;
             verify_prepare(&proof).map_err(|_| PrivateError::Invalid)?;
-            let pinned = pinned(
+            let pinned = service.pin(None)?;
+            let task = validate_pinned_task(
                 service,
+                &pinned,
                 &proof.request.fence,
                 &proof.subject_public_key,
                 true,
@@ -448,19 +449,21 @@ pub(super) fn process(
                 None => store
                     .prepare_task_context(
                         &proof,
-                        snapshot(service, &pinned, &proof.request.fence, store)?,
+                        snapshot(service, &task, &proof.request.fence, store)?,
                     )
                     .map_err(task_error)?,
             };
-            check_record_live(&pinned, &record, None)?;
+            check_record_live(task.pinned, &record, None)?;
             before_delivery();
-            let fresh = pinned_check(
+            let fresh = service.pin(None)?;
+            let fresh_task = validate_pinned_task(
                 service,
+                &fresh,
                 &proof.request.fence,
                 &proof.subject_public_key,
                 true,
             )?;
-            check_record_live(&fresh, &record, None)?;
+            check_record_live(fresh_task.pinned, &record, None)?;
             service
                 .signed(path, &proof, record)
                 .map_err(PrivateError::from)
@@ -469,42 +472,48 @@ pub(super) fn process(
             let proof: SignedReadRequest<TaskContextGetV1> =
                 parse(body).map_err(|_| PrivateError::Invalid)?;
             verify_get(&proof).map_err(|_| PrivateError::Invalid)?;
-            let pinned = pinned(
+            let pinned = service.pin(None)?;
+            let task = validate_pinned_task(
                 service,
+                &pinned,
                 &proof.request.context.fence,
                 &proof.subject_public_key,
                 true,
             )?;
-            let output = load_captured(service, store, &proof, &pinned)?;
+            let output = load_captured(service, store, &proof, &task)?;
             before_delivery();
-            let fresh = pinned_check(
+            let fresh = service.pin(None)?;
+            let fresh_task = validate_pinned_task(
                 service,
+                &fresh,
                 &proof.request.context.fence,
                 &proof.subject_public_key,
                 true,
             )?;
-            game_task::validate_task_context_capture(
-                &fresh.world,
-                &proof.request.context,
-                &proof.subject_public_key,
-            )
-            .map_err(|error| {
-                capture_validation_conflict(
-                    &fresh.world,
-                    &proof.request.context,
-                    ReadCheckPoint::Delivery,
-                    &error,
-                )
-            })?;
-            check_record_live(&fresh, &output.prepared, Some(ReadCheckPoint::Delivery))?;
-            if fresh.commit.binding != pinned.commit.binding {
+            fresh_task
+                .history
+                .validate_prefix_capture(&proof.request.context, &proof.subject_public_key)
+                .map_err(|error| {
+                    capture_validation_conflict(
+                        &fresh_task.pinned.world,
+                        &proof.request.context,
+                        ReadCheckPoint::Delivery,
+                        &error,
+                    )
+                })?;
+            check_record_live(
+                fresh_task.pinned,
+                &output.prepared,
+                Some(ReadCheckPoint::Delivery),
+            )?;
+            if fresh_task.pinned.commit.binding != task.pinned.commit.binding {
                 return Err(PrivateError::ContextReadDeliveryDrift(Some(
                     ReadConflictStage::DeliveryBindingChanged,
                 )));
             }
             // A dedicated retry category describes only a still-authorized,
             // unexpired context whose read snapshot changed during delivery.
-            if fresh.commit != pinned.commit {
+            if fresh_task.pinned.commit != task.pinned.commit {
                 return Err(PrivateError::ContextReadDeliveryDrift(None));
             }
             service
@@ -513,14 +522,6 @@ pub(super) fn process(
         }
         _ => Err(PrivateError::Invalid),
     }
-}
-fn pinned_check(
-    service: &Service<'_>,
-    fence: &GameTaskFenceV1,
-    subject: &str,
-    executor: bool,
-) -> Result<PinnedWorld, PrivateError> {
-    pinned(service, fence, subject, executor)
 }
 
 #[cfg(all(test, unix))]
@@ -616,6 +617,19 @@ mod diagnostic_tests {
             {
                 continue;
             }
+            let Some(task) = stage(
+                height,
+                "validated_pinned_task",
+                validate_pinned_task(
+                    &service,
+                    &pin,
+                    &original.request.fence,
+                    &original.subject_public_key,
+                    true,
+                ),
+            ) else {
+                continue;
+            };
             let Some(Some(control)) = stage(
                 height,
                 "task_control",
@@ -706,7 +720,7 @@ mod diagnostic_tests {
                 continue;
             }
             assert!(
-                snapshot(&service, &pin, &original.request.fence, &private).is_ok(),
+                snapshot(&service, &task, &original.request.fence, &private).is_ok(),
                 "diagnostic production snapshot"
             );
             let scratch = std::env::temp_dir().canonicalize().unwrap().join(format!(

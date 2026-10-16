@@ -134,7 +134,7 @@ pub(super) fn assert_delayed_quote_retry_reuses_original(
     let deadline = Instant::now() + Duration::from_secs(3);
     let mut attempts = 0;
     let mut first_request_timed_out = false;
-    let repeated = super::retry_same_signed_recipe_quote_until(proof, deadline, |original| {
+    let repeated = super::retry_same_signed_private_quote_until(proof, deadline, |original| {
         attempts += 1;
         let result = client.quote_task_recipe(original);
         if attempts == 1 {

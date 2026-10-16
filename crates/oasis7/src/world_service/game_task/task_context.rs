@@ -8,15 +8,42 @@ pub fn validate_task_context_identity(
     generation: u64,
     staged: &[CanonicalIntentResultV1],
 ) -> Result<(), String> {
+    validate_task_context_identity_inner(world, context, subject, generation, staged, None)
+}
+
+fn validate_task_context_identity_inner(
+    world: &World,
+    context: &oasis7_agent_api::game::TaskContextIdentityV1,
+    subject: &str,
+    generation: u64,
+    staged: &[CanonicalIntentResultV1],
+    history: Option<&super::ValidatedRetentionHistory<'_>>,
+) -> Result<(), String> {
     context.validate()?;
-    validate_cognition_fence_staged(
-        world,
-        &context.fence.agent_id,
-        Some(&context.fence),
-        subject,
-        generation,
-        staged,
-    )?;
+    if let Some(history) = history {
+        history.validate_cognition_fence(
+            &context.fence.agent_id,
+            Some(&context.fence),
+            subject,
+            generation,
+        )?;
+    } else {
+        validate_cognition_fence_staged(
+            world,
+            &context.fence.agent_id,
+            Some(&context.fence),
+            subject,
+            generation,
+            staged,
+        )?;
+    }
+    validate_context_expiry(world, context)
+}
+
+fn validate_context_expiry(
+    world: &World,
+    context: &oasis7_agent_api::game::TaskContextIdentityV1,
+) -> Result<(), String> {
     let authority = crate::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
         world,
         &context.fence.agent_id,
@@ -35,7 +62,7 @@ fn validate_context_capture_staged(
     subject: &str,
     staged: &[CanonicalIntentResultV1],
 ) -> Result<(), String> {
-    validate_context_capture_inner(world, context, subject, staged, false)
+    validate_context_capture_inner(world, context, subject, staged, false, None)
 }
 fn validate_context_capture_inner(
     world: &World,
@@ -43,6 +70,7 @@ fn validate_context_capture_inner(
     subject: &str,
     staged: &[CanonicalIntentResultV1],
     allow_expired: bool,
+    history: Option<&super::ValidatedRetentionHistory<'_>>,
 ) -> Result<(), String> {
     let generation = context
         .fence
@@ -53,31 +81,45 @@ fn validate_context_capture_inner(
         .0;
     if allow_expired {
         context.validate()?;
-        validate_cognition_fence_staged(
-            world,
-            &context.fence.agent_id,
-            Some(&context.fence),
-            subject,
-            generation,
-            staged,
-        )?;
+        if let Some(history) = history {
+            history.validate_cognition_fence(
+                &context.fence.agent_id,
+                Some(&context.fence),
+                subject,
+                generation,
+            )?;
+        } else {
+            validate_cognition_fence_staged(
+                world,
+                &context.fence.agent_id,
+                Some(&context.fence),
+                subject,
+                generation,
+                staged,
+            )?;
+        }
     } else {
-        validate_task_context_identity(world, context, subject, generation, staged)?;
+        validate_task_context_identity_inner(world, context, subject, generation, staged, history)?;
     }
-    let mut matched = false;
-    for (key, value) in &world.capability_revocation_state().world_service_results {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 =
-            serde_json::from_value(value.clone()).map_err(|_| "invalid task prefix result")?;
-        matched |= matches_task_prefix(&result, context, subject);
-    }
-    for result in staged {
-        correlation::validate_result(
-            &correlation::key_digest(&result.request.correlation.key)?,
-            &serde_json::to_value(result).map_err(|e| e.to_string())?,
-        )?;
-        matched |= matches_task_prefix(result, context, subject);
-    }
+    let matched = if let Some(history) = history {
+        history.contains_prefix(context, subject)?
+    } else {
+        let mut matched = false;
+        for (key, value) in &world.capability_revocation_state().world_service_results {
+            correlation::validate_result(key, value)?;
+            let result: CanonicalIntentResultV1 =
+                serde_json::from_value(value.clone()).map_err(|_| "invalid task prefix result")?;
+            matched |= matches_task_prefix(&result, context, subject);
+        }
+        for result in staged {
+            correlation::validate_result(
+                &correlation::key_digest(&result.request.correlation.key)?,
+                &serde_json::to_value(result).map_err(|e| e.to_string())?,
+            )?;
+            matched |= matches_task_prefix(result, context, subject);
+        }
+        matched
+    };
     if !matched {
         return Err("task context has no canonical prefix".into());
     }
@@ -115,6 +157,14 @@ pub fn validate_task_context_capture(
     subject: &str,
 ) -> Result<(), String> {
     validate_context_capture_staged(world, context, subject, &[])
+}
+
+pub(super) fn validate_context_capture_for_retention(
+    history: &super::ValidatedRetentionHistory<'_>,
+    context: &oasis7_agent_api::game::TaskContextIdentityV1,
+    subject: &str,
+) -> Result<(), String> {
+    validate_context_capture_inner(history.world, context, subject, &[], false, Some(history))
 }
 /// Pure public action envelope. No provider prompt, private goal digest or reasoning.
 pub fn task_cognition_intent(
@@ -232,5 +282,5 @@ pub fn validate_task_failure_context(
     {
         return Err("task failure delegation generation mismatch".into());
     }
-    validate_context_capture_inner(world, context, subject, staged, expired)
+    validate_context_capture_inner(world, context, subject, staged, expired, None)
 }
