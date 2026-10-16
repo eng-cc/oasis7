@@ -123,6 +123,21 @@ class Selection(unittest.TestCase):
         self.write('crates/core/tests/shared.json', '{"changed":true}')
         self.assertIn('consumer', self.plan()['groups'])
 
+    def test_cross_package_source_import_keeps_nested_library_readers(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../other/src/bin/shared.rs"] mod shared;')
+        self.write('crates/other/src/bin/shared.rs', 'mod nested;')
+        self.write('crates/other/src/bin/shared/nested.rs', '// shared child')
+        self.base = self.commit()
+        self.write('crates/other/src/bin/shared/nested.rs', '// changed shared child')
+        self.assertIn('consumer', self.plan()['groups'])
+
+    def test_cross_package_import_fixture_keeps_library_readers(self):
+        self.write('crates/core/src/lib.rs', '#[path = "../../other/src/bin/shared.rs"] mod shared;')
+        self.write('crates/other/src/bin/shared.rs', 'const FIXTURE: &str = include_str!("../../../../doc/readme.md");')
+        self.base = self.commit()
+        self.write('doc/readme.md', 'imported fixture changed')
+        self.assertIn('consumer', self.plan()['groups'])
+
     def test_leaf_fixture_does_not_change_library_consumers(self):
         self.write('crates/core/tests/integration.rs', 'const FIXTURE: &str = include_str!("../../../doc/readme.md");')
         self.base = self.commit()

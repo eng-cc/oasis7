@@ -142,13 +142,16 @@ def cargo_graph(ref):
     # A library may explicitly import a nominally independent target source.
     # Widen the whole referenced directory, including implicit child modules.
     library_directories = set()
+    library_readers = {}
     source_owners = {path: {n for n, (d, _) in manifests.items()
                           if d and path.startswith(d + '/')}
                      for path in paths if path.endswith('.rs')}
     while True:
-        before = set(library_directories)
+        before = (set(library_directories), {d: frozenset(readers) for d, readers in library_readers.items()})
         for path, owners in source_owners.items():
             source = blobs[path].decode('utf-8', 'replace')
+            owners = owners | {reader for d, readers in library_readers.items()
+                               if path.startswith(d + '/') for reader in readers}
             library_owners = {n for n in owners
                               if not independent_target_input(path, *manifests[n])
                               or any(path.startswith(d + '/') for d in library_directories)}
@@ -159,8 +162,10 @@ def cargo_graph(ref):
                     directory = manifests[owner][0]
                     for root in ('', directory, posixpath.dirname(path)):
                         candidate = posixpath.normpath(posixpath.join(root, token.lstrip('/')))
-                        if candidate in tracked_paths and independent_target_input(candidate, *manifests[owner]):
-                            library_directories.add(posixpath.dirname(candidate))
+                        if candidate in source_owners:
+                            parent = posixpath.dirname(candidate)
+                            library_directories.add(parent)
+                            library_readers.setdefault(parent, set()).update(library_owners)
             if re.search(r'\bmod\s+bin\s*[;{]', source):
                 for owner in library_owners:
                     library_directories.add(manifests[owner][0] + '/src/bin')
@@ -172,7 +177,7 @@ def cargo_graph(ref):
                     or re.search(r'#\[(?:path|cfg_attr\([^;\n]*,\s*path)\s*=\s*(?![\s"])[A-Za-z_]', source)):
                 for owner in library_owners:
                     library_directories.add(manifests[owner][0])
-        if library_directories == before:
+        if (library_directories, {d: frozenset(readers) for d, readers in library_readers.items()}) == before:
             break
     leaf_inputs = {path for path, owners in source_owners.items() if owners
                    and all(independent_target_input(path, *manifests[n]) for n in owners)
@@ -184,6 +189,8 @@ def cargo_graph(ref):
     for path in paths:
         owners = [n for n, (d, _) in manifests.items()
                   if (d and path.startswith(d + '/')) or (not d and path.startswith(('src/', 'tests/', 'examples/', 'benches/')))]
+        owners = sorted(set(owners) | {reader for directory, readers in library_readers.items()
+                                       if path.startswith(directory + '/') for reader in readers})
         if not path.endswith('.rs') or not owners:
             continue
         source = blobs[path].decode('utf-8', 'replace')
@@ -217,6 +224,7 @@ def cargo_graph(ref):
             embedded.setdefault('__unresolved_embed__', set()).update(owners)
     embedded['__leaf_inputs__'] = leaf_inputs
     embedded['__library_directories__'] = library_directories
+    embedded['__library_readers__'] = library_readers
     embedded['__library_embeds__'] = library_embeds
     return manifests, reverse, embedded
 
@@ -290,6 +298,9 @@ def select(config, base, source_head, test_head=None, additions=()):
                 owners = {name for name, (directory, _) in manifests.items()
                           if directory and path.startswith(directory + '/')}
                 owners.update(embedded.get(path, ()))
+                imported_readers = {reader for directory, readers in embedded.get('__library_readers__', {}).items()
+                                    if path.startswith(directory + '/') for reader in readers}
+                owners.update(imported_readers)
                 if owners:
                     matched = True
                     leaf = all(independent_target_input(path, *manifests[n]) for n in owners) and not any(
@@ -298,7 +309,7 @@ def select(config, base, source_head, test_head=None, additions=()):
                     # determine whether reverse consumers are affected.
                     direct = {name for name, (directory, _) in manifests.items()
                               if directory and path.startswith(directory + '/')}
-                    library_owners = (set() if leaf else direct) | embedded.get('__library_embeds__', {}).get(path, set())
+                    library_owners = (set() if leaf else direct) | imported_readers | embedded.get('__library_embeds__', {}).get(path, set())
                     affected.update(owners)
                     affected.update(reverse_consumers(library_owners, reverse))
             for rule in config['rules']:
