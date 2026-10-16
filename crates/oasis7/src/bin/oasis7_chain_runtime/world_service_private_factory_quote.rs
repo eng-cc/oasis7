@@ -25,21 +25,51 @@ pub(super) fn process(
     {
         return Err(PrivateError::QuoteBaseDrift);
     }
-    let quote = pinned
+    if oasis7::runtime::builtin_factory_spec(&proof.request.factory_kind, &proof.request.factory_id)
+        .is_none()
+    {
+        return Err(PrivateError::Forbidden);
+    }
+    // Classify only a missing object grant after authenticating the full task.
+    // Never expose another object's existence or the private grant set.
+    let authorized = pinned
         .world
-        .builtin_factory_quote(
-            &fence.agent_id,
-            &proof.request.site_id,
-            &proof.request.factory_kind,
-            &proof.request.factory_id,
-        )
-        .map_err(|_| PrivateError::Forbidden)?;
-    let output = TaskFactoryQuoteV1 {
-        schema_revision: 1,
-        context: context_proof.request.context.clone(),
-        read_commit: pinned.commit.clone(),
-        current_public_context: captured.current_public_context.clone(),
-        quote,
+        .agent_delegation_authorizations(&fence.agent_id)
+        .map_err(|_| PrivateError::Forbidden)?
+        .iter()
+        .any(|a| {
+            a.grant.object_id == proof.request.factory_id
+                && a.grant
+                    .action_kinds
+                    .iter()
+                    .any(|kind| kind == "BuildFactory")
+        });
+    let output = if authorized {
+        let quote = pinned
+            .world
+            .builtin_factory_quote(
+                &fence.agent_id,
+                &proof.request.site_id,
+                &proof.request.factory_kind,
+                &proof.request.factory_id,
+            )
+            .map_err(|_| PrivateError::Forbidden)?;
+        TaskFactoryQuoteResponseV1::Quote(Box::new(TaskFactoryQuoteV1 {
+            schema_revision: 1,
+            context: context_proof.request.context.clone(),
+            read_commit: pinned.commit.clone(),
+            current_public_context: captured.current_public_context.clone(),
+            quote,
+        }))
+    } else {
+        TaskFactoryQuoteResponseV1::Denied(Box::new(TaskFactoryQuoteDeniedV1 {
+            schema_revision: 1,
+            context: context_proof.request.context.clone(),
+            read_commit: pinned.commit.clone(),
+            current_public_context: captured.current_public_context.clone(),
+            reason: FactoryQuoteDenialV1::FactoryNotAuthorized,
+            no_action_submitted: true,
+        }))
     };
     output
         .validate_against(&proof)

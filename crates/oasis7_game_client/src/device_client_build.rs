@@ -1,10 +1,44 @@
 use super::*;
 use oasis7_client_api::world_service as authority;
 use oasis7_client_api::world_service::task_factory_quote::{
-    TASK_FACTORY_QUOTE_PATH, TaskFactoryQuoteRequestV1, TaskFactoryQuoteV1,
+    TASK_FACTORY_QUOTE_PATH, TaskFactoryQuoteDeniedV1, TaskFactoryQuoteRequestV1,
+    TaskFactoryQuoteResponseV1, TaskFactoryQuoteV1,
 };
 
+pub enum BuildQuoteOutcome {
+    Quote(Box<TaskFactoryQuoteV1>),
+    Denied(Box<TaskFactoryQuoteDeniedV1>),
+    Original(Value),
+}
 impl Client {
+    pub fn quote_build_outcome(
+        &self,
+        operation: &str,
+        site: &str,
+        factory: &str,
+        kind: &str,
+    ) -> Result<BuildQuoteOutcome, String> {
+        if let Some(original) = self.cached_intent(ClientStateKind::Action, operation)? {
+            validate_original_build(&original, &self.agent, site, factory, kind)?;
+            return Ok(BuildQuoteOutcome::Original(
+                json!({"original_operation":self.lookup(&original)?,"quote":null,
+                "next":"retain_original_action; capture a new context only after a settled result"}),
+            ));
+        }
+        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
+            return Ok(BuildQuoteOutcome::Original(
+                json!({"original_operation":self.lookup(&original)?,"quote":null,"next":"retain_original_outcome"}),
+            ));
+        }
+        let (_, quoted) = self.fresh_quote(operation, |captured| {
+            self.factory_quote(operation, captured, site, factory, kind)
+        })?;
+        self.ensure_quote_has_no_write(operation)?;
+        Ok(match quoted {
+            TaskFactoryQuoteResponseV1::Quote(quote) => BuildQuoteOutcome::Quote(quote),
+            TaskFactoryQuoteResponseV1::Denied(denial) => BuildQuoteOutcome::Denied(denial),
+        })
+    }
     pub fn quote_build(
         &self,
         operation: &str,
@@ -12,22 +46,12 @@ impl Client {
         factory: &str,
         kind: &str,
     ) -> Result<Value, String> {
-        if let Some(original) = self.cached_intent(ClientStateKind::Action, operation)? {
-            validate_original_build(&original, &self.agent, site, factory, kind)?;
-            return Ok(
-                json!({"original_operation":self.lookup(&original)?,"quote":null,
-                "next":"retain_original_action; capture a new context only after a settled result"}),
-            );
+        match self.quote_build_outcome(operation, site, factory, kind)? {
+            BuildQuoteOutcome::Quote(quote) => serde_json::to_value(quote),
+            BuildQuoteOutcome::Denied(denial) => serde_json::to_value(denial),
+            BuildQuoteOutcome::Original(original) => return Ok(original),
         }
-        if let Some(original) = self.cached_intent(ClientStateKind::Outcome, operation)? {
-            return Ok(
-                json!({"original_operation":self.lookup(&original)?,"quote":null,"next":"retain_original_outcome"}),
-            );
-        }
-        let (_, quoted) = self.fresh_quote(operation, |captured| {
-            self.factory_quote(operation, captured, site, factory, kind)
-        })?;
-        serde_json::to_value(quoted).map_err(|_| "factory quote encoding failed".into())
+        .map_err(|_| "factory quote encoding failed".into())
     }
     fn factory_quote(
         &self,
@@ -36,7 +60,7 @@ impl Client {
         site: &str,
         factory: &str,
         kind: &str,
-    ) -> Result<TaskFactoryQuoteV1, crate::WorldServiceClientError> {
+    ) -> Result<TaskFactoryQuoteResponseV1, crate::WorldServiceClientError> {
         let request = authority::sign_read_request(
             TASK_FACTORY_QUOTE_PATH,
             TaskFactoryQuoteRequestV1 {
@@ -55,11 +79,13 @@ impl Client {
             &self.key_hex,
         )
         .map_err(crate::WorldServiceClientError::Configuration)?;
-        let quoted = self.remote.quote_task_factory(&request)?;
-        quoted
-            .quote
-            .validate_selection(&self.agent, site, kind, factory)
-            .map_err(crate::WorldServiceClientError::Assurance)?;
+        let quoted = self.remote.quote_task_factory_outcome(&request)?;
+        if let TaskFactoryQuoteResponseV1::Quote(quote) = &quoted {
+            quote
+                .quote
+                .validate_selection(&self.agent, site, kind, factory)
+                .map_err(crate::WorldServiceClientError::Assurance)?;
+        }
         Ok(quoted)
     }
     pub fn build(
@@ -80,6 +106,11 @@ impl Client {
         let (mut captured, quoted) = self.fresh_quote(operation, |captured| {
             self.factory_quote(operation, captured, site, factory, kind)
         })?;
+        let TaskFactoryQuoteResponseV1::Quote(quoted) = quoted else {
+            return Err(
+                "factory selection denied; no action submitted; inspect quote-build".into(),
+            );
+        };
         if quoted.quote.rejection.is_some() {
             return Err("factory quote rejected; no action submitted; inspect quote-build".into());
         }

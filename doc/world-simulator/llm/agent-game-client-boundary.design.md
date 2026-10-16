@@ -144,6 +144,28 @@ SDK 统一严格编码、签名、世界/主体/服务绑定验证、有限响�
 
 canonical 远端 cognition 的 `stale_base` 恢复反馈只在现有签名、任务与当前执行资格校验通过，且 Runtime 返回结构化的对应拒绝后发布。执行桥丢弃失败的业务 candidate，从原世界仅保留既有拒绝终结和幂等记录、生成与该原件精确关联的 rejected feedback，并与空 receipt 的 canonical 拒绝结果同块提交；不能提交失败 candidate 的业务变更，也不为任意鉴权、fence 或有效期错误生成可恢复反馈。SDK 同时校验原件终态和当前授权投影中的反馈，缺失或不匹配时继续停止。只有确认拒绝的执行方策略才可另开 slot、读取新 Context 并重新决策，原签名不替换，既有预算不重置。
 
+### 报价失败分类与继续决策
+
+Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb；O7-REQ-a27895ed-2ca4-45cc-901a-466befd02cf7；O7-REQ-ad3ea59c-596c-4c50-8da8-fe47608c6f01。
+
+本节细化 DES-AGC-002 / DES-AGC-003 / DES-AGC-004，承接 [REQ-EXT-003](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-003)、[REQ-EXT-005](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#req-ext-005) 与既有 REQ-AGENT-PARITY-003；沿用其 Trace refs，不新增产品要求或放宽世界权限。
+
+能力发现必须提供当前受权的原生 action/object 授权、有效期及余量，不能只给工具名或工厂种类。建厂的 `factory_id` 是待建设对象身份，必须精确匹配当前 `BuildFactory` grant 的 `object_id`；它不是可任意命名的参数。模型初始上下文中的该目录必须与当前 Context 的公开读取 commit/fence 对齐，超限显式报告截断，不能从服务端存储或其它主体补全；准入仍由 Runtime 每次重验。
+
+| 分类 | 证据与界限 | SDK / Harness 行为 |
+| --- | --- | --- |
+| 已确认无写入的报价选择拒绝 | 当前合法 executor 已完成 task/fence/Context/TTL 校验；服务仅根据其可见对象授权返回有限原因，并在交付前复验 pin 与权限；拒绝绑定原请求、业务选择、Context、base 和服务签名 | 作为只读工具结果交给模型，不计成功效果、不产生 action/outcome。停止执行同一模型 batch 中其余旧计划工具，按原 supplier call ID 补 `not_executed` 结果；在原预算和有效 Context 内发起新模型决策，可读取能力、改选合法对象或明确放弃 |
+| 规范报价内的业务拒绝 | 原签名报价已有合法授权关联，但资源、site 或生产前置条件拒绝；不能把拒绝当已接受行动 | 同样交付实际拒绝原因并要求新决策；不得提交被拒绝报价，亦不替玩家补资源或授权 |
+| 身份/主体、读取权限或 executor fence 失效 | 真正的认证失败、撤权、过期、签名/关联不可信，或无法确认原因的普通 HTTP 403 | 保持错误并停止该执行；不得根据状态码、错误字符串或模型自报降级成可纠正拒绝，不泄露其它对象存在性 |
+| 只读切点竞态 | 仅既有 `task_quote_base_drift` / `task_quote_delivery_drift` 证据 | 继续按本节前述有界同身份重读；不改变业务选择、不延租、不重新签写请求 |
+| 已有写原件、提交未知或 pending | 已缓存 action/outcome 或权威结果尚不确定 | 原件查询优先；不再报价、不替换写、不把未知宣称为无副作用；仍使用原操作恢复合同 |
+
+只读拒绝不是 Runtime action disposition、canonical receipt 或 Context 终结，不凭它开新 slot。Context 失效或任务变化后按已有终结/到期与新准入路径处理。模型改变选择是一次新的有预算决策，不是 SDK 自动重试原403；重复拒绝同样消耗原物理调用预算，预算耗尽走已有原 Context 收口，重连/重启不清零。
+
+首个实现切片仅把**已授权视角内、没有匹配建厂对象授权的选择**转成有限结构化拒绝；未知内部错误保持 fail closed。工厂报价成功分支保持既有 V1 JSON，不制造不存在的授权或成本；新拒绝结果由共享协议严格区分、验签及验证关联，旧消费者无法识别时仍失败关闭。配方及其它报价仅在其已验证合同实际提供同等安全证据时适用，不能把本条当成所有403均可续玩的承诺。
+
+负例与结果验收覆盖：授权对象成功、未授权选择安全拒绝、同 batch 后续动作未执行、模型接收完整拒绝后纠正、普通403/错误签名/错Context/撤权仍停止、已有未知原件不报价、重复拒绝预算不重置、全部报价不改世界。脚本/合同通过不代签真实模型首产物或 Stop/恢复；真实模型仍需独立授权与预算。
+
 ## 8. 部署、安全与运行约束
 
 <a id="des-agc-005"></a>

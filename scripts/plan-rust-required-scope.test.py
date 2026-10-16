@@ -81,6 +81,18 @@ class Selection(unittest.TestCase):
                 Path(path).unlink()
                 self.commit()
 
+    def test_hosted_local_mock_production_guard_is_owned_before_introduction(self):
+        self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        path = 'scripts/hosted-local-mock-production-guard.py'
+        self.assertNotIn(path, self.git('ls-tree', '-r', '--name-only', self.base).splitlines())
+        self.write(path, '# trusted-scope selector fixture')
+
+        plan = self.plan()
+
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertEqual(set(plan['groups']), {'baseline', 'workflow_governance'})
+        self.assertTrue(any(path in reason for reason in plan['reasons']))
+
     def test_command_center_control_stays_full(self):
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())
         for path in ('tools/oasis7-command-center/Cargo.lock',

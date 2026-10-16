@@ -339,3 +339,129 @@ fn stopped_model_lease_never_prepares_a_new_private_context() {
             .all(|event| event.starts_with("recover:"))
     );
 }
+
+#[test]
+fn confirmed_read_only_quote_denial_reaches_model_and_allows_corrected_selection() {
+    let host = Arc::new(FakeHost::new());
+    let denial = json!({"status":"selection_rejected","reason":"factory_not_authorized","world_effect":"none","next":"read_capabilities_and_choose_authorized_factory"});
+    host.state
+        .lock()
+        .unwrap()
+        .read_results
+        .push_back(Ok(denial.clone()));
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let p = FakeProvider {
+        batches: vec![
+            vec![
+                call(
+                    "quote_build",
+                    json!({"site":"site","factory":"invented","kind":"factory.smelter.mk1"}),
+                ),
+                call(
+                    "build",
+                    json!({"site":"site","factory":"invented","kind":"factory.smelter.mk1"}),
+                ),
+            ],
+            vec![call(
+                "build",
+                json!({"site":"site","factory":"authorized","kind":"factory.smelter.mk1"}),
+            )],
+        ],
+        prompts: prompts.clone(),
+    };
+    let report = NativeTaskRunner::new(host.clone(), Box::new(p), config())
+        .unwrap()
+        .run()
+        .unwrap();
+    assert_eq!(report.stop_reason, NativeTaskStopReason::Completed);
+    assert_eq!(report.turns_completed, 1);
+    assert_eq!(report.model_calls_spent, 2);
+    let prompts = prompts.lock().unwrap();
+    let second: Value = serde_json::from_str(&prompts[1]).unwrap();
+    assert_eq!(second["operation"], "operator-run:0");
+    assert_eq!(second["tool_results"][0]["result"], denial);
+    assert_eq!(
+        host.events()
+            .iter()
+            .filter(|v| v.ends_with(":effect"))
+            .count(),
+        1
+    );
+    assert!(!host.events().iter().any(|v| v == "prepare:operator-run:1"
+        || v == "reserve:operator-run:1"
+        || v.starts_with("tool:operator-run:1:")));
+}
+#[test]
+fn opaque_quote_errors_are_not_promoted_to_safe_selection_denials() {
+    for error in [
+        "HTTP 403",
+        "signature invalid",
+        "task fence revoked",
+        "transport unknown",
+    ] {
+        let host = Arc::new(FakeHost::new());
+        host.state
+            .lock()
+            .unwrap()
+            .read_results
+            .push_back(Err(error));
+        let report = NativeTaskRunner::new(
+            host.clone(),
+            provider(vec![vec![call(
+                "quote_build",
+                json!({"site":"site","factory":"factory","kind":"factory.smelter.mk1"}),
+            )]]),
+            config(),
+        )
+        .unwrap()
+        .run()
+        .unwrap();
+        assert_eq!(report.stop_reason, NativeTaskStopReason::HostFailure);
+        assert_eq!(report.model_calls_spent, 1);
+        assert_eq!(report.turns_completed, 0);
+        assert!(!host.events().iter().any(|v| v.ends_with(":effect")));
+    }
+}
+
+#[test]
+fn quote_denial_preserves_supplier_ids_skips_old_batch_effect_and_does_not_reset_budget() {
+    let host = Arc::new(FakeHost::new());
+    host.state.lock().unwrap().read_results.push_back(Ok(
+        json!({"status":"selection_rejected","reason":"factory_not_authorized"}),
+    ));
+    let mut p = protocol_provider();
+    let args = json!({"site":"site","factory":"invented","kind":"factory.smelter.mk1"});
+    p.turns = vec![
+        call("quote_build", args.clone()),
+        call("build", args.clone()),
+    ];
+    p.pending = vec![
+        crate::ModelProviderToolCall {
+            call_id: "supplier-denied-quote".into(),
+            name: "quote_build".into(),
+            arguments: args.clone(),
+        },
+        crate::ModelProviderToolCall {
+            call_id: "supplier-skipped-build".into(),
+            name: "build".into(),
+            arguments: args,
+        },
+    ];
+    let results = p.results.clone();
+    let mut c = config();
+    c.max_model_calls = 1;
+    let report = NativeTaskRunner::new(host.clone(), Box::new(p), c)
+        .unwrap()
+        .run()
+        .unwrap();
+    assert_eq!(report.stop_reason, NativeTaskStopReason::BudgetExhausted);
+    assert_eq!(report.model_calls_spent, 1);
+    assert_eq!(report.turns_completed, 0);
+    let results = results.lock().unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].call_id, "supplier-denied-quote");
+    assert_eq!(results[0].content["reason"], "factory_not_authorized");
+    assert_eq!(results[1].call_id, "supplier-skipped-build");
+    assert_eq!(results[1].content["reason"], "not_executed");
+    assert!(!host.events().iter().any(|v| v.ends_with(":effect")));
+}
