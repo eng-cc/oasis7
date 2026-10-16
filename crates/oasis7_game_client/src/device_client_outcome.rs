@@ -41,6 +41,13 @@ impl Client {
                 let prefix = self
                     .cached_intent(ClientStateKind::Prefix, operation)?
                     .ok_or("original context prefix unavailable")?;
+                let prefix_result = self.lookup(&prefix)?;
+                if !matches!(prefix_result.outcome, IntentOutcome::Committed { .. }) {
+                    return Err(
+                        "original context prefix is not committed; recover that result instead"
+                            .into(),
+                    );
+                }
                 let WorldServicePayloadV1::Scheduler(signed) = prefix.signed_payload else {
                     return Err("invalid original prefix".into());
                 };
@@ -49,6 +56,7 @@ impl Client {
                     return Err("invalid original prefix".into());
                 };
                 let view = self.public_view()?;
+                validate_expired_retirement(&context, view.task_fence(), view.logical_tick())?;
                 let binding = view
                     .projection()
                     .runtime_binding
@@ -72,6 +80,9 @@ impl Client {
             } else {
                 outcome_intent(&self.captured(operation)?, reason)?
             };
+            if reason == "context_expired" {
+                self.ensure_quote_has_no_write(operation)?;
+            }
             let signed = authority::sign_read_request("scheduler", intent, &self.key_hex)?;
             self.cache_intent(
                 ClientStateKind::Outcome,
@@ -82,3 +93,26 @@ impl Client {
         self.submit_and_poll(&request)
     }
 }
+
+/// First-creation guard only: cached outcomes keep their exact original request.
+fn validate_expired_retirement(
+    context: &oasis7_agent_api::game::TaskContextIdentityV1,
+    current_fence: Option<&GameTaskFenceV1>,
+    current_tick: u64,
+) -> Result<(), String> {
+    use oasis7_agent_api::game::GameTaskStatusV1;
+    if current_fence != Some(&context.fence)
+        || context.fence.task_status != GameTaskStatusV1::Active
+        || current_tick <= context.valid_until_tick.0
+    {
+        return Err(
+            "context retirement requires current Active task fence and strictly expired lease"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "device_client_outcome_tests.rs"]
+mod tests;

@@ -169,6 +169,28 @@ fn current_task_receipt(world: &oasis7::runtime::World, result: &CanonicalIntent
         _ => false,
     }
 }
+// The caller supplies a fully verified pinned World. This is only the extra
+// historical-layer validation, separate from complete snapshot restoration.
+// Snapshot restoration already validates every receipt; revalidate only the
+// owned cut's candidates before comparing them with current canonical history.
+fn historical_values_at_height<'a>(
+    values: &'a BTreeMap<String, serde_json::Value>,
+    height: u64,
+    mut validate: impl FnMut(&str, &serde_json::Value) -> Result<(), String>,
+) -> Result<Vec<(&'a str, &'a serde_json::Value)>, String> {
+    let mut selected = Vec::new();
+    for (key, value) in values {
+        let committed_height = value
+            .get("committed_height")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or("invalid historical task result height")?;
+        if committed_height == height {
+            validate(key, value)?;
+            selected.push((key.as_str(), value));
+        }
+    }
+    Ok(selected)
+}
 fn live_results(
     world: &oasis7::runtime::World,
     records: &Path,
@@ -213,12 +235,14 @@ fn live_results(
             &identity,
             *height,
         )?;
-        for (key, value) in &pinned
-            .world
-            .capability_revocation_state()
-            .world_service_results
-        {
-            correlation::validate_result(key, value)?;
+        for (key, value) in historical_values_at_height(
+            &pinned
+                .world
+                .capability_revocation_state()
+                .world_service_results,
+            *height,
+            correlation::validate_result,
+        )? {
             let result: CanonicalIntentResultV1 = serde_json::from_value(value.clone())
                 .map_err(|_| "invalid historical task retention result")?;
             if result.committed_height != *height || !current_task_receipt(world, &result) {
@@ -326,4 +350,98 @@ pub(super) fn refresh(
         replace_execution_bridge_record_pin_shard(&record, archive, false, false, store)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod historical_validation_tests {
+    use super::*;
+    #[test]
+    fn owned_height_still_requires_its_original_signature() {
+        use oasis7::world_service::{SubmitIntentRequest, WorldIdentity, sign_read_request};
+        use oasis7_agent_api::game::{DecimalU64, GAME_TASK_CREATE_DOMAIN, GameTaskCreateV1};
+        let identity = WorldIdentity {
+            world_id: "world".into(),
+            genesis_digest: "genesis".into(),
+        };
+        let payload = WorldServicePayloadV1::GameTaskCreate(
+            sign_read_request(
+                GAME_TASK_CREATE_DOMAIN,
+                GameTaskCreateV1 {
+                    api_rev: 1,
+                    client_operation_id: "original".into(),
+                    world_id: identity.world_id.clone(),
+                    genesis_digest: identity.genesis_digest.clone(),
+                    branch_id: "main".into(),
+                    reorg_epoch: DecimalU64(0),
+                    agent_id: "agent".into(),
+                    owner_binding: "owner".into(),
+                    owner_generation: DecimalU64(1),
+                },
+                &hex::encode([73; 32]),
+            )
+            .unwrap(),
+        );
+        let request = SubmitIntentRequest {
+            contract_version: 1,
+            correlation: correlation::derive_correlation(identity, &payload).unwrap(),
+            deadline_unix_ms: None,
+            signed_payload: payload,
+        };
+        let key = correlation::key_digest(&request.correlation.key).unwrap();
+        let mut result = CanonicalIntentResultV1 {
+            request,
+            action_id: 1,
+            committed_height: 4,
+            receipt: serde_json::Value::Null,
+            rejected: Some("fixture".into()),
+        };
+        let valid = [(key.clone(), serde_json::to_value(&result).unwrap())]
+            .into_iter()
+            .collect();
+        assert_eq!(
+            historical_values_at_height(&valid, 4, correlation::validate_result)
+                .unwrap()
+                .len(),
+            1
+        );
+        let WorldServicePayloadV1::GameTaskCreate(signed) = &mut result.request.signed_payload
+        else {
+            unreachable!()
+        };
+        signed.signature_hex = "00".repeat(64);
+        let damaged = [(key, serde_json::to_value(result).unwrap())]
+            .into_iter()
+            .collect();
+        assert!(historical_values_at_height(&damaged, 4, correlation::validate_result).is_err());
+    }
+
+    #[test]
+    fn cumulative_cuts_only_revalidate_receipts_committed_at_each_cut() {
+        let mut observed = Vec::new();
+        for cuts in [1_u64, 4, 8] {
+            let mut validations = 0;
+            for height in 1..=cuts {
+                let values = (1..=height)
+                    .map(|h| {
+                        (
+                            format!("result-{h}"),
+                            serde_json::json!({"committed_height": h}),
+                        )
+                    })
+                    .collect();
+                let selected = historical_values_at_height(&values, height, |_, _| {
+                    validations += 1;
+                    Ok(())
+                })
+                .unwrap();
+                assert_eq!(selected.len(), 1);
+            }
+            observed.push(validations);
+        }
+        assert_eq!(
+            observed,
+            [1, 4, 8],
+            "extra signature validations must follow owned cut receipts"
+        );
+    }
 }
