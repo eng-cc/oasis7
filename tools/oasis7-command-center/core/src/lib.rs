@@ -1,7 +1,11 @@
 pub mod codex;
 pub mod context;
 pub mod document_directory;
+mod document_directory_pairings;
+mod document_directory_references;
 pub mod document_inventory;
+pub mod document_semantic_tree;
+pub mod document_tree_reading;
 pub mod domain;
 pub mod github;
 mod index;

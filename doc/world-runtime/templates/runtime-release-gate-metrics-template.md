@@ -53,4 +53,4 @@
 - 是否填写所有关键指标的状态与证据路径。
 - 是否绑定边界清单与回归模板。
 - `conditional-go` / `no-go` / `blocked` 是否具备直接证据支撑。
-- 是否已把结论同步回写对应 GitHub task issue evidence、`doc/core/templates/stage-closure-go-no-go-template.md` 的评审记录，以及受影响的现行 PRD/design。
+- 是否在实际 PR/已有 Task 记录本候选结论、运行版本及原始证据，并与使用 `doc/core/templates/stage-closure-go-no-go-template.md` 的实际评审记录互链；仅在长期要求、合同、验证方法或真实能力边界变化时同步受影响 PRD/design，分工见[开发流程规范](../../engineering/workflow/source-of-truth.md#information-record-placement)。

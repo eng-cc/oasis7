@@ -29,7 +29,7 @@ Do not use this skill when:
    Record `agent-browser --session "$AB_SESSION" session info --json`; inspect parallel sessions with `agent-browser session list --json`.
 4. Use `--headed open` when the task is visual or player-facing, then wait with `wait --load <state>` and an app signal such as `wait --fn` or `wait --text` before taking refs or acting.
 5. Install an EXIT/INT/TERM trap that closes only `$AB_SESSION`. Never use the default session or the close command's global all-sessions option; a headed session is not covered by idle cleanup.
-6. Read `references/full-guidance.md` only for the current command family you need, and record browser commands and observable results in GitHub task issue evidence comments when the browser check is task evidence.
+6. Read `references/full-guidance.md` only for the current command family you need, and record browser commands and observable results in the actual PR/existing Task when the browser check is task evidence. Read-only analysis does not require a remote comment; retain applicable original evidence and do not infer permission for external writes.
 
 ## Supporting Files
 
@@ -43,7 +43,7 @@ Do not use this skill when:
 - named session lifecycle in `references/session-management.md` and `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - `AGENTS.md` UI Web closed-loop constraints
 - `testing-manual.md` S6 when working on oasis7 UI flows
-- GitHub-backed task truth and lifecycle ownership remain defined by `doc/engineering/workflow/source-of-truth.md`; this skill does not replace that workflow.
+- Execution-record placement and lifecycle ownership remain defined by `doc/engineering/workflow/source-of-truth.md`; this skill does not replace that workflow.
 
 ## Known Failure Modes
 

@@ -118,6 +118,16 @@ Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[上游要求](../../p
 
 模型适配器需保留工具名、schema、call ID、参数增量重组、工具结果顺序、终态及 usage。缺终态、格式损坏、工具未支持或必需输入无法容纳时返回明确阻塞，不把文本 JSON、截断结果或普通回答当动作。推理相关附加字段按具体协议保存必要历史，不能丢掉必需内容，也不能当作面向玩家或世界的事实。
 
+#### 历史归属与输入容量
+
+Harness 与 Provider 必须显式约定历史模式，不能由适配器是否保存消息推断。`ModelProviderHistory::CallerSnapshot` 是默认模式：调用者每轮提供完整授权快照，Provider 不再累计另一份对话。`ProviderConversation` 由 Provider 拥有结构化会话历史；SessionModelProvider 使用该模式。这里的“无状态”是供应商请求协议属性，不改变本地 Provider 对必要历史的归属。
+
+在 `ProviderConversation` 模式，同一 Context 首次决策发送完整当前任务、目标、授权观察和能力；后续决策仅提供继续当前 Context 的小型指示及本轮新增工具结果。工具结果以原 supplier call ID 通道交付一次，不再把累计 transcript 复制进 user prompt。Provider 保留先前 assistant 工具调用、必要推理字段及有序结果；多工具批次中未执行调用也须按原 ID 完成因果链。取得合法的新 Context 后，首轮必须发送完整新上下文，不能用旧 Context 的历史替代当前切点、目标或 fence；换 Context 也不自动清空仍属该模型会话的必要协议历史。
+
+模型输入容量以实际候选请求为准：Provider 的 `preflight(&self, request)` 必须在不修改会话、不发送、不预留物理调用预算的情况下，构造包含现有必要历史与本轮新增输入的完整候选，检查真实编码字节数和保守 token 上界。调用者快照模式默认校验请求本身；结构化会话模式不能只校验新增片段。Harness 在 durable host 的 `reserve_model_call` 前执行预检；Provider 在执行入口再次校验，发送前仍独立复核当前 Stop、租约与 fence，预检不构成执行许可。
+
+实际候选无法容纳时返回 typed `input_limit`，不静默截断、摘要替换必要历史、丢弃工具结果、抬高限制或降级协议。本地预检拒绝不计物理请求、不制造 unknown usage、不消耗持久物理调用预留；已完成预留后的竞态或发送结果不明仍保守计入原预算，不以该合同自动退款。容量证据只记录非敏感的历史模式、编码大小、配置限额和拒绝阶段，不记录完整 prompt 或凭证。
+
 OpenRouter Responses 按官方无状态合同携带必要历史，使用 `store: false` 且不设置非空 `previous_response_id`。Chat Completions 的 OpenRouter 路由默认锁在明确的允许集合，禁用集合外回退，并要求必要工具参数被支持；相应请求使用 `provider.only`、`allow_fallbacks: false`、`require_parameters: true`。其他协议只有在适配器能证明同等约束时才启用；字段不支持时拒绝该组合，不静默删除约束。默认不跨模型回退，实际模型/路由变化必须可诊断并重新检查适用性。
 
 项目的 session、幂等和 provider invocation 标识保留在本地控制/诊断层，不无条件塞进供应商请求体；上游接受同名字段也不能证明免费重试或计费幂等。费用/用量缺失保留 unknown。
@@ -164,6 +174,8 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../p
 
 切换以新连接完成检查为前提，版本 CAS 确认后执行既有[Provider Switch](provider-switch-intent-continuity.design.md#des-psw-003)停止/交接。新模型只读取授权的当前目标和世界结果，不自动复用旧模型私有推理；旧 provider 的未知世界 operation 必须保留原身份并先查询。读不到、超时、鉴权失败不能推定未发生；世界操作幂等性由现有 Game API/Runtime 合同保证，不由模型连接层重新实现。
 
+`input_limit` 是本地输入容量阻塞，不是供应商消费失败或游戏选型拒绝。阻塞保留原 Context、run/operation 身份、已验证工具结果和未知世界原件；不透明重试、不自动新建 Context/slot、不重置调用预算，也不通过 Stop/重启清除历史来续玩。先诊断是否重复携带并修复编码；若必要输入真实超限，应明确报告容量限制，由后续显式配置/受审上下文策略处理。再次运行仍须复核有效授权与原操作状态；未知原件优先查询，不能因输入阻塞推断未提交。Stop 仍可独立执行，并永久隔离旧运行代的迟到结果。
+
 多标签页共享已确认连接投影但不共享 raw Key；每次变更检查 version，旧页面不能用过期版本重新激活。停止/断开与并发 activate 的竞态以版本和撤销状态裁决；退出账号或 session 撤销使其连接停用。若已在原世界许可内完成提交，则保留原结果，不能因随后停用改写为取消。
 
 ## 9. 安全、隐私与可观测性
@@ -172,7 +184,7 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../p
 
 记录 connection 随机 ID、provider/model/protocol/preset revision、探测类别、尝试数、延迟、脱敏错误、已知用量及 unknown 标记；不记录 raw Key 或其可跨服务关联的公开指纹，不采集完整 prompt/response/供应商错误体。状态接口仅向当前有权主体暴露最小投影。
 
-错误码按本地语义归一为 `authentication_failed`、`quota_unavailable`、`budget_exhausted`、`rate_limited`、`model_unavailable`、`capability_unsupported`、`transport_failed`、`session_expired`、`version_conflict` 等；HTTP 200 也需验证终态/工具结果。错误码不覆盖原世界 operation 的 pending/committed/rejected 等权威状态。
+错误码按本地语义归一为 `authentication_failed`、`quota_unavailable`、`budget_exhausted`、`rate_limited`、`model_unavailable`、`capability_unsupported`、`input_limit`、`transport_failed`、`session_expired`、`version_conflict` 等；HTTP 200 也需验证终态/工具结果。错误码不覆盖原世界 operation 的 pending/committed/rejected 等权威状态。
 
 ## 10. 兼容、迁移与部署
 
@@ -196,7 +208,7 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../p
 | Trace refs: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca；[REQ-BYOK-002](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-002) | [DES-BYOK-002](#des-byok-002) | BYOK-02 租户/凭证隔离；BYOK-03 并发预算与未知用量 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-02)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | canary secret 不泄漏；未知 usage 不按零返还；不承诺账户硬封顶 | 计划验证；功能、真实供应商与网页均未验收 |
 | Trace refs: O7-REQ-84294c93-3275-4d19-8faf-389950b87464；[REQ-BYOK-003](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-003) | [DES-BYOK-003](#des-byok-003) | BYOK-04 合法工具/游戏闭环；BYOK-05 会话失效与重启 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-04)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 同一 Runtime 准入；到期后无新调用，世界作业按原规则推进 | 计划验证；功能、真实供应商与网页均未验收 |
 | Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[REQ-BYOK-004](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-004) | [DES-BYOK-004](#des-byok-004) | BYOK-06 换 Key、Stop、双标签页 CAS、迟到结果与原件恢复 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-06)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 旧运行代永久失效；不替换未知原操作，不保证上游退费 | 计划验证；功能、真实供应商与网页均未验收 |
-| Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[REQ-BYOK-005](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-005) | [DES-BYOK-005](#des-byok-005) | BYOK-07 双协议工具往返/路由；BYOK-08 两家授权真实模型闭环 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-07)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 协议可配不等于已支持；分供应商/模型/协议/路由/浏览器取证 | 计划验证；功能、真实供应商与网页均未验收 |
+| Trace refs: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d；[REQ-BYOK-005](../../product/agents-world-simulation/self-supplied-model-connection.prd.md#req-byok-005) | [DES-BYOK-005](#des-byok-005) | BYOK-07 双协议工具往返/路由、多轮历史归属与容量负例；BYOK-08 两家授权真实模型闭环 | [BYOK 验收手册](../../testing/manual/self-supplied-model-connection.manual.md#byok-07)：按该手册对应场景执行确定性/HTTP/网页及获授权真实试玩 | 协议可配不等于已支持；分供应商/模型/协议/路由/浏览器取证 | 计划验证；功能、真实供应商与网页均未验收 |
 
 本表都是待执行场景，不是新增 CI 状态或流程材料。实现 PR 记录实际测试命令、版本和结果；费用调用另获真实凭证/预算授权。fixture 不使用真实 Key；截图、HAR、日志和回执证据必须先脱敏。普通 CI 可验证确定性安全与协议合同，真实付费模型和真实玩家体验不能由其代签。
 

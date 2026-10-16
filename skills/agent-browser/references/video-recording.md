@@ -2,10 +2,23 @@
 
 Capture browser automation as video for debugging, documentation, or verification.
 
-All examples assume an owned named session exported through
-`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Stop recording
-before closing that exact session; never use the default session or global
-multi-session cleanup.
+Use the owned-session setup and cleanup from [session-management.md](session-management.md)
+in the same shell before these examples (also inside any standalone script):
+
+```bash
+AB_SESSION="$(agent-browser session id --scope worktree --prefix video)" || exit $?
+: "${AB_SESSION:?Session creation returned an empty id}"
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+```
+
+Install the scoped `EXIT INT TERM` cleanup from that reference after setup.
+Every `ab` invocation passes the owned id explicitly; an ambient
+`AGENT_BROWSER_SESSION` alone is not sufficient. Never use the default session
+or global multi-session cleanup. This follows the repository's 0.37.1 session
+contract; if the installed CLI differs, read `agent-browser skills get core --full`
+before adapting these examples.
+
+Stop recording before closing that exact session, and retain stop failures as described below.
 
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
@@ -22,29 +35,29 @@ multi-session cleanup.
 
 ```bash
 # Start recording
-agent-browser record start ./demo.webm
+ab record start ./demo.webm
 
 # Perform actions
-agent-browser open https://example.com
-agent-browser snapshot -i
-agent-browser click @e1
-agent-browser fill @e2 "test input"
+ab open https://example.com
+ab snapshot -i
+ab click @e1
+ab fill @e2 "test input"
 
 # Stop and save
-agent-browser record stop
+ab record stop
 ```
 
 ## Recording Commands
 
 ```bash
 # Start recording to file
-agent-browser record start ./output.webm
+ab record start ./output.webm
 
 # Stop current recording
-agent-browser record stop
+ab record stop
 
 # Restart with new file (stops current + starts new)
-agent-browser record restart ./take2.webm
+ab record restart ./take2.webm
 ```
 
 ## Use Cases
@@ -55,18 +68,18 @@ agent-browser record restart ./take2.webm
 #!/bin/bash
 # Record automation for debugging
 
-agent-browser record start ./debug-$(date +%Y%m%d-%H%M%S).webm
+ab record start ./debug-$(date +%Y%m%d-%H%M%S).webm
 
 # Run your automation
-agent-browser open https://app.example.com
-agent-browser snapshot -i
-agent-browser click @e1 || {
+ab open https://app.example.com
+ab snapshot -i
+ab click @e1 || {
     echo "Click failed - check recording"
-    agent-browser record stop
+    ab record stop
     exit 1
 }
 
-agent-browser record stop
+ab record stop
 ```
 
 ### Documentation Generation
@@ -75,23 +88,23 @@ agent-browser record stop
 #!/bin/bash
 # Record workflow for documentation
 
-agent-browser record start ./docs/how-to-login.webm
+ab record start ./docs/how-to-login.webm
 
-agent-browser open https://app.example.com/login
-agent-browser wait 1000  # Pause for visibility
+ab open https://app.example.com/login
+ab wait 1000  # Pause for visibility
 
-agent-browser snapshot -i
-agent-browser fill @e1 "demo@example.com"
-agent-browser wait 500
+ab snapshot -i
+ab fill @e1 "demo@example.com"
+ab wait 500
 
-agent-browser fill @e2 "password"
-agent-browser wait 500
+ab fill @e2 "password"
+ab wait 500
 
-agent-browser click @e3
-agent-browser wait --load networkidle
-agent-browser wait 1000  # Show result
+ab click @e3
+ab wait --load networkidle
+ab wait 1000  # Show result
 
-agent-browser record stop
+ab record stop
 ```
 
 ### CI/CD Test Evidence
@@ -145,16 +158,16 @@ The test status is captured immediately. A failed test keeps its original code e
 
 ```bash
 # Slow down for human viewing
-agent-browser click @e1
-agent-browser wait 500  # Let viewer see result
+ab click @e1
+ab wait 500  # Let viewer see result
 ```
 
 ### 2. Use Descriptive Filenames
 
 ```bash
 # Include context in filename
-agent-browser record start ./recordings/login-flow-2024-01-15.webm
-agent-browser record start ./recordings/checkout-test-run-42.webm
+ab record start ./recordings/login-flow-2024-01-15.webm
+ab record start ./recordings/checkout-test-run-42.webm
 ```
 
 ### 3. Handle Recording in Error Cases
@@ -165,15 +178,15 @@ Use the CI/CD example above to preserve the original test status and recording c
 
 ```bash
 # Record video AND capture key frames
-agent-browser record start ./flow.webm
+ab record start ./flow.webm
 
-agent-browser open https://example.com
-agent-browser screenshot ./screenshots/step1-homepage.png
+ab open https://example.com
+ab screenshot ./screenshots/step1-homepage.png
 
-agent-browser click @e1
-agent-browser screenshot ./screenshots/step2-after-click.png
+ab click @e1
+ab screenshot ./screenshots/step2-after-click.png
 
-agent-browser record stop
+ab record stop
 ```
 
 ## Output Format

@@ -1,199 +1,182 @@
 # Viewer Pixel World Player-Readable Rendering
 
-- 对应设计文档: `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md`
-- 历史任务追溯: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
-- 关联专题:
-  - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md`
-- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文拥有 PixelWorld 的 HUD/DTO、renderer 信息架构与验证映射，不替代终端 shell PRD。
-
-审计轮次: 1
+- 配对设计：[玩家可读渲染系统设计](viewer-pixel-world-player-readable-rendering.design.md)。
+- 专业 owner：`viewer_engineer`；visual/QA 共同审读。
+- 上游产品：[玩家可读的世界舞台](../../product/agents-world-simulation/player-readable-world-stage.prd.md)。
+- 关联：[视觉规范](viewer-visual-design-spec-2026-06-05.design.md)、[语义定位](viewer-pixel-world-semantic-positioning.prd.md)、[Fragment LOD](viewer-pixel-world-fragment-lod.prd.md)、[大世界读模型](external-agent-world-view.design.md)。
+- 历史任务：`task_b399bf37eff94c44a300c55f5db739d3` / #1294；历史实现与证据在 Git/Task 中，不能代签新合同。
+- 审读：2026-10-16；基线 `a2389f437e6cedc3b870a91d33a1cdf40a00a8da`。
 
 ## 1. Executive Summary
-- Pixel-world 不能只追求把模拟器数据画全；商业化目标要求首屏直接回答“当前目标、下一步动作、玩家造成了什么变化”。
-- 本轮把 pixel-world 主舞台从 renderer/debug 状态面板收口为游戏指挥棋盘：Agent、路线、目标和 player leverage 优先，Fragment terrain 保持世界背景。
-- 本轮不扩 runtime snapshot 协议，不新增 3D workstream，不把 Fragment block 变成交互对象。
+
+像素世界应先回答当前目标、下一步、blocker及原行动造成的变化，而不是把模拟器数据或诊断全部铺满。当前显示派生 owner 是 Rust `host_state.rs::build_render_state`；`pixel_world_host.jsx` 消费 runtime.deriveRenderState，WASM 是唯一世界渲染内核。
+
+本修订统一商业HUD、主体归属、来源时效和回退语义。不新增世界状态字段、第二JS renderer、3D workstream或Fragment交互。新的空间查询/分页目标由大世界系统设计负责，不能假装当前渲染输入天然是完整大世界。
 
 ## 2. User Experience & Functionality
 
 ## 目标
-- 玩家 5 秒内能读出当前目标、下一步动作和关键阻塞。
-- Agent / route / action feedback 的视觉权重大于 Location marker 和 renderer 诊断。
-- Fragment terrain 继续作为世界身体存在，但在 Agent 可读视角下保持背景信息。
-- renderer 状态、DTO JSON 和调试按钮默认进入诊断折叠区。
+
+- 在规定的首读测试中，玩家5秒内辨认目标、下一步和主要blocker；方法见专项手册，数字不是当前实测结果。
+- Agent/有效关系/原行动反馈优先于Location marker、terrain及诊断。
+- 选中对象、动作主体和回执归属不混淆；无权威目标/回执时保持空或未确认。
+- renderer、raw DTO、性能和测试控制默认折叠；失败时保留合法文本与恢复，不绘制替代世界。
 
 ## 范围
-- 范围内：Rust render state 的商业化语义层、PixelWorldHost 首屏 HUD、rendered route 表达、定向 UI 测试、生成产物刷新。
-- 范围外：runtime snapshot 字段扩展、设施/生产线正式协议、dense terrain 聚合、3D renderer、正式美术资产。
+
+范围内：Rust commercial_surface派生、Solid host HUD、受支持关系表达、来源/主体/状态约束、定向回归和canonical build。范围外：世界schema、设施/生产线新增协议、dense terrain引擎、3D、正式美术资产和Shell重排。
 
 ### In Scope
-- `buildPixelWorldRenderState` 新增 `commercial_surface`，由现有 `buildGameplaySummary`、agents、links、fragment terrain 派生。
-- `commercial_surface` 至少表达 objective、next action、active agent、player leverage、blocker、route count 与 fragment count。
-- Pixel-world stage 顶部显示商业化 HUD，优先展示目标、下一步和玩家杠杆。
-- Rust-derived rendered DOM 绘制 agent-location route 线，使关系在 bridge 派生状态中可验证。
-- renderer 诊断 badges、控制按钮和 raw DTO 默认折叠。
+
+当前render state保留commercial_surface的objective、next_action、active_agent_id、player_leverage、blocker、world_read及action_receipt。字段从明确的权威gameplay输入与获准显示集合派生；原函数名 `buildPixelWorldRenderState` 仅为历史名称，不再建立JS派生owner。
 
 ### Out of Scope
 
-历史措辞说明：本节“新增 host 字段由 wasm 侧忽略”及旧 `buildPixelWorldRenderState` 名称记录初始阶段。当前 owner 是 Rust `host_state.rs` 派生并发布 `commercial_surface`，JS host 消费 runtime 结果；这里不改变以下非目标、既有 schema 或 AC，也不建立独立 JS renderer。
-- 不新增 world server / runtime snapshot 字段。
-- 不改变 `pixel_world_bridge` 反序列化 schema；新增 host 字段由 wasm 侧忽略。
-- 不把 action button 直接搬进像素地图；命令面仍在现有 Command surface。
-- 不把 Fragment block 设为 hover/select target。
+不新增world server/snapshot规则，不把button直接搬进地图，不新增Fragment hit region，不修改mount/update/tick/unmount及宿主事件ABI，不以本专题宣称完整产业图谱或semantic zoom。
 
 <a id="industry-detail-requirements"></a>
 ### 产业图谱与空间信息层级：目标合同
 
-Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：下面节点、路线、blocker 和未知/推断标示只承接当前目的与可读关系的持续目标，不证明完整产业实现。
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)的相关对象/blocker可读性。
 
-Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；局部承接[REQ-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-003)：下面 World/Region/Node 的分层可见集与目标定位只承接多尺度浏览的有限目标，不证明完整探索、授权搜索/返回任务或 semantic zoom。
+Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；局部承接[REQ-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-003)的分层可见集。
 
-- 受支持的产业 projection 应统一工厂/配方/产品/物流节点、物料/电力/数据流向、层级/阶段/状态和 location/Agent/module 定位目标；吞吐、损耗、瓶颈、拥塞与告警仅展示权威数据。
-- 当权威数据支持 P3 分层档案时，符号应可辨 R1~R5 层级及 bootstrap/scale/governance 阶段，并独立表达瓶颈/拥塞/告警；不得仅凭 id/tag 推断而包装为确认事实。
-- World/Region/Node 层级分别保留热区/主干流、区域关系、配方/库存；文本与舞台消费一致事实，符号保持可读，密度裁剪优先保留目标、相关路线和 blocker，限制节点/边负载。
-- 根因推断不得伪装为确认原因，缺失数据明确未知；只从受支持 snapshot/event 派生，不猜测字段，不把环境活动当作玩家进展。
-- 本节为吸收的持续目标。当前 agents/links/hotspots/commercial HUD 不等于完整产业图谱、吞吐流、R1~R5/阶段符号或三档 semantic zoom；完整实现及 external headed 验收仍有缺口。
+受支持产业projection应区分工厂/配方/产品/物流节点、物料/电力/数据流向、层级/阶段/状态和location/Agent/module定位；吞吐、损耗、瓶颈、拥塞、告警仅展示权威数据。支持P3分层档案时，R1~R5和bootstrap/scale/governance符号可辨，状态独立且不只依赖颜色。
+
+World/Region/Node分别保留热区/主干流、区域关系、配方/库存，密度裁剪优先目标、相关路线和blocker，限制节点/边负载。未知与推断根因明确区分。当前agents/links/hotspots/HUD不证明完整产业图谱、吞吐流或三档semantic zoom。
 
 ## 3. User Stories
-- As a player, I want the pixel-world stage to show my current objective and next move before renderer diagnostics, so that the screen feels like a game surface instead of an operator console.
-- As a producer, I want the stage to separate player leverage from ambient world activity, so that a lively simulation is not mistaken for meaningful play.
-- As a viewer engineer, I want commercial HUD semantics to be derived from existing snapshot/gameplay data, so that the first slice ships without widening runtime protocol risk.
+
+玩家能先看世界与下一步，再读原行动结果；查看B不会把A的成果贴到B上。制作人能区分玩家影响与环境活动。工程师能在现有Rust派生和host内维护同一来源，不为视觉兜底引入第二套世界真值。
 
 ## 4. Technical Specifications
 
 ## 接口 / 数据
-- 输入：现有 `WorldSnapshot.player_gameplay`、`model.agents`、`model.locations`、
-  fragment blocks；Action Receipt 使用 `player_gameplay.recent_feedback` 等权威因果
-  字段。World Feed v1 单独使用 runtime 持久化 `WorldEvent` journal 的有序投影；
-  当前 `state.recentEvents` 仍只是非契约 ambient preview，二者不得混用。
-- 输出：Pixel-world host render state 新增 `commercial_surface`；WASM bridge 继续消费原有 `world_bounds / fragment_terrain / locations / agents / links / visual_hotspots / selection`。
-- 兼容：没有 gameplay summary 时，仅 `world_read`/ambient diagnostics 可以显示
-  agents/routes/fragments 的静态世界读数以避免阻断 renderer mount/update；不得由这些
-  计数合成 objective、next action、player leverage、blocker、Action Receipt 或玩家进度。
+
+输入包括现有 `WorldSnapshot.player_gameplay`、agents/locations和fragment blocks。Action Receipt来自权威 `player_gameplay.recent_feedback`及与原操作一致的因果字段；World Feed独立来自Runtime持久WorldEvent journal。`state.recentEvents`只是非契约ambient preview，三者不混用。
+
+没有gameplay summary时，获准的静态world_read/ambient诊断可用于解释当前可见集合，但不得由计数合成objective、next action、player leverage、blocker、receipt或进度。world_read须说明计数是当前视点/授权范围，不把partial集合包装成世界总量。
 
 ### 4.1 Commercial Surface DTO
 
-Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：现有目标、下一步、玩家杠杆与 blocker 的可读 HUD 映射；ambient 计数不合成玩家进度。
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)。
 
-- `objective`: 当前目标标题与描述。
-- `next_action`: 推荐动作标签或 next-step hint。
-- `active_agent_id`: 推荐动作、accepted intent、selection 或首个 agent 推导出的当前玩家杠杆对象。
-- `player_leverage`: execution state、accepted intent summary、world change/effect detail。
-- `blocker`: blocker label/detail。
-- `world_read`: agents/routes/fragments/hotspots 的可扫描计数。
+| 字段 | 有效语义 | 不允许的兜底 |
+| --- | --- | --- |
+| `objective` | 适用玩家目标；Agent私有目标另需明确绑定。 | 用场景计数/全局summary冒充选中Agent目标。 |
+| `next_action` | 当前受支持推荐/下一步及明确的执行类型、主体；无法安全绑定时退为选定对象/同步/打开Command。 | 用active_agent_id或首个Agent补可执行target。 |
+| `active_agent_id` | 展示关注对象，不能当作控制证明；无明确来源可为null。selection仍独立。 | 列表首项被当成玩家杠杆/已认领对象，并继续流入动作或回执。 |
+| `player_leverage` | 已接受意图、执行状态和可归因结果；属于原主体/目标。 | 环境变化、其他玩家结果、视觉焦点当玩家影响。 |
+| `blocker` | 当前目标/操作的明确阻塞和恢复方向。 | 任意其他实体状态作为当前失败原因。 |
+| `world_read` | 当前获准显示集合的静态读数及范围。 | partial计数冒充世界全量，计数增长冒充玩家进度。 |
+
+<a id="subject-binding-requirements"></a>
+#### 主体绑定要求
+
+Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；承接[REQ-AGENT-STAGE-005](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-005)。
+
+展示焦点、提交主体和回执主体分别解析。已提交对象由原operation固定，不随selection、推荐、列表顺序或重连变化。无明确操作/主体关联时不渲染该Agent的成功；有合法玩家级结果但没有Agent目标时保留玩家级，不强造Agent。当前first-agent fallback和target串联是待整改的历史实现，不再作为正确行为要求。
 
 ### 4.1.1 Action Receipt DTO/state mapping
 
-Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：现有因果反馈与下一步解释；pending 不等于完成，advanced/no-progress 分开，缺回执不能用环境活动补齐。
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；承接[AC-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-001)。
 
-`commercial_surface.action_receipt` is the only player-causality projection. It is
-derived from the authoritative runtime `player_gameplay.recent_feedback`,
-`execution_state`, `causality_kind/detail`, `last_world_change`, and the local
-gameplay-action feedback only while awaiting the runtime projection:
+`commercial_surface.action_receipt`是现有玩家因果展示锚点。权威来源为原操作的recent_feedback、execution_state、causality_kind/detail、last_world_change；本地反馈最多在等待Runtime时表达与原请求明确关联的pending，不证明世界变化。未提交草稿不是pending receipt。
 
 | DTO field | Source mapping | Player meaning |
 | --- | --- | --- |
-| `present`, `state`, `confidence` | feedback presence + `stage`/`execution_state` | whether a causal receipt exists; no receipt is explicit |
-| `title`, `summary`, `detail` | `action`, `effect`, `reason`, `hint`, `last_world_change` | what was attempted, changed, blocked, or what to do next |
-| `target_agent_id`, `effect_kind` | intent/action target, `causality_kind` | selected causal subject and effect class |
-| `delta_logical_time`, `delta_event_seq` | `recent_feedback.delta_*` | committed world evidence, not a forecast |
+| `present`, `state`, `confidence` | 权威反馈或明确关联原请求的等待状态。 | 有/无回执，等待/完成/阻断/拒绝/待恢复确认。 |
+| `title`, `summary`, `detail` | 原行动、effect、reason、hint及权威变化。 | 尝试了什么、什么改变/未改变、原因与下一步。 |
+| `target_agent_id`, `effect_kind` | 原operation/intent/action明确绑定的主体和因果类。 | 不随选择变化；无Agent的玩家级结果可为null。 |
+| `delta_logical_time`, `delta_event_seq` | 权威原反馈delta，仅在合同允许的已发生阶段展示。 | 不是预估，不因accepted/queued填入世界增量。 |
 
-`accepted/submitted/queued/ack` are pending and must not render completion;
-`completed_advanced` is progress, while `completed_no_progress` remains a
-no-progress/blocker result. `blocked` and `rejected` retain their reason and
-recovery path. When no authoritative feedback exists, render
-`No action receipt yet`; do not promote Recent Events/World Feed into a receipt.
+accepted/submitted/queued/ack是pending；completed_advanced表示进展，completed_no_progress仍是无进展结果；blocked/rejected保留原因与恢复。recovery_required/未知结果先查原操作，不伪装失败并发新请求。缺权威回执显示 `No action receipt yet`；Recent Events/Feed不能补回执。不能用较新的acceptedIntentTarget或recommendedAction给较早回执猜归属。
 
 ### 4.1.2 World Feed v1 implementation contract
 
-Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：环境活动与玩家因果分离、真实空/不可用/恢复提示；order/dedup/cursor 是以下既有专业机制，不等于完整产品 AC。
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)。
 
-World Feed is the implemented Viewer projection owned by `viewer_engineer`, sourced
-from the ordered persisted runtime `WorldEvent` journal projection confirmed by
-`runtime_engineer`. Current `state.recentEvents` is only a non-contract ambient
-preview; `player_gameplay.recent_feedback` remains the causal Action Receipt
-source. Current Recent Events/Feedback keep their names and are not silently renamed.
-The stable anchor is `#viewer-world-feed`. Acceptance: ambient events are visually
-separate from receipts; pending stages never imply success; empty/loading/unavailable
-states explain cause and next step; gap/reorg triggers authoritative snapshot reload;
-desktop, mobile, keyboard, CJK and long labels remain readable without overflow.
+Viewer owner消费有序持久WorldEvent journal，稳定anchor为 `#viewer-world-feed`。环境事件与receipt视觉独立；缺失/loading/unavailable解释原因与恢复；gap/reorg按cursor恢复并重取snapshot。当前Recent Events/Feedback保留原名，不静默重命名或转成因果结果。
 
 ### 4.1.3 World Feed v1 additive schema (implemented)
-The schema is the current Viewer/runtime contract. It does not turn ambient events
-into action causality, and current runtime projections intentionally emit a nullable
-`receipt_ref` with `null` when no explicit identity exists.
 
 | Field | Required contract |
 | --- | --- |
-| `schema_version` | literal `world_feed/v1`; unknown versions fail closed to unavailable |
-| `world_id` | canonical world identity and cursor scope |
-| `reorg_epoch` | history epoch; epoch changes invalidate prior cursor |
-| `cursor` | opaque resume token bound to world/epoch and last `event_seq` |
-| `events[]` | ascending source order; dedup key `(world_id,reorg_epoch,event_seq)` |
-| `event_seq` | monotonic within the world/epoch |
-| `kind`, `summary`, `detail` | ambient presentation fields; never causal proof |
-| `receipt_ref` | nullable; render only when runtime supplies explicit causal identity; never infer from time/text/delta |
-| `status` | `loading`, `ready`, `empty`, `replay`, `gap`, `unavailable` |
+| `schema_version` | `world_feed/v1`；未知版本fail closed到unavailable。 |
+| `world_id` | 权威世界与cursor作用域。 |
+| `reorg_epoch` | 历史epoch，变化时旧cursor失效。 |
+| `cursor` | 绑定world/epoch及最后event_seq的opaque token。 |
+| `events[]` | source升序；去重键 `(world_id,reorg_epoch,event_seq)`。 |
+| `event_seq` | 同world/epoch内单调；保留精确整数。 |
+| `kind`, `summary`, `detail` | 环境表达，不是因果证明。 |
+| `receipt_ref` | nullable，只按Runtime显式因果身份提供，不能从时间/文本/delta推断。 |
+| `status` | loading、ready、empty、replay、gap、unavailable。 |
 
-On gap/reorg, the consumer must perform cursor-aware recovery and snapshot reload;
-it must not silently splice events. `accepted`, `submitted`, `queued`, and `ack`
-remain pending in the receipt contract. The World Feed never replaces
-`commercial_surface.action_receipt`.
+reorg_epoch/event_seq在wire上使用精确非负十进制字符串；Rust为u64，已支持的legacy数值输入仍按原兼容合同处理，不能经JS Number损失精度。gap/reorg不静默拼接事件；Feed永不替代action_receipt。
 
 ### 4.2 UI Layering
 
-Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；局部承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)：世界舞台/目标/下一步主次，诊断次级及受支持屏幕的可读表达；没有新增布局决定。
+Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；承接[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)。
 
-- Stage summary: `World Command Board` / `世界指挥棋盘`。
-- Commercial HUD: objective、next move、player leverage 的字段与可读性由本文定义；布局只取[终端 shell 当前合同](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)的 Next Move 主区与从属上下文，不再要求三列或三张平级卡片。
-- Canvas foreground: selected entity / goal / blocker callouts。
-- Canvas middle: agents, routes, hotspots。
-- Canvas background: Fragment terrain and subdued Location anchors。
-- Diagnostics: renderer status, runtime source, camera, raw DTO and test controls.
+布局沿[Shell当前合同](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)：一个Next Move主区，Objective/Player Leverage从属；窄屏主区第一行、上下文第二行，不恢复三张平级卡片。canvas前景为选中/目标/blocker，中层为有效agents/routes/hotspots，背景为Fragment/Location逻辑锚点，诊断折叠。
 
 ### 4.3 Player Leverage Rule
-- `player_leverage.summary` 优先使用 accepted intent / recent world change / execution cause。
-- 若没有玩家意图，则明确显示尚无 player-facing accepted intent，不用“世界活跃”冒充玩家进展。
-- UI test 必须断言 `commercial_surface.player_leverage` 与目标/下一步同屏可见。
+
+player_leverage仅从明确适用的accepted intent/原世界变化/execution cause派生。没有已接受意图时明确说明，不以“世界活跃”代替。与目标/下一步可读地相邻，不因无数据生成默认成功。
+
+<a id="render-degradation-requirements"></a>
+### 4.4 来源、降级与恢复
+
+Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[REQ-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-002)。
+
+几何来源和新鲜度独立；partial不是全量。读取不可用、GPU不可用、ready后图形失效、断连、撤权分别处理。生产世界只由WASM渲染；已有Rust派生DOM/fixture用于相应语义测试或明确辅助表面，不成为Rust/WASM不可用时的独立JS世界。
+
+降级保留当前仍被授权的目标、文本、Targets、原回执/原操作回查及安全控制。图形失效时禁用旧canvas命中，恢复后重建本会话并重验当前授权/来源/选择。不因保留上下文泄漏已撤权数据，不自动提交、重放世界动作或调用模型。
 
 ## 5. Risks & Roadmap
 
 ## 里程碑
-以下是初始专题的历史交付分解，不恢复已退役的 project/PM 维护义务；当前修改按仓库开发流程与适用 PR、测试记录交付。
-- M1：专题 PRD/design/project 与模块入口回写。
-- M2：Rust DTO、commercial HUD、rendered route 与诊断折叠实现。
-- M3：targeted UI test、build、PM/doc/diff hygiene 完成。
+
+初始M1文档、M2 Rust DTO/HUD、M3定向验证为历史专题划分，不恢复旧PM义务。后续按当前PR完成主体解析、时效/回退和负例；大世界分页与原生依赖另按对应设计交付。
 
 ## 风险
-- 当前数据里设施/生产线语义不足，第一期只能用 gameplay summary 和 agent-location routes 表达商业闭环。
-- HUD 如果继续堆 renderer badges，会退回 debug dashboard；本轮通过默认折叠诊断控制。
-- 后续若要展示设施、生产、库存流，需要同步 runtime/viewer 协议设计和适用验证范围；Issue/Project 按跟踪需要使用。
+
+旧active-agent链污染因果；全局summary伪装Agent目标；有效位置被误当有效关系；partial计数被当进展；mock loader被当Rust执行；降级形成第二renderer。产业数据不足时只展示已有明确数据，不猜设施/吞吐字段。
 
 ### Terminal implementation slices and evidence
-PixelWorld participates in slices 3 (console/receipt), 5 (separate World Feed), and
-6 (headed QA) of the terminal handoff. Its focused acceptance evidence is:
 
 | Check | Expected evidence | Not satisfied by |
 | --- | --- | --- |
-| board/HUD | objective, next move, leverage remain readable above terrain/diagnostics | ambient counts or a mock screenshot |
-| receipt | no-receipt, queued, advanced, no-progress, blocked states map to authoritative fields | Recent Events text |
-| feed | v1 order, dedup, cursor, gap/reorg reload, distinct loading/empty/unavailable | local time sorting or text matching |
-| responsive | desktop + 390x844, keyboard, CJK/long text, no overflow | unit/DOM structure alone |
+| board/HUD | 目标、Next Move、leverage与范围语义；无游戏摘要不造目标。 | ambient计数或mock截图。 |
+| receipt | 无回执、queued、advanced、no-progress、blocked、unknown及主体切换。 | Feed文本、当前选择或推荐目标。 |
+| feed | v1精确顺序、去重、cursor、gap/reorg与状态。 | 本地时间或文字匹配。 |
+| responsive | desktop/390x844及适用tablet、键盘、触控、CJK。 | 单元/DOM结构。 |
+| recovery | 初始不可用、ready后失败、撤权和原操作不重做。 | 只有GPU-disabled截图。 |
 
 ## 6. Acceptance Criteria
-- AC-1: `buildPixelWorldRenderState` 返回 `commercial_surface`，并可在无 runtime 协议扩展时从现有 snapshot 派生。
-- AC-2: PixelWorldHost 首屏展示 objective、next action、player leverage，renderer diagnostics 默认折叠。
-- AC-3: rendered DOM 绘制 agent-location route，Fragment terrain 仍在背景层且非交互。
-- AC-4: UI tests 覆盖 commercial surface DTO、HUD 可见性和诊断折叠。
-- AC-5: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 通过。
+
+AC-1至5保留原专题覆盖范围，历史执行只对原候选有效；下面说明当前Rust owner和适用表面，不把历史JS叙述继续当实现合同。
+
+- AC-1：Rust `build_render_state`派生commercial_surface，不扩世界协议；无gameplay时不合成目标/进度。
+- AC-2：首屏目标、下一步、leverage可读，diagnostics折叠，布局遵守Shell。
+- AC-3：已有Rust派生语义/DOM测试表面只在独立关系authority成立时显示route，terrain背景且非交互；正式WASM真实层级另验，不创造生产JS回退。
+- AC-4：分层测试覆盖DTO、HUD、诊断、正确主体与无数据负例；mock host不能代签Rust。
+- AC-5：适用 `test:ui -- pixel_world_host`、canonical `build:viewer`、文档检查及diff hygiene；旧 `build:software-safe`仅在真实存在的compat脚本范围使用。
+- AC-6：A操作在途选择B、推荐改变、列表重排、重连，回执仍属于A原操作；无Agent绑定结果不借B或首项。
+- AC-7：主体/权威反馈缺失、玩家级结果、草稿、pending/unknown和环境活动不合成Agent成功或delta。
+- AC-8：位置来源/时效、partial计数、失效/撤权及旧回复不被UI抹平；高后果操作沿原authority重验。
+- AC-9：renderer启动与ready后失效均可解释、安全恢复；没有第二JS世界、旧命中或重复提交。
+- AC-10：5秒首读、密度、语言/输入和图形矩阵按专项手册取得相应证据，不能以构建通过代签。
+
+AC-6/7承接REQ-AGENT-STAGE-001/005；AC-8承接002；AC-9/10在001/003/004适用范围内细化，不另建立产品权威。
 
 ## 7. Validation & Decision Record
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
-| --- | --- | --- | --- | --- |
 
+| 范围 | 验证入口 | 证据边界 |
+| --- | --- | --- |
+| Rust派生/主体/因果 | `crates/pixel_world_bridge/src/host_state_tests.rs`；[PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)。 | 真实Rust输出和mock host分别记录。 |
+| HUD/Feed/键盘/语言 | `pixel_world_host.test.jsx`及[S6](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md)。 | DOM不证明GPU/真人理解。 |
+| 来源、partial与恢复 | [PW-PROJECTION](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-projection)、[PW-RECOVERY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-recovery)。 | 全链和真实renderer另取证。 |
+| 首读/密度/性能 | [PW-READABILITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-readability)、[PW-PERFORMANCE](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-performance)。 | 不把设计预算写成实测结果。 |
 
-| 决策ID | 选定方案 | 备选方案（否决） | 依据 |
-| --- | --- | --- | --- |
-| DEC-WS-046-COMM-1 | 第一阶段只扩 host 商业语义层，不扩 runtime snapshot 协议 | 立即新增设施/生产线/资源流协议 | 现有 gameplay summary 已能表达目标、阻塞、下一步与玩家意图；先压实 player leverage 展示，避免横跨 runtime/viewer 的高风险大改。 |
-| DEC-WS-046-COMM-2 | renderer diagnostics 默认折叠 | 保留 renderer badges 与调试按钮在 pixel-world 首屏 | 商业化入口应让玩家先读目标、Agent 与世界变化；renderer 状态属于诊断信息。 |
+DEC-WS-046-COMM-1：复用现有Rust显示语义层，不为首屏扩世界协议。DEC-WS-046-COMM-2：诊断次级，世界/目的/结果优先。主体与时效修订是实施输入；本文件不记录本次CI或宣称代码已经修复，实际结果由PR/Task保存。

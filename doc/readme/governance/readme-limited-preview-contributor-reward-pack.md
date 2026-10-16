@@ -26,6 +26,9 @@ Default non-countable examples:
 - vague praise with no evidence
 
 ## 2. Scoring Sheet
+
+Use [reward-pack PRD §7](readme-limited-preview-contributor-reward-pack.prd.md#7-执行模板执行版) as the single source for contribution base scores (§7.1), quality modifiers (§7.2), and recommendation bands (§7.3). This sheet records those inputs; it does not define another scoring rule or approve a distribution.
+
 | Field | Value |
 | --- | --- |
 | Contributor |  |

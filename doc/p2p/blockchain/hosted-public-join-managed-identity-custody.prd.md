@@ -66,7 +66,7 @@
   - PRD-P2P-029-F: As a player, I want an optional path to bind an external wallet or move to self-custody later, so that managed onboarding does not lock me into browser-only trust.
 - Critical User Flows:
   1. Flow-P2P-029-001: `访客打开 hosted_public_join URL -> 先拿 guest session -> 浏览世界 -> 点击开始游玩`
-  2. Flow-P2P-029-002: `用户选择邮箱登录 -> 收到 OTP challenge -> hosted account 验证通过 -> 生成或恢复 hosted_account_id`
+  2. Flow-P2P-029-002: `用户选择推荐的通行密钥或可选邮箱登录 -> 按多凭证合同完成认证 -> 生成或恢复 hosted_account_id；世界准入独立检查`
   3. Flow-P2P-029-003: `account service 为用户恢复 signer_ref 和 player_id -> session broker 签发 player_session + device_session -> runtime 完成 entity bind`
   4. Flow-P2P-029-004: `玩家执行普通玩法输入 -> 浏览器只用 device session key 或 session token -> runtime 校验 capability，不触发 custody sign`
   5. Flow-P2P-029-005: `玩家执行 prompt_control_apply / main_token_transfer 等高风险动作 -> step-up auth -> policy engine 评估 -> custody service 出签 -> runtime 验证并执行`
@@ -75,7 +75,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Hosted account | `hosted_account_id/login_channel/login_hint/verified_at/status` | 邮箱发码、校验、恢复账户 | `guest -> challenge_issued -> verified -> active/frozen` | 同一登录因子可映射多个设备 session，但只能映射一个当前主账户真值 | `identity plane` 负责 |
+| Hosted account | `hosted_account_id/player_id/status`；具体凭证字段归多凭证合同 | 推荐通行密钥、可选邮箱，验证凭证并恢复稳定账户 | `guest -> challenge_issued -> verified -> active/frozen` | 同一登录因子可映射多个设备 session，但只能映射一个当前主账户真值 | `identity plane` 负责 |
 | Device session | `device_session_id/player_session_id/device_pubkey/expires_at/risk_level` | 浏览器建立/刷新/撤销短期设备会话 | `issued -> registered -> refreshed -> expired/revoked` | 设备会话必须有限 TTL；浏览器只允许存 `session handle + device key handle`，不存长期 signer 明文私钥 | `public player plane` + `identity plane` |
 | Managed signer reference | `signer_ref/custody_mode/algorithm/backend_class/account_binding` | 服务端创建、恢复、停用或迁移托管 signer | `provisioning -> active -> step_up_required -> frozen/migrated` | 运行时只认 `signer_ref` 及签名证明，不认浏览器自报托管私钥 | `custody plane` 负责 |
 | Sign authorization | `action_id/policy_class/step_up_result/audit_id/signature_proof` | 高风险动作先授权再出签 | `requested -> challenged -> approved -> signed -> consumed/denied` | `main_token_transfer`、治理与高风险 prompt/control 必须经过 step-up 和风控；失败时返回结构化错误 | `policy engine` + `custody plane` |
@@ -182,7 +182,7 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-P2P-029-001 | `hosted_public_join` 默认走邮箱 hosted account，而不是用户手填公私钥 | 让新用户自己保存或输入公私钥 | 普通玩家 onboarding 成本过高，且无法支撑恢复、风控和运营收口。 |
+| DEC-P2P-029-001 | `hosted_public_join` 默认推荐通行密钥，邮箱为可选兼容方式；不要求用户手填公私钥 | 让新用户自己保存或输入公私钥 | 原邮箱默认决策已由[多凭证合同](hosted-public-join-key-based-onboarding.prd.md)及本页 SC-1 / AC-2 承接；保留稳定身份、恢复、风控和 custody 独立边界。 |
 | DEC-P2P-029-002 | 浏览器只持有设备级短期会话材料，长期玩家 signer 留在 custody plane | 继续把 `privateKey` 持久化到浏览器 localStorage 作为正式方案 | 这与 hosted access “浏览器不持有长期 signer” 的既有边界冲突。 |
 | DEC-P2P-029-003 | 上层冻结 `signer_ref + sign API` 契约，底层后端允许 `KMS/HSM` 或 `KMS-wrapped sealed-key backend` | 直接把产品方案写死为单一云 KMS 的具体 key API | 产品首先需要稳定的 trust boundary，而不是把运行时算法/成本约束提前硬编码进 PRD。 |
 | DEC-P2P-029-004 | 自托管升级先支持 `bind external wallet` / `transfer-out`，不要求 MVP 导出托管私钥原文 | 把“导出原始托管私钥”当成 MVP 必备功能 | 迁移能力重要，但“把私钥直接吐给浏览器”不是 hosted onboarding 的最优安全默认值。 |

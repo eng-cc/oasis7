@@ -49,3 +49,18 @@ it('passes finite directory queries without filesystem or shell proxy arguments'
   await bridge.documentDirectory(query);
   expect(mock.invoke).toHaveBeenLastCalledWith('query_document_directory',{query});
 });
+
+it('passes semantic tree occurrence and same-snapshot filters through one finite command', async () => {
+  const query = {view:'product',parentOccurrence:'product/module/topic',lifecycleFilter:'current',kindFilter:'prd',pairingFilter:'missing',inventory:{schemaVersion:1,projectId:'project',snapshotId:'snapshot',query:'设计',readFilter:'all',cursor:'cursor'}};
+  await bridge.documentSemanticTree(query);
+  expect(mock.invoke).toHaveBeenLastCalledWith('query_document_semantic_tree',{query});
+});
+
+it('uses independent finite personal reading commands with explicit project and baseline scope',async()=>{
+  const scope={schemaVersion:1,projectId:'project',baselineMode:'tracked-working-tree',baselineOid:'head'};const key={...scope,view:'product'};
+  const state={filters:{query:'',readFilter:'all',lifecycleFilter:'current',kindFilter:'all',pairingFilter:'all'},expandedRoutes:[],parentRoute:[],selection:null,treeScrollTop:0,detailScrollTop:0};
+  await bridge.loadDocumentTreeLastView(scope);expect(mock.invoke).toHaveBeenLastCalledWith('load_document_tree_last_view',{scope});
+  await bridge.loadDocumentTreeReading(key);expect(mock.invoke).toHaveBeenLastCalledWith('load_document_tree_reading',{key});
+  await bridge.saveDocumentTreeReading({key,state});expect(mock.invoke).toHaveBeenLastCalledWith('save_document_tree_reading',{request:{key,state}});
+  await bridge.resetDocumentTreeReading(key);expect(mock.invoke).toHaveBeenLastCalledWith('reset_document_tree_reading',{key});
+});

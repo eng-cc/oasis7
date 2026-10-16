@@ -17,14 +17,16 @@
   - SC-3: 结算未上链；
 
 ## 2. User Experience & Functionality
-- User Personas: 协议维护者、任务执行者、质量复核者。
-- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
-- User Stories: As a 维护者, I want oasis7 Runtime：可兑现节点资产与电力兑换闭环 的需求结构化, so that implementation is auditable.
-- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
-- Functional Specification Matrix:
+- User Personas: 节点资产账本维护者、兑换执行者与签名/恢复审计复核者。
+- User Scenarios & Frequency: 积分结算铸造、RedeemPower、签名策略校验与快照恢复时。
+- User Stories: 作为资产维护者，需要按原身份与预算条件把积分记为受限 PowerCredit，兑换时保持资产、储备与目标 Agent 电力一致。
+- Critical User Flows: EpochSettlementReport -> 按原 points_per_credit 与签名治理检查生成 mint 记录和受限余额 -> RedeemPower 校验余额、nonce、最小量、epoch 储备/上限及签名 -> 成功时扣资产/储备并增加目标电力，失败保留可审计拒绝 -> 快照/replay 复核一致性。
+- Functional Specification Matrix（仅承接下文既有专业合同；不新增实现或验收结论）:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+| 结算铸造 | NodeRewardMintRecord、NodeAssetBalance | 按结算与签名策略形成余额/累计统计 | 积分结算进入链状态与快照 | floor(awarded_points / points_per_credit) | PowerCredit 不可直接转账 |
+| 电力兑换 | RedeemPower、ProtocolPowerReserve | 先验余额/nonce/最小量/储备与上限 | 成功产生 PowerRedeemed；失败为拒绝 | 沿原比例与 epoch 限额 | 遵守既有签名与 node 绑定 |
+| 审计恢复 | snapshot、RewardAssetInvariantReport | 回放复核余额/储备与签名策略 | 异常检测，不自动修复或对账 | v1 摘要不等于私钥签名 | 策略无法满足时 fail closed |
 - Acceptance Criteria:
   - AC-1: **RPA-1：可兑现资产层（PowerCredit）**
   - AC-2: 新增协议资产 `PowerCredit`（不可直接转账，先支持系统铸造与兑换燃烧）。
@@ -43,13 +45,13 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Architecture Overview: 按下文资产/储备账本、结算 mint 记录、兑换动作事件与签名治理分层；不改变资产比例或兑现范围。
 - Integration Points:
   - `doc/p2p/node/node-redeemable-power-asset.prd.md`
   - GitHub Issue / GitHub Project
   - `testing-manual.md`
-- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
-- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+- Edge Cases & Error Handling: 余额/储备不足、nonce 重放、最小量或 epoch 上限不满足时拒绝；缺少所需签名或绑定 fail closed。旧快照可反序列化不免除策略与 invariant report 复核。
+- Non-Functional Requirements: 铸造/燃烧/兑换守恒和快照回放一致；审计检测不自动修复，不证明 custody 或生产 readiness。
 - Security & Privacy: 不引入敏感信息与本地绝对路径。
 
 ### 原文技术约束（保真）
@@ -178,13 +180,13 @@ DomainEvent::PowerRedeemRejected {
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-P2P-MIG-098-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+| 原 AC 与 §4 专业合同 | 对应业务变更的 PR / 实际验证记录 | `test_tier_required` + `test_tier_full` | AC-1..6 与 §4 测试策略：required 验证 points->credits 守恒、兑换扣账/电力一致、储备不足/nonce 重放拒绝和快照余额；full 保留多节点多 epoch、重启/replay、libp2p 状态一致性抽样；MIG-096/097 签名/审计验证独立保留。 | 既有专业行为及负向边界；不代签当前运行通过 |
 | PRD-P2P-MIG-096-001 | redeemable-asset-audit-authority | `test_tier_required` + `test_tier_full` | v1 摘要、签名校验、invariant report 与恢复一致性 | Reward asset audit |
 | PRD-P2P-MIG-097-001 | redeemable-asset-signature-authority | `test_tier_required` + `test_tier_full` | v2/redeem 签名、治理拒绝路径与快照策略回归 | Reward signature governance |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-PRD-P2P-MIG-098-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
+| DEC-PRD-P2P-MIG-098-001 | 历史文档迁移：逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标” -> 第 1 章。
@@ -231,3 +233,25 @@ Trace refs: O7-REQ-9804d9d7-2c75-475f-b321-5c4ed36276b5；唯一声明：[世界
 - 原义务：状态与回放一致性、审计与签名治理演进、MIG-096验收；mint/burn/balance/record与快照/replay保持一致；invariant report用于检测而非自动修复，旧快照可读取不免除签名策略与报告复核。
 - 原验证入口：[本文件验证与决策记录](#6-validation--decision-record)；具体业务场景仍按本文件第4章与原AC，不以§6文档迁移检查代签业务测试。
 - 有限接收：[审计与恢复检测异常而不自动修复设计](node-redeemable-power-asset.design.md#des-economic-power-audit)；不证明mainnet或生产恢复，不恢复历史viewer flags入口。
+
+## 历史 strictification 迁移记录（不属于业务流程或验收）
+
+以下保留迁移时的原流程、矩阵、结构说明和验证来源，仅供 Git history / 原 GitHub task evidence 追溯；`draft -> active -> done` 指文档迁移，不是运行状态。正文流程与 §6 现在承接本文原 AC/技术合同，未改变经济参数、权限、实现状态或重新激活前置。
+
+- User Personas: 协议维护者、任务执行者、质量复核者。
+- User Scenarios & Frequency: 每次专题改动前后执行需求核对、测试回归与状态回写。
+- User Stories: As a 维护者, I want oasis7 Runtime：可兑现节点资产与电力兑换闭环 的需求结构化, so that implementation is auditable.
+- Critical User Flows: `阅读旧文档 -> 重写为 strict PRD -> 回写项目文档 -> 校验提交`。
+- Functional Specification Matrix:
+| 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
+| --- | --- | --- | --- | --- | --- |
+| 专题迁移 | 需求/任务/依赖/状态/测试层级 | 逐篇重写并校验 | `draft -> active -> done` | 以原文约束点映射为主线 | 维护者写入，复核者抽检 |
+- Architecture Overview: 保持原文技术边界，按 strict PRD 结构重排。
+- Edge Cases & Error Handling: 命名不一致、章节缺失、引用断链需在同提交修复。
+- Non-Functional Requirements: PRD-ID/任务映射完整；治理检查通过。
+
+原迁移验证行（仅文档结构，不代签业务验收）：
+| PRD-P2P-MIG-098-001 | T0~Tn | `test_tier_required` | 文档治理检查 + 章节完整性核验 | 专题文档可维护性 |
+
+原迁移决定：
+| DEC-PRD-P2P-MIG-098-001 | 逐篇阅读后人工重写 | 直接重命名 | 保证语义保真和可审计性。 |

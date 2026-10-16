@@ -1,86 +1,137 @@
 # 外部 Agent 大世界 Web 与桌面可视化系统设计
 
-- 设计状态：target contract，待实现与独立评审；不是当前能力或发布报告。
-- Canonical repository：`eng-cc/oasis7`；审读基线：`03fb58784a65de9f02a43dfeafc3e882bb04e5f2`（已合入产品 PR #4493）。
-- Owner role：`viewer_engineer`；最后审读：2026-10-10；新增合同 revision：`1`。
-- 产品入口：[外部 Runtime 游玩](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)；[玩家与 Runtime 协作](../../product/agents-world-simulation/player-runtime-collaboration.prd.md)。
-- 系统总入口：[LLM / external runtime 系统入口](../llm/README.md)；写作规范：[系统设计规范](../../engineering/doc-governance/system-design-writing-standard.design.md)。
-
-本文中的新组件、路由、记录和测试场景均为后续实施输入。`accepted` 只表示所属权威已受理，世界效果必须读取既有权威回执；文档合入不代表这些接口已经上线。
+- 设计状态：`target contract`；当前实现和运行证据不得由本文推定。
+- Canonical repository：`nil-studio/oasis7`；审读基线：`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`。
+- Owner role：`viewer_engineer`；协作：runtime_engineer、agent_engineer、game_visual_interaction_designer、qa_engineer、Launcher owner。
+- 最后审读：2026-10-16；文档合同revision：2，不是已发布API major。
+- 产品入口：[世界舞台](../../product/agents-world-simulation/player-readable-world-stage.prd.md)、[外部Runtime游玩](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)、[玩家与Runtime协作](../../product/agents-world-simulation/player-runtime-collaboration.prd.md)。
+- 依赖authority：[Game API](../llm/external-agent-game-api.design.md)、[Runtime协作](../../world-runtime/runtime/player-runtime-collaboration.design.md)、[Viewer手册](viewer-manual.manual.md)。
 
 ## 1. 问题、目标与非目标
 
-玩家需要在网页和桌面客户端内探索正在被外部 Runtime 驱动的同一持久世界，而非只看 Agent 日志、旧世界截图或一个打开浏览器按钮。本设计定义共享读模型、空间查询、选择/跟随、任务叠加、native 容器和故障降级。
+让玩家在Web/native界面观察同一持久世界，从总览进入局部，理解Agent/设施/路线/事件，连接合法高层指导并读取原行动结果。需要连接现有snapshot→Rust render state链路与未来授权、分页、流式大世界读模型。
 
-非目标：另建世界引擎、通过地图直接采集/移动/建造、所有玩家全图实时可见、恢复退役的第二 Viewer 工具链或一次实现所有地形/事件数据。空间规则与阶段依赖消费现有世界舞台 PRD，缺失来源必须诚实显示未知。
+目标不仅是画出对象，还包括主体、权限、来源、时效、部分性、交互与恢复可验证。非目标：另建世界引擎/第二Viewer、地图直接采集/建造/移动、全图全知、修改共识或世界schema、自动调用模型、把所有实体套Agent控制。
+
+§9是待测的初始质量目标，不能写成当前实测成绩。
 
 ## 2. 上游约束与相关角色
 
-Viewer/视觉 owner 维护共享场景和交互；Runtime owner 提供 authoritative world binding、位置/关系及回执；身份 owner 提供 audience 和撤销语义；Launcher owner 负责实际客户端容器与发行平台。浏览器与 native 各自取证，不互相代签。
+Runtime拥有世界、控制版本、观察资格、admission及持久结果；API/身份owner提供授权查询、Context、撤销与原操作恢复；Viewer只派生显示/本地交互；Launcher交付受限原生容器；QA分开核验数据合同、GPU、各平台与真实世界。
 
 ### 2.1 需求承接与分配表
 
-| 上游条款 | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 排除与未覆盖范围 |
+| 上游 requirement / product AC | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | Web 与桌面各自实际操作同一真实世界 | [view-native](#view-native) | viewer_engineer / qa_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-EXT-016](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-016) | 从总览浏览局部并返回目标，未知信息不伪造 | [view-query](#view-query) | viewer_engineer / runtime_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-EXT-017](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-017) | 世界现场只连接合法高层指导与权威回执 | [view-guidance](#view-guidance) | viewer_engineer / agent_engineer | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[AC-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-001) | 目标、因果与下一步优先于装饰和日志 | [view-scene](#view-scene) | viewer_engineer / game_visual_interaction_designer / qa_engineer | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[AC-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-002) | 陈旧、冲突与范围外观察保持来源语义 | [view-query](#view-query) | viewer_engineer / game_visual_interaction_designer / qa_engineer | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-003) | 多尺度定位与对象检查保持任务上下文 | [view-query](#view-query) | viewer_engineer / game_visual_interaction_designer / qa_engineer | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-AGENT-STAGE-004](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-004) | 网页和原生客户端都具备界面内交互 | [view-native](#view-native) | viewer_engineer / game_visual_interaction_designer / qa_engineer | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-AGENT-STAGE-005](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-005) | 选中可见对象不授予新的控制权 | [view-guidance](#view-guidance) | viewer_engineer / game_visual_interaction_designer / qa_engineer | 不证明所有平台、全图可见或公开发行 |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[AC-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-001) | 世界/目的/blocker/下一步与原结果可读，选择不改归属。 | [共享舞台](#view-scene) | Viewer/visual；Runtime因果。 | 局部HUD/截图不证明真人理解。 |
+| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[AC-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-002) | 来源/时效、冲突、旧响应、撤权与生效重验闭环。 | [观察到生效](#view-admission) | Runtime/API Context、fence、授权与原操作。 | Viewer不另建真值裁决/admission。 |
+| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-003) | 多尺度探索、partial适配、跟随/返回与有界密度。 | [探索查询](#view-query) | 授权空间投影、Rust/renderer、QA。 | 地形LOD不等于完整semantic zoom或已测容量。 |
+| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-AGENT-STAGE-004](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-004) | Web/native自身交互、同义结果、重连和图形恢复。 | [原生与逐端合同](#view-native) | Launcher/WebView、发行资产、QA。 | Web成功/外部浏览器不代签原生。 |
+| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-AGENT-STAGE-005](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-005) | 只读选择进入合法高层指导，原操作不重复世界效果。 | [指导边界](#view-guidance) | owner API、Runtime task/goal/receipt。 | 不新增地图动作或模型权限。 |
+| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | 两表面各自实际操作同一世界。 | [原生与逐端合同](#view-native) | Viewer/Launcher/QA。 | 不证明真实Runtime或完整首局。 |
+| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-EXT-016](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-016) | 概览至局部、搜索并返回目标，未知不伪造。 | [探索查询](#view-query) | 授权索引及位置/关系。 | 不授予全图情报。 |
+| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-EXT-017](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-017) | 世界现场连接合法高层指导和原回执。 | [指导边界](#view-guidance) | Agent/Runtime协作。 | accepted/动画不是world effect。 |
 
 ## 3. 当前状态、目标状态与差距
 
-| 基线 | 已知事实 | 新设计目标 / 不可外推 |
+| 当前基线 | 目标适配 | 实现边界 |
 | --- | --- | --- |
-| Viewer | `viewer-manual.manual.md` 明确 canonical `crates/oasis7_viewer/viewer.html` 与 `oasis7_viewer_live` | 扩展同一 Viewer，不建立第二份 world state |
-| 世界读回 | 手册说明 runtime writer 与 Observer 使用可验证 immutable generation checkpoint | 新聚合/空间读模型必须绑定这一来源，不能从进程内旧场景合成当前世界 |
-| 当前显示 | 现有舞台产品文档明确旧 2D overview/zoom 已退役，P1-A/B/C 有事实前置 | 新多尺度设计是 target，不能宣称现行已可用 |
-| Native | launcher 控制面及 `oasis7_launcher_ui` 并不证明客户端内大世界渲染 | 增加隔离 WebView host 和实际内嵌 Viewer；运行证据待补 |
+| viewer.html/viewer.js及oasis7_viewer_live，software_safe仅alias。 | 共用同一Viewer build与应用状态。 | 不建立第二入口。 |
+| host_state.rs::build_render_state从有界snapshot派生DTO；JS消费Rust。 | 数据客户端先组装明确授权范围/版本，再交Rust和renderer。 | 分页WorldView不是完整snapshot的直接替身。 |
+| 按类型reconcile、位置来源、地形LOD和宿主选择事件。 | 保留ABI，补partial/裁剪/来源侧带状态。 | 不把旧每帧全量重建当当前事实。 |
+| HUD active-agent fallback可流入next-action/receipt target。 | 分离焦点、原提交、原回执主体。 | 待代码整改与负例，文档不宣称已修复/越权已发生。 |
+| Launcher控制面不证明内嵌世界。 | 同build的受限WebView世界窗口。 | 平台支持/运行证据待独立验证。 |
 
 ## 4. 边界与结构
 
 <a id="view-scene"></a>
-一个共享 Viewer 应用负责 world-first 场景、任务详情、消息/审批和恢复；Web 与 native 加载同一有内容 hash 的 Viewer build。共用类型与应用状态，不让两入口各自计算资源余额或判定任务完成。
+### 4.1 共享舞台与四层职责
 
-分为四层：`WorldProjectionReader`（服务端按授权生成读模型）；`WorldDataClient`（分页、快照/游标、重连与请求代际）；`WorldSceneAdapter`（既有 renderer 的空间、LOD、选择与回退）；`TaskContextPanel`（来自协作 snapshot 的目标/问答/审批与回执引用）。任务控制 UI 不取代世界主舞台；其来源和时效独立于画面刷新。
+```text
+Runtime checkpoint / authorized events
+ -> WorldProjectionReader (server auth, source cut, spatial projection)
+ -> WorldDataClient (pages, generations, cache, recovery)
+ -> WorldSceneAdapter -> Rust host_state -> WASM renderer + accessible host UI
+                    -> TaskContextPanel (authorized task/goal/original receipt)
+Owner guidance -> existing owner API -> Runtime admission -> original receipt
+```
 
-数据流是 Runtime checkpoint/events → 授权读模型 → Web/native；玩家指令是受控 owner API → Runtime control commit，不能写 renderer 内存后显示世界成功。外部 executor 的私有 observation 不能直接广播给 Viewer；公开/私有 audience 分开投影。
+Viewer不拥有第二资源账本、任务完成规则或admission。外部executor的私有observation不能广播给Viewer；按audience投影。图形输入只含绘制所需获准字段，token/模型Key/私有prompt/其他主体内容不进render DTO、DOM probe或日志。
+
+观察焦点只控制浏览；原操作固定world/Agent/task/goal与操作身份；回执按原身份关联，缺绑定不借active_agent_id。具体映射见[主体绑定](viewer-pixel-world-player-readable-rendering.design.md#subject-binding)。目的/blocker/下一步与原结果的可读性按[质量预算](#view-quality)及专项首读验收，TaskContextPanel不能取代世界舞台成为诊断面。
+
+<a id="view-adapter"></a>
+### 4.2 当前链路到WorldView的适配
+
+| 输入语义 | 适配与消费者 | 禁止行为 |
+| --- | --- | --- |
+| 世界坐标基准 | world_bounds是world基准；viewport bounds独立。复用既有单位/轴/world-to-canvas。 | 用当前页包围盒重定义世界尺度或轴向。 |
+| binding/cut/projection revision | 同cut页组装一个只读视图，范围/版本/完整性侧带保留；先验完整签名投影再裁剪显示。 | 混多个cut；裁未知字段后验签。 |
+| 身份/权限 | cache key含部署/world/主体/audience/projection/query generation；应用前重验。 | 跨世界/账号按裸entity ID复用缓存。 |
+| 几何与时效 | 几何：权威/地点派生/关系布局/缺失；时效：current/last-known/unknown/conflict/expired。 | 旧权威位置转当前snapshot，刚刷新派生位置变精确。 |
+| 旧position_source | 当前权威坐标→snapshot；地点派生→location_derived；缺失→missing；其他组合保留侧带并有陈旧/抽象样式。 | 不能表达时效却绘成current；应抑制该动态图形并给文本。 |
+| partial/页 | 同query scope合并并保留coverage/completeness。 | 一页缺项就触发全世界删除。 |
+| 删除/淘汰 | 完整同cut scope替换或明确获准tombstone才说明相应删除；viewport/LRU只是本地不绘制。 | 过滤/裁剪/配额淘汰说成对象不存在。 |
+| 关系/事件 | 独立authority、有效身份/端点/时效；无anchor事件留Feed。 | location_id/邻近自动生成关系，最近Agent作为事件位置。 |
+| 目标/回执 | 独立协作流的绑定状态，不一致标待同步。 | 世界帧/当前选择改写task/原receipt。 |
+
+适配层不合成完整Runtime model。现有Rust函数需要集合时，仅提供明确的授权可见集，不能丢partial或把本地reconcile删除解释为世界删除。新增读模型字段属于查询目标合同，不修改世界状态、既有WASM ABI或旧公开snapshot schema。
+
+坐标有限且符合现有范围/单位，签名整数不经JS Number丢精度；只在验签/校验后转成局部显示数值，不反写权威坐标。camera、DPR、CSS hit region与renderer用同一转换来源，以角点/中心/缩放/高DPR fixture验证。
 
 ## 5. 关键运行流程
 
 <a id="view-query"></a>
-### 5.1 从世界总览到局部
+### 5.1 进入、探索、选择和跟随
 
-进入页面先取得部署身份和许可范围，再请求 world summary/初始 viewport query。summary 只聚合可披露对象，未知部分明确 unknown，不披露隐藏对象精确数量或位置。视点的平移/缩放只修改本地 camera；稳定后以有界区域/尺度发只读查询，旧 request_generation 返回时丢弃，不覆盖最新视点。
+先取得部署/world身份与许可范围，再查询summary/初始viewport；授权先于聚合/计数，unknown不泄漏隐藏数量或位置。按[适配合同](#view-adapter)组装页/来源，按[质量合同](#view-quality)处理密度和输入预算，不能只实现拖动画布就宣称多尺度探索完成。
 
-世界/区域/Fragment/对象的层级取自权威关系或明确标识的派生布局；坐标缺失时可以用关系位置展示，但标记 position_source=relationship_layout，不能用于计算可执行路线/距离。Last-known 与当前 confirmed 的样式和可访问文本不同；未知不是零资源或空世界。
+平移/缩放立即改本地camera，稳定后合并有界只读query；取消仅节流，正确性由generation保证。失败保留仍获准的旧范围并标最近已知，不给空世界。搜索区分当前Targets过滤和授权空间搜索，结果只提供稳定ID/来源/定位线索，不自动提交。
 
-搜索返回许可范围内稳定 entity ID 与定位线索；select/follow 绑定 world_id、entity_id 与当前 query generation。跟随丢失可信位置时停止自动追踪并显示 last-known，可退出跟随或回到主目标，不默认选择另一个 Agent。
+选择/跟随绑定world/entity/selection generation。显式跟随只消费当前可信位置；手动浏览退出跟随，失效暂停，恢复数据不自动抢回camera。重叠候选列表、聚合下钻、返回总览/主目标都只改读状态；目标无位置则返回合法文本，不用fallback坐标。
 
-### 5.2 增量与并发响应
+### 5.2 分页、增量与并发
 
-初始 snapshot 与 event cursor 必须同一 source cut；增量按 stream 分区顺序应用。world 流和 task 协作流是不同 cursor，不用客户端时间把它们拼成原子世界事务；跨流 overlay 保留各自 WorldBinding/goal revision 与“待同步”状态。
+初始snapshot与resume cursor来自同source cut；page token绑定world/audience/query/projection/cut，失效reset，不能用下一cut补旧页。可渐进显示合法页但始终partial；服务器明确完整且全部页验证完才complete。单页200项/实际编码2 MiB，超大单项明确不可用/资源限制，不截字段假装完整。
 
-分支/reorg/generation 不匹配、cursor 失效、权限 revision 改变或事件缺口时，清除受影响缓存并重取 snapshot。不能先把旧 owner 私有内容绘制后再等待鉴权；数据层在应用响应前重验当前 audience/selection generation。断连只使后续来源变 stale，不撤销已确认历史成果。
+增量按服务分区顺序，用world/epoch/stream/event身份去重；同身份异内容、缺口、cursor失效、reorg或投影不兼容时reset，不按客户端时间排序。world/task分别维护cursor/binding/revision，overlay不一致显示待同步，不拼成原子事务。
+
+request_generation是客户端请求代际，不证明世界新旧；current需可验证cut/binding，不可比较cut不能以较晚HTTP响应覆盖。撤权/换账号先清私有缓存、图形、详情、搜索与在途结果，再初始化新范围，不先绘制后鉴权。
 
 <a id="view-guidance"></a>
 ### 5.3 从对象到高层指导
 
-点击 Agent 打开经过服务器授权的 task context；有当前 owner 权限才提供目标/Prompt/审批/stop 入口。点击地图、地形、工厂、路线或选择其他 Agent 只作观察，不构造 action:submit。客户端权限提示仅是体验，服务器每次写入仍重验。
+只对当前合法owner开放目标/Prompt/审批/stop。地图、terrain、设施、路线及其他Agent点击不构造action:submit。客户端提示不代替服务器逐次授权。选择不固定业务主体；明确提交后原操作身份不可被新选择改写。
 
-提交目标携带 expected revision 与原 client_operation_id；显示 saved、activation pending、active、executor read/adoption/context-used 的真实区别。审批必须是明确操作与精确方案摘要，普通 Chat 输入不能批准。世界完成显示必须通过受权 receipt 回读并匹配 Agent/任务，不能引用别人的生产结果或用 animation 代替。
+目标saved、activation pending、active、executor read/adoption/context-used与world result分开。审批需明确操作及精确方案摘要，普通Chat不是批准。提交沿原owner API expected revision/client_operation_id，效果只由匹配原操作/Agent/task的受权receipt确认；[权威重验](#view-admission)是完整链路的生效边界。关窗口不停止独立执行器，renderer健康不代表executor状态。
+
+<a id="view-admission"></a>
+### 5.4 从观察到生效的权威重验
+
+Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[AC-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-002)。
+
+[查询代际](#view-query)和[来源适配](#view-adapter)保证显示不伪造当前观察；下表连接到实际权威生效，不新增Viewer自己的admission。
+
+| 观察/操作 | Viewer表达 | 权威边界 |
+| --- | --- | --- |
+| 当前授权只读 | 展示/定位/检查。 | 读取授权和cut，不授予写权。 |
+| 最近已知/冲突/未知 | 获准内容可只读，纯建议/草稿标待核验。 | View DTO不能铸造Context/grant/成功，预览不生效。 |
+| 激活目标/批准/高后果操作 | 固定主体/方案/expected revision，披露旧观察。 | 原Game API Context/action合同重验主体、权限、控制/目标版本、fence及适用世界条件；Runtime最终裁决资源/规则。 |
+| 预览后条件变化 | stale/conflict/重新授权；改方案必须重新确认。 | 校验与实际接受/生效权威事务关联，不是Viewer独立GET即获许可。 |
+| stop/撤销/原结果查询 | 不因图形失败或观察陈旧统一置灰。 | 各自owner授权和控制合同，不能绕过撤权。 |
+| 丢reply/结果unknown | 保留原operation，显示recovery_required并回查。 | 不新键/换Agent/重新报价替代已提交请求，按原幂等恢复。 |
+
+顺序为固定主体与方案→读取既有权威Context/能力→纯预览→明确确认→原API版本约束提交→pending/拒绝/待确认→原结果回读。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
+
+记录可脱敏关联的原操作、显示cut/分类、expected/实际控制版本及权威原因供对账，不公开token、观察正文或私有推理。
 
 ## 6. 接口与数据合同
 
-路由统一挂在 Game API `/v1/game/worlds/{W}/views`，不新增第二个 auth 系统。
+目标路由为Game API `/v1/game/worlds/{W}/views`，复用鉴权。以下为实施输入，不声称端点已部署；wire schema由API owner与实现锁定，未知版本明确blocked/升级。
 
 ```text
 WorldViewQueryV1 = {api_revision, request_generation, scope_ref,
-  scale: world|region|local, bounds?, focus_entity_id?, filters,
-  page_size, cursor?}
+  scale: world|region|local, bounds?, focus_entity_id?, filters, page_size, cursor?}
 WorldViewSnapshotV1 = {world_binding, snapshot_id, projection_revision,
   audience_revision, source_cut, request_generation, coverage,
   entities, relations, events, next_cursor?, resume_cursor,
@@ -88,71 +139,130 @@ WorldViewSnapshotV1 = {world_binding, snapshot_id, projection_revision,
 EntityViewV1 = {entity_id, kind, parent_ref?, label,
   position?, position_source: authoritative|relationship_layout|last_known|unknown,
   observed_at_tick?, valid_at_source_cut, visibility, activity?,
-  task_refs, receipt_refs, authorized_guidance_capabilities}
+  task_refs, receipt_refs, authorized_guidance_capabilities, provenance?}
+provenance = {geometry_source: authoritative|location_derived|relationship_layout|missing,
+  freshness: current|last_known|unknown|conflict|expired,
+  source_ref, observed_at_tick?, valid_at_source_cut, reason?}
 ```
 
-实体类型/物理单位/合法关系复用 semantic positioning、Fragment LOD 和 Runtime schema；JSON 的 tick/revision 与 API 保持十进制字符串。`activity` 与 receipt 是不同字段，unknown 不使用默认坐标补齐。授权过期的 reply 不返回差异及原私有 label。
+provenance区分几何和时效，旧position_source仅兼容表达。缺provenance时只保留旧输入可证含义，不能凭authoritative升级current；没有独立观察authority/binding证明则unknown/last-known，并阻止不适用的生效。新增必要语义须版本协商，不以optional默认值让旧consumer假装支持。
 
-`POST /query` 只读；`GET /entities/{id}` 按主体重新鉴权；`GET /search` 有界 q/filter/cursor；`GET /events` 只投影获准世界事件。一个 scope/page 不足以覆盖所有信息时给 next_cursor 与 completeness，不截断后返回 complete。未具备空间 anchor 的事件显示在相邻世界 feed，不伪造 map marker。
+实体类型、单位/合法关系沿Runtime与语义定位；tick/revision为精确十进制。activity/Intent/receipt独立，unknown不填零坐标，不可见对象不回私有label/数量。
+
+POST /query只读；GET /entities/{id}重验主体且绑定cut；GET /search的q/filter/cursor和条数有界；GET /events只投影获准事件。opaque同cut cursor不能用offset替代；无anchor事件留Feed。
+
+错误沿API envelope：身份/权限不泄漏存在性；cursor失效重snapshot；cut/revision冲突重新确认；资源超限明确partial或拒绝；服务不可用不伪装空集合。只读重试有抖动、次数和总deadline，副作用失败先回查，不无限刷新。
 
 ## 7. 状态、事务与持久化
 
-camera、selection、filters、drawer 是客户端展示状态；可以按账号/world 保存轻量偏好，但不是世界事实。切换账号或 audience 缩小时删除旧私有缓存，不能跨账号恢复 selection 后泄漏详情。
+camera/selection/filters/drawer是客户端展示偏好，可按账号/world保存轻量非秘密设置；任务/审批/原操作/结果不以localStorage为共享真值。换账号/撤权清旧私有缓存和恢复键，不恢复旧selection后泄漏详情。
 
-服务端聚合和空间索引是可重建读投影，checkpoint/root 不完整时拒绝提供 current；后台索引 generation 必须和响应 source cut 对齐。任务目标、审批、operation、回执由对应权威保存，不写 localStorage 作为共享真值。
+空间索引可重建，index generation与cut一致；缺checkpoint/root、落后或不可验证不给current。先授权再聚合/计数，读投影不改世界历史。network/renderer/query/task/executor/world operation各自状态独立；已committed不因重载改pending。按字节/对象数有界LRU，pin不能绕授权或无限增长。
 
-UI 相互独立保存：网络状态、renderer 状态、当前 task/目标、executor 通信状态和 world operation 状态。renderer failure 不能变成 executor offline；已经 committed 的结果不会因页面重载显示 pending 或触发重做。
+<a id="view-recovery"></a>
+### 7.1 降级与恢复状态机
+
+| 触发 | 清理/保留 | 恢复条件 |
+| --- | --- | --- |
+| boot/loading | 稳定舞台框、获准目标与文本。 | 正确资源hash、当前读模型、实际renderer ready。 |
+| 初始GPU/资源失败 | unavailable，无第二JS世界。 | 原可信资源显式重试或文本/Targets降级。 |
+| ready后context loss/fatal | 旧命中/动画停止，旧帧非实时，合法文本/原操作保留。 | 重建会话，重应用授权视图/camera/selection并验证命中，不能只看probe。 |
+| disconnected | 来源stale，可披露历史保留，控制按authority。 | cursor/binding/audience有效才增量，否则snapshot。 |
+| query failed/partial | 标受影响范围，不误删仍有效旧范围。 | 重查scope，完成前不complete。 |
+| reorg/gap | 清失效cursor/索引，结果按权威重组状态。 | 新checkpoint和配套cursor，不重放为收益。 |
+| 账号/world/audience变化 | 先清图形/私有缓存/详情/hover/搜索/旧promise结果。 | 新授权后初始化。 |
+| 原结果未知 | 原operation和recovery_required保留。 | 查证原结果，无证据不产生第二效果。 |
+
+自动图形恢复最多一次有界尝试，失败后显式重试/文本，不无限reload。关页面/窗口只释放自有视图订阅/GPU/临时缓存，不停止独立worker或其他进程。
 
 ## 8. 部署、安全与运行约束
 
 <a id="view-native"></a>
-### 8.1 NativeWorldViewHost
+### 8.1 NativeWorldViewHost与逐端合同
 
-拟新增原生 host 作为现有桌面 Launcher 的受限世界窗口，使用系统 WebView 容器加载同一官方 Viewer build，而不是启动系统浏览器。首期架构选择共享 Web 渲染实现；WebView binding 的具体依赖版本由 Launcher owner 在实施锁定、平台试验后提交依赖，不能把当前纯数据 `oasis7_launcher_ui` 当已包含浏览器内核。
+现有Launcher增加受限世界窗口，加载同一有hash的官方Viewer build，不弹系统浏览器。Web与native共同执行[探索](#view-query)、[原结果与指导](#view-guidance)及[恢复状态机](#view-recovery)，逐平台取证，不因共享代码免验。
 
-远程世界加载受信 HTTPS 同源页面；本地世界加载显式启动的 loopback 静态/API 服务。所有导航按部署 allowlist 校验，拒绝任意第三方页获取 native bridge；生产不允许禁用 TLS 校验。native IPC 只承载窗口生命周期、用户明确的文件保存和安全存储操作，不提供通用 shell、任意文件读取或 world action 后门。
+目标选择系统WebView：macOS WKWebView、Windows WebView2；Linux等另外候选，未验证不声明支持。本表只规定新增世界窗口的实施，不重写其他组件支持范围。
 
-登录继续现有 device/session proof；一次性 bootstrap 必须绑定 trusted origin、nonce 和该窗口，secret 不放 URL。远程 browser cookie 使用 Secure/HttpOnly/SameSite 与 CSRF 校验；native 缓存不得共享模型 token。公开深链只含 world/entity/task 标识，不能携带 bearer 或隐式授予 owner 权限。
+| 组合 | 设计选择 | 上线前锁定与验证 |
+| --- | --- | --- |
+| Web桌面 | canonical Viewer和Game API。 | OS/浏览器/GPU/版本、viewport/DPR、release交互。 |
+| macOS native | 受限WKWebView窗口。 | Rust binding/锁文件、OS/架构、WASM/WebGL、签名安装/升级/恢复。 |
+| Windows native | 受限WebView2窗口。 | binding/runtime分发、OS/架构、GPU恢复、安装/升级/回滚。 |
+| 其他浏览器/移动/Linux | 独立通过后扩大支持。 | 同义旅程、安全、质量和发行资产，不继承green。 |
 
-### 8.2 渲染资源与失效
+最低版本和依赖由Launcher owner在实施候选锁定；这是明确交付项，不用已有纯数据Launcher代替内嵌内核。未通过的组合未验证/不支持，不静默打开系统浏览器计通过。
 
-沿当前 Viewer 的可选 WASM/静态资产 provenance 规则，包 hash 和版本需要与实际页面一致；缺 optional payload 则 RendererUnavailable 并保留任务文本、可信回执和返回入口，不下载任意动态代码补救。图形崩溃只重建渲染会话，不重置授权和任务。
+### 8.2 来源、认证与IPC
 
-Web 与每个声明支持的桌面 OS 均有实际资产启动和操作证据。没有通过的平台不得在支持矩阵中自动继承 Web 的 green；客户端弹浏览器不能算 native 通过。
+远程用受信HTTPS同源，本地用显式启动loopback服务；导航/redirect按allowlist，第三方页不能获native bridge，不禁TLS。IPC仅生命周期、用户明确文件保存和安全存储，无通用shell/任意文件读/world action后门。
+
+复用device/session proof；一次性bootstrap绑origin/nonce/窗口，secret不进URL。cookie沿既有Secure/HttpOnly/SameSite/CSRF；native不共享模型token缓存。深链只含world/entity/task，重鉴权后只读定位，不携bearer或自动批准。
+
+### 8.3 资产与可观测性
+
+页面/模块/字体/optional WASM沿同manifest、SHA-256和build provenance；缺失/错配明确失败，不下载任意代码补救。图形payload缺失不清合法task/receipt/control。发布区分核心UI可操作、renderer ready、完整探索，安装包存在不是可玩。
+
+分段记录读/解码/派生/reconcile/首帧/输入、payload字节、cache、reset和renderer失败阶段；标签有界，用脱敏关联和原因，不记token/prompt/私有label/坐标/其他账号数据。未测量不宣称达标。
 
 ## 9. 质量与容量
 
-大世界按视点有界查询，API page 最大 200、总响应 2 MiB。首期 Viewer 单视点最多累计 1000 个实体投影，超过改用聚合/分页并标 partial；最多突出 200 个 labels，当前目标/选中/关键 blocker 优先，不能用隐藏信息创造“对象不存在”的结论。
+<a id="view-quality"></a>
+### 9.1 容量和密度
 
-先用同一候选下的 50000 对象、多区域测试世界测绘制帧耗时、P95 查询、缓存内存和切换延迟；这是验收负载设计，不是现有并发能力声明。请求合并/取消只影响只读 query，不取消世界 operation；大列表和事件洪泛不阻塞输入、退出跟随或 stop/授权操作。
+单页最多200项、实际编码响应2 MiB；单视点累计1000实体投影、突出200labels。目标/选中/blocker/相关路线优先；超限授权聚合/分页并partial，不无声吞掉关键对象。详情可独立查但画布不无限扩容；关系端点和聚合成员负载分别记录。
+
+服务端有界空间索引、先授权后聚合；客户端合并读请求、有限cache、静态reconcile与动画分离。50000对象是测试世界规模，不是每帧传/画50000。洪泛不能阻塞输入、退出跟随、stop、原结果查询。
+
+密度先退次级标签/背景；确定性散布不证明重叠可用，还需候选选择。关键状态有非颜色信号；派生位置不作可执行距离依据；5秒首读与误归因测试按专项手册，模型审读不代替真人/L5。
+
+### 9.2 初始验收预算
+
+以下是待测目标，不是当前性能报告。A：桌面8 GiB内存、集成GPU、100 Mbps/40 ms RTT；B：同设备10 Mbps/150 ms。实际CPU/GPU/OS/浏览器、电源、刷新率、viewport/DPR必须记录，缺身份不可比较。
+
+| 指标 | 初始目标 | 边界 |
+| --- | --- | --- |
+| 核心目标/反馈/恢复UI可操作 | A冷P95≤3 s；B≤5 s。 | 从认证已完成的导航起，不等待可选renderer；登录另计。 |
+| 首个真实可交互世界帧 | A冷P95≤20 s、热≤5 s；B冷≤90 s、热≤10 s。 | 含payload下载/编译、snapshot、派生、首帧；实际字节冷/热分别报，不把占位/DOM算世界帧。 |
+| 有界query服务耗时 | P95≤300 ms。 | 50000对象授权scope；网络/响应体与e2e另报，不以热缓存替冷索引。 |
+| 本地选择/退出跟随/stopUI反馈 | P95≤100 ms；无连续1 s输入无响应。 | 只是UI接受，不等于网络/Runtime完成。 |
+| 连续平移/缩放帧间隔 | P95≤33.3 ms，P99≤100 ms。 | 1000实体/200labels、前台交互；静止按需和后台节流分开。 |
+| 应用可归因缓存 | ≤64 MiB且有对象上限。 | renderer/进程/WASM/GPU另测；LRU不删权威结果或留旧权限。 |
+| 30分钟长稳 | 无崩溃/旧命中；稳定同负载末窗口内存较初窗口增长≤10%。 | GC和测量方法明确，未知分量不以JS heap代替。 |
+
+实测失败先报告/修复或缩小支持范围；改预算须同fixture证据和owner决定，不临时放宽。方法见[专项性能验证](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-performance)。这些不是新通用CI gate，文档PR不需GPU/付费模型。
 
 ## 10. 兼容、迁移与回滚
 
-复用 canonical Viewer，不恢复退役第二 Viewer。先接受一致 snapshot/task overlay，再扩多尺度/选择，随后 native 内嵌与独立验收。保留现有 P1-A/B/C 的身份/来源/事件前置，尚未具备 anchor 的对象以未知或关系模式显示，不修改游戏规则补齐 UI。
+先修当前HUD主体/时效并补Rust/host负例；再接一致snapshot/task overlay、partial/分页/generation；之后扩空间查询、聚合、探索/性能；最后同build原生容器逐OS验收。保留旧有界snapshot时明确范围，不同时拥有两套世界真值。
 
-回滚只切回可兼容的 Viewer build 或文本降级，不能改变世界 schema、丢 pending、恢复旧授权或静默打开调试世界。旧 projection major 不受支持时明确升级/blocked，禁止用旧字段填充新响应假装完整。
+回滚只用满足主体/来源/权限的兼容Viewer或文本降级，不改世界历史、不丢pending、不恢复旧授权、不切debug世界/旧executor。不支持projection major时blocked/升级，旧构建不能正确表达时效/原操作时仅文本。P1-A/B/C前置与Feed/receipt隔离不变。
 
 ## 11. 验证设计与可追溯性
 
-普通 CI 覆盖类型、缓存代际、乱序响应、权限收窄、selection、地图只读和 controlled command。S6/实际桌面资产验证真实浏览器、WebView、可访问文本、交互与渲染故障；截图必须配相应状态/操作结果，不单独证明世界成功。
+普通CI测精度/类型、来源、partial/删除、乱序/撤权/selection/原主体与观察无副作用；fake Context不调用模型。实际S6/GPU/native/真人另验。保留[原组合手册](../../testing/manual/external-agent-runtime-contract-validation.manual.md)全部viewer-*义务，专项手册补可重复判据，不取消历史AC。
 
 ### 11.1 验证映射表
 
-| 上游条款 | 本设计条款 | 独立 obligation 与适用条件 | 准确验证方法与场景 | evidence target | 未证明范围 |
+| 上游 requirement / AC | 本设计条款 | 独立 obligation 与条件 | 验证方法 / source / scenario / environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | [view-native](#view-native) | Web 与桌面各自实际操作同一真实世界 | [viewer-dual](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-dual)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-EXT-016](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-016) | [view-query](#view-query) | 从总览浏览局部并返回目标，未知信息不伪造 | [viewer-explore](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-explore)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-EXT-017](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-017) | [view-guidance](#view-guidance) | 世界现场只连接合法高层指导与权威回执 | [viewer-guidance](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-guidance)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不单独证明真实模型、客户端或公开发行就绪 |
-| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[AC-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-001) | [view-scene](#view-scene) | 目标、因果与下一步优先于装饰和日志 | [viewer-primary](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-primary)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；[AC-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-002) | [view-query](#view-query) | 陈旧、冲突与范围外观察保持来源语义 | [viewer-freshness](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-freshness)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；[AC-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-003) | [view-query](#view-query) | 多尺度定位与对象检查保持任务上下文 | [viewer-scale](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-scale)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a；[AC-AGENT-STAGE-004](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-004) | [view-native](#view-native) | 网页和原生客户端都具备界面内交互 | [viewer-native](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-native)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明所有平台、全图可见或公开发行 |
-| Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096；[AC-AGENT-STAGE-005](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-005) | [view-guidance](#view-guidance) | 选中可见对象不授予新的控制权 | [viewer-authority](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-authority)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明所有平台、全图可见或公开发行 |
+| [AC-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-001) | [共享舞台](#view-scene) | 首读/原归属和ambient分离。 | [PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)及PW-READABILITY，Rust/host与真实S6同候选。 | 原操作/DTO/图像/回答分层记录。 | DOM/模型不证明真人理解。 |
+| [AC-AGENT-STAGE-002](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-002) | [观察到生效](#view-admission) | 来源/冲突/过期/撤权与原结果恢复。 | [PW-FRESHNESS](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-freshness)，确定性竞争+真实API/Runtime临时世界。 | 显示cut、原operation、权威原因和前后结果。 | fake authority不证明接线。 |
+| [AC-AGENT-STAGE-003](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-003) | [探索查询](#view-query) | partial/cut/空间适配、完整旅程与密度质量。 | [PW-PROJECTION](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-projection)、PW-EXPLORATION、PW-PERFORMANCE，固定世界/build/设备。 | 页集合、删除/淘汰、交互及实测帧/内存。 | helper阈值不证明像素/容量。 |
+| [AC-AGENT-STAGE-004](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-004) | [原生与逐端合同](#view-native) | 各端自身交互与失效恢复。 | [PW-PLATFORM](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-platform)和PW-RECOVERY，实际release/WebView/OS。 | 资产hash、操作、原结果、恢复前后。 | 另一端/无GPU不代签正常ready。 |
+| [AC-AGENT-STAGE-005](../../product/agents-world-simulation/player-readable-world-stage.prd.md#ac-agent-stage-005) | [指导边界](#view-guidance) | 观察无副作用、合法指导/原结果。 | [PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)、PW-FRESHNESS，双主体/原操作临时世界。 | 请求、前后root、原receipt/权限。 | UI disabled不证明授权。 |
+| [AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | [原生与逐端合同](#view-native) | 两表面实际同世界交互。 | [viewer-dual](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-dual)，真实候选/平台。 | 双端操作与权威结果。 | 不单独证明模型/完整首局。 |
+| [AC-EXT-016](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-016) | [探索查询](#view-query) | 概览至局部再返回任务。 | [viewer-explore](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-explore)，实际授权世界。 | 对象、来源、定位与返回。 | 不证明全图可见。 |
+| [AC-EXT-017](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-017) | [指导边界](#view-guidance) | 世界现场合法指导/回执。 | [viewer-guidance](../../testing/manual/external-agent-runtime-contract-validation.manual.md#viewer-guidance)，实际owner操作。 | 原operation/receipt关联。 | accepted/animation不代签效果。 |
 
 ## 12. 决策、长期风险与未决问题
 
-ADR-VIEW-1：两使用表面共享 Viewer 和读模型，native 采用内嵌世界窗口；不再开发两套独立 renderer 或世界缓存权威。代价是需要逐 OS 验证 WebView 与图形资产。
+ADR-VIEW-1：共享Viewer/读模型，native受限系统WebView，代价是逐平台资产与图形验证。
 
-ADR-VIEW-2：只读空间浏览与 owner 高层指导分开；存在可见对象不代表其可控制。渲染降级优先保留决策锚点而非伪造像素世界。
+ADR-VIEW-2：观察与owner指导分开，服务器裁决，缺来源/权限诚实降级。
 
-实施前 Viewer/Launcher owner 必须锁定可支持的 OS/WebView 依赖和实际世界 projection 数据来源；Runtime owner 提供可复核的 snapshot/event cut。数据源或平台缺口只允许降低该组合的支持声明，不能通过 iframe、外部浏览器或模拟截图替代要求。
+ADR-VIEW-3：几何、时效、请求代际、世界切点分开；partial不是全量，显示默认值不是业务主体。增加适配复杂度换取权限/因果连续性。
+
+ADR-VIEW-4：保留renderer/Shell，按预算做局部索引/聚合/reconcile，不先重写引擎/shader。
+
+待实施锁定：平台依赖/发行身份、API Context/fence真实接线、空间索引来源及实测质量。这些是交付缺口，不可跳过；独立跨域评审和运行证据在实际PR记录，不由本文自报完成。

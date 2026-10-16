@@ -209,7 +209,7 @@ How the cluster of server processes is orchestrated as a whole.
 **Startup & Shutdown**:
 - **Boot Order**: Processes have dependency order. Typical sequence: DB Proxy → Auth → Global → Lobby → Player / Game / Scene → Connector → Gateway. Each process reports ready before dependents start.
 - **Graceful Shutdown**: Reverse order. Gateway stops accepting new connections → Connector drains sessions (notify clients of maintenance) → Game/Scene finish current ticks and flush state → Player flushes to DB → DB Proxy completes write queue.
-- **Rolling Restart**: Update one process instance at a time. Routing layer redirects traffic away from the restarting instance. No downtime if at least one instance per role remains healthy.
+- **Rolling Restart**: Update one process instance at a time. Routing layer redirects traffic away from the restarting instance. No-downtime rolling restarts require healthy replacement capacity for every affected shard/session, compatible versions, and verified draining and routing convergence. Stateless replicas can redirect requests; stateful rooms, shards, and single-writer owners additionally need a safe state/ownership handoff or recovery strategy. A healthy instance of the same role alone is not sufficient.
 
 **Routing**:
 - **Routing Table**: Central registry mapping logical targets to physical process addresses. E.g., `PlayerID → Player process`, `RoomID → Game process`, `RegionID → Scene process`.
@@ -335,7 +335,7 @@ Entity_Enter_Notify / Entity_Leave_Notify  # AOI entity appear/disappear
 - **Purpose**: Limit data each client receives to entities within a relevant area.
 - **Grid-Based AOI**: Divide world into cells; player subscribes to surrounding cells. $O(1)$ lookup.
 - **Radius-Based AOI**: Subscribe to entities within distance threshold. Flexible but requires spatial queries.
-- **Hysteresis**: Enter threshold > exit threshold to prevent rapid subscribe/unsubscribe oscillation at boundaries.
+- **Hysteresis**: For distance-based AOI, subscribe when distance <= enterRadius and unsubscribe only when distance > exitRadius, with enterRadius < exitRadius. Between the two radii, preserve the current subscription state to prevent boundary oscillation.
 - **AOI Events**: `Entity_Enter_Notify`, `Entity_Leave_Notify`, `Entity_Update_Notify`. Client creates/destroys visual representations.
 - **Priority AOI**: Closer or more important entities get higher update frequency.
 - **View Layers**: Different AOI radii for different data types (large radius for minimap blips, small for full detail).

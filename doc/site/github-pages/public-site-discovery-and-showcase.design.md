@@ -133,6 +133,18 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 
 刷新失败可以保留完整的静态已知候选，但必须明确“最后记录版本，未确认最新”；静态无 JS 入口同样不得自称在线已验证最新。无有效候选时只保留发行说明/恢复入口。checksums 不是平台签名，不提供绕过系统策略的步骤；本文不改变 [root 手动升级首写合同](../design.md#manual-upgrade-first-write)。
 
+#### 预览层级与深链定位
+
+承接[产品预览阅读顺序](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#preview-choice-hierarchy)及 REQ-SITE-DISCOVERY-004；Trace refs: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3。复用现有静态 HTML、原生 details、平台选择器与候选快照，不增加第二份版本数据源。
+
+`#download` 定位预览标题和常显摘要，并在增强可用时展开预览说明；`#package-download` 定位平台选择，并先展开其祖先 disclosure。先确定目标和展开状态，再完成定位；布局稳定后目标标题或平台选择须进入可见视口，不能仅凭 URL 已改变或 `open=true` 判成功。若顶栏覆盖内容，使用适用的滚动留白，不能遮住目标。
+
+首次带 hash 加载、页内主次入口、同 hash 重复点击，以及前进/后退到目标 hash，均消费同一目标映射。重复点击应能重新展开并定位，不依赖再次触发 hashchange；普通手动滚动与关闭 disclosure 后，不因迟到事件、图片载入或 Release 刷新再次展开、跳回顶部或抢走阅读位置。历史导航尊重浏览器恢复；仅在目标仍被折叠或遮挡时做必要修正，不新增历史记录。保留修饰键点击和新标签页等原生链接语义。
+
+键盘激活后，后续焦点顺序应能继续进入目标说明和控件；需转移焦点时只落到目标标题或原生 summary，不自动触发下载。无 JS 时保留标题、原生展开入口和有效 href；减少动效时使用即时定位，不以平滑滚动作为可达性前提。
+
+页面回归须在 CN/EN、桌面与窄屏覆盖首次深链、页内点击、同 hash 关闭后重入、前进/后退，以及展开后的图片/候选更新；另核对无 JS 与 reduced-motion。验证展开状态之外，还应在布局稳定后检查目标的视口位置及顶栏遮挡，并实际操作下一控件；不能以自动点击工具先将元素滚入视口后的截图代替链接落点验证。分别记录关键风险可见、候选与案例版本区分及不安装出口；这些页面结果不代签安装或案例复现。
+
 <a id="des-site-story"></a>
 ### DES-SITE-STORY：小说入口与 reader 复用
 
@@ -342,6 +354,10 @@ canonical 使用已配置的公开站点与真实路由；同语言详情有自�
 ### 13.2 DES-SITE-IMMERSION：科技感、沉浸与视觉冲击的渐进交付
 
 承接 [REQ-SITE-DISCOVERY-007](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#req-site-discovery-007)、[AC-SITE-DISCOVERY-007](../../product/player-entry-distribution/public-site-discovery-and-showcase.prd.md#ac-site-discovery-007)及[多屏与动效规格](../../product/player-entry-distribution/public-site-discovery-and-showcase.design.md#cinematic-experience)。视觉 owner 决定镜头构图、焦点和三维效果目标；实现负责正确交付，不从 CSS 动画数量推导产品质量。
+
+**静态观测站构图。** 首页使用 `observatory` 局部作用域：墨蓝背景、薄荷色主动作、琥珀预览状态；不改变内容详情和手册页面。桌面 Hero 采用非对称文案与世界图、接近一个视口的阅读尺度，手机保留主体裁切与文字暗面并允许内容自然增高。案例用同主题工业近景接续，四步显式标出玩家目标、Agent 尝试、Agent 调整和世界结果；结果图解与概念图分开。日志、预览、FAQ、小说按顺序阅读；预览的范围、准备、费用与升级信息无需展开即可看见，包详情继续使用原生 disclosure。小说名称、中文身份和虚构边界在展开前可见。首期只提供短控件反馈，不引入视差、循环、视频或新的字体请求，因此无需显示无实际增强可控制的暂停按钮。
+
+沿用 `asteroid-settlement-planet-20261015.webp` 与 `asteroid-industrial-cluster-20261015.webp` 的已有 AI 概念素材及来源记录；近景仅表示美术接续。Hero 桌面焦点为 75%/45%，手机为 67%/40%；近景高度在手机压缩，小说尾图延续世界意象。图片失败保留概念图说明、暗色底、全部 HTML 文案和动作；不追加更重替代素材。Hero 使用高优先级加载，后续概念图延迟加载，移除日志/下载/规则重复装饰缩略图。
 
 **结构与资产。** 采用“语义 HTML 内容 + 原创静态世界层 + 可选 CSS/JS 增强”，不新增 WebGL/Three.js、Canvas 粒子引擎或运行服务。Hero 世界层可全幅延伸，正文保持既有容器与阅读行宽；装饰层使用独立层叠上下文、`pointer-events: none` 和适当的 `aria-hidden`，不能拦截 CTA、遮住 focus 或代替必需图注。具有信息价值的图片仍用语义图片/图注，不因装饰层实现丢失来源性质。
 

@@ -19,7 +19,8 @@ This page is the first-read router for `doc/scripts/precommit/`; it does not dup
 | How do I repair a formatting or explicit-validation failure? | `pre-commit.prd.md` plus `scripts/fix-precommit.sh` |
 | What does each CI tier cover? | `doc/testing/ci/ci-tiered-execution.prd.md` plus `scripts/ci-tests.sh` |
 | What was completed for this topic? | PR、实际 CI 与评审记录（Issue 按需） |
-| Where is scripts-module scope or current task status? | `doc/scripts/prd.md` and `doc/scripts/prd.md` |
+| Where is scripts-module scope? | `doc/scripts/prd.md` |
+| Where is current task status? | The actual PR/Task, CI and review records; see `doc/engineering/workflow/source-of-truth.md` |
 
 ## Maintenance
 

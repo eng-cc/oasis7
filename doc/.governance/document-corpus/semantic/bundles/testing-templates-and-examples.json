@@ -1,11 +1,11 @@
 {
   "record": {
-    "content_set_sha256": "979f3d49572890ea4325dcd66430d00e29427b489340d34bdb64855145727b08",
+    "content_set_sha256": "f9ff3f8d332c7f1b7d4853be6058f10e43dcddfcd39dce9fec89f2417d7e693d",
     "current_authority": "doc/testing/templates/README.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_active_template_or_example",
     "id": "testing-templates-and-examples",
-    "note": "reviewed all 38 reusable template/example members and #4438 L4 summary execution-result, unreviewed judgment and portable authority-link changes; explicitly legacy rehearsal material remains non-live; current authority, full member set and non-readiness boundaries retained; no execution or release claim",
+    "note": "Historical bundle review retained at main b5476a616dd3d4dbc29f332ee42ed848903c1f60, including the prior lite sampled-head delta; it is not repeated or renewed here. This bounded delta reads the legacy track-gate template in full and verifies its 7/8/7 required-lane table against the current gate script and three retained TSVs. The reusable instruction creates only an exclusive new commented-header TSV, then requires a genuinely filled same-candidate TSV through an explicit readable LANES_TSV path, rather than nonexistent default filenames or archived example evidence. The other 37 bundle members are byte-identical to that baseline. Legacy/non-live and no-new-player-world-claim boundaries remain. This records documentation review only, not execution, deployment, privacy acceptance or readiness.",
     "paths": [
       "doc/testing/templates/chain-proof-evidence-v1-template.md",
       "doc/testing/templates/external-verifier-light-client-lite-v1-template.md",

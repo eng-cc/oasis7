@@ -16,7 +16,7 @@
 1. `doc/headless-runtime/prd.md`
 2. `doc/headless-runtime/design.md`
 3. `doc/headless-runtime/prd.index.md`
-5. 下钻 `nonviewer/` 等专题目录
+4. 按当前索引进入 `checklists/` 与 `templates/`；旧 `nonviewer/` 专题已由模块 PRD/design 承接，历史追溯见 `doc/headless-runtime/README.md`。
 
 ## 3. 设计结构
 

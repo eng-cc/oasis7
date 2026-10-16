@@ -1007,15 +1007,28 @@
     });
   }
 
-  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"], ["#lore", "#lore > details"], ["#case-conditions", "#case-conditions"]]) {
+  for (const [anchor, selector] of [["#download", "[data-preview-details]"], ["#package-download", "[data-preview-details]"], ["#world-laws", "#world-laws > details"], ["#lore", "#lore > details"], ["#case-conditions", "#case-conditions"]]) {
     const previewDetails = document.querySelector(selector);
     if (!previewDetails) continue;
+    const target = document.querySelector(anchor);
     let previewLinkHashPending = false;
+    const positionTarget = (focus = false) => {
+      requestAnimationFrame(() => {
+        if (window.location.hash !== anchor || !previewDetails.open || !target) return;
+        target.scrollIntoView({ block: "start", behavior: "instant" });
+        if (focus) {
+          const destination = target.querySelector("h2, [data-download-platform-button], summary") || target;
+          if (!destination.matches("button, summary")) destination.setAttribute("tabindex", "-1");
+          destination.focus({ preventScroll: true });
+        }
+      });
+    };
     const openPreviewFromHash = () => {
       if (window.location.hash !== anchor) { previewLinkHashPending = false; return; }
       // The link already opened it before native navigation; a later hash event must not undo a quick close.
       if (previewLinkHashPending) { previewLinkHashPending = false; return; }
       previewDetails.open = true;
+      positionTarget();
     };
     openPreviewFromHash();
     window.addEventListener("hashchange", openPreviewFromHash);
@@ -1024,6 +1037,7 @@
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         if (window.location.hash !== anchor) previewLinkHashPending = true;
         previewDetails.open = true;
+        positionTarget(event.detail === 0);
       });
     });
   }
