@@ -73,6 +73,8 @@
 - 引入“多次 30 tick + 固定统计口径”的验收方式，降低单次采样偏差影响。
 - 在保持 `llm_errors=0` 的前提下，逐步回收 `llm_input_chars_max` 与 `module_call` 波动。
 
+<a name="6-validation-decision-record"></a>
+
 ## 6. Validation & Decision Record
 
 - 本文保留 prompt-budget、协议兼容和稳定性约束；历史任务状态、运行

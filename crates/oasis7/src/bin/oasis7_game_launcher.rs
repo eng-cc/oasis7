@@ -30,6 +30,10 @@ mod hosted_access;
 mod hosted_account_identity;
 #[path = "oasis7_game_launcher/hosted_account_store_backend.rs"]
 mod hosted_account_store_backend;
+#[path = "oasis7_game_launcher/hosted_identity/mod.rs"]
+mod hosted_identity;
+#[path = "oasis7_game_launcher/hosted_model_client/mod.rs"]
+mod hosted_model_client;
 #[path = "oasis7_game_launcher/hosted_player_session.rs"]
 mod hosted_player_session;
 #[path = "oasis7_game_launcher/hosted_strong_auth.rs"]
@@ -46,9 +50,10 @@ mod url_encoding;
 mod viewer_live_command;
 #[path = "oasis7_game_launcher/viewer_runtime_config.rs"]
 mod viewer_runtime_config;
+#[cfg(test)]
+use chain_command::build_oasis7_chain_runtime_args;
 use chain_command::{
-    build_oasis7_chain_runtime_args, missing_execution_world_persistence_files,
-    resolved_chain_execution_world_dir,
+    missing_execution_world_persistence_files, resolved_chain_execution_world_dir,
 };
 use cli::{
     major_world_event_visibility_as_str, parse_host_port, parse_options, print_help,
@@ -293,6 +298,7 @@ struct StaticHttpServer {
     error_rx: Receiver<String>,
     join_handle: Option<thread::JoinHandle<()>>,
     runtime_presence_join_handle: Option<thread::JoinHandle<()>>,
+    identity_maintenance_join_handle: Option<thread::JoinHandle<()>>,
 }
 
 fn main() {
@@ -498,7 +504,7 @@ fn spawn_oasis7_chain_runtime(
     trace_session_id: &str,
 ) -> Result<Child, String> {
     let mut command = Command::new(path);
-    command.args(build_oasis7_chain_runtime_args(options));
+    command.args(chain_command::prepare_oasis7_chain_runtime_args(options)?);
     command.env(TRACE_SESSION_ID_ENV, trace_session_id);
     command.spawn().map_err(|err| {
         format!(
@@ -556,7 +562,16 @@ fn start_static_http_server(
             }
             #[cfg(not(test))]
             {
-                HostedAccountIdentityBroker::from_env()?
+                if runtime_config
+                    .identity
+                    .lock()
+                    .map_err(|_| "identity lock poisoned")?
+                    .is_some()
+                {
+                    HostedAccountIdentityBroker::disabled()
+                } else {
+                    HostedAccountIdentityBroker::from_env()?
+                }
             }
         } else {
             HostedAccountIdentityBroker::disabled()
@@ -571,6 +586,13 @@ fn start_static_http_server(
         }))
     } else {
         None
+    };
+    let identity_maintenance_join_handle = {
+        let stop = Arc::clone(&stop_requested);
+        let runtime = Arc::clone(&runtime_config);
+        Some(thread::spawn(move || {
+            hosted_identity::run_maintenance(stop, runtime)
+        }))
     };
     let join_handle = thread::spawn(move || {
         if let Err(err) = run_static_http_loop(
@@ -594,6 +616,7 @@ fn start_static_http_server(
         error_rx,
         join_handle: Some(join_handle),
         runtime_presence_join_handle,
+        identity_maintenance_join_handle,
     })
 }
 
@@ -612,6 +635,7 @@ fn run_static_http_loop(
     allow_hosted_test_login: bool,
     stop_rx: Receiver<()>,
 ) -> Result<(), String> {
+    let connection_budget = static_http::ConnectionBudget::new();
     loop {
         match stop_rx.try_recv() {
             Ok(_) | Err(TryRecvError::Disconnected) => return Ok(()),
@@ -619,7 +643,11 @@ fn run_static_http_loop(
         }
 
         match listener.accept() {
-            Ok((stream, _addr)) => {
+            Ok((mut stream, _addr)) => {
+                let Some(permit) = connection_budget.try_acquire() else {
+                    let _=stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\nRetry-After: 1\r\n\r\n");
+                    continue;
+                };
                 stream
                     .set_nonblocking(false)
                     .map_err(|err| format!("failed to set static HTTP stream blocking: {err}"))?;
@@ -629,6 +657,7 @@ fn run_static_http_loop(
                 let hosted_session_issuer = Arc::clone(&hosted_session_issuer);
                 let hosted_account_broker = Arc::clone(&hosted_account_broker);
                 thread::spawn(move || {
+                    let _permit = permit;
                     if let Err(err) = handle_http_connection(
                         stream,
                         root_dir.as_path(),
@@ -835,6 +864,9 @@ fn stop_static_http_server(server: &mut StaticHttpServer) {
     server.stop_requested.store(true, Ordering::SeqCst);
     let _ = server.stop_tx.send(());
     if let Some(handle) = server.join_handle.take() {
+        let _ = handle.join();
+    }
+    if let Some(handle) = server.identity_maintenance_join_handle.take() {
         let _ = handle.join();
     }
     if let Some(handle) = server.runtime_presence_join_handle.take() {

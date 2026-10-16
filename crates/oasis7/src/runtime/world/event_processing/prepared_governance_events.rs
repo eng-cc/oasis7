@@ -18,7 +18,7 @@ pub(crate) struct PreparedGovernanceApprovalPublication {
 }
 
 impl PreparedGovernanceApprovalPublication {
-    fn install(self, world: &mut World) {
+    fn install(self, world: &mut World) -> Result<(), WorldError> {
         let PreparedGovernanceApprovalPublication {
             proposal_id,
             proposal,
@@ -29,6 +29,7 @@ impl PreparedGovernanceApprovalPublication {
             journal_events_evicted,
             consensus_record,
         } = self;
+        world.install_prepared_tick_consensus_record(consensus_record)?;
         world.proposals.insert(proposal_id, proposal);
         if let Some(event) = events.last() {
             world.state.time = event.time;
@@ -40,7 +41,7 @@ impl PreparedGovernanceApprovalPublication {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(journal_events_evicted);
-        world.install_prepared_tick_consensus_record(consensus_record);
+        Ok(())
     }
 }
 
@@ -434,7 +435,7 @@ impl World {
                 reason: "injected append_event failure after publication preparation".to_string(),
             });
         }
-        prepared.install(self);
+        prepared.install(self)?;
         Ok(())
     }
 

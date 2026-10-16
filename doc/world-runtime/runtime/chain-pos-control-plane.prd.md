@@ -99,25 +99,39 @@ logical slot/tick 不等于 canonical activation height；恢复 timing、status
 以下分项保留旧 §2.1–2.4/SC-1–3 原义，配对设计逐行接受，不授予共识/服务/玩家规则。
 
 <a id="pos-accept-shared-formula"></a>
+#### 共享时序公式的专业接受
 - 共享genesis与整数logical_tick/slot/phase公式跨节点同输入同结果，missed accounting不补历史；设计接受与未运行验证见配对设计的 pos-case-shared-formula。
 
+Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 经 [root deterministic receiver](../design.md#runtime-deterministic-design)，仅承接共享时序输入下的整数 logical_tick/slot/phase 一致性子义务。不代签全部活动验证者、实例隔离、原子拒绝或 BFT 组合。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="pos-accept-config-rejection"></a>
+#### 参数合法性与透传的专业接受
 - duration/ticks正值、phase<tps，explicit非法CLI字段级拒绝；default config权威与透传；设计接受与未运行验证见配对设计的 pos-case-config-rejection。
 
 <a id="pos-accept-phase-guards"></a>
+#### 稳态相位与完整 guard 的专业接受
 - steady phase gate、next_slot条件及全部pending/replication/participation/proposer/signature/execution/finality guard；设计接受与未运行验证见配对设计的 pos-case-phase-guards。
 
 <a id="pos-accept-edge-nonsticky"></a>
+#### 临时恢复边沿的专业接受
 - strict next_slot<current本tick恢复edge，guard blocked即丢弃，next tick无继承；设计接受与未运行验证见配对设计的 pos-case-edge-nonsticky。
 
 <a id="pos-accept-admission-window"></a>
+#### 入站时间窗口的专业接受
 - future/stale与target epoch不匹配拒绝，不借jitter放宽；设计接受与未运行验证见配对设计的 pos-case-admission-window。
 
 <a id="pos-accept-readonly-status"></a>
+#### 只读状态的专业接受
 - status immutable timing/counters，只读不推进slot/续租/制造evidence；poll≠slot；设计接受与未运行验证见配对设计的 pos-case-readonly-status。
 
 <a id="pos-accept-restart-monotonic"></a>
+#### 重启单调连续性的专业接受
 - persistedconfig/counters一致，restart不倒退重复计；inconsistentfail closed保留诊断；设计接受与未运行验证见配对设计的 pos-case-restart-monotonic。
 
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接persisted counters/config 的连续性子义务。不代签非空事件后缀正向续跑、独立故障域或服务资格；原 test_tier_full 组合仍须 runtime/P2P/ops/QA 判定。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。
+
 <a id="pos-accept-replay-recorded"></a>
+#### 按记录重放的专业接受
 - replay只按snapshot/events/log，不当前wall clock补proposal/block/event；设计接受与未运行验证见配对设计的 pos-case-replay-recorded。
+
+Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root recovery receiver](../design.md#runtime-recovery-design)，仅承接按已记录时间/状态后果重放且不补造历史的连续性子义务。不代签完整控制状态恢复、非空事件后缀正向续跑或服务资格；原 test_tier_full 组合保持。原条文、独立验收和未证明范围不变；本引用不改变产品状态，不新增实现或执行证据。

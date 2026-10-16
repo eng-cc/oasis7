@@ -171,7 +171,10 @@ fn scan(project: &Project, after_read: impl FnOnce()) -> Result<IndexCandidate> 
             .map_or_else(|| name.to_owned(), |section| section.title.clone());
         file.revision = Some(revision);
         file.bytes = Some(content.len());
-        file.pairings = Some(document_pairings::parse(name, &content));
+        file.pairings = Some(document_pairings::parse(name, &content, "配对系统设计"));
+        if file.kind == "design" {
+            file.upstream = Some(document_pairings::parse(name, &content, "上游"));
+        }
         inventory_files.push(file);
         sections.extend(parsed);
         pairing_contents.insert(name.to_owned(), content);

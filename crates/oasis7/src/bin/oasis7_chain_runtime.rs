@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../world_service/formal_read_fixtures.rs"]
+mod formal_read_fixtures;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{Read, Write};
@@ -39,14 +43,22 @@ use signer_derivation::{
 mod cli;
 #[path = "oasis7_chain_runtime/controlled_bootstrap_cli.rs"]
 mod controlled_bootstrap_cli;
+#[path = "oasis7_chain_runtime/controlled_execution_policy.rs"]
+mod controlled_execution_policy;
 #[path = "oasis7_chain_runtime/controlled_history_cli.rs"]
 mod controlled_history_cli;
 #[path = "oasis7_chain_runtime/controlled_live_config.rs"]
 mod controlled_live_config;
 #[path = "oasis7_chain_runtime/controlled_live_runtime.rs"]
 mod controlled_live_runtime;
+#[path = "oasis7_chain_runtime/dev_cli.rs"]
+mod dev_cli;
+#[path = "oasis7_chain_runtime/development_runtime.rs"]
+mod development_runtime;
 #[path = "oasis7_chain_runtime/distfs_probe_runtime.rs"]
 mod distfs_probe_runtime;
+#[path = "oasis7_chain_runtime/executable_image.rs"]
+mod executable_image;
 #[cfg(not(test))]
 #[allow(dead_code)]
 #[path = "oasis7_chain_runtime/execution_bridge/mod.rs"]
@@ -57,6 +69,37 @@ mod execution_role;
 mod explorer_p0_api;
 #[path = "oasis7_chain_runtime/feedback_submit_api.rs"]
 mod feedback_submit_api;
+#[path = "oasis7_chain_runtime/formal_durable_set_cli.rs"]
+mod formal_durable_set_cli;
+#[path = "oasis7_chain_runtime/formal_effect_delivery_store.rs"]
+mod formal_effect_delivery_store;
+#[path = "oasis7_chain_runtime/formal_effect_outbox.rs"]
+mod formal_effect_outbox;
+#[path = "oasis7_chain_runtime/formal_effect_transport.rs"]
+mod formal_effect_transport;
+#[path = "oasis7_chain_runtime/formal_live_config.rs"]
+mod formal_live_config;
+#[cfg(all(test, unix))]
+#[path = "oasis7_chain_runtime/formal_live_crash_endpoint.rs"]
+mod formal_live_crash_endpoint;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/formal_live_effect_delivery.rs"]
+mod formal_live_effect_delivery;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/formal_live_history.rs"]
+mod formal_live_history;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/formal_live_reconcile.rs"]
+mod formal_live_reconcile;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/formal_live_recovery_test_support.rs"]
+mod formal_live_recovery_test_support;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/formal_live_runtime.rs"]
+mod formal_live_runtime;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/formal_live_service.rs"]
+mod formal_live_service;
 #[path = "oasis7_chain_runtime/gameplay_submit_api.rs"]
 mod gameplay_submit_api;
 #[path = "oasis7_chain_runtime/governance_registry.rs"]
@@ -68,16 +111,24 @@ mod identity_receipt;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/identity_receipt_tests.rs"]
 mod identity_receipt_tests;
+#[path = "oasis7_chain_runtime/inspect_cli.rs"]
+mod inspect_cli;
 #[path = "oasis7_chain_runtime/local_provider_setup.rs"]
 mod local_provider_setup;
 #[path = "oasis7_chain_runtime/main_token_submit_api.rs"]
 mod main_token_submit_api;
+#[path = "oasis7_chain_runtime/membership_cli.rs"]
+mod membership_cli;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/native_agent_client.rs"]
 mod native_agent_client;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
+#[path = "oasis7_chain_runtime/node_lifecycle.rs"]
+mod node_lifecycle;
+#[path = "oasis7_chain_runtime/node_operations.rs"]
+mod node_operations;
 #[path = "oasis7_chain_runtime/p2p_status.rs"]
 mod p2p_status;
 #[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
@@ -117,6 +168,9 @@ mod traffic_status;
 mod transfer_submit_api;
 #[path = "oasis7_chain_runtime/wasm_status.rs"]
 mod wasm_status;
+#[cfg(unix)]
+#[path = "oasis7_chain_runtime/world_initialization.rs"]
+mod world_initialization;
 #[path = "oasis7_chain_runtime/world_service_api.rs"]
 mod world_service_api;
 #[path = "oasis7_chain_runtime/world_writer_lock.rs"]
@@ -165,97 +219,8 @@ use traffic_status::build_chain_traffic_status;
 use wasm_status::build_chain_wasm_status;
 
 #[cfg(test)]
-mod execution_bridge {
-    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::controlled_live;
-    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::world_service_read;
-    use std::path::Path;
-
-    use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
-    use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
-    use oasis7_proto::storage_profile::StorageProfileConfig;
-
-    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::driver_observability::{
-        ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
-        reset_execution_bridge_commit_timing_for_tests, snapshot_execution_bridge_commit_timing,
-        snapshot_execution_bridge_module_tick_routing_metrics,
-    };
-    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::ExecutionCheckpointStatusEvidence;
-
-    pub(crate) fn load_latest_execution_checkpoint_status_evidence(
-        execution_records_dir: &Path,
-    ) -> Result<Option<ExecutionCheckpointStatusEvidence>, String> {
-        super::execution_bridge_real_tests::real_execution_bridge::load_latest_execution_checkpoint_status_evidence(
-            execution_records_dir,
-        )
-    }
-
-    #[derive(Debug)]
-    pub(super) struct NodeRuntimeExecutionDriver;
-
-    #[allow(dead_code)]
-    impl NodeRuntimeExecutionDriver {
-        pub(super) fn set_controlled_capture_enabled(
-            &mut self,
-            enabled: bool,
-        ) -> Result<(), String> {
-            if enabled {
-                Err("test stub cannot produce historical capture".into())
-            } else {
-                Ok(())
-            }
-        }
-        pub(super) fn new(
-            _state_path: std::path::PathBuf,
-            _world_dir: std::path::PathBuf,
-            _records_dir: std::path::PathBuf,
-            _storage_root: std::path::PathBuf,
-        ) -> Result<Self, String> {
-            Ok(Self)
-        }
-
-        pub(super) fn new_with_storage_profile(
-            _state_path: std::path::PathBuf,
-            _world_dir: std::path::PathBuf,
-            _records_dir: std::path::PathBuf,
-            _storage_root: std::path::PathBuf,
-            _storage_profile: &StorageProfileConfig,
-        ) -> Result<Self, String> {
-            Ok(Self)
-        }
-    }
-
-    impl NodeExecutionHook for NodeRuntimeExecutionDriver {
-        fn on_commit(
-            &mut self,
-            context: NodeExecutionCommitContext,
-        ) -> Result<NodeExecutionCommitResult, String> {
-            Ok(NodeExecutionCommitResult {
-                execution_height: context.height,
-                execution_block_hash: String::new(),
-                execution_state_root: String::new(),
-            })
-        }
-    }
-
-    pub(super) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, String> {
-        let snapshot_path = world_dir.join("snapshot.json");
-        let journal_path = world_dir.join("journal.json");
-        if !snapshot_path.exists() || !journal_path.exists() {
-            return Ok(RuntimeWorld::new_production_hardened());
-        }
-        RuntimeWorld::load_from_dir(world_dir)
-            .map_err(|err| {
-                format!(
-                    "load execution world from {} failed: {:?}",
-                    world_dir.display(),
-                    err
-                )
-            })
-            .map(|world| {
-                world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
-            })
-    }
-}
+#[path = "oasis7_chain_runtime/execution_bridge_test_stub.rs"]
+mod execution_bridge;
 
 const DEFAULT_RECENT_MINT_RECORD_LIMIT: usize = 20;
 const STORAGE_METRICS_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
@@ -263,17 +228,17 @@ const EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER: &str = "retention-degraded";
 const EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER: &str = "retention-in-progress";
 
 #[derive(Debug, Clone)]
-struct RuntimePaths {
-    runtime_root: PathBuf,
-    execution_bridge_state_path: PathBuf,
-    execution_world_dir: PathBuf,
-    execution_records_dir: PathBuf,
-    storage_root: PathBuf,
-    replication_root: PathBuf,
-    reward_runtime_state_path: PathBuf,
-    reward_runtime_distfs_probe_state_path: PathBuf,
-    reward_runtime_report_dir: PathBuf,
-    reward_runtime_storage_metrics_path: PathBuf,
+pub(crate) struct RuntimePaths {
+    pub(crate) runtime_root: PathBuf,
+    pub(crate) execution_bridge_state_path: PathBuf,
+    pub(crate) execution_world_dir: PathBuf,
+    pub(crate) execution_records_dir: PathBuf,
+    pub(crate) storage_root: PathBuf,
+    pub(crate) replication_root: PathBuf,
+    pub(crate) reward_runtime_state_path: PathBuf,
+    pub(crate) reward_runtime_distfs_probe_state_path: PathBuf,
+    pub(crate) reward_runtime_report_dir: PathBuf,
+    pub(crate) reward_runtime_storage_metrics_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -362,6 +327,14 @@ fn main() {
         }
         return;
     }
+    #[cfg(unix)]
+    if let Some(result) = world_initialization::dispatch(raw_args.iter().map(String::as_str)) {
+        if let Err(err) = result {
+            error!(error = %err, "world initialization command failed");
+            process::exit(1);
+        }
+        return;
+    }
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
         return;
@@ -385,14 +358,35 @@ fn main() {
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let native_client_selected = native_agent_client::selected()?;
     if native_client_selected
-        && (options.guarded_initial_config.is_some() || !options.reward_runtime_enabled)
+        && (options.guarded_initial_config.is_some() || !options.reward_runtime_enabled || options.formal_live_config.is_some())
     {
         return Err(
             "native task executor requires the ordinary World Service execution profile".into(),
         );
     }
+    if let Some(config_path) = options.formal_live_config.as_deref() {
+        if options.guarded_initial_config.is_some() {
+            return Err(
+                "--formal-live-config cannot be combined with --guarded-initial-config".into(),
+            );
+        }
+        #[cfg(unix)]
+        {
+            return formal_live_runtime::run(config_path);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = config_path;
+            return Err("formal live runtime currently requires Unix native storage".into());
+        }
+    }
     if options.guarded_initial_config.is_some() {
-        return controlled_live_runtime::run(options);
+        return controlled_live_runtime::run(dev_cli::GuardedWorldOptions {
+            config_path: options
+                .guarded_initial_config
+                .clone()
+                .ok_or("guarded configuration missing")?,
+        });
     }
     let mut options = options;
     apply_network_tier_manifest_defaults(&mut options);
@@ -418,6 +412,21 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let release_security_policy =
         release_security_policy_for_storage_profile(options.storage_profile);
 
+    let runtime_authority_binding =
+        runtime_authority::load_runtime_authority_binding_for_node_with_world_id(
+            paths.execution_world_dir.as_path(),
+            options.node_id.as_str(),
+            options.node_role,
+            options.world_id.as_str(),
+            options.genesis_validator_registry_path.as_deref(),
+            options.deployment_inventory_path.as_deref(),
+            options.loaded_network_tier_manifest.as_ref(),
+        )?;
+    governance_registry::ensure_world_governance_validator_registry(
+        paths.execution_world_dir.as_path(),
+        options.genesis_validator_registry_path.as_deref(),
+        options.loaded_network_tier_manifest.as_ref(),
+    )?;
     let mut config = NodeConfig::new(
         options.node_id.clone(),
         options.world_id.clone(),
@@ -429,19 +438,60 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .with_network_policy(build_node_network_policy(&options))
         .map_err(|err| format!("failed to apply network policy: {err:?}"))?;
 
-    let validators = if options.node_validators.is_empty() {
-        config.pos_config.validators.clone()
-    } else {
-        options.node_validators.clone()
-    };
-    let validator_signer_bindings = build_validator_signer_public_keys(
-        validators.as_slice(),
-        &keypair,
-        &options.node_validator_signer_public_keys,
-    )?;
-    let mut pos_config = NodePosConfig::ethereum_like(validators.clone())
-        .with_validator_signer_public_keys(validator_signer_bindings.clone())
-        .map_err(|err| format!("failed to apply validator signer bindings: {err:?}"))?;
+    let (_validators, _validator_signer_bindings, mut pos_config) =
+        if options.loaded_network_tier_manifest.is_some() || !options.development_runtime {
+            // Authority and registry preparation above already checked the World
+            // binding. Read its effective registry; raw JSON is not a trust source
+            // and no remote validator key is provisionally root-derived.
+            let verified_world = runtime_authority::load_authority_world(
+                paths.execution_world_dir.as_path(),
+                options.world_id.as_str(),
+            )?;
+            let registry = verified_world
+            .resolve_governance_effective_finality_signer_registry()
+            .map_err(|err| format!("verified World signer registry: {err:?}"))?
+            .ok_or(
+                "formal/authority-bound startup requires a complete verified World signer registry",
+            )?;
+            governance_registry::validate_world_finality_signer_completeness(
+                &registry,
+                &options.node_validators,
+            )?;
+            let pos = governance_registry::node_pos_config_from_world_finality_registry(
+                &registry,
+                &config.pos_config,
+            );
+            if pos.validators.is_empty()
+                || pos.validators.iter().any(|validator| {
+                    !pos.validator_signer_public_keys
+                        .contains_key(&validator.validator_id)
+                })
+            {
+                return Err("verified World registry omits required validator signer keys".into());
+            }
+            (
+                pos.validators.clone(),
+                pos.validator_signer_public_keys.clone(),
+                pos,
+            )
+        } else {
+            let validators = if options.node_validators.is_empty() {
+                config.pos_config.validators.clone()
+            } else {
+                options.node_validators.clone()
+            };
+            let bindings = build_validator_signer_public_keys(
+                validators.as_slice(),
+                &keypair,
+                &options.node_validator_signer_public_keys,
+            )?;
+            let pos = NodePosConfig::ethereum_like(validators.clone())
+                .with_validator_signer_public_keys(bindings.clone())
+                .map_err(|err| {
+                    format!("failed to apply engineering validator signer bindings: {err:?}")
+                })?;
+            (validators, bindings, pos)
+        };
     pos_config.slot_duration_ms = options.pos_slot_duration_ms;
     pos_config.slot_clock_genesis_unix_ms = options.pos_slot_clock_genesis_unix_ms;
     pos_config = pos_config
@@ -473,21 +523,6 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     config = apply_traffic_profile_to_node_config(config, &options)?;
-    let runtime_authority_binding =
-        runtime_authority::load_runtime_authority_binding_for_node_with_world_id(
-            paths.execution_world_dir.as_path(),
-            options.node_id.as_str(),
-            options.node_role,
-            options.world_id.as_str(),
-            options.genesis_validator_registry_path.as_deref(),
-            options.deployment_inventory_path.as_deref(),
-            options.loaded_network_tier_manifest.as_ref(),
-        )?;
-    governance_registry::ensure_world_governance_validator_registry(
-        paths.execution_world_dir.as_path(),
-        options.genesis_validator_registry_path.as_deref(),
-        options.loaded_network_tier_manifest.as_ref(),
-    )?;
     config = governance_registry::apply_world_governance_registry_overrides(
         config,
         paths.execution_world_dir.as_path(),
@@ -552,7 +587,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         build_replication_remote_writer_allowlist(effective_validator_signer_bindings.values());
     let replication_fetch_requester_allowlist = build_replication_fetch_requester_allowlist(
         effective_validator_signer_bindings.values(),
-        &options.replication_remote_writer_public_keys,
+        &options.replication_fetch_requester_public_keys,
     );
     let allow_any_signed_fetch_requester =
         network_tier_allows_open_observer_fetch(options.loaded_network_tier_manifest.as_ref());
@@ -849,7 +884,7 @@ fn reserve_startup_reconcile_bind_guard(
     })
 }
 
-fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
+pub(crate) fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
     let root = options.runtime_root.clone().unwrap_or_else(|| {
         Path::new("output")
             .join("chain-runtime")
@@ -1073,7 +1108,7 @@ fn build_default_replication_network_config(
     Ok(config)
 }
 
-fn apply_network_tier_manifest_defaults(options: &mut CliOptions) {
+pub(crate) fn apply_network_tier_manifest_defaults(options: &mut CliOptions) {
     let Some(loaded_manifest) = options.loaded_network_tier_manifest.as_ref() else {
         return;
     };

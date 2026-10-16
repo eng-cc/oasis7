@@ -49,7 +49,10 @@
 - `Generated`：已生成碎片几何、化学组成与资源量，可观测/开采。
 - `Exhausted`：区块可开采资源耗尽（可选状态，用于优化查询）。
 
+<a id="chunk-physical-contract"></a>
 ### 几何与物理量（新增）
+
+产品仅接收[既有事实/决策消费者切片](../../product/world-rules-core-gameplay/prd.md#generation-physical-truth)；以下既有专业算法与公式原文保持，不由产品句推导新增算法。
 
 #### 最小空间单位
 - **1 cm**（`SPACE_UNIT_CM = 1`）
@@ -104,7 +107,10 @@
 - 元素组成由化合物签名映射得到（用于资源统计、查询、开采规则）；
 - 单质可作为极低概率特例，不作为默认主组成。
 
+<a id="chunk-budget-contract"></a>
 ### 资源库存模型（生成即定量）
+
+产品仅接收[既有事实/决策消费者切片](../../product/world-rules-core-gameplay/prd.md#source-location-quantity-truth)；以下既有专业算法与公式原文保持，不由产品句推导新增算法。
 - `FragmentResourceBudget`
   - `total_by_element: BTreeMap<FragmentElementKind, i64>`
   - `remaining_by_element: BTreeMap<FragmentElementKind, i64>`
@@ -137,13 +143,17 @@
 - `fn synthesize_fragment_budget(profile: &FragmentPhysicalProfile) -> FragmentResourceBudget`
 - `fn consume_fragment_resource(location_id: &str, element: FragmentElementKind, amount_g: i64)`
 
+<a id="chunk-init-contract"></a>
 ### 场景接入配置（CG5）
+
+初始化可重现切片承接[SC1](../../product/agents-world-simulation/prd.md#sc-agent-001)，仅有效输入与初始化顺序，不代签整体交互。
 - `asteroid_fragment.bootstrap_chunks: Vec<ChunkCoord>`：场景可显式声明启动即生成的 chunk 列表。
 - 初始化顺序：`seed_positions -> bootstrap_chunks -> agent_spawn_positions`。
 - 分块尺寸固定：`20km × 20km × 10km`（常量 `CHUNK_SIZE_X/Y/Z_CM`），场景不可覆盖。
 - 当前场景与生成器只接受规范名 `asteroid_fragment`；已完成的旧命名迁移不保留字段兼容别名。
 - `min_fragment_spacing_cm` 的生成器默认值为 `50_000` cm（500m）；有效值 `<= 0` 表示关闭额外 spacing 约束。场景未显式覆盖时沿用 `WorldConfig.asteroid_fragment`，覆盖优先级与初始化边界由 `scenario-files.prd.md` 定义。
 
+<a id="chunk-floor-contract"></a>
 ### Frag 密度、材质分布与保底配置
 
 `AsteroidFragmentConfig` 的稳定资源生成合同包括：
@@ -157,6 +167,8 @@
 这些参数属于生成器权威，不进入产品承诺；starter core 与最低数量只降低极端冷启动概率，不消除世界差异，也不保证第一工业目标必然完成。
 
 ### 运行期 Frag 补种与落账
+
+产品消费者仅承接[权威补充后复查](../../product/world-rules-core-gameplay/prd.md#source-replenishment-effect-recheck)；周期/比例、location 与预算落账仍由本专业合同拥有。
 
 - `replenish_interval_ticks = 100`；负值 sanitize 为 `0`，`0` 表示关闭。仅 asteroid-fragment runtime 已启用、当前 tick 命中非零周期、且 generated/exhausted chunk 低于 `max_fragments_per_chunk` 时补种。
 - `replenish_percent_ppm = 10_000`（1%），sanitize 到 `0..=1_000_000`。每次目标量为 `min(missing, max(1, ceil(max_fragments_per_chunk * ppm / 1_000_000)))`。
@@ -187,6 +199,7 @@
 - 统一顺序：`ensure_chunk_generated -> action validation -> action apply -> event append`。
 - 一致性要求：同一 tick 内多个 Agent 命中同一未生成 chunk 时，只允许一次成功生成，其余请求复用结果。
 
+<a id="chunk-cg6-replay-contract"></a>
 ### 持久化与回放契约（M2 对齐，CG6 落地）
 
 #### 快照字段（落地）
@@ -224,18 +237,73 @@
 - 若动作或策略推荐等待补种，但缺少可用的 `next_replenish_tick`、`estimated_replenished_frag_count`、`next_industrial_goal_relevance` 或 `recommended_resource_action`，仍属于 `resource_replenishment_quote_missing`；未知数据不能用占位数值满足该合同。
 
 <a id="req-frfr-1"></a>
+##### REQ-FRFR-1 执行能力一致
+
+- 系统设计状态：已覆盖
+- 实现状态：未核实
+- 系统设计依据：[对应专业条款](chunked-fragment-generation.design.md#des-frfr-capability)与 §2.1 / §11.1 精确分配本条；覆盖不等于业务验收通过。
+- 实现与验证依据：[候选验证映射](chunked-fragment-generation.design.md#111-验证映射表)定位真实源码与断言，本次未运行。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：执行结果、真实网络/浏览器及本条排除的入口能力未由本文证明；原文所列 profile 和边界保留。
+
+承接产品[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)；本条原专业算法和后端条件不变。
+
 - **REQ-FRFR-1 执行能力一致**：预览必须根据当前后端的实际补种能力与有效配置确定 `replenishment_enabled`。已知不执行补种时显示 disabled，无下一补种 tick，不推荐 `wait_current_chunk`；玩家可以检查现有资源后移动或切换材料路线。无法确认服务能力与当前资源来源时返回 unavailable，不能据此把整个远程世界宣告为禁用。临时只读 kernel、启动模型或周期配置均不能证明 live 会执行补种。验收：[AC-FRFR-1](#ac-frfr-1)。
 
 <a id="req-frfr-2"></a>
+##### REQ-FRFR-2 启动与资源来源
+
+- 系统设计状态：已覆盖
+- 实现状态：未核实
+- 系统设计依据：[对应专业条款](chunked-fragment-generation.design.md#des-frfr-source)与 §2.1 / §11.1 精确分配本条；覆盖不等于业务验收通过。
+- 实现与验证依据：[候选验证映射](chunked-fragment-generation.design.md#111-验证映射表)定位真实源码与断言，本次未运行。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：执行结果、真实网络/浏览器及本条排除的入口能力未由本文证明；原文所列 profile 和边界保留。
+
+承接产品[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)；本条原专业算法和后端条件不变。
+
 - **REQ-FRFR-2 启动与资源来源**：named scenario 与 generated-world 的预览必须保留可用的 chunk、fragment 和预算来源，或明确说明该入口不支持相应预览；不能把模型缺失伪装成世界中没有资源。启动模型只能证明初始化状态，不能在世界推进后冒充当前预算。当前两个本地入口均不执行运行期补种，预览标明 disabled 且当前资源余量 unavailable；named scenario 初始快照的模型保留属于独立入口投影边界，不能由本预览修正推导已经完成。验收：[AC-FRFR-2](#ac-frfr-2)。
 
 <a id="req-frfr-3"></a>
+##### REQ-FRFR-3 下一机会时间
+
+- 系统设计状态：已覆盖
+- 实现状态：未核实
+- 系统设计依据：[对应专业条款](chunked-fragment-generation.design.md#des-frfr-time)与 §2.1 / §11.1 精确分配本条；覆盖不等于业务验收通过。
+- 实现与验证依据：[候选验证映射](chunked-fragment-generation.design.md#111-验证映射表)定位真实源码与断言，本次未运行。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：执行结果、真实网络/浏览器及本条排除的入口能力未由本文证明；原文所列 profile 和边界保留。
+
+承接产品[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)；本条原专业算法和后端条件不变。
+
 - **REQ-FRFR-3 下一机会时间**：对处理完成的 tick，`next_replenish_tick` 必须严格晚于当前世界时间；周期边界已经处理时不得再次展示现已到期或零等待。从处理完成的 snapshot 与 journal 恢复后遵循同一语义。本合同只接受正常完成边界，不增加持久字段或对任意手工构造中间快照的完成状态推断。验收：[AC-FRFR-3](#ac-frfr-3)。
 
 <a id="req-frfr-4"></a>
+##### REQ-FRFR-4 下一机会数量
+
+- 系统设计状态：已覆盖
+- 实现状态：未核实
+- 系统设计依据：[对应专业条款](chunked-fragment-generation.design.md#des-frfr-estimate)与 §2.1 / §11.1 精确分配本条；覆盖不等于业务验收通过。
+- 实现与验证依据：[候选验证映射](chunked-fragment-generation.design.md#111-验证映射表)定位真实源码与断言，本次未运行。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：执行结果、真实网络/浏览器及本条排除的入口能力未由本文证明；原文所列 profile 和边界保留。
+
+承接产品[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-assessment-replenishment-truth)；本条原专业算法和后端条件不变。
+
 - **REQ-FRFR-4 下一机会数量**：启用且有当前完整模型时，预览按当前缺口、现有比例和上限估计下一次补种目标量，不能仅因尚未到周期就填 `0`。已知目标量为零与输入未知必须区别显示；缺失 chunk 预算或无法表达严格未来 tick 时拒绝报价，不用成功零值代替未知。估计不保证实际落点、材料或接纳数量；满 chunk 或已知零目标量不推荐等待补料。验收：[AC-FRFR-4](#ac-frfr-4)。
 
 <a id="req-frfr-5"></a>
+##### REQ-FRFR-5 只读与复查
+
+- 系统设计状态：已覆盖
+- 实现状态：未核实
+- 系统设计依据：[对应专业条款](chunked-fragment-generation.design.md#des-frfr-readonly)与 §2.1 / §11.1 精确分配本条；覆盖不等于业务验收通过。
+- 实现与验证依据：[候选验证映射](chunked-fragment-generation.design.md#111-验证映射表)定位真实源码与断言，本次未运行。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：执行结果、真实网络/浏览器及本条排除的入口能力未由本文证明；原文所列 profile 和边界保留。
+
+承接产品[既有补充决策切片](../../product/world-rules-core-gameplay/prd.md#source-replenishment-effect-recheck)；本条原专业算法和后端条件不变。
+
 - **REQ-FRFR-5 只读与复查**：预览和重复请求不得生成 frag、扣改资源、推进 tick、消费世界动作 nonce 或产生补种回执。收到新世界快照、请求失败、重新连接或更换 chunk 后，旧预览不能继续作为当前等待建议；复查以执行后端的实际事件与快照为准。周期尝试未接受任何候选时允许没有补种增量，预览不能凭空产生增量。验收：[AC-FRFR-5](#ac-frfr-5)。
 
 这些约束不改变补种周期、比例、材料分布、生成即定量、采集扣减、持久 schema 或 replay 规则，不增加 Runtime 补种子系统或 world-service RPC。未来开放 live 正向预览需要权威资源投影、实际执行能力以及该入口跨周期结果共同成立，不能仅恢复启动模型或删除 disabled 判断。
@@ -277,6 +345,8 @@
 <a id="legacy-simulator-refining-ledger"></a>
 #### 当前 Simulator Data 账本与 M4 材料账本
 
+产品仅接收[既有事实/决策消费者切片](../../product/world-rules-core-gameplay/prd.md#source-current-goal-impact)；以下既有专业算法与公式原文保持，不由产品句推导新增算法。
+
 当前 [`RefineCompound` 执行路径](../../../crates/oasis7/src/simulator/kernel/actions_core.rs) 从同一 owner 的 `ResourceKind::Data` 扣除投入 `M = compound_mass_g`，再把 `H = hardware_output` 加回该余额。合法成功动作的余额由提交前 `D` 变为 `D - M + H`；`compound` / `hardware` 是该旧动作的输入/产出名称，不是两份独立库存。
 
 该消费者的目标报价必须比较完整动作前后：对第一工业目标需求 `B`，`hardware_shortfall_before = max(B - D, 0)`，`hardware_shortfall_after = max(B - (D - M + H), 0)`。不得把已扣除投入的 `D - M` 当作动作前余额；`partial_progress` 只有在动作后的净缺口严格缩小且仍大于 0 时才成立，产出 `H > 0` 本身不足以证明推进。当前 [`quote_refine_compound`](../../../crates/oasis7/src/simulator/kernel/actions_refine_quote.rs) 仍以 `D - M` 计算 before，这属于待修实现偏差；本次文档不宣称报价已修复或相关回归已通过。
@@ -285,6 +355,8 @@
 
 <a id="fragment-center-budget-contract"></a>
 ### 跨 chunk 边界一致性规则（CG7 落地）
+
+产品仅接收[既有事实/决策消费者切片](../../product/world-rules-core-gameplay/prd.md#source-location-quantity-truth)；以下既有专业算法与公式原文保持，不由产品句推导新增算法。
 - 归属规则：碎片按中心点归属 chunk；候选碎片生成时先做“本 chunk 内 spacing”，再做“邻接 chunk（26 邻域）校验”。
 - 厘米取整后的 `chunk_coord_of(center)` 必须仍等于生成/记账 coord；内部上边界不能因 round 跨入相邻块而继续记在原预算。该不变量同时适用于初始化和 replenishment，不限制碎片半径跨边界。
 - 边界验收覆盖 `max - 0.5cm` 两侧及内部面/边/角，核对初始生成、补种、后续消费命中同一 chunk 预算；世界最外沿 clamp 保留。修复改变生成结果时须说明生成版本/确定性兼容范围，历史 committed delta 不重生成。本文补充验收不表示生成实现已修复或存在已执行的固定 seed 复现。
@@ -293,8 +365,9 @@
 - 保留写入：若邻块处于 `Unexplored` 且候选碎片到邻块包围盒距离 `<= radius + spacing`，写入 `BoundaryReservation`。
 - 保留消费：邻块未来生成时先消费（remove）该 chunk 的 reservations，再据此过滤候选碎片。
 - 确定性策略：冲突默认“已存在碎片优先（先生成者优先）”，保证同 seed + 同触发序列结果可复现。
-- 回归边界：相同 `world_seed + effective asteroid_fragment config + chunk trigger order` 必须得到相同布局；验证既覆盖已放置碎片，也覆盖跨 chunk 邻居和 reservation。replay 只应用已提交的生成/补种 delta，不用当前默认值重新生成历史布局。
+- <a id="chunk-cg7-replay-wording"></a>回归边界：相同 `world_seed + effective asteroid_fragment config + chunk trigger order` 必须得到相同布局；验证既覆盖已放置碎片，也覆盖跨 chunk 邻居和 reservation。replay 只应用已提交的生成/补种 delta，不用当前默认值重新生成历史布局。
 
+<a id="chunk-hard-budget-contract"></a>
 ### 性能预算与降级策略（CG9 落地）
 新增三档硬预算（`AsteroidFragmentConfig`）：
 - `max_fragments_per_chunk`：单 chunk 最多接纳碎片数（默认 `4_000`）。
@@ -330,6 +403,7 @@
 | <a id="ac-frfr-4"></a>**AC-FRFR-4 未来数量与未知** | 上限 100、比例 10,000 ppm、存在缺口时，tick 40 预估下一目标量 1、等待 60；满 chunk 显示已知零并推荐转向；缺失预算或未来 tick 溢出返回不可用。Web 区分已知零与无效数量，不延续未知结果的等待建议。 | [REQ-FRFR-4](#req-frfr-4) |
 | <a id="ac-frfr-5"></a>**AC-FRFR-5 预览到世界结果** | 真正的 kernel 启动后读取预览、跨周期推进，按目标 chunk 核对 `FragmentsReplenished` 明细及 fragment/chunk 预算，再核对 snapshot/replay。事件可包含多个 chunk，不能把全世界增量当作当前 chunk 估计。重复预览不改变世界与日志；Web 在失败、待刷新和坐标变化后撤下旧建议。当前 live 签名路径只验证禁用/不可用，不声称已完成 live 补种闭环。 | [REQ-FRFR-5](#req-frfr-5) |
 
+<a id="chunk-budget-replay-validation"></a>
 ### 回放一致性与性能回归测试（CG10 落地）
 - 回放一致性：对携带预算约束的 `ChunkGenerated` 事件执行重放，校验 `fragment_count/block_count/chunk_budget` 与原运行一致。
 - 预算回归：多 chunk 批量初始化下逐块验证 `max_fragments_per_chunk / max_blocks_per_fragment / max_blocks_per_chunk` 约束。
@@ -372,3 +446,8 @@
 
 ## 6. Validation & Decision Record
 - 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。
+
+
+### 回放规则的待裁决关系
+
+[CG6 重建规则](#chunk-cg6-replay-contract)与[CG7 生成/补种 delta 泛句](#chunk-cg7-replay-wording)原文同时保留。两者的当前源机制、历史整合与待裁决范围见[配对设计冲突登记](chunked-fragment-generation.design.md#chunk-replay-conflict-register)。该导航不选定重建或增量路线，不构成 supersession，不改变事件载荷、版本兼容或验收义务。

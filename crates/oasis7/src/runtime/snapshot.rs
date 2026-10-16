@@ -139,9 +139,9 @@ pub struct Snapshot {
     #[serde(default)]
     pub tick_consensus_records: Vec<TickConsensusRecord>,
     #[serde(default)]
-    pub tick_consensus_total_record_count: usize,
+    pub tick_consensus_total_record_count: u64,
     #[serde(default)]
-    pub tick_consensus_archived_record_count: usize,
+    pub tick_consensus_archived_record_count: u64,
     #[serde(default)]
     pub tick_consensus_hot_from_tick: Option<WorldTime>,
     #[serde(default)]

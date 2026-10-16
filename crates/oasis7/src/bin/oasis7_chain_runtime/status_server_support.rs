@@ -947,7 +947,7 @@ pub(super) fn write_json_response(
 pub(super) fn handle_guarded_connection(
     mut stream: TcpStream,
     runtime: &Arc<Mutex<NodeRuntime>>,
-    options: &CliOptions,
+    context: &super::controlled_live_runtime::GuardedConnectionContext,
     records: &Path,
     signer: &FeedbackSubmitSigner,
 ) -> Result<(), String> {
@@ -975,21 +975,15 @@ pub(super) fn handle_guarded_connection(
     let method = line.next().ok_or("guarded method missing")?;
     let target = line.next().ok_or("guarded path missing")?;
     let path = target.split('?').next().unwrap_or(target);
-    let config = options
-        .guarded_initial_config
-        .as_deref()
-        .ok_or("guarded configuration missing")?;
-    let fence = options
-        .guarded_read_authority
-        .as_ref()
-        .ok_or("guarded publication fence missing")?;
+    let config = context.config_path.as_path();
+    let fence = &context.read_authority;
     if !super::world_service_api::maybe_handle_with_guarded(
         &mut stream,
         &bytes,
         runtime,
         method,
         path,
-        &options.world_id,
+        &context.world_id,
         Path::new(""),
         records,
         Path::new(""),

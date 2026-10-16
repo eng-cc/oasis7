@@ -190,11 +190,11 @@ impl PreparedEventStateDelta {
                 if prepared.agents.contains_key(&charge.payer_agent_id)),
             Self::EffectQueued { intent_id, .. } => matches!(
                 body,
-                WorldEventBody::EffectQueued(intent) if &intent.intent_id == intent_id
+                WorldEventBody::EffectQueued(intent) if &intent.identity_key() == intent_id
             ),
             Self::ReceiptAppended { intent_id, .. } => matches!(
                 body,
-                WorldEventBody::ReceiptAppended(receipt) if &receipt.intent_id == intent_id
+                WorldEventBody::ReceiptAppended(receipt) if &receipt.identity_key() == intent_id
             ),
             Self::ModuleEvent { event, .. } => {
                 matches!(body, WorldEventBody::ModuleEvent(body_event) if body_event == event)

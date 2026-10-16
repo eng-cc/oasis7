@@ -2832,6 +2832,17 @@
         button:not(:disabled):hover,
         .pixel-world-command-cell--next:active { transform: none; }
       }
+.model-connection-panel { margin-block: 1rem; padding: .8rem; border: 1px solid var(--border, #777); border-radius: .5rem; min-width: 0; }
+.model-connection-panel summary { cursor: pointer; font-weight: 600; }
+.model-connection-panel p { overflow-wrap: anywhere; line-height: 1.5; }
+.model-connection-panel label { display: grid; gap: .4rem; margin-block: .7rem; min-width: 0; }
+.model-connection-panel select, .model-connection-panel input[type=password] { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: .5rem; }
+.model-connection-panel .model-connection-panel__check { display: flex; align-items: flex-start; gap: .5rem; }
+.model-connection-panel__check input { flex: 0 0 auto; margin-top: .25rem; }
+.model-connection-panel__actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.model-connection-panel button { white-space: normal; overflow-wrap: anywhere; min-height: 2.75rem; font: inherit; margin-block: .25rem; }
+.model-connection-panel :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
     </style>
     <link rel="stylesheet" href="./viewer_terminal_shell.css" />
   </head>

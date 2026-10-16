@@ -132,6 +132,8 @@ fn full_node_restart(stale_cache: bool) {
     };
     let old_view = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),
@@ -186,6 +188,8 @@ fn full_node_restart(stale_cache: bool) {
     };
     let new_view = switched
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: switched.config().expected_world.clone(),
             scope_id: switched.config().scope_id.clone(),

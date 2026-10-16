@@ -14,6 +14,8 @@
   - SC-3: checklist 模板可直接填入真实创世参数并输出 `pass/block` verdict。
   - SC-4: 专题纳入 `testing` 模块与 `p2p token` 项目追踪，满足可追溯性。
 
+<a name="2-user-experience-functionality"></a>
+
 ## 2. User Experience & Functionality
 - User Personas:
   - `qa_engineer`：需要一份可重复执行的创世配置审计清单。

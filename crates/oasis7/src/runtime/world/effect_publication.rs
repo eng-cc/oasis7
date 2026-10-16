@@ -70,7 +70,10 @@ impl World {
         let (allocated_intent_seq, next_intent_id, next_intent_id_era) =
             Self::preview_next_intent_seq(self.next_intent_id, self.next_intent_id_era);
         let expected_intent_id = format!("intent-{allocated_intent_seq}");
-        if intent.intent_id != expected_intent_id || policy_record.intent_id != expected_intent_id {
+        if intent.intent_id != expected_intent_id
+            || policy_record.intent_id != expected_intent_id
+            || intent.birth_era != self.effect_birth_era_for(self.next_intent_id_era)
+        {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: "effect intent sequence does not match the world allocator".to_string(),
             });
@@ -100,7 +103,7 @@ impl World {
             .last()
             .map(|event| event.id)
             .expect("effect publication batch contains policy and effect events");
-        self.install_prepared_no_state_event_batch(prepared);
+        self.install_prepared_no_state_event_batch(prepared)?;
         Ok(effect_event_id)
     }
 
@@ -141,7 +144,7 @@ impl World {
             .first()
             .map(|event| event.id)
             .expect("policy disposition batch contains one event");
-        self.install_prepared_no_state_event_batch(prepared);
+        self.install_prepared_no_state_event_batch(prepared)?;
         Ok(event_id)
     }
 
@@ -154,7 +157,7 @@ impl World {
             && !self.pending_effects.iter().any(|pending| {
                 !self
                     .capability_effect_receipt_links
-                    .contains_key(&pending.intent_id)
+                    .contains_key(&pending.identity_key())
             })
         {
             return Err(WorldError::CapabilityAuthorizationDenied {
@@ -169,7 +172,7 @@ impl World {
             let Some(eviction_index) = pending_effects.iter().position(|pending| {
                 !self
                     .capability_effect_receipt_links
-                    .contains_key(&pending.intent_id)
+                    .contains_key(&pending.identity_key())
             }) else {
                 break;
             };
@@ -246,7 +249,11 @@ impl World {
         })
     }
 
-    fn install_prepared_no_state_event_batch(&mut self, prepared: PreparedNoStateEventBatch) {
+    fn install_prepared_no_state_event_batch(
+        &mut self,
+        prepared: PreparedNoStateEventBatch,
+    ) -> Result<(), WorldError> {
+        self.install_prepared_tick_consensus_record(prepared.consensus_record)?;
         self.next_event_id = prepared.next_event_id;
         self.next_event_id_era = prepared.next_event_id_era;
         self.journal.events = prepared.journal_events;
@@ -254,6 +261,6 @@ impl World {
             .runtime_backpressure_stats
             .journal_events_evicted
             .saturating_add(prepared.journal_events_evicted);
-        self.install_prepared_tick_consensus_record(prepared.consensus_record);
+        Ok(())
     }
 }

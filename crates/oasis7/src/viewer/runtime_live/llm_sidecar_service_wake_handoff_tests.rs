@@ -105,6 +105,7 @@ fn configured_sidecar(
         scope_id: "public".into(),
         read_private_key_hex: hex::encode([13; 32]),
         timeout: std::time::Duration::from_millis(10),
+        formal_read_trust: None,
         max_response_bytes: 4096,
     });
     sidecar.provider_service_signer = Some(WorldServiceAgentSignerConfig {

@@ -1,8 +1,8 @@
 //! Actual local NodeRuntime engineering entry. Deployment remains deferred by
 //! the user; this opt-in path supplies no formal readiness or network finality.
 use super::{
-    CliOptions, NodeConfig, NodeRole, NodeRuntime, build_feedback_submit_signer,
-    controlled_live_config::GuardedAuthority,
+    NodeConfig, NodeRole, NodeRuntime, build_feedback_submit_signer,
+    controlled_live_config::GuardedAuthority, dev_cli::GuardedWorldOptions,
     execution_bridge::controlled_live::GuardedExecutionDriver, node_keypair_config,
     status_server_support,
 };
@@ -12,48 +12,14 @@ use std::{
     time::Duration,
 };
 
-pub(super) fn run(mut options: CliOptions) -> Result<(), String> {
-    // Reject every external transport/provider lane before acquiring endpoint
-    // locks or creating any directory. This path never builds a libp2p network.
-    let defaults = CliOptions::default();
-    if options.status_bind != defaults.status_bind
-        || options.storage_profile != defaults.storage_profile
-        || options.traffic_profile != defaults.traffic_profile
-        || options.node_tick_ms != defaults.node_tick_ms
-        || options.pos_slot_duration_ms != defaults.pos_slot_duration_ms
-        || options.pos_ticks_per_slot != defaults.pos_ticks_per_slot
-        || options.pos_proposal_tick_phase != defaults.pos_proposal_tick_phase
-        || options.pos_adaptive_tick_scheduler_enabled
-            != defaults.pos_adaptive_tick_scheduler_enabled
-        || options.pos_slot_clock_genesis_unix_ms != defaults.pos_slot_clock_genesis_unix_ms
-        || options.pos_max_past_slot_lag != defaults.pos_max_past_slot_lag
-        || options.chain_local_standalone_test
-        || options.p2p_accept_public_entry
-        || options.agent_decision_source.is_some()
-        || options.agent_provider_backend.is_some()
-        || options.node_gossip_bind.is_some()
-        || !options.node_gossip_peers.is_empty()
-        || !options.replication_network_listen_addrs.is_empty()
-        || !options.replication_network_bootstrap_peers.is_empty()
-        || !options.replication_remote_writer_public_keys.is_empty()
-        || options.network_tier_manifest_path.is_some()
-        || options.loaded_network_tier_manifest.is_some()
-        || options.genesis_validator_registry_path.is_some()
-        || options.deployment_inventory_path.is_some()
-        || options.local_test_provider_authority_path.is_some()
-        || !options.provider_backed_bootstrap_authority_paths.is_empty()
-        || options.reward_runtime_enabled
-        || options.capture_schedule_recipe_history
-        || !options.node_validators.is_empty()
-        || !options.node_validator_signer_public_keys.is_empty()
-        || !matches!(options.node_role, NodeRole::Sequencer)
-    {
-        return Err("guarded engineering startup rejects external transports, providers and consensus overrides".into());
-    }
-    let external = options
-        .guarded_initial_config
-        .as_deref()
-        .ok_or("guarded configuration missing")?;
+pub(super) struct GuardedConnectionContext {
+    pub world_id: String,
+    pub config_path: std::path::PathBuf,
+    pub read_authority: super::controlled_live_config::GuardedReadAuthority,
+}
+
+pub(super) fn run(options: GuardedWorldOptions) -> Result<(), String> {
+    let external = options.config_path.as_path();
     let authority = GuardedAuthority::load(external)?;
     super::controlled_live_config::require_private_owned(
         &authority.config.node_keypair_directory,
@@ -66,13 +32,13 @@ pub(super) fn run(mut options: CliOptions) -> Result<(), String> {
     let signer = build_feedback_submit_signer(&authority.config.node_id, &keypair)?;
     let records = authority.config.records_directory.clone();
     let bind = authority.config.status_bind;
-    options.node_id = authority.config.node_id.clone();
-    options.world_id = authority.policy.trust.world_id.clone();
+    let node_id = authority.config.node_id.clone();
+    let world_id = authority.policy.trust.world_id.clone();
     let interval = authority.config.node_tick_ms;
     // Existing local single-validator decision machinery determines the
     // decision. Its continuation is engineering recovery material, not a
     // signature proof of network PoS approval.
-    let config = NodeConfig::new(&options.node_id, &options.world_id, NodeRole::Sequencer)
+    let config = NodeConfig::new(&node_id, &world_id, NodeRole::Sequencer)
         .and_then(|c| c.with_tick_interval(Duration::from_millis(interval)))
         .map_err(|e| format!("guarded local node configuration: {e:?}"))?
         .with_require_execution_on_commit(true)
@@ -80,7 +46,11 @@ pub(super) fn run(mut options: CliOptions) -> Result<(), String> {
         .with_auto_attest_all_validators(true);
     let driver = GuardedExecutionDriver::new(authority, records.clone())?;
     let bootstrap = driver.bootstrap()?;
-    options.guarded_read_authority = Some(driver.read_authority());
+    let context = GuardedConnectionContext {
+        world_id,
+        config_path: options.config_path,
+        read_authority: driver.read_authority(),
+    };
     let listener = TcpListener::bind(bind).map_err(|e| format!("guarded loopback ingress: {e}"))?;
     let mut node = NodeRuntime::new(config)
         .with_local_execution_bootstrap(bootstrap)
@@ -105,7 +75,7 @@ pub(super) fn run(mut options: CliOptions) -> Result<(), String> {
             }
         };
         if let Err(reason) = status_server_support::handle_guarded_connection(
-            stream, &runtime, &options, &records, &signer,
+            stream, &runtime, &context, &records, &signer,
         ) {
             tracing::warn!(error = %reason, "guarded service request rejected");
         }

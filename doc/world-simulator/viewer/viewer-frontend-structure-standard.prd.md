@@ -40,6 +40,8 @@
 - `main.jsx` 与 `pixel_world_host.jsx` 承担 UI composition、state projection、copy、diagnostics、event handlers 与 fixture/test hooks，缺少“何时抽组件、何时抽 service/state module”的标准。
 - 现有 Rust 侧已有体量与真实职责拆分治理；Viewer JS/HTML/JSX 侧需要较轻但明确的对应规则。
 
+<a name="接口-数据"></a>
+
 ## 接口 / 数据
 
 | 类型 | 示例 | 规则 |
@@ -101,6 +103,8 @@ Rejected patterns:
 - Copying state shapes or fixture payloads into parallel modules to avoid imports.
 - Creating a second source of truth for canonical `viewer.js`, `viewer.html`, the claim fixture, generated compatibility aliases, or runtime files.
 - Moving JSX into string templates when Solid components would keep structure and test selectors clearer.
+
+<a name="html-jsx-js-职责"></a>
 
 ## HTML / JSX / JS 职责
 

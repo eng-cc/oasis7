@@ -10,7 +10,9 @@
 - Image2 visual target:
   - `output/visual-targets/viewer-visual-polish/image2-viewer-first-screen-target.png`
 
-## 1. Purpose
+<a id="1-purpose"></a>
+
+## 1. Purpose（目标）
 This document converts the current complex Viewer page into an executable
 page-level and module-level visual interaction design. It does not replace the
 June 5 visual and brand-system specifications. It narrows them to the current
@@ -31,7 +33,9 @@ state expression, and screenshot-review expectations. It does not own runtime
 correctness, engineering feasibility, QA release judgment, product priority, or
 new gameplay semantics.
 
-## 2. Overall Page Design
+<a id="2-overall-page-design"></a>
+
+## 2. Overall Page Design（页面整体结构）
 ### 2.1 Screen Purpose
 The Viewer first screen must answer, in order:
 
@@ -644,7 +648,9 @@ World Feed schema/transport/state and Director fail-closed boundary are implemen
 while issuer-backed Director allowed entry and full headed renderer/Focus release
 rows remain outstanding.
 
-## 8. Residual Risks and Role Handoffs
+<a id="8-residual-risks-and-role-handoffs"></a>
+
+## 8. Residual Risks and Role Handoffs（残余风险与角色交接）
 - Task #3248 epoch 2 removes Quote from the peer rail, defaults Gameplay Details
   closed, ships stage-first Targets/Command drawers, opens/focuses secondary
   Diagnostics, and guarantees route/Focus drawer Escape, IME suppression, and

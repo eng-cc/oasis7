@@ -27,6 +27,32 @@ pub type CanonicalIntentResultV1 = oasis7_client_api::world_service_wire::Canoni
     crate::viewer::AgentChatRequest,
     SchedulerIntentV1,
 >;
+
+use serde::{Deserialize, Serialize};
+pub const MEMBERSHIP_PATH: &str = "/v1/world/governance-membership";
+
+/// A lookup carries the caller's signed, externally anchored read request.
+/// The original payload retains its independently signed request identity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FormalAuthenticatedLookupV1 {
+    pub schema_version: u32,
+    pub lookup: AuthenticatedLookup,
+    pub read: SignedReadRequest<super::ReadWorldViewRequest>,
+}
+
+/// The nested signature authenticates the current audience and anchored view.
+/// Cursor and bounds are echoed exactly and independently checked by the client.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FormalAuthenticatedChangesV1 {
+    pub schema_version: u32,
+    pub cursor: oasis7_client_api::world_service::FormalBusinessChangesCursorV1,
+    pub max_items: u32,
+    pub max_bytes: u64,
+    pub read: SignedReadRequest<super::ReadWorldViewRequest>,
+}
+
 #[cfg(test)]
 mod feedback_ack_codec_tests {
     use super::*;

@@ -3,11 +3,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
+use super::error::WorldError;
 use super::types::WorldTime;
 
 /// An intent to perform an external effect.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EffectIntent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub birth_era: Option<u64>,
     pub intent_id: String,
     pub kind: String,
     pub params: JsonValue,
@@ -18,6 +21,12 @@ pub struct EffectIntent {
 /// Receipt returned after an effect is executed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EffectReceipt {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub birth_era: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world: Option<oasis7_distfs::controlled_authority::formal::FormalWorldIdentityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_payload_digest: Option<String>,
     pub intent_id: String,
     pub status: String,
     pub payload: JsonValue,
@@ -128,6 +137,36 @@ impl CapabilityGrant {
         match self.expiry {
             Some(expiry) => now > expiry,
             None => false,
+        }
+    }
+}
+
+impl EffectIntent {
+    /// World-local storage key. External use must also bind the verified World.
+    pub fn identity_key(&self) -> String {
+        match self.birth_era {
+            Some(era) => format!("effect:v2:{era}:{}", self.intent_id),
+            None => self.intent_id.clone(),
+        }
+    }
+    pub fn payload_digest(&self) -> Result<String, WorldError> {
+        let bytes =
+            serde_cbor::to_vec(&("oasis7.effect.intent-payload.v2", self)).map_err(|error| {
+                WorldError::ResourceBalanceInvalid {
+                    reason: error.to_string(),
+                }
+            })?;
+        Ok(blake3::hash(&bytes).to_hex().to_string())
+    }
+}
+
+impl EffectReceipt {
+    /// Same World-local reference as the original effect. Legacy raw references
+    /// never match a receipt for a newly born formal effect.
+    pub fn identity_key(&self) -> String {
+        match self.birth_era {
+            Some(era) => format!("effect:v2:{era}:{}", self.intent_id),
+            None => self.intent_id.clone(),
         }
     }
 }

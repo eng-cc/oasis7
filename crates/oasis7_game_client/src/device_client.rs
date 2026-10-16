@@ -100,6 +100,8 @@ impl Client {
     pub fn public_view(&self) -> Result<crate::VerifiedTaskWorldView, String> {
         self.remote
             .read_view(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world: self.world.clone(),
                 scope_id: format!("agent:{}", self.agent),
@@ -304,6 +306,8 @@ impl Client {
         let view = self
             .remote
             .read_view(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world: self.world.clone(),
                 scope_id: format!("agent:{}", self.agent),

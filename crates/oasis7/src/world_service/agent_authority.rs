@@ -234,6 +234,13 @@ pub fn validate_feedback_ack(
                         && signed.request.request.request_digest == ack.request_digest)
                 && result.receipt.get("lineage").and_then(|v| v.get("feedback_id")).and_then(serde_json::Value::as_str) == Some(ack.feedback_id.as_str())
                 && result.receipt.get("lineage").and_then(|v| v.get("receipt_id")).and_then(serde_json::Value::as_str) == ack.runtime_receipt_id.as_deref()));
+    let published_service_feedback = published_service_feedback
+        || (world.state().retained_history_root.is_some()
+            && world
+                .read_retained_feedback_publication_exists(
+                    &crate::runtime::FeedbackPublicationLookupV1::from(ack),
+                )
+                .map_err(|error| error.to_string())?);
     if !published_service_feedback {
         return Err("canonical feedback acknowledgement service publication missing".into());
     }

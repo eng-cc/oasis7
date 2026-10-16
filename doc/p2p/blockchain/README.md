@@ -18,6 +18,10 @@
 | Hosted player identity | `hosted-public-join-managed-identity-custody.prd.md` | `hosted_public_join` 的玩家身份、邮箱登录与 managed player signer；不替代协议级 signer custody。 |
 | P2PFS / blockchain hardening history | `p2p-blockchain-p2pfs-hardening.prd.md` | phase2~8、production-grade roadmap、Phase B 与 Phase C 已收敛到稳定三件套；Phase C 网络证明仍是 future gap。 |
 
+## 待评审方案
+
+- [免邮箱注册与多凭证账号体系 PRD](hosted-public-join-key-based-onboarding.prd.md)与[配套系统设计](hosted-public-join-key-based-onboarding.design.md)：`draft`，覆盖通行密钥、可选邮箱、多凭证与恢复、账号会话和单世界控制、事务存储、迁移及撤销。入库只供评审，不覆盖现行托管身份合同，不表示已实现或已发布；正式采纳前须完成 PRD §6.4 与系统设计 §18.3 的条款同步和适用评审。
+
 ## 现行与历史边界
 
 - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md` 是旧 `shared_devnet -> staging -> canary` rehearsal 的 rollback/provenance 入口；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值和 checklist 以 `formal-network-tiers-testnet-mechanism.*` 为准。

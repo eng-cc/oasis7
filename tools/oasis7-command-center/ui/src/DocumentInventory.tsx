@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { bridge, errorMessage, observedTime } from './bridge';
+import DocumentRelations from './DocumentRelations';
 import type { Snapshot, DocumentSection } from './types';
-import type { DocumentInventoryPage, IndexedDocument, DocumentPairing } from './generated/core';
+import type { DocumentInventoryPage, IndexedDocument } from './generated/core';
 
 const reasons: Record<string, string> = {
   deleted: '工作树文件已删除', permission_denied: '没有读取权限',
@@ -10,13 +11,6 @@ const reasons: Record<string, string> = {
   total_budget: '超过总量 16 MiB', symlink: '符号链接未读取',
   not_regular_file: '不是普通文件', unsupported_confined_read: '当前平台不支持受限读取',
 };
-const pairingIssues: Record<string, string> = {
-  'multiline pairing declaration; projection incomplete': '声明跨多行，目前仅解析首行链接',
-  'pairing declaration exceeds 4096 bytes; projection incomplete': '声明超过 4096 字节，未解析该字段',
-  'pairing target limit 32 exceeded; projection incomplete': '超过 32 个目标，仅展示前 32 条',
-  'pairing declaration has no explicit Markdown link': '声明中没有可识别的 Markdown 链接',
-};
-const resolutions: Record<string, string> = { resolved: '目标文件已读取', fragment_unchecked: '文件已读取，章节锚点尚未核对', missing: '目标已删除', missing_fragment: '目标文件中未找到章节锚点', ambiguous: '目标锚点重复，无法唯一定位', unread: '目标尚未读取', outside_scope: '目标不在本次清单或路径不安全' };
 const states: Record<string, string> = { read: '已读取', skipped: '已跳过', deleted: '已删除', error: '读取错误' };
 const categories: Record<string, string> = { proposed: '提议', draft: '草案', active: '现行', superseded: '已替代', retired: '已退役', other: '其他声明', unknown: '未声明' };
 const kinds: Record<string, string> = { entry: '结构入口', prd: '需求', design: '设计', other: '其他文档' };
@@ -76,15 +70,10 @@ export default function DocumentInventory(props: {
     const file = selected();
     return file?.state === 'read' ? props.snapshot.sections.filter(s => s.path === file.path && s.revision === file.revision) : [];
   };
-  function pairingSection(edge: DocumentPairing) {
-    if (edge.resolution !== 'resolved' || !edge.target || !edge.targetSection || !edge.targetRevision) return undefined;
-    const path = edge.target.split('#')[0];
-    return props.snapshot.sections.find(s => s.path === path && s.id === edge.targetSection && s.revision === edge.targetRevision);
-  }
   return <section class="panel" aria-label="文档文件清单">
     <div class="panel-title"><h3>文件清单与读取缺口</h3><button disabled={busy()} onClick={() => void load()}>重新查询首页</button></div>
     <div class="panel-body">
-      <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头的显式配对系统设计声明；可打开已解析的目标章节并返回，尚未提供产品/专业树。</p>
+      <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头的显式配对系统设计和设计上游声明；可打开已解析的目标章节并返回，尚未提供产品/专业树。</p>
       <form class="inventory-filters" onSubmit={event => { event.preventDefault(); if (!composing()) void load(); }}>
         <label>标题或路径<input aria-label="筛选文档文件" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (composing() || e.isComposing || e.keyCode === 229) { if (e.key === 'Enter') e.preventDefault(); } }} /></label>
         <label>读取结果<select aria-label="文档读取结果" value={filter()} onChange={e => setFilter(e.currentTarget.value)}><option value="all">全部文件</option><option value="read">已读取</option><option value="omitted">仅看遗漏</option></select></label>
@@ -111,16 +100,8 @@ export default function DocumentInventory(props: {
         <Show when={file().revision}><p class="muted small">内容摘要 {file().revision}</p></Show>
         <Show when={file().lifecycle}><p class="muted small">生命周期原声明：{file().lifecycle?.rawStatus ?? file().lifecycle?.status ?? '未声明'} · 类别 {categories[file().lifecycle?.category ?? 'unknown'] ?? '未分类'}<Show when={file().lifecycle?.issue}> · {file().lifecycle?.issue}</Show></p></Show>
         <Show when={file().state === 'read'}>
-          <h5>显式配对系统设计</h5>
-          <Show when={file().pairings} fallback={<p>旧清单尚未解析配对，请刷新本地事实。</p>}>{pairings => <>
-            <Show when={pairings().issue}><p role="status">配对解析不完整：{pairingIssues[pairings().issue!] ?? pairings().issue}</p></Show>
-            <Show when={!pairings().targets.length && !pairings().issue}><p>本次范围未发现显式配对系统设计链接。</p></Show>
-            <For each={pairings().targets}>{edge => <div class="small">
-              <p>第 {edge.declarationLine} 行 · {edge.target ?? edge.destination} · {resolutions[edge.resolution] ?? edge.resolution}</p>
-              <Show when={pairingSection(edge)}>{target => <button onClick={event => props.showSource(target(), event.currentTarget)}>打开配对章节：{target().title}</button>}</Show>
-              <Show when={edge.resolution === 'resolved' && !pairingSection(edge)}><p class="muted">{edge.targetRevision ? '目标没有可定位的索引章节。' : '旧清单尚无章节定位，请刷新本地事实。'}</p></Show>
-            </div>}</For>
-          </>}</Show>
+          <DocumentRelations relations={file().pairings} mode="pairing" sections={props.snapshot.sections} showSource={props.showSource} />
+          <Show when={file().kind === 'design'}><DocumentRelations relations={file().upstream} mode="upstream" sections={props.snapshot.sections} showSource={props.showSource} /></Show>
         </Show>
         <Show when={file().state === 'read' && !chapters().length}><p>已读取，文件没有可展示的章节。</p></Show>
         <For each={chapters()}>{section => <p><button onClick={e => props.showSource(section, e.currentTarget)}>{section.title} · 第 {section.line} 行</button></p>}</For>

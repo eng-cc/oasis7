@@ -12,6 +12,9 @@ use oasis7_client_api::world_service::{
 
 #[cfg(test)]
 mod coherence_tests;
+mod formal_refresh;
+#[cfg(test)]
+mod formal_tests;
 
 pub(super) fn coherence_trace_request_kind(request: &ViewerRequest) -> &'static str {
     match request {
@@ -556,6 +559,15 @@ fn prepare_world_service_update_with_trace_context(
     trace_context: WorldServiceCoherenceTraceContext,
 ) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
     let _ = trace_context;
+    if config.formal_read_trust.is_some() {
+        return formal_refresh::prepare_formal_refresh(
+            config,
+            previous,
+            !pending.is_empty(),
+            query_state,
+            deadline,
+        );
+    }
     let client = || {
         let mut bounded = config.clone();
         if let Some(deadline) = deadline {
@@ -601,6 +613,8 @@ fn prepare_world_service_update_with_trace_context(
     }
     let mut view = client()?
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: config.expected_world.clone(),
             scope_id: config.scope_id.clone(),
@@ -707,6 +721,8 @@ fn prepare_world_service_update_with_trace_context(
                 }
                 let refreshed_view = client()?
                     .read_view(ReadWorldViewRequest {
+                        observation_nonce: None,
+                        formal_anchor: None,
                         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                         world: config.expected_world.clone(),
                         scope_id: config.scope_id.clone(),

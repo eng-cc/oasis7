@@ -15,6 +15,8 @@
 
 本文只组合玩家从了解产品到进入、安装、验证受支持技术预览的路径。根 `README.md` 是公开当前状态与 claim envelope 的唯一权威；Viewer、Launcher、发行资产与访问模式的实现合同由 `world-simulator` 专业域拥有。
 
+账号接入组合依赖[免邮箱注册与多凭证账号合同](../../p2p/blockchain/hosted-public-join-key-based-onboarding.prd.md)：推荐通行密钥，邮箱保持可选；账号创建、世界准入与运行时绑定分别验收。实现候选与虚拟认证器证据不自动升级公开就绪结论。
+
 ### 活跃产品专题
 
 - [`访问模式与发行就绪`](access-modes-and-release-readiness.prd.md)：`viewer` / `pure_api` 模式边界、能力等价、失败恢复、统一候选门禁与公开 claim 升阶。
@@ -31,6 +33,8 @@
 ## 2. 范围与玩家边界
 
 覆盖产品发现、公开说明、Web 访问、平台安装、Launcher 转移、账号/模式入口和首次验证。玩家可以了解当前阶段并选择受支持入口；不应被未发布功能、内部测试模式、过期下载或历史 go 证据诱导。
+
+公开说明中的既有 HTML 路演 deck 由 [SC-11](#sc-entry-011)独立接收，来源为 [PRD-SITE-012](../../site/prd.md#prd-site-012)。这项接收不扩大官网发现专题的首期六项功能或其状态范围，不重做页面。
 
 ### 安装与发行体验边界
 
@@ -95,6 +99,8 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 | --- | --- |
 | 发现、访问、安装、验证与发行路径的组合体验 | `README.md` 拥有当前公开状态与 claim；`doc/world-simulator/prd.md` 拥有 Viewer、Launcher、provider、资产与访问实现；`doc/world-runtime/prd.md` 拥有持久 runtime 状态兼容、写入原子性与恢复合同；`doc/game/prd.md` 拥有 pure API 玩法与 parity；`doc/p2p/prd.md` 拥有 hosted entry/session/authentication/signer custody；`doc/testing/prd.md` 拥有证据与门禁合同 |
 
+Site 的静态发布、导航、维护权限与专业验收继续由 [Site PRD](../../site/prd.md#prd-site-012)拥有，现行系统 authority 是 [Site 根设计](../../site/design.md#site-roadshow-deck-receiver)；产品层只接收既有顺序化公开说明结果，不新增发布审批或改变 README 的公开状态权威。
+
 本 PRD 不得独立宣布新版本、新渠道、新下载或发布就绪。公开 claim 变更必须先有专业验证与 QA 结论，再由 `liveops_community` 同步根 README/公开渠道。
 
 ## 4. 路线图
@@ -115,6 +121,8 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 - SC-8：每个支持手动覆盖升级的平台资产都在不可逆处理前给出兼容判定；兼容时可继续，只有能证明原状态未改写时才提供绑定明确旧版本与备份来源的回退，未知或可能已改写时停止并禁止盲目降级。本地回退不会被表达为权威世界、identity/session authority、committed receipt 或网络已接受行动的回退。
 - SC-9：代表性 hosted 与恢复样例证明，会话失效不会把已接受的 intent 或已结算 receipt 静默撤销、隐藏、重放或二次结算；客户端缺少回执不能被当作未生效。玩家能区分已确认未生效、提交结果未知及已确认提交，并在当前读取资格有效后按原请求核对。重新认证不恢复旧 authority，也不扩展 Agent 委托；尚未决定的请求与既定执行的续接分别遵循专业合同。提交成功但回复丢失的样例必须查回原结果且只有一次效果，查询受阻时保持真实未知与安全下一步，见[组合验收](#player-session-unknown-outcome-acceptance)。
 - SC-10：每个受支持平台至少有一条推荐资产的完整性失败样例：缺失、无法完成或不匹配的核对会在写入既有状态前停止安装/覆盖，并给出预期/实际结果和重新下载、正确平台资产或支持/恢复中的适用下一步；通过重新取得资产的本地核对不被表述为 identity/session/Agent authority 恢复、pending intent 结算或 world receipt。新增校验机制或平台必须保留这组语义边界。
+
+- SC-11：公开站点保留可直接访问的 HTML 路演 deck，以固定顺序说明项目定位、玩法差异、当前阶段与后续路径；访客可从 docs hub 或首页的清晰入口进入并回到首页 / docs hub，持续辨明当前仅为 limited playable technical preview。该项独立接收既有 PRD-SITE-012 及其既有验收，不把首页改为演示稿，不增加新的公开能力；[唯一身份及专业验收](#sc-entry-011)。
 
 <a id="player-session-unknown-outcome-acceptance"></a>
 
@@ -148,6 +156,7 @@ QA 关联会话变化、原请求、实际查询返回、权威结果及其资�
 | SC-8 | producer_system_designer / viewer_engineer / runtime_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-020 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_RUNTIME-014 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 真实发行资产覆盖兼容继续、写入前失败且可验证回退、未知或可能写入时阻止降级三类样例，并核对版本、平台、primary mode、候选资产、备份来源与权威状态非回退边界 | test_tier_full |
 | SC-9 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-P2P-004 / PRD-P2P-023 / PRD-P2P-029 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`; `doc/product/world-infrastructure/prd.md`; `doc/product/world-rules-core-gameplay/prd.md` | [SC-9-U1–U5 组合样例](#player-session-unknown-outcome-acceptance)：提交后丢回复、重新认证、原请求查询/幂等重试、查询受阻及错误归属；区分尚未决定与既定执行续接，核对 Agent 授权先于或晚于会话失效时的单次效果、无越权新提交、无自动续权，以及 Viewer 玩家可读状态、`pure_api` 结构化状态与原 receipt 的同义结果 | test_tier_full |
 | SC-10 | viewer_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-039 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 每个受支持平台上的错误 checksum、缺失/不可完成核对与重新取得正确候选的安装前负例；核对结果、可用恢复路径，以及不改写本地状态、不恢复世界 authority/receipt 的组合核对 | test_tier_required |
+| SC-11 | viewer_engineer / game_visual_interaction_designer / qa_engineer；模块维护者维护、发布责任人复核 | PRD-SITE-012 | `doc/site/prd.md`；[既有 deck 合同](../../site/prd.md#prd-site-012)、[AC-15](../../site/prd.md#ac-15)、[AC-16](../../site/prd.md#ac-16)、[AC-17](../../site/prd.md#ac-17) | [原专业验证入口](../../site/prd.md#validation-site-012)：docs hub / deck 入口、静态链接、导航和状态文案核对；双语/hash/键盘触控与页面比较沿原设计，当前未执行 | test_tier_required |
 
 ### 5.2 首写与升级的系统设计承接
 
@@ -338,6 +347,22 @@ SC-1～SC-7 复用叶子要求的 Trace refs，只作为组合验收，不重复
 - 剩余范围：每个实际受支持平台的入口防护/资产校验到使用接线尚未核实；页面 checksum 显示不证明本地字节核对或安装前阻断。
 - 核对日期与基线：2026-10-15；文档候选 `dffd797f`，文本关系审读；运行环境与完整组合实现未核实。
 
+
+<a id="sc-entry-011"></a>
+### 5.4 SC-11：既有 HTML 路演 deck 的独立接收与状态
+
+Trace ID: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6
+
+声明范围：仅为 §5 SC-11 的既有顺序化公开说明结果登记身份，来源为 [PRD-SITE-012](../../site/prd.md#prd-site-012)、[原功能矩阵](../../site/prd.md#deck-functional-contract)与 [DEC-SITE-012](../../site/prd.md#dec-site-012)。原 [AC-15](../../site/prd.md#ac-15)、[AC-16](../../site/prd.md#ac-16)、[AC-17](../../site/prd.md#ac-17)继续定义可访问页面、静态发布兼容及入口/回链/预览边界；原专业权限和验收真值不迁移。该身份不覆盖 discovery 六叶，也不为它们重复声明。
+
+- 功能点：SC-11；适用原 CN/EN deck route family，不新增语言、页面、内容或布局方案。
+- Trace refs: O7-REQ-6cbda46f-bba2-423f-8197-2a15a4b1d5a6；本节唯一声明。
+- 系统设计状态：未核实
+- 系统设计依据：[Site 有限接收](../../site/design.md#site-roadshow-deck-receiver)与 [deck 页面原状态](../../site/deck/html-roadshow-deck-page-2026-06-19.design.md#required-states)提供准确定位；尚未核实本范围全部系统义务的覆盖，链接可解析不等于已覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[原专业验证要求](../../site/prd.md#validation-site-012)及 [页面比较说明](../../site/deck/html-roadshow-deck-page-2026-06-19.design.md#implementation-comparison-notes)不是本次运行证据；没有本范围完整同候选实现/验收记录。
+- 剩余范围：静态发布适配、双语/固定顺序、hash/键盘触控/窄屏、入口与回链、持续 preview 的完整设计及实际证据仍未逐项核实；不以 Image2、历史任务、合入或其它页面结果代签。
+- 核对日期与基线：2026-10-15；原文基线 `a51afcd46c9e949fd4cfa8af84619ace70eeb5bd`，只读文档关系核对；没有执行浏览器、站点、部署、发布或体验验收。
 
 ## 6. Non-Goals
 

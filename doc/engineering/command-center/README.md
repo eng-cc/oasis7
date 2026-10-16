@@ -95,6 +95,8 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 4. 受控真人两次会话
 
+Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可选凭证。实现与代码验证见 [#4669](https://github.com/eng-cc/oasis7/pull/4669)，部署进度及交付阻断项见 [#4671](https://github.com/eng-cc/oasis7/issues/4671)。协议边界由 [账号设计](../../p2p/blockchain/hosted-public-join-key-based-onboarding.design.md) 和 [验收手册](../../testing/manual/hosted-passkey-account.manual.md) 承接；技术预览不代签正式邀请资格。
+
 目标和观察口径已定义；持久世界与实际体验满足首次开放条件后，才开展目标玩家两次会话观察。
 本轮未取得真人完成证据。届时需区分独立完成、提示、代操作、未完成和未覆盖，并区分安排的第二次会话与自发回访。
 来源：[core 受控真人验证工作包](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 历史验收范围](https://github.com/eng-cc/oasis7/issues/4363)。
@@ -153,7 +155,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
-2026-10-15 候选源码核对：[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的工作树文件清单与逐项覆盖已有 [Core 查询](../../../tools/oasis7-command-center/core/src/document_inventory.rs)及[规范视图](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx)承接，可按标题/路径和读取结果筛选、分页，查看空文件/遗漏并进入同版本章节。清单与章节/搜索同事务发布，旧缓存缺失或损坏不删除个人数据；能力边界见[专题设计](document-tree.design.md#111-验证映射表)。详情已展示文件头“配对系统设计”链接、声明行和文件级读取诊断，跨行/超预算字段标记解析不完整，旧缓存提示刷新；带锚点目标区分唯一、缺失和歧义，可打开同摘要目标章节并返回原配对按钮。这不提供三种树投影、固定提交基线或独立树快照。真实桌面的实际候选、环境、验收范围和合入事实由实现 PR 承载，未据此刷新其他项目/部署事实；完整 AC-CC-016 仍待验收。
+2026-10-15 候选源码核对：[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的工作树文件清单与逐项覆盖已有 [Core 查询](../../../tools/oasis7-command-center/core/src/document_inventory.rs)及[规范视图](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx)承接，可按标题/路径和读取结果筛选、分页，查看空文件/遗漏并进入同版本章节。清单与章节/搜索同事务发布，旧缓存缺失或损坏不删除个人数据；能力边界见[专题设计](document-tree.design.md#111-验证映射表)。详情已展示文件头“配对系统设计”链接、声明行和文件级读取诊断，跨行/超预算字段标记解析不完整，旧缓存提示刷新；带锚点目标区分唯一、缺失和歧义，可打开同摘要目标章节并返回原按钮；设计文件头的精确“上游”字段另组展示需求文档与设计引用，保留声明行和诊断，正文承接表仍待解析。这不提供三种树投影、固定提交基线或独立树快照。真实桌面的实际候选、环境、验收范围和合入事实由实现 PR 承载，未据此刷新其他项目/部署事实；完整 AC-CC-016 仍待验收。
 
 <a id="cc-status-attention"></a>
 

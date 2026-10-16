@@ -16,6 +16,8 @@
   - SC-3: 首份 baseline 至少覆盖 3 个近期 testing 证据样本，并给出可审计结论。
   - SC-4: 趋势记录可被 `qa_engineer` 周期性续写，不依赖口头解释。
 
+<a name="2-user-experience-functionality"></a>
+
 ## 2. User Experience & Functionality
 - User Personas:
   - `qa_engineer`：需要一个固定的趋势口径持续判断测试治理是否在变好。

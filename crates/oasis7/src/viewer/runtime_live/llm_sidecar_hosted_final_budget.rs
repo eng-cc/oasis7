@@ -585,6 +585,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             .ok_or("final budget client missing")?;
         let operation = if resume.stage.ends_with("_view") {
             AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),

@@ -21,6 +21,8 @@ pub(crate) fn fixture(scope: &str) -> (ReadWorldViewRequest, ReadWorldViewRespon
         state_root_ref: "root".into(),
     };
     let request = ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world,
         scope_id: scope.into(),
@@ -29,6 +31,8 @@ pub(crate) fn fixture(scope: &str) -> (ReadWorldViewRequest, ReadWorldViewRespon
         deadline_unix_ms: None,
     };
     let response = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         contract_version: 1,
         execution_evidence_scope: None,
         version: ProjectionVersion {

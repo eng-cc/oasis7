@@ -106,6 +106,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 **已有实现：**
 
 - ARCH-08：headless ingress 已定义签名 payload、ed25519、单调 nonce 与恢复防重放；它不自动证明任意新 API 的完整授权和恢复行为。
+- ARCH-08 的 [多凭证账号设计](../../../p2p/blockchain/hosted-public-join-key-based-onboarding.design.md) 使用固定 RP/origin、事务身份存储、HttpOnly 账号 Cookie 和短期签名世界授权；新注册默认关闭，不改变资产或 operator 授权。代码验证见 [#4669](https://github.com/eng-cc/oasis7/pull/4669)，部署与环境验收进度见 [#4671](https://github.com/eng-cc/oasis7/issues/4671)，验收方法见 [手册](../../../testing/manual/hosted-passkey-account.manual.md)。
 - ARCH-09：[PR #4562](https://github.com/eng-cc/oasis7/pull/4562)交付 Game API 的发现合同和已实现签名读取；范围仍是显式开启的 loopback bootstrap。
 - [PR #4565](https://github.com/eng-cc/oasis7/pull/4565)增加持久、owner-signed task control；初态 suspended、没有 executor。配对、私有目标、完整 context 和 action admission 不在该切片内。
 - 2026-10-14 局部摘要（仅原生任务执行）：owner 私有目标控制、fenced executor/Context、物流、权威配方和 prepared claimed Agent 建厂到首产物的代码切片已交付。实际试玩源、失败与 targeted 范围从 [Game API 专业合同及证据入口](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)读取，逐次 CI/清理流水归原交付 PR。本摘要不证明完整 TaskSnapshot、两 Runtime 首局、GUI、稳定生产或部署；部署暂停保持，其他主题基线不变。

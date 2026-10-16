@@ -1,8 +1,19 @@
 # Oasis7 model provider
 
-This package owns the production OpenAI-compatible Responses transport used by
-native Agent clients. It depends on the shared Harness contract and HTTP/codec
-libraries; it does not depend on the `oasis7` server, Runtime, World, or simulator.
+This package contains the session-scoped BYOK consumer and an explicit legacy
+simulator compatibility module. Both depend on the shared Harness contract and
+HTTP/codec libraries, without a dependency on the `oasis7` server, Runtime, World,
+or simulator.
+
+The BYOK API is `connection`, `preset`, `protocol`, `transport`, `probe`, and
+`harness_adapter::SessionModelProvider`. It uses trusted session/executor bindings,
+configured provider presets, request permits and structured supplier tool history.
+It has no environment credential fallback and never invokes the legacy transport.
+
+`legacy` retains the existing Responses client and configuration API; root
+reexports preserve its active simulator consumers. The sections below describe
+that legacy compatibility path. Its configuration and retry behavior do not
+configure or weaken the separate BYOK consumer.
 
 ## Boundaries
 

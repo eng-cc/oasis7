@@ -18,6 +18,41 @@ pub(super) struct NodeKeypairConfig {
 
 pub(super) const PROVISIONED_NODE_KEYPAIR_FILE: &str = "node-keypair.toml";
 
+/// Read a legacy arbitrary TOML path without provisioning or repairing it.
+pub(crate) fn read_existing_legacy_keypair(path: &Path) -> Result<NodeKeypairConfig, String> {
+    if !path.is_absolute() {
+        return Err("legacy key path must be absolute".into());
+    }
+    reject_symlink_path_components(path)?;
+    let metadata = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("legacy key config must be a regular file".into());
+    }
+    require_exact_mode(path, 0o600, "legacy key config")?;
+    validate_complete_keypair_config(path)?;
+    let table = load_config_table(path)?;
+    let node = table
+        .get(NODE_TABLE_KEY)
+        .and_then(toml::Value::as_table)
+        .ok_or("legacy [node] missing")?;
+    let private_key_hex = node
+        .get(NODE_PRIVATE_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .ok_or("legacy private key missing")?
+        .trim()
+        .to_owned();
+    let public_key_hex = node
+        .get(NODE_PUBLIC_KEY_FIELD)
+        .and_then(toml::Value::as_str)
+        .ok_or("legacy public key missing")?
+        .trim()
+        .to_owned();
+    Ok(NodeKeypairConfig {
+        private_key_hex,
+        public_key_hex,
+    })
+}
+
 /// Read an already provisioned identity without creating, repairing, or
 /// rewriting any file. Missing or weakly protected identities fail closed.
 pub(super) fn read_existing_node_keypair_in_secure_config_dir(

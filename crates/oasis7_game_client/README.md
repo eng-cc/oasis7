@@ -73,3 +73,40 @@ Unknown/Pending remains unresolved, and no authoritative ACK-completion marker i
 persisted locally. A missing or conflicting index blocks sending; an interrupted
 initial write can be retried with the exact original acceptance. This foundation
 alone does not complete the legacy feedback/memory consumer migration.
+## Bounded recovery of original operations
+
+`Client` sends each public intent once and queries its immutable original after
+uncertain delivery. Queries retry only transport failures, HTTP 503 and an already
+identified shared cooldown, within 40 attempts and an eight-second window.
+They never resubmit, re-sign, or allocate another operation ID. Rejected, expired,
+configuration and assurance failures remain explicit; Unknown remains unresolved.
+
+Private context preparation retries only the same durable signed prepare proof on
+transport failures, HTTP 503 or an identified cooldown. This is the idempotent
+private prepare protocol, not a public action submission retry. The service keeps
+the immutable prepared winner and checks the original fence and lifetime again.
+
+Factory/recipe quotes refresh the same prepared context only for the two fixed,
+route-specific base/delivery drift codes. Context reads retry the exact same signed
+GET proof only for their fixed delivery drift code. Both allow at most three
+requests within eight seconds; an already in-flight bounded HTTP request may
+finish after the window, but no further request starts. Generic conflicts, expiry,
+permission and verification errors are not retried. Quote refresh preserves the
+complete prepared input, context identity, operation, nonce, lifetime and business
+selection; existing Action/Outcome records take priority over fresh quotes.
+
+These checks do not eliminate the race between receiving an observation and
+canonical action admission. A stale or otherwise rejected original remains rejected;
+callers must retain its evidence and choose an explicit recovery policy. This SDK
+slice does not implement a built-in model runner or claim autonomous play success.
+
+
+## Native execution call budget
+
+`OperationStore::initialize_native_run` fixes the local run identity and call
+limit. `reserve_native_model_call` durably increments its encrypted counter under
+a capability-relative file lock before a physical model request starts. Restart,
+a lost response, or repeating an operation label does not refund that reservation.
+Changed bindings, changed limits, missing counter files, and corrupt records fail
+closed. This counter is local consumption accounting; it grants no World authority
+and does not replace the session credential and token limits of a BYOK connection.

@@ -157,6 +157,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         resume.validate_rejection(&self.llm_sidecar)?;
         if resume.stage.ends_with("_view") {
             return Ok(Some(AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),

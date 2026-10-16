@@ -93,6 +93,8 @@ pub(super) fn verify_provider_closure(public_client: &RemoteWorldServiceClient) 
     println!("provider_terminal_feedback_id={feedback_id}");
     let view = client
         .read_view(ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),

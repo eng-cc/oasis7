@@ -82,6 +82,7 @@ impl Fixture {
             &config,
             serde_json::to_vec(&GuardedConfiguration {
                 schema_version: 1,
+                remote_endpoints: None,
                 scope: ENGINEERING_SCOPE.into(),
                 node_id: "node-a".into(),
                 node_keypair_directory: root.join("node-identity"),
@@ -433,7 +434,7 @@ fn guarded_inputs_fail_closed_before_creating_private_records() {
     let bytes = fs::read(&fixture.config).unwrap();
     let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     for (field, value) in [
-        ("schema_version", serde_json::json!(2)),
+        ("schema_version", serde_json::json!(3)),
         ("scope", serde_json::json!("formal")),
         ("status_bind", serde_json::json!("0.0.0.0:0")),
         ("unexpected", serde_json::json!(true)),
@@ -498,11 +499,10 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
     wait_until(|| node.snapshot().consensus.committed_height == 42);
     node.stop().unwrap();
     let runtime = Arc::new(Mutex::new(node));
-    let options = crate::CliOptions {
+    let context = crate::controlled_live_runtime::GuardedConnectionContext {
         world_id: fixture.trust.world_id.clone(),
-        guarded_initial_config: Some(fixture.config.clone()),
-        guarded_read_authority: Some(fence),
-        ..Default::default()
+        config_path: fixture.config.clone(),
+        read_authority: fence,
     };
     let private = hex::encode([9; 32]);
     let signer = crate::FeedbackSubmitSigner {
@@ -512,6 +512,7 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let config = WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: format!("http://{address}"),
         trusted_service_public_key: signer.public_key_hex.clone(),
         expected_world: request.correlation.key.world.clone(),
@@ -522,14 +523,22 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
     };
     let records = fixture.records.clone();
     let server = thread::spawn(move || {
-        for _ in 0..13 {
+        for _ in 0..17 {
             let (stream, _) = listener.accept().unwrap();
             crate::status_server_support::handle_guarded_connection(
-                stream, &runtime, &options, &records, &signer,
+                stream, &runtime, &context, &records, &signer,
             )
             .unwrap();
         }
     });
+    let mut public_config = config.clone();
+    public_config.scope_id = "public".into();
+    let ordinary_public = RemoteWorldServiceClient::new(public_config.clone()).unwrap();
+    let diagnostic_public = RemoteWorldServiceClient::new_with_evidence_policy(
+        public_config,
+        ReadEvidencePolicy::AllowControlledPrerequisite,
+    )
+    .unwrap();
     let ordinary = RemoteWorldServiceClient::new(config.clone()).unwrap();
     let engineering = RemoteWorldServiceClient::new_with_evidence_policy(
         config,
@@ -541,6 +550,8 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
         engineering.read_authority_identity().unwrap()
     );
     let view_request = ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: request.correlation.key.world.clone(),
         scope_id: "agent:agent-a".into(),
@@ -602,7 +613,32 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
             .as_deref(),
         Some(oasis7_distfs::controlled_authority::replicated_protocol::EVIDENCE_SCOPE)
     );
-    for (path, expected) in [("/checkpoint", "404"), (VIEW_PATH, "503")] {
+    let membership_request = ReadMembershipRequest {
+        contract_version: 1,
+        world: request.correlation.key.world.clone(),
+        min_commit: Some(initial.version().commit.clone()),
+        fixed_commit: None,
+    };
+    assert!(
+        ordinary_public
+            .read_membership(membership_request.clone())
+            .is_err()
+    );
+    let membership = diagnostic_public
+        .read_membership(membership_request)
+        .unwrap();
+    assert_eq!(membership.response().commit, initial.version().commit);
+    assert_eq!(
+        membership.response().execution_evidence_scope.as_deref(),
+        Some(verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE)
+    );
+    assert_eq!(membership.response().applied_consensus_membership, None);
+    assert!(!membership.response().supports_safe_runtime_update);
+    for (path, expected) in [
+        ("/checkpoint", "404"),
+        (VIEW_PATH, "503"),
+        (MEMBERSHIP_PATH, "503"),
+    ] {
         let mut stream = TcpStream::connect(address).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
@@ -614,3 +650,6 @@ fn signed_http_pure_client_requires_explicit_prerequisite_policy_for_all_operati
     }
     server.join().unwrap();
 }
+
+#[path = "controlled_live_remote.rs"]
+mod remote;

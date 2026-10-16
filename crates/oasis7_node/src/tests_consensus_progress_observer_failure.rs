@@ -522,13 +522,23 @@ fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_t
             let publications_while_blocked =
                 retained_commit_publication_count(network.as_ref(), world_id);
             let maintenance_while_blocked = dht.published_records().len();
-            let persisted_while_blocked =
+            let pos_state_store =
                 super::super::pos_state_store::PosNodeStateStore::from_replication(
                     config.replication.as_ref().expect("replication config"),
+                );
+            let blocked_height = while_blocked.consensus.committed_height;
+            let mut persisted_while_blocked = None;
+            let persisted_caught_up = wait_until(Instant::now() + Duration::from_secs(2), || {
+                persisted_while_blocked = Some(
+                    pos_state_store
+                        .load()
+                        .expect("load persisted state while observer is blocked"),
                 )
-                .load()
-                .ok()
                 .flatten();
+                persisted_while_blocked
+                    .as_ref()
+                    .is_some_and(|persisted| persisted.committed_height >= blocked_height)
+            });
             let committed_batch_while_blocked = batches_ready.wait_for_batches(Duration::ZERO);
             let calls_while_blocked = observer.calls.load(Ordering::SeqCst);
             let latest_height_while_blocked = while_blocked.consensus.committed_height;
@@ -573,11 +583,12 @@ fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_t
                 "blocking observer delayed replica maintenance: before={maintenance_at} during={maintenance_while_blocked}",
             );
             assert!(
-                persisted_while_blocked.as_ref().is_some_and(|persisted| {
-                    persisted.committed_height >= while_blocked.consensus.committed_height
-                }),
+                persisted_caught_up
+                    && persisted_while_blocked
+                        .as_ref()
+                        .is_some_and(|persisted| { persisted.committed_height >= blocked_height }),
                 "blocking observer delayed engine save: persisted={persisted_while_blocked:?} while_blocked_height={}",
-                while_blocked.consensus.committed_height,
+                blocked_height,
             );
             assert!(
                 while_blocked

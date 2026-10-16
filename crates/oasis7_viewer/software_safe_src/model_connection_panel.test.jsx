@@ -1,0 +1,71 @@
+import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModelConnectionPanel } from "./model_connection_panel.jsx";
+function capabilities() { return { ok: true, enabled: true, authenticated: true, trusted_executor: { trusted: true, display_name: "Trusted game executor", location: "Game deployment", origin: location.origin }, presets: [{ id: "deepseek-v1", provider_id: "deepseek", model_id: "deepseek-chat", protocol: "chat_completions" }], executor_available: false, limits: { max_calls: 3, max_tokens: 1000, max_input_tokens: 500, max_output_tokens: 500, max_concurrent: 1, lease_ms: 120000, absolute_ms: 7200000, renew_interval_ms: 30000 } }; }
+const connection = () => ({ id: "connection-1", version: 1, preset_id: "deepseek-v1", state: "ready", run_state: "idle", run_generation: 0, expires_at_ms: Date.now() + 120000, absolute_expires_at_ms: Date.now() + 7200000, calls_spent: 0, tokens_reserved: 0 });
+function client(items = [connection()], cap = capabilities()) { return { capabilities: vi.fn(async () => cap), list: vi.fn(async () => items), create: vi.fn(async () => connection()), probe: vi.fn(async (value) => ({ ...value, version: value.version + 1 })), activate: vi.fn(), lease: vi.fn(async (value) => ({ ...value, version: value.version + 1, expires_at_ms: Date.now() + 120000 })), stop: vi.fn(async (value) => ({ ...value, version: value.version + 1, run_state: "stopped" })), forget: vi.fn(async (value) => ({ ...value, version: value.version + 1, state: "revoked", run_state: "stopped" })) }; }
+function panel(api, locale = "en") { const result = render(() => <ModelConnectionPanel client={api} locale={locale} agentId="a" canControl={true} />); result.container.querySelector("details").open = true; return result; }
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+describe("model connection panel", () => {
+ it("does not mount a key field for disabled, unauthenticated or untrusted deployments", async () => {
+  for (const patch of [{ enabled: false }, { authenticated: false }, { trusted_executor: { trusted: false } }]) {
+   const api = client([], { ...capabilities(), ...patch }); const result = panel(api);
+   await waitFor(() => expect(api.capabilities).toHaveBeenCalled());
+   expect(result.container.querySelector("input[type=password]")).toBeNull();
+   expect(api.list).not.toHaveBeenCalled(); cleanup();
+  }
+ });
+ it("separates ready from running and blocks start when no game executor exists", async () => {
+  const api = client(); const result = panel(api);
+  await waitFor(() => expect(result.container.textContent).toContain("Model ready; not started"));
+  expect(result.getByText(/No game executor is available/)).toBeTruthy();
+  expect(result.getByRole("button", { name: "Confirm start" }).disabled).toBe(true);
+  expect(result.getByRole("button", { name: "Test connection" }).disabled).toBe(true);
+  fireEvent.click(result.getByLabelText(/Consent to a bounded/));
+  fireEvent.click(result.getByRole("button", { name: "Test connection" }));
+  await waitFor(() => expect(api.probe).toHaveBeenCalledTimes(1));
+  expect(api.activate).not.toHaveBeenCalled();
+ });
+ it("clears the password synchronously and never renders a failed key or upstream error", async () => {
+  const api = client([]); api.create.mockRejectedValue(new Error("canary-private-key")); const result = panel(api);
+  await waitFor(() => expect(result.getByLabelText("Inference API key")).toBeTruthy());
+  const input = result.getByLabelText("Inference API key");
+  fireEvent.change(result.getByLabelText("Provider and model"), { target: { value: "deepseek-v1" } });
+  fireEvent.input(input, { target: { value: "canary-private-key" } });
+  fireEvent.click(result.getByLabelText(/I understand the recipient/));
+  fireEvent.submit(result.container.querySelector("form"));
+  expect(input.value).toBe("");
+  await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+  expect(api.probe).not.toHaveBeenCalled(); expect(api.activate).not.toHaveBeenCalled();
+  await waitFor(() => expect(result.getByRole("alert").textContent).toContain("connection service"));
+  expect(result.container.textContent).not.toContain("canary-private-key");
+ });
+ it("keeps Stop and Forget distinct and refreshes CAS conflicts without automatic reactivation", async () => {
+  const api = client(); api.stop.mockRejectedValueOnce({ code: "version_conflict" }); const result = panel(api, "zh");
+  await waitFor(() => expect(result.getByRole("button", { name: "停止新决策" })).toBeTruthy());
+  fireEvent.click(result.getByRole("button", { name: "停止新决策" }));
+  await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+  expect(result.getByRole("alert").textContent).toContain("其他页面");
+  expect(api.activate).not.toHaveBeenCalled(); expect(api.forget).not.toHaveBeenCalled();
+  fireEvent.click(result.getByRole("button", { name: "断开并忘记" }));
+  await waitFor(() => expect(api.forget).toHaveBeenCalledTimes(1));
+  expect(api.forget.mock.calls[0][0]).toMatchObject({ id: "connection-1", version: 1 });
+  await waitFor(() => expect(result.container.textContent).toContain("已断开并忘记 · 已停止新决策"));
+  expect(result.container.textContent).not.toContain("会话已过期");
+ });
+ it("does not renew or revive a session that expired while the page was hidden", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-16T00:00:00Z"));
+  const descriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  const api = client(); const result = panel(api);
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(121000);
+  expect(api.lease).not.toHaveBeenCalled();
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.advanceTimersByTimeAsync(0); await vi.advanceTimersByTimeAsync(1000);
+  expect(api.lease).not.toHaveBeenCalled(); expect(api.activate).not.toHaveBeenCalled();
+  expect(result.container.textContent).toContain("Session expired");
+  if (descriptor) Object.defineProperty(document, "visibilityState", descriptor); else delete document.visibilityState;
+ });
+});

@@ -26,6 +26,7 @@ COPY_PATHS = (
     "doc/game/gameplay/gameplay-industrial-pipeline-service-window-contract.prd.md",
     "doc/core/prd.md",
     "doc/engineering/doc-governance/doc-structure-standard.design.md",
+    "doc/site/prd.md",
     "doc/world-runtime/prd.md",
     "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
     "doc/p2p/prd.md",

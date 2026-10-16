@@ -65,6 +65,7 @@ fn read_request(stream: &mut TcpStream) -> (String, Vec<u8>) {
 fn committed(original: &SubmitIntentRequest<WorldServicePayloadV1>) -> IntentResponse<Value> {
     IntentResponse {
         contract_version: 1,
+        formal_profile: None,
         execution_evidence_scope: None,
         correlation: original.correlation.clone(),
         outcome: IntentOutcome::Committed {
@@ -179,6 +180,7 @@ impl Probe {
                                 authority::request_digest(SUBMIT_PATH, &submitted).unwrap(),
                                 IntentResponse {
                                     contract_version: 1,
+                                    formal_profile: None,
                                     execution_evidence_scope: None,
                                     correlation: expected.correlation.clone(),
                                     outcome: IntentOutcome::Received {

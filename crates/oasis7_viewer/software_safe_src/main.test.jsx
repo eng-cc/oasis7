@@ -356,6 +356,8 @@ async function setupConnectedSemanticCore({
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Legacy fixtures explicitly advertise v2 absence; outages must never permit fallback.
+  vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404, json: async () => ({ ok: false, error_code: "not_found" }) });
   window.history.replaceState({}, "", viewerUrl());
   window.localStorage.clear();
   Object.defineProperty(window, "crypto", {
@@ -3124,8 +3126,8 @@ describe("viewer web ui automation baseline", () => {
     });
 
     screen.getByText("Runtime Diagnostics").click();
-    expect(screen.getByRole("dialog", { name: "Sign In With Email" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Request Login Code" }).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("dialog", { name: "Sign In to Play" })).toBeInTheDocument();
+    expect((await screen.findAllByRole("button", { name: "Request Login Code" })).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Email").length).toBeGreaterThan(0);
     expect(screen.getByText("upgrade_after_player_session")).toBeInTheDocument();
     expect(
@@ -3155,7 +3157,7 @@ describe("viewer web ui automation baseline", () => {
       },
     });
 
-    expect(screen.queryByRole("dialog", { name: "Sign In With Email" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sign In to Play" })).not.toBeInTheDocument();
   });
 
   it("surfaces hosted login retry-after guidance when OTP resend is throttled", async () => {
@@ -3171,9 +3173,9 @@ describe("viewer web ui automation baseline", () => {
 
     screen.getByText("Runtime Diagnostics").click();
     expect(
-      screen.getAllByText("a login code was just sent for this email; retry in 21 seconds (retry in 21s)").length,
+      (await screen.findAllByText("a login code was just sent for this email; retry in 21 seconds (retry in 21s)")).length,
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("retry_after=21s").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("retry_after=21s")).length).toBeGreaterThan(0);
   });
 
   it("clears hosted login retry guidance immediately when the player edits the email", async () => {
@@ -3187,7 +3189,7 @@ describe("viewer web ui automation baseline", () => {
       },
     });
 
-    expect(screen.getAllByText("retry_after=21s").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("retry_after=21s")).length).toBeGreaterThan(0);
 
     fireEvent.input(document.getElementById("gate-hosted-login-handle"), {
       target: { value: "next-player@example.com" },
@@ -3206,9 +3208,9 @@ describe("viewer web ui automation baseline", () => {
       },
     });
 
-    const dialog = screen.getByRole("dialog", { name: "Sign In With Email" });
-    const emailInput = document.getElementById("gate-hosted-login-handle");
-    const requestButton = within(dialog).getByRole("button", { name: "Request Login Code" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign In to Play" });
+    const emailInput = await within(dialog).findByLabelText("Email");
+    const requestButton = await within(dialog).findByRole("button", { name: "Request Login Code" });
 
     await waitFor(() => {
       expect(document.activeElement).toBe(emailInput);
@@ -3413,9 +3415,9 @@ describe("viewer web ui automation baseline", () => {
       search: `${viewerUrl()}&viewer_visual_fixture=hosted_login_gate`,
     });
 
-    const dialog = screen.getByRole("dialog", { name: "Sign In With Email" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign In to Play" });
     expect(dialog).toHaveAttribute("data-viewer-fixture-state", "hosted_login_gate");
-    expect(within(dialog).getByDisplayValue("player@example.com")).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue("player@example.com")).toBeInTheDocument();
     expect(within(dialog).getByText("challenge=fixture-challenge")).toBeInTheDocument();
     expect(within(dialog).getByText("Enter the latest verification code to continue.")).toBeInTheDocument();
     expect(within(dialog).getByText("retry_after=18s")).toBeInTheDocument();

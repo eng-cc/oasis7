@@ -1,4 +1,4 @@
-use crate::*;
+use super::*;
 use oasis7_agent_harness::{
     ModelProvider, ModelProviderError, ModelProviderRequest, ModelProviderResponse,
     ModelProviderTool, ModelProviderTrace, ModelProviderTurn, ModelProviderUsage,

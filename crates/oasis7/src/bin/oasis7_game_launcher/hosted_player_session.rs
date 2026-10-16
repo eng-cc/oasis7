@@ -14,6 +14,8 @@ pub(super) const HOSTED_PLAYER_SESSION_REFRESH_ROUTE: &str = "/api/public/player
 const ISSUE_WINDOW_MS: u64 = 60_000;
 const PENDING_REGISTRATION_TTL_MS: u64 = 30_000;
 const SLOT_LEASE_TTL_MS: u64 = 120_000;
+#[path = "hosted_player_session_v2.rs"]
+mod v2;
 // Registration and runtime commits can straddle one snapshot; require a second
 // successful absence before presence reconciliation revokes a seen lease.
 const RUNTIME_MISSING_SNAPSHOT_CONFIRMATIONS: u8 = 2;
@@ -144,7 +146,7 @@ struct HostedPlayerSessionLedger {
     runtime_revoked_players: BTreeSet<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(super) struct HostedPlayerSessionIssuer {
     next_sequence: u64,
     issued_players_total: u64,

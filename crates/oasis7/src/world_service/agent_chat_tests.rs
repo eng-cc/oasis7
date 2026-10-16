@@ -244,6 +244,8 @@ fn canonical_authority_is_signed_and_legacy_absence_has_exact_codec() {
 #[test]
 fn canonical_owner_read_codec_golden() {
     let request = oasis7_client_api::world_service::ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: oasis7_client_api::world_service::WorldIdentity {
             world_id: "world".into(),

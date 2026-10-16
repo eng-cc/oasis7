@@ -296,6 +296,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             HostedServicePhase::ActView {
                 pending, commit, ..
             } => AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: pending.correlation.key.world.clone(),
                 scope_id: client.config().scope_id.clone(),
@@ -356,6 +358,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             HostedServicePhase::HandoffView {
                 pending, commit, ..
             } => AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: pending.correlation.key.world.clone(),
                 scope_id: client.config().scope_id.clone(),
@@ -392,6 +396,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             HostedServicePhase::FeedbackAckView {
                 pending, commit, ..
             } => AgentServiceIoOperation::View(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: pending.correlation.key.world.clone(),
                 scope_id: client.config().scope_id.clone(),

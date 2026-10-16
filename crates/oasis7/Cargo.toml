@@ -32,8 +32,18 @@ rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-oasis7_model_provider = { path = "../oasis7_model_provider" }
+rusqlite = { version = "0.40.2", features = ["bundled", "backup"] }
+prost = "0.13"
+hmac_legacy = { package = "hmac", version = "0.12" }
+sha1 = "0.10"
+md5 = "0.7"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+webauthn-rs-core = "=0.5.5"
+url = "2"
+uuid = { version = "1", features = ["serde", "v4"] }
+base64 = "0.22"
 oasis7_game_client = { path = "../oasis7_game_client" }
+oasis7_model_provider = { path = "../oasis7_model_provider" }
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 zeroize = "1"
 cap-std = "4"

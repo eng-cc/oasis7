@@ -27,6 +27,37 @@ use std::time::Duration;
 
 const MAX_HTTP_REQUEST_BYTES: usize = 64 * 1024;
 const HOSTED_TEST_LOGIN_ENABLED_ENV: &str = "OASIS7_HOSTED_TEST_LOGIN_ENABLED";
+#[cfg(test)]
+#[path = "identity_request_security_tests.rs"]
+mod identity_request_security_tests;
+#[path = "static_http_identity_security.rs"]
+mod identity_security;
+#[cfg(test)]
+#[path = "static_http_passkey_fixture.rs"]
+mod passkey_fixture;
+
+pub(super) struct ConnectionBudget(Arc<std::sync::atomic::AtomicUsize>);
+pub(super) struct ConnectionPermit(Arc<std::sync::atomic::AtomicUsize>);
+impl ConnectionBudget {
+    pub(super) fn new() -> Self {
+        Self(Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+    }
+    pub(super) fn try_acquire(&self) -> Option<ConnectionPermit> {
+        self.0
+            .fetch_update(
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+                |count| if count < 32 { Some(count + 1) } else { None },
+            )
+            .ok()
+            .map(|_| ConnectionPermit(Arc::clone(&self.0)))
+    }
+}
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
 
 #[derive(Debug, Default, Deserialize)]
 struct HostedAccountLoginStartRequest {
@@ -65,6 +96,8 @@ struct HostedTestLoginRequest {
 pub(super) struct StaticHttpRuntimeConfig {
     pub(super) live_bind: String,
     viewer_runtime_config_json: String,
+    pub(super) identity: Arc<Mutex<Option<super::hosted_identity::IdentityService>>>,
+    pub(super) model_client: Option<super::hosted_model_client::HostedModelClient>,
 }
 
 impl StaticHttpRuntimeConfig {
@@ -73,9 +106,23 @@ impl StaticHttpRuntimeConfig {
         live_bind: &str,
         web_bind: &str,
     ) -> Result<Self, String> {
+        let identity = if deployment_mode == DeploymentMode::HostedPublicJoin {
+            super::hosted_identity::IdentityConfig::from_env()?
+                .map(|mut config| {
+                    config.runtime_live_bind = live_bind.to_owned();
+                    super::hosted_identity::IdentityService::new(config)
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        let identity = Arc::new(Mutex::new(identity));
+        let model_client = super::hosted_model_client::HostedModelClient::from_env(&identity)?;
         Ok(Self {
             live_bind: live_bind.to_string(),
             viewer_runtime_config_json: viewer_runtime_config_json(deployment_mode, web_bind)?,
+            identity,
+            model_client,
         })
     }
 }
@@ -99,12 +146,13 @@ pub(super) fn handle_http_connection(
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
 
-    let request_bytes = read_http_request_bytes(&mut stream)?;
+    let request_bytes = zeroize::Zeroizing::new(read_http_request_bytes(&mut stream)?);
     if request_bytes.is_empty() {
         return Ok(());
     }
 
-    let request = String::from_utf8_lossy(request_bytes.as_slice());
+    let request = std::str::from_utf8(request_bytes.as_slice())
+        .map_err(|_| "invalid HTTP request encoding")?;
     let Some(line) = request.lines().next() else {
         write_http_response(&mut stream, 400, "text/plain", b"Bad Request", false)
             .map_err(|err| format!("failed to write 400 response: {err}"))?;
@@ -118,6 +166,89 @@ pub(super) fn handle_http_connection(
 
     let head_only = method.eq_ignore_ascii_case("HEAD");
     let path_only = target.split('?').next().unwrap_or(target);
+    if path_only == super::hosted_model_client::PREFIX || path_only.starts_with("/v1/agent-client/")
+    {
+        let reply = super::hosted_model_client::handle_request(
+            runtime_config,
+            method,
+            target,
+            request,
+            request_body,
+        );
+        write_identity_response(&mut stream, &reply)?;
+        return Ok(());
+    }
+    {
+        let mut identity = runtime_config
+            .identity
+            .lock()
+            .map_err(|_| "identity lock poisoned")?;
+        if let Some(service) = identity.as_mut() {
+            if path_only.starts_with("/api/public/hosted-account/v2/") {
+                let payload = if method == "GET" {
+                    serde_json::json!({"cursor":parse_query_value(target,"cursor")})
+                } else {
+                    match identity_security::parse_identity_json(request_body.as_bytes()) {
+                        Ok(value) => value,
+                        Err(_) => {
+                            write_http_response(
+                                &mut stream,
+                                400,
+                                "application/json",
+                                b"{\"ok\":false,\"error_code\":\"invalid_request\"}",
+                                false,
+                            )
+                            .map_err(|_| "identity response failed")?;
+                            return Ok(());
+                        }
+                    }
+                };
+                let peer = stream
+                    .peer_addr()
+                    .map(|a| a.ip())
+                    .map_err(|_| "identity peer unavailable")?;
+                let source = identity_source(
+                    peer,
+                    service.config.trusted_proxy_loopback,
+                    request.as_ref(),
+                )?;
+                let reply = service.handle(
+                    method,
+                    path_only,
+                    request.as_ref(),
+                    payload,
+                    &source,
+                    &mut *hosted_session_issuer
+                        .lock()
+                        .map_err(|_| "session issuer lock poisoned")?,
+                );
+                drop(identity);
+                if let Some(client) = &runtime_config.model_client {
+                    let _ = client.manager.revoke_invalid_sessions();
+                }
+                write_identity_response(&mut stream, &reply)?;
+                return Ok(());
+            }
+            if path_only.starts_with("/api/public/hosted-account/")
+                || matches!(
+                    path_only,
+                    HOSTED_PLAYER_SESSION_REFRESH_ROUTE
+                        | HOSTED_PLAYER_SESSION_ISSUE_ROUTE
+                        | HOSTED_PLAYER_SESSION_RELEASE_ROUTE
+                )
+            {
+                write_http_response(
+                    &mut stream,
+                    401,
+                    "application/json",
+                    b"{\"ok\":false,\"error_code\":\"identity_v2_required\"}",
+                    false,
+                )
+                .map_err(|_| "identity response failed")?;
+                return Ok(());
+            }
+        }
+    }
     let is_admission_route = path_only == HOSTED_PLAYER_SESSION_ADMISSION_ROUTE;
     let is_refresh_route = path_only == HOSTED_PLAYER_SESSION_REFRESH_ROUTE;
     let is_issue_route = path_only == HOSTED_PLAYER_SESSION_ISSUE_ROUTE;
@@ -352,12 +483,27 @@ pub(super) fn handle_http_connection(
             } else {
                 body
             };
-            write_http_response(
+            let security_headers = if path.extension() == Some(OsStr::new("html"))
+                && runtime_config
+                    .identity
+                    .lock()
+                    .map_err(|_| "identity lock poisoned")?
+                    .is_some()
+            {
+                identity_security::hosted_html_security_headers(
+                    &body,
+                    &runtime_config.viewer_runtime_config_json,
+                )?
+            } else {
+                String::new()
+            };
+            write_http_response_with_headers(
                 &mut stream,
                 200,
                 content_type_for_path(path.as_path()),
                 body.as_slice(),
                 head_only,
+                &security_headers,
             )
             .map_err(|err| format!("failed to write 200 response: {err}"))?;
         }
@@ -622,18 +768,29 @@ fn find_header_terminator(buffer: &[u8]) -> Option<(usize, usize)> {
 }
 
 fn parse_content_length(headers: &str) -> Result<usize, String> {
+    let mut length = None;
     for line in headers.lines() {
         let Some((name, value)) = line.split_once(':') else {
             continue;
         };
         if name.trim().eq_ignore_ascii_case("content-length") {
-            return value
+            if length.is_some() {
+                return Err("duplicate Content-Length header".into());
+            }
+            let parsed = value
                 .trim()
                 .parse::<usize>()
-                .map_err(|err| format!("invalid Content-Length header `{}`: {err}", value.trim()));
+                .map_err(|_| "invalid Content-Length header".to_string())?;
+            if parsed > MAX_HTTP_REQUEST_BYTES {
+                return Err("request body too large".into());
+            }
+            length = Some(parsed);
+        }
+        if name.trim().eq_ignore_ascii_case("transfer-encoding") {
+            return Err("Transfer-Encoding is unsupported".into());
         }
     }
-    Ok(0)
+    Ok(length.unwrap_or(0))
 }
 
 fn extract_request_body(request: &str) -> &str {
@@ -858,6 +1015,49 @@ pub(super) fn build_viewer_auth_bootstrap_script(auth: &ViewerAuthBootstrap) -> 
     )
 }
 
+fn identity_source(peer: IpAddr, trusted_loopback: bool, headers: &str) -> Result<String, String> {
+    let address = if trusted_loopback && peer.is_loopback() {
+        super::hosted_identity::header(headers, "x-real-ip")
+            .and_then(|s| s.parse::<IpAddr>().ok())
+            .ok_or_else(|| "trusted identity proxy must supply one valid X-Real-IP".to_string())?
+    } else {
+        peer
+    };
+    Ok(match address {
+        IpAddr::V6(ip) => ip
+            .to_ipv4_mapped()
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| ip.to_string()),
+        IpAddr::V4(ip) => ip.to_string(),
+    })
+}
+
+fn write_identity_response(
+    stream: &mut TcpStream,
+    reply: &super::hosted_identity::IdentityReply,
+) -> Result<(), String> {
+    let body =
+        serde_json::to_vec(&reply.body).map_err(|_| "identity response serialization failed")?;
+    let mut headers = format!(
+        "HTTP/1.1 {} Identity Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; frame-ancestors 'none'\r\nConnection: close\r\n",
+        reply.status,
+        body.len()
+    );
+    for cookie in &reply.cookies {
+        headers.push_str("Set-Cookie: ");
+        headers.push_str(cookie);
+        headers.push_str("\r\n");
+    }
+    if reply.status == 429 {
+        headers.push_str("Retry-After: 60\r\n");
+    }
+    headers.push_str("\r\n");
+    stream
+        .write_all(headers.as_bytes())
+        .and_then(|_| stream.write_all(&body))
+        .map_err(|_| "identity response write failed".into())
+}
+
 fn write_json_response<T: Serialize>(
     stream: &mut TcpStream,
     status_code: u16,
@@ -883,6 +1083,17 @@ fn write_http_response(
     body: &[u8],
     head_only: bool,
 ) -> std::io::Result<()> {
+    write_http_response_with_headers(stream, status_code, content_type, body, head_only, "")
+}
+
+fn write_http_response_with_headers(
+    stream: &mut TcpStream,
+    status_code: u16,
+    content_type: &str,
+    body: &[u8],
+    head_only: bool,
+    security_headers: &str,
+) -> std::io::Result<()> {
     let status_text = match status_code {
         200 => "OK",
         400 => "Bad Request",
@@ -891,7 +1102,7 @@ fn write_http_response(
         _ => "Internal Server Error",
     };
     let headers = format!(
-        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n{security_headers}Connection: close\r\n\r\n",
         body.len()
     );
     stream.write_all(headers.as_bytes())?;
@@ -941,4 +1152,8 @@ pub(super) fn resolve_viewer_auth_bootstrap_for_embedded_server(
         )
         .ok()
     }
+}
+
+pub(super) fn parse_model_json(body: &[u8]) -> Result<serde_json::Value, String> {
+    identity_security::parse_identity_json(body)
 }

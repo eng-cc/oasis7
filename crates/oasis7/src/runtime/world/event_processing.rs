@@ -841,13 +841,14 @@ impl World {
                 self.push_pending_effect_bounded(intent.clone())?;
             }
             WorldEventBody::ReceiptAppended(receipt) => {
+                let identity_key = self.effect_receipt_key(receipt)?;
                 let mut removed = false;
-                if self.inflight_effects.remove(&receipt.intent_id).is_some() {
+                if self.inflight_effects.remove(&identity_key).is_some() {
                     removed = true;
                 }
                 let before = self.pending_effects.len();
                 self.pending_effects
-                    .retain(|intent| intent.intent_id != receipt.intent_id);
+                    .retain(|intent| intent.identity_key() != identity_key);
                 if before != self.pending_effects.len() {
                     removed = true;
                 }
@@ -954,7 +955,7 @@ impl World {
                 && matches!(
                     &event.body,
                     WorldEventBody::ReceiptAppended(receipt)
-                        if receipt.intent_id == expected_effect_intent_id
+                        if receipt.identity_key() == expected_effect_intent_id
                             && !receipt.status.trim().is_empty()
                 )
         });

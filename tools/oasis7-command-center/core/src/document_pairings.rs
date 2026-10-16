@@ -1,9 +1,9 @@
-//! Explicit top-level pairing fields. Resolution uses only the candidate manifest.
+//! Explicit top-level document relationship fields. Resolution uses only the candidate manifest.
 use crate::document_inventory::{DocumentPairing, DocumentPairings, IndexedDocument};
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::collections::HashMap;
 
-pub(super) fn parse(path: &str, content: &str) -> DocumentPairings {
+pub(super) fn parse(path: &str, content: &str, field_name: &str) -> DocumentPairings {
     let mut result = DocumentPairings {
         targets: Vec::new(),
         issue: None,
@@ -12,7 +12,11 @@ pub(super) fn parse(path: &str, content: &str) -> DocumentPairings {
     let mut quotes = 0;
     for (event, range) in Parser::new(content).into_offset_iter() {
         match event {
-            Event::Start(Tag::Heading { level, .. }) if level != HeadingLevel::H1 => break,
+            Event::Start(Tag::Heading { level, .. })
+                if level != HeadingLevel::H1 && depth == 0 && quotes == 0 =>
+            {
+                break;
+            }
             Event::Start(Tag::BlockQuote(_)) => quotes += 1,
             Event::End(TagEnd::BlockQuote(_)) => quotes -= 1,
             Event::Start(Tag::List(_)) => depth += 1,
@@ -31,7 +35,7 @@ pub(super) fn parse(path: &str, content: &str) -> DocumentPairings {
                 {
                     break;
                 }
-                if key.trim().trim_matches('*') != "配对系统设计" {
+                if key.trim().trim_matches('*') != field_name {
                     continue;
                 }
                 if content[range.clone()]
@@ -73,6 +77,7 @@ pub(super) fn parse(path: &str, content: &str) -> DocumentPairings {
                             resolution: "outside_scope".into(),
                             target_section: None,
                             target_revision: None,
+                            target_kind: None,
                         });
                     }
                 }
@@ -96,7 +101,7 @@ pub(super) fn resolve(
         .map(|file| {
             (
                 file.path.clone(),
-                (file.state.clone(), file.revision.clone()),
+                (file.state.clone(), file.revision.clone(), file.kind.clone()),
             )
         })
         .collect();
@@ -106,13 +111,17 @@ pub(super) fn resolve(
     }
     let mut fragments = HashMap::new();
     for file in files {
-        if let Some(pairings) = &mut file.pairings {
+        for pairings in [&mut file.pairings, &mut file.upstream]
+            .into_iter()
+            .flatten()
+        {
             for edge in &mut pairings.targets {
                 let Some(target) = &edge.target else { continue };
                 let (path, fragment) = target
                     .split_once('#')
                     .map_or((target.as_str(), None), |(p, f)| (p, Some(f)));
-                edge.resolution = match states.get(path).map(|(state, _)| state.as_str()) {
+                edge.target_kind = states.get(path).map(|(_, _, kind)| kind.clone());
+                edge.resolution = match states.get(path).map(|(state, _, _)| state.as_str()) {
                     Some("read") => "resolved",
                     Some("deleted") => "missing",
                     None => "outside_scope",

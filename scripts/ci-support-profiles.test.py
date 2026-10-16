@@ -109,6 +109,7 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         result = self.invoke('plan:' + json.dumps(plan))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('support profile completed: oasis7_game_client', result.stdout)
+        self.assertIn('support profile completed: oasis7_model_provider', result.stdout)
         self.assertIn('support profile completed: wasm_module_observe', result.stdout)
 
     def test_full_inventory_preserves_packages_and_special_commands(self):
