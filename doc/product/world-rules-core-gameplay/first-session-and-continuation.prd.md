@@ -526,6 +526,13 @@ Trace refs: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3；声明：[REQ-FIRST-BR
 
 - FS-16：首局成功基线后的单约束配对样例按 2.2.5 记录匹配完成 receipt、变化前后权威事实与未变化条件，分别给出主要 blocker、保留/占用/消费/损失价值、下一安全动作及条件的观察证据；链路完成、理解迁移、继续意愿与提示介入分别判定。缺少适用观察时保持未验证，不以 fixture、代操作或重复确认宣称独立理解。
 
+<a id="fs7-starter-resource-reason"></a>
+#### FS-7 既有条件子义务：推荐首个资源目标的理由
+
+Trace ID: O7-REQ-f6aebb85-7a07-4e0b-a3cf-f23655f293a2
+
+本条仅为上文 FS-7 已采用的“推荐首个资源目标时可解释其粗粒度价值、可达性与首次持续能力关联而不承诺产出”登记唯一身份，不新增产品承诺。首个 frag 的专业字段与提示缺失语义仍由[出生 PRD 原条件合同](../../world-simulator/scenario/agent-frag-initial-spawn-position.prd.md#fsp-starter-reason-contract)及[设计接收条款](../../world-simulator/scenario/agent-frag-initial-spawn-position.design.md#fsp-reason-design)拥有；[验证关系](../../world-simulator/scenario/agent-frag-initial-spawn-position.design.md#fsp-verification)只覆盖该局部条件，不证明整项 FS-7、首局可达/产出或正式入口已经通过。FS-7 原全文、测试层级、现有产品状态与其余接收范围不变。
+
 ### 6.1 验收追踪
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |

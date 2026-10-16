@@ -80,6 +80,9 @@ impl ViewerRuntimeLiveServer {
         command: AuthoritativeRecoveryCommand,
     ) -> Result<(AuthoritativeRecoveryAck<u64>, bool), AuthoritativeRecoveryError> {
         match command {
+            AuthoritativeRecoveryCommand::ReleaseHostedSession { request } => {
+                self.release_hosted_session(request).map(|ack| (ack, false))
+            }
             AuthoritativeRecoveryCommand::RegisterSession { request } => {
                 self.register_session_key(request).map(|ack| (ack, false))
             }
@@ -824,6 +827,29 @@ impl ViewerRuntimeLiveServer {
             }
         };
         let session_epoch = session_registration_plan.session_epoch();
+        let hosted_authorization = if super::super::auth::hosted_identity_v2_enabled() {
+            let context = super::super::auth::verify_hosted_authorization_grant(
+                request.registration_grant.as_deref().unwrap_or_default(),
+                &verified.player_id,
+                &verified.public_key,
+                false,
+            )
+            .and_then(|context| {
+                self.session_policy
+                    .validate_authorization_registration(&context, session_epoch)?;
+                Ok(context)
+            })
+            .map_err(|message| {
+                self.recovery_error_from_session_policy(
+                    message,
+                    verified.player_id.clone(),
+                    Some(verified.public_key.clone()),
+                )
+            })?;
+            Some(context)
+        } else {
+            None
+        };
         let rotates_session_key = session_registration_plan.rotates_key();
         self.llm_sidecar
             .validate_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
@@ -937,6 +963,9 @@ impl ViewerRuntimeLiveServer {
 
         self.session_policy
             .commit_session_registration(session_registration_plan);
+        if let Some(context) = hosted_authorization {
+            self.session_policy.commit_hosted_authorization(context);
+        }
         self.llm_sidecar
             .commit_player_auth_nonce(verified.player_id.as_str(), verified.nonce);
         if let Some(plan) = binding_plan {

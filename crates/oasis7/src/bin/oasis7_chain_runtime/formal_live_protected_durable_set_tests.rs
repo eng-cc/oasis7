@@ -116,41 +116,107 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     }
     let new_replica_directory = case.root.join("healthy-successor-replica");
     oracle_support::private_directory(&new_replica_directory)?;
-    let start_cut = runtime.published.current()?;
-    let transition = signed_transition(
-        &case.authority,
-        &start_cut.anchor,
-        &case.primary_directory,
-        &new_replica_directory,
-    )?;
-    let boundary_position = transition.body.boundary_position;
-    let operation_id = transition.body.operation_id.clone();
-
-    if start_cut.anchor.head().record().position + 1 != boundary_position {
-        return Err("healthy arm predecessor differs from the actual published cut".into());
-    }
     case.scenario_deadline
         .report_stage("before exact transition arm")?;
-    let armed = runtime.arm_durable_set_transition(&operation_id, transition.clone())?;
+    let (start_cut, transition, armed) = {
+        // The public exact-arm wrapper locks only after its caller constructed
+        // the candidate. A running Node may already have an original continuation
+        // pending then. Wait for that original under the existing scenario budget,
+        // and keep one gate across the first cut, signature and guarded core arm.
+        let _admission = crate::formal_live_runtime::quiesce::acquire_after_pending_clear(
+            &runtime.admission_gate,
+            || runtime.durable_set_arm.pending_open(),
+            case.scenario_deadline.expires_at,
+        )?;
+        if !runtime.started
+            || !runtime
+                .state
+                .ready
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err("formal runtime is not ready to admit a durable-set arm".into());
+        }
+        let start_cut = runtime.published.current()?;
+        let transition = signed_transition(
+            &case.authority,
+            &start_cut.anchor,
+            &case.primary_directory,
+            &new_replica_directory,
+        )?;
+        if start_cut.anchor.head().record().position + 1 != transition.body.boundary_position {
+            return Err("healthy arm predecessor differs from the actual published cut".into());
+        }
+        let armed = crate::formal_live_runtime::quiesce::arm_before_deadline(
+            case.scenario_deadline.expires_at,
+            || {
+                runtime.durable_set_arm.arm(
+                    &transition.body.operation_id,
+                    transition.clone(),
+                    &start_cut.anchor,
+                )
+            },
+        )?;
+        (start_cut, transition, armed)
+    }; // Release admission before any public request or boundary wait.
+    let boundary_position = transition.body.boundary_position;
+    let operation_id = transition.body.operation_id.clone();
+    let transition_digest = transition.body.digest().map_err(|e| e.to_string())?;
     if armed.phase != DurableSetArmPhaseV1::Armed
         || armed.operation_id != operation_id
         || armed.boundary_position != boundary_position
+        || armed.transition_digest != transition_digest
+        || operation_id != fixtures::h(124)
+        || boundary_position == 0
     {
         return Err("formal runtime did not persist the exact healthy transition arm".into());
     }
-    case.scenario_deadline
-        .report_stage("exact transition arm persisted")?;
 
     let owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
         .map_err(|error| error.to_string())?;
     case.scenario_deadline
         .report_stage("before boundary submit and qualification")?;
-    assert_volatile_admission(
-        owner
-            .submit(case.owner_request.clone())
-            .map_err(|error| format!("submit at healthy boundary: {error}"))?,
-        &case.owner_request.correlation,
-    )?;
+    if case.long_history {
+        // Exercise the already-qualified-at-first-query path deterministically
+        // in the long-history/cold-lookup scenario. The short case retains the
+        // immediate Armed/pre-boundary admission path.
+        wait_for_boundary(&runtime, boundary_position)?;
+    }
+    let initial_arm_status = runtime
+        .query_durable_set_transition(&operation_id, boundary_position)?
+        .ok_or("healthy transition arm was not persisted")?;
+    if initial_arm_status.operation_id != operation_id
+        || initial_arm_status.boundary_position != boundary_position
+        || initial_arm_status.transition_digest != transition_digest
+    {
+        return Err("healthy transition query differs from the prepared operation".into());
+    }
+    if case.long_history && initial_arm_status.phase != DurableSetArmPhaseV1::BoundaryQualified {
+        return Err(
+            "long healthy-set scenario did not observe its exact qualified boundary".into(),
+        );
+    }
+    if initial_arm_status.phase == DurableSetArmPhaseV1::Armed {
+        // Preserve the pre-boundary admission when the exact current anchor
+        // still admits it. The node may qualify the boundary while this HTTP
+        // request is in flight, which is why the boundary checks below use
+        // fixed verified anchors rather than another racy current-head read.
+        assert_volatile_admission(
+            owner
+                .submit(case.owner_request.clone())
+                .map_err(|error| format!("submit at healthy boundary: {error}"))?,
+            &case.owner_request.correlation,
+        )?;
+        case.scenario_deadline
+            .report_stage("original request admitted before healthy boundary")?;
+    } else if initial_arm_status.phase != DurableSetArmPhaseV1::BoundaryQualified {
+        return Err(format!(
+            "healthy transition has an unexpected pre-boundary phase: {:?}",
+            initial_arm_status.phase
+        ));
+    } else {
+        case.scenario_deadline
+            .report_stage("pre-boundary admission deferred for exact boundary proof")?;
+    }
     wait_for_boundary(&runtime, boundary_position)?;
     let boundary_cut = runtime.published.current()?;
     if boundary_cut.anchor.head().record().position != boundary_position
@@ -163,43 +229,67 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     {
         return Err("healthy boundary is not the exact old-authority Qualified cut".into());
     }
+    let parent_anchor = start_cut.anchor.clone();
+    let parent = parent_anchor.head().clone();
+    if transition.body.predecessor != parent.head() {
+        return Err("healthy transition predecessor differs from its prepared anchor".into());
+    }
+    let (boundary_candidate, boundary_proof) =
+        crate::execution_bridge::formal_writer::read_published_candidate_at(
+            &case.writer_directory,
+            boundary_position,
+        )?
+        .ok_or("healthy boundary candidate/proof is missing")?;
+    if boundary_candidate.candidate.record != boundary_proof.decision.record {
+        return Err("healthy boundary candidate differs from its qualified proof".into());
+    }
+    verify_record_material(
+        &boundary_proof.decision.record,
+        &boundary_candidate.material,
+    )
+    .map_err(|error| format!("verify healthy boundary material: {error}"))?;
+    let boundary =
+        verify_formal_qualified(&boundary_proof, &case.authority, Some(&parent), None)
+            .map_err(|error| format!("verify exact healthy boundary qualification: {error}"))?;
+    let boundary_anchor = parent_anchor
+        .clone()
+        .after_verified_commit(case.authority.clone(), boundary.clone())
+        .map_err(|error| format!("advance exact healthy boundary anchor: {error}"))?;
     let arm_status = runtime
-        .query_durable_set_transition(&operation_id, boundary_position)?
+        .durable_set_arm
+        .query(&operation_id, boundary_position, &boundary_anchor)?
         .ok_or("healthy arm disappeared at the exact boundary")?;
     if arm_status.phase != DurableSetArmPhaseV1::BoundaryQualified
-        || arm_status.transition_digest != transition.body.digest().map_err(|e| e.to_string())?
+        || arm_status.operation_id != operation_id
+        || arm_status.boundary_position != boundary_position
+        || arm_status.transition_digest != transition_digest
     {
         return Err(format!(
             "healthy boundary arm state mismatch: {arm_status:?}"
         ));
     }
+    let live_after_boundary = runtime.published.current()?;
+    if live_after_boundary.anchor.head().record().position != boundary_position
+        || live_after_boundary.anchor.head().head() != boundary_anchor.head().head()
+        || live_after_boundary
+            .anchor
+            .authority()
+            .context_digest()
+            .map_err(|e| e.to_string())?
+            != case.authority.context_digest().map_err(|e| e.to_string())?
+    {
+        return Err("healthy durable-set arm did not hold the exact qualified boundary".into());
+    }
     case.scenario_deadline
         .report_stage("exact old-authority boundary qualified")?;
 
-    let parent_anchor = start_cut.anchor.clone();
-    let parent = parent_anchor.head().clone();
-    let boundary_anchor = boundary_cut.anchor.clone();
-    let (_, boundary_proof) = crate::execution_bridge::formal_writer::read_published_candidate_at(
-        &case.writer_directory,
-        boundary_position,
-    )?
-    .ok_or("healthy boundary candidate/proof is missing")?;
-    let boundary =
-        verify_formal_qualified(&boundary_proof, &case.authority, Some(&parent), None)
-            .map_err(|error| format!("verify exact healthy boundary qualification: {error}"))?;
     if boundary.head() != boundary_anchor.head().head()
         || boundary_proof
             .decision
             .record
             .durable_set_transition_digest
             .as_deref()
-            != Some(
-                transition
-                    .body
-                    .digest()
-                    .map_err(|e| e.to_string())?
-                    .as_str(),
-            )
+            != Some(transition_digest.as_str())
     {
         return Err("healthy candidate differs from the armed transition boundary".into());
     }

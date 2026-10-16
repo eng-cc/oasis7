@@ -67,6 +67,30 @@ fn build_viewer_live_command_with_service_mode(
             .arg(options.chain_link_policy.as_str());
     }
     if viewer_deployment_mode_from_options(options) == DeploymentMode::HostedPublicJoin {
+        command.env_remove("OASIS7_HOSTED_AUTHORIZATION_ISSUER_PRIVATE_KEY");
+        command.env_remove("OASIS7_HOSTED_IDENTITY_SESSION_KEY");
+        command.env_remove("OASIS7_HOSTED_IDENTITY_EMAIL_KEY");
+        command.env_remove("OASIS7_HOSTED_LOGIN_SMTP_PASSWORD");
+        if oasis7::viewer::hosted_identity_v2_enabled() {
+            if let Ok(private) = std::env::var("OASIS7_HOSTED_AUTHORIZATION_ISSUER_PRIVATE_KEY")
+                && let Ok(public) =
+                    oasis7::viewer::derive_hosted_registration_issuer_public_key(&private)
+            {
+                command.env(
+                    oasis7::viewer::HOSTED_AUTHORIZATION_ISSUER_PUBLIC_KEY_ENV,
+                    public,
+                );
+            }
+            if let (Ok(service), Ok(environment)) = (
+                std::env::var("OASIS7_HOSTED_IDENTITY_SERVICE_ID"),
+                std::env::var("OASIS7_HOSTED_IDENTITY_ENVIRONMENT"),
+            ) {
+                command.env(
+                    "OASIS7_HOSTED_IDENTITY_NAMESPACE",
+                    format!("{}:{}:{}", service.len(), service, environment),
+                );
+            }
+        }
         command.env_remove(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
         if let Ok(issuer_private_key) =
             std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)

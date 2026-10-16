@@ -119,6 +119,7 @@ Trace ID: O7-REQ-3cf9f857-8083-4527-9648-95e9425a8448
 - 功能点：SC-1，本卡成功标准原文与 §5.1 对应行共同限定范围。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[场景加载约束](../../world-simulator/scenario/scenario-files.design.md#scenario-loading-design)及[生成来源与固定输入重建](../../world-simulator/scenario/scenario-files.design.md#generated-world-provenance-design)承接初始化与来源重建切片；五列承接及六列验证反链本SC。
+- 初始化切片补充：[分块生成既有义务与验证](../../world-simulator/scenario/chunked-fragment-generation.design.md#chunk-generation-existing-obligations)接收同一有效 seed/config/chunk trigger order 的初始化确定性；只补反链，不改变本卡组合状态或全部权威事件及交互重现的剩余范围。该专题的[回放规范冲突](../../world-simulator/scenario/chunked-fragment-generation.design.md#chunk-replay-conflict-register)仍待裁决，不由本反链消解。
 - 实现状态：未核实
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
@@ -138,6 +139,48 @@ Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb（[REQ-EXT-003](external
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
 - 剩余范围：外部Runtime观察、决策和权威结果切片以所列叶项为准；builtin及其他provider、正式玩家反馈、完整因果链不能由外部Runtime子集代签。
+
+<a id="sc-agent-002-builtin-input-integrity"></a>
+##### SC-2 已接收子范围：builtin 当前输入完整性
+
+Trace ID: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f
+
+本条只为 §5.1 SC-2/SC-6 已接收的 [builtin 当前输入完整性目标](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-input-integrity)登记跨层身份：实际请求保留当前必需输入，配置不足时在模型调用前停止并给出既有无副作用失败与恢复路径。完整目标、适用条件与独立验收仍见该专业原文及其 [AC](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-input-integrity)，技术预算、输入投影与字段合同不转移到产品层。对应专业条款为[必要输入与预算流程](../../world-simulator/llm/decision-provider-contract.design.md#des-builtin-input-integrity)及[计划验证组](../../world-simulator/llm/decision-provider-contract.design.md#ver-builtin-input-integrity)；这些定位不改变本根 SC 的未核实状态、原证据基线或剩余组合范围，不证明实现修复、完整玩家体验或其它 provider 支持。
+
+<a id="sc-agent-002-builtin-parameter-consistency"></a>
+##### SC-2 已接收子范围：builtin 参数说明一致性
+
+Trace ID: O7-REQ-be4bb896-dc4f-41d1-9f87-c381049ac190
+
+本条只为 §5.1 SC-2 已接收的 [builtin 参数说明一致性目标](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-parameter-consistency)登记跨层身份：同一次请求的文字、schema、parser 与 Runtime 表达同一治理合法参数合同，不因修复说明漂移而扩大合法域。完整目标及独立验收仍见该专业原文与其 [AC](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-parameter-consistency)，正式数值及技术消费关系继续归原专业 authority。对应专业条款为[治理约束消费关系](../../world-simulator/llm/decision-provider-contract.design.md#des-builtin-parameter-consistency)及[计划验证组](../../world-simulator/llm/decision-provider-contract.design.md#ver-builtin-parameter-consistency)；这些定位不改变本根 SC 的未核实状态、原证据基线或剩余组合范围，不证明四方实现已一致或真实模型选择。
+
+<a id="sc-agent-002-factory-metrics"></a>
+##### SC-2 已接收子范围：builtin 动作触发、成败与首达可分辨
+
+Trace ID: O7-REQ-ff9e304a-1782-434c-a344-f5377affe3a3
+
+报告可独立判断建厂/排产是否触发、成败次数与首达 tick。 本条只为原 SC-2 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-metrics)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-metrics)拥有；四个报告 map 保留原语义，不新增触发率分母或首次成功 tick。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-metrics)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-metrics)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-002-factory-tool-only"></a>
+##### SC-2 已接收子范围：builtin 最终决策工具协议
+
+Trace ID: O7-REQ-67e3afba-3cce-4e00-b84e-7be5960020f0
+
+builtin 最终决策经既定工具提交，缺 function_call 不成为有效最终决策。 本条只为原 SC-2 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-tool-only)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-tool-only)拥有；LFO7 的 required、查询工具与 guardrail/修复边界保持，不扩大工具或动作集合。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-tool-only)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-tool-only)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-002-factory-typed-input"></a>
+##### SC-2 已接收子范围：builtin 类型化决策输入单路径
+
+Trace ID: O7-REQ-265317d7-916b-439e-8668-30123bbfdaab
+
+builtin 行为层消费类型化 turn，SDK 解析失败不启用 raw-body JSON 后备入口。 本条只为原 SC-2 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-typed-input)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-typed-input)拥有；LFO9 删除字符串往返不删除 tool 参数/决策语义校验；output 仍供 trace/debug。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-typed-input)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-typed-input)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-002-factory-rewrite-receipt"></a>
+##### SC-2 已接收子范围：builtin 改写原因可追踪
+
+Trace ID: O7-REQ-876ef676-3032-4d78-989a-9d5af5971f43
+
+builtin 的决策改写保留 from/to/reason，并在 trace 与下一轮语境解释原请求为何变化。 本条只为原 SC-2 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-rewrite-receipt)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-rewrite-receipt)拥有；LFO11 的已有 decision_rewrite 与两个 future quote diagnostics 分开，回执不证明成本预览。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-rewrite-receipt)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-rewrite-receipt)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
 
 <a id="sc-agent-003"></a>
 #### 功能状态卡：SC-3 组合
@@ -199,6 +242,8 @@ Trace refs: O7-REQ-aad7b341-83b1-4402-8ebc-8540db36ccfb（[REQ-EXT-003](external
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
 - 剩余范围：外部Runtime上下文有效性和学习情报历史仅覆盖各自叶范围；builtin输入不足、各provider的新鲜度及正式surface刷新/纠正/重排组合仍未完整承接。
 
+Trace refs: O7-REQ-d1ea0352-7f1a-426b-907a-cf41571a1e7f；仅引用 §5.1 已接收的 [builtin 当前输入完整性子范围](#sc-agent-002-builtin-input-integrity)，不另发身份，也不以该子范围代签 SC-6 的正式 surface 与各 provider 组合。
+
 <a id="sc-agent-007"></a>
 #### 功能状态卡：SC-7 组合
 
@@ -213,6 +258,34 @@ Trace refs: O7-REQ-bd792456-4b98-4891-b5e3-e24b1de4f1a1（[REQ-EXT-004](external
 - 实现与验证依据：叶项中固定源码或历史 Task 只证明原候选、入口和局部范围；尚无本根全部适用条件的同候选组合证据，未执行本 SC 行为验收。
 - 核对日期与基线：2026-10-15；需求及设计审读基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；只读文档及已记录证据核对，无新增 Runtime、provider、浏览器、部署或真人运行。
 - 剩余范围：多轮决策、权威回读及首局义务仅作组合入口；工业资源/物流/市场/威胁/治理约束到实际世界更新及玩家主因果、成本、blocker和下一步仍需同候选端到端证据。
+
+<a id="sc-agent-007-factory-recovery"></a>
+##### SC-7 已接收子范围：builtin 失败恢复与反循环
+
+Trace ID: O7-REQ-fffbfcf7-4ab2-46b5-9771-bc14276f9521
+
+失败原因驱动补救并避免无效重复，使 builtin 工业策略收敛到建厂和排产。 本条只为原 SC-7 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-recovery)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-recovery)拥有；恢复目标为原强制要求；初版四项映射仍是建议，N 与模板下限不在此重定。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-recovery)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-recovery)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-007-factory-nested-wait"></a>
+##### SC-7 已接收子范围：builtin 已解析内嵌等待的既定处理
+
+Trace ID: O7-REQ-bdf9e6ce-431b-4bbc-a1d0-4eaecab050e1
+
+旧 builtin lane 的 execute_until 内嵌 wait/wait_ticks 按已选最小动作改写继续推进。 本条只为原 SC-7 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-nested-wait)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-nested-wait)拥有；仅限 LFO11 已解析的内嵌等待；不是 provider 失败 fallback，也不是 native durable Wait。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-nested-wait)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-nested-wait)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-007-factory-refine-preview"></a>
+##### SC-7 已接收子范围：builtin 精炼恢复价值可读
+
+Trace ID: O7-REQ-46cda05b-3486-48e6-a30c-75123ff2822f
+
+硬件不足恢复建议让玩家读到精炼净收益、电力机会成本、硬件缺口与首目标关联。 本条只为原 SC-7 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-refine-preview)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-refine-preview)拥有；strategy hint 或未来升级 schema 路线；缺预览保留 refine_quote_missing，不宣称当前公共 observation 已有字段。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-refine-preview)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-refine-preview)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
+
+<a id="sc-agent-007-factory-power-preview"></a>
+##### SC-7 已接收子范围：builtin 电力恢复生存价值可读
+
+Trace ID: O7-REQ-a66aa3a6-7e7b-49f7-9cef-51c94c229179
+
+电力恢复建议让玩家读到恢复后 runway、下一步可负担性和防停机收益。 本条只为原 SC-7 已接收结果登记精确身份，完整适用条件、技术机制和参数真值仍由[专业义务](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#lfo-power-preview)及其[独立验收](../../world-simulator/llm/llm-factory-strategy-optimization.prd.md#ac-lfo-power-preview)拥有；power_survival_quote_missing 仍是 future routed diagnostic；不新增公共 last_action/schema 字段。 对应[设计承接](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#des-lfo-power-preview)和[计划验证](../../world-simulator/llm/llm-factory-strategy-optimization.design.md#ver-lfo-power-preview)不改变本根组合的未核实状态、原证据基线或剩余范围，不证明实现、玩家体验或其它 provider 已通过。
 
 <a id="sc-agent-008"></a>
 #### 功能状态卡：SC-8 组合

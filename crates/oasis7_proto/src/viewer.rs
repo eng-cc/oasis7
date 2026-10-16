@@ -341,6 +341,9 @@ pub struct AuthoritativeChallengeResolveRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum AuthoritativeRecoveryCommand {
+    ReleaseHostedSession {
+        request: HostedSessionReleaseRequest,
+    },
     RegisterSession {
         request: AuthoritativeSessionRegisterRequest,
     },
@@ -373,6 +376,11 @@ pub enum AuthoritativeRecoveryCommand {
     RotateSession {
         request: AuthoritativeSessionRotateRequest,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostedSessionReleaseRequest {
+    pub authorization_grant: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthoritativeRollbackRequest {

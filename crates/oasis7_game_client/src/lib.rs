@@ -209,7 +209,9 @@ impl WorldServiceTransport {
         if status != 200 {
             return Err(WorldServiceClientError::Rejected {
                 status,
-                message: "private goal request rejected".into(),
+                message: quote_error_category(path, status, &mut response)
+                    .unwrap_or("private goal request rejected")
+                    .into(),
             });
         }
         let bound = self
@@ -372,3 +374,45 @@ mod tests;
 
 #[cfg(test)]
 mod transport_error_tests;
+
+// Private error bodies are never retained. Only route-specific fixed read categories
+// can cross the transport boundary; all other errors keep the generic safe tag.
+fn quote_error_category(path: &str, status: u16, reader: &mut impl Read) -> Option<&'static str> {
+    use oasis7_client_api::world_service::task_context::{
+        TASK_CONTEXT_READ_DELIVERY_DRIFT, TASK_CONTEXT_READ_PATH,
+    };
+    use oasis7_client_api::world_service::{
+        task_factory_quote::*, task_recipe_quote::TASK_RECIPE_QUOTE_PATH,
+    };
+    if status != 409
+        || ![
+            TASK_FACTORY_QUOTE_PATH,
+            TASK_RECIPE_QUOTE_PATH,
+            TASK_CONTEXT_READ_PATH,
+        ]
+        .contains(&path)
+    {
+        return None;
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct ErrorCode {
+        error: String,
+    }
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    reader.take(257).read_to_end(&mut bytes).ok()?;
+    if bytes.len() > 256 {
+        return None;
+    }
+    let error: ErrorCode = serde_json::from_slice(&bytes).ok()?;
+    match error.error.as_str() {
+        TASK_QUOTE_BASE_DRIFT if path != TASK_CONTEXT_READ_PATH => Some(TASK_QUOTE_BASE_DRIFT),
+        TASK_QUOTE_DELIVERY_DRIFT if path != TASK_CONTEXT_READ_PATH => {
+            Some(TASK_QUOTE_DELIVERY_DRIFT)
+        }
+        TASK_CONTEXT_READ_DELIVERY_DRIFT if path == TASK_CONTEXT_READ_PATH => {
+            Some(TASK_CONTEXT_READ_DELIVERY_DRIFT)
+        }
+        _ => None,
+    }
+}
