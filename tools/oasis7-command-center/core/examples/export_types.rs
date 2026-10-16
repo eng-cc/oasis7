@@ -3,6 +3,7 @@ use oasis7_command_center_core::context::*;
 use oasis7_command_center_core::document_directory::*;
 use oasis7_command_center_core::document_inventory::*;
 use oasis7_command_center_core::document_semantic_tree::*;
+use oasis7_command_center_core::document_tree_reading::*;
 use oasis7_command_center_core::domain::*;
 use oasis7_command_center_core::github::{Check, GitHubSnapshot, PullRequest};
 use oasis7_command_center_core::tools::jobs::ToolJob;
@@ -32,6 +33,15 @@ fn main() {
         DocumentLifecycle::decl(),
         DocumentSection::decl(),
         DocumentNavigation::decl(),
+        DocumentTreeRouteStep::decl(),
+        DocumentTreeReadingScope::decl(),
+        DocumentTreeReadingKey::decl(),
+        DocumentTreeReadingFilters::decl(),
+        DocumentTreeReadingSelection::decl(),
+        DocumentTreeReadingState::decl(),
+        DocumentTreeReadingSaveRequest::decl(),
+        DocumentTreeReadingLoadResult::decl(),
+        DocumentTreeLastView::decl(),
         DocumentSemanticTreeQuery::decl(),
         DocumentSemanticTreeEntry::decl(),
         DocumentSemanticTreePage::decl(),

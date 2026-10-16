@@ -1,4 +1,5 @@
 //! Snapshot-bound explicit navigation projections. No filesystem reads or authority inference.
+use crate::document_tree_reading::DocumentTreeRouteStep;
 use crate::{
     CommandCenter, Error, Result,
     document_inventory::{DocumentInventoryQuery, DocumentPairing, IndexedDocument},
@@ -17,6 +18,9 @@ pub struct DocumentSemanticTreeQuery {
     pub parent_occurrence: String,
     #[serde(default)]
     #[ts(optional)]
+    pub parent_route: Option<Vec<DocumentTreeRouteStep>>,
+    #[serde(default)]
+    #[ts(optional)]
     pub lifecycle_filter: Option<String>,
     #[serde(default)]
     #[ts(optional)]
@@ -29,12 +33,14 @@ pub struct DocumentSemanticTreeQuery {
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSemanticBreadcrumb {
     pub occurrence_id: String,
+    pub stable_route: Vec<DocumentTreeRouteStep>,
     pub label: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSemanticTreeEntry {
     pub occurrence_id: String,
+    pub stable_route: Vec<DocumentTreeRouteStep>,
     pub label: String,
     pub path: Option<String>,
     pub kind: String,
@@ -63,6 +69,8 @@ pub struct DocumentSemanticTreePage {
     pub view: String,
     pub parent_occurrence: String,
     pub breadcrumbs: Vec<DocumentSemanticBreadcrumb>,
+    pub parent_route: Vec<DocumentTreeRouteStep>,
+    pub route_notice: Option<String>,
     pub candidates: usize,
     pub read: usize,
     pub omitted: usize,
@@ -90,6 +98,9 @@ impl CommandCenter {
         &self,
         request: DocumentSemanticTreeQuery,
     ) -> Result<DocumentSemanticTreePage> {
+        if let Some(route) = &request.parent_route {
+            crate::document_tree_reading::validate_route(route)?;
+        }
         if !matches!(request.view.as_str(), "product" | "professional") {
             return Err(Error::Invalid("invalid semantic tree view".into()));
         }
@@ -154,8 +165,13 @@ impl CommandCenter {
         } else {
             0
         };
+        let (resolved_parent, route_notice) = if let Some(route) = &request.parent_route {
+            projection.resolve_route(route, &inventory.snapshot_id, &request.view, &matching)
+        } else {
+            (request.parent_occurrence.clone(), None)
+        };
         let (mut entries, breadcrumbs) = projection.children(
-            &request.parent_occurrence,
+            &resolved_parent,
             &matching,
             &inventory.snapshot_id,
             &request.view,
@@ -164,7 +180,7 @@ impl CommandCenter {
         let filter = index::digest(&serde_json::to_vec(&(
             "semantic-tree-v1",
             &request.view,
-            &request.parent_occurrence,
+            &resolved_parent,
             &text,
             &request.inventory.read_filter,
             lifecycle,
@@ -209,7 +225,12 @@ impl CommandCenter {
             baseline_oid: inventory.baseline_oid.clone(),
             generated_at: inventory.generated_at.clone(),
             view: request.view,
-            parent_occurrence: request.parent_occurrence,
+            parent_occurrence: resolved_parent,
+            parent_route: breadcrumbs
+                .last()
+                .map(|b| b.stable_route.clone())
+                .unwrap_or_default(),
+            route_notice,
             breadcrumbs,
             candidates: inventory.files.len(),
             read,
