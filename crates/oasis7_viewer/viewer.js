@@ -1093,6 +1093,9 @@ function Portal(props) {
 	return marker;
 }
 //#endregion
+//#region software_safe_src/model_connection_styles.js
+var modelConnectionStyles = ".model-connection-panel { margin-block: 1rem; padding: .8rem; border: 1px solid var(--border, #777); border-radius: .5rem; min-width: 0; }\n.model-connection-panel summary { cursor: pointer; font-weight: 600; }\n.model-connection-panel p { overflow-wrap: anywhere; line-height: 1.5; }\n.model-connection-panel label { display: grid; gap: .4rem; margin-block: .7rem; min-width: 0; }\n.model-connection-panel select, .model-connection-panel input[type=password] { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; font: inherit; padding: .5rem; }\n.model-connection-panel .model-connection-panel__check { display: flex; align-items: flex-start; gap: .5rem; }\n.model-connection-panel__check input { flex: 0 0 auto; margin-top: .25rem; }\n.model-connection-panel__actions { display: flex; flex-wrap: wrap; gap: .6rem; }\n.model-connection-panel button { white-space: normal; overflow-wrap: anywhere; min-height: 2.75rem; font: inherit; margin-block: .25rem; }\n.model-connection-panel :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }\n\n";
+//#endregion
 //#region software_safe_src/viewer_model_connection_client.js
 var API$1 = "/v1/agent-client";
 var IDENTITY = "/api/public/hosted-account/v2/capabilities";
@@ -1294,7 +1297,7 @@ var _tmpl$$35 = /*#__PURE__*/ template(`<p role=alert>`);
 var _tmpl$2$33 = /*#__PURE__*/ template(`<div class=model-connection-panel__boundary><p>: </p><p>: <!> · </p><p></p><p></p><p>: <!> / </p><p>: <!> / <!> / `);
 var _tmpl$3$26 = /*#__PURE__*/ template(`<form class=model-connection-panel__form><label><select required><option value></option></select></label><label><input type=password name=model-inference-key autocomplete=off maxlength=4096 required></label><label class=model-connection-panel__check><input type=checkbox></label><button type=submit>`);
 var _tmpl$4$23 = /*#__PURE__*/ template(`<label><select>`);
-var _tmpl$5$22 = /*#__PURE__*/ template(`<details class=model-connection-panel data-testid=model-connection-panel><summary></summary><p></p><button type=button>`);
+var _tmpl$5$22 = /*#__PURE__*/ template(`<details class=model-connection-panel data-testid=model-connection-panel><style></style><summary></summary><p></p><button type=button>`);
 var _tmpl$6$15 = /*#__PURE__*/ template(`<p role=status>`);
 var _tmpl$7$11 = /*#__PURE__*/ template(`<option> · <!> · `);
 var _tmpl$8$7 = /*#__PURE__*/ template(`<option> · `);
@@ -1474,57 +1477,58 @@ function ModelConnectionPanel(props) {
 		previousAgent = id;
 	});
 	return (() => {
-		var _el$ = _tmpl$5$22(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$33 = _el$3.nextSibling;
-		insert(_el$2, () => tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor"));
-		insert(_el$3, () => tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run."));
+		var _el$ = _tmpl$5$22(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling, _el$34 = _el$4.nextSibling;
+		insert(_el$2, modelConnectionStyles);
+		insert(_el$3, () => tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor"));
+		insert(_el$4, () => tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run."));
 		insert(_el$, createComponent(Show, {
 			get when() {
 				return error();
 			},
 			get children() {
-				var _el$4 = _tmpl$$35();
-				insert(_el$4, error);
-				return _el$4;
+				var _el$5 = _tmpl$$35();
+				insert(_el$5, error);
+				return _el$5;
 			}
-		}), _el$33);
+		}), _el$34);
 		insert(_el$, createComponent(Show, {
 			get when() {
 				return available();
 			},
 			get fallback() {
 				return (() => {
-					var _el$34 = _tmpl$6$15();
-					insert(_el$34, (() => {
+					var _el$35 = _tmpl$6$15();
+					insert(_el$35, (() => {
 						var _c$ = memo(() => !!capabilities());
 						return () => _c$() ? message(capabilities().reason || (capabilities().authenticated ? "untrusted_executor" : "authentication_required")) : tr("正在核对部署与登录状态；暂不接收凭证。", "Checking deployment and sign-in; credentials are not accepted yet.");
 					})());
-					return _el$34;
+					return _el$35;
 				})();
 			},
 			get children() {
 				return [
 					(() => {
-						var _el$5 = _tmpl$2$33(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild, _el$1 = _el$9.nextSibling;
-						_el$1.nextSibling;
-						var _el$10 = _el$8.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.firstChild, _el$15 = _el$13.nextSibling;
-						_el$15.nextSibling;
-						var _el$16 = _el$12.nextSibling, _el$17 = _el$16.firstChild, _el$20 = _el$17.nextSibling, _el$21 = _el$20.nextSibling.nextSibling;
-						_el$21.nextSibling;
-						insert(_el$6, () => tr("凭证接收方", "Credential recipient"), _el$7);
-						insert(_el$6, () => capabilities()?.trusted_executor?.display_name, null);
-						insert(_el$8, () => tr("执行位置", "Execution location"), _el$9);
-						insert(_el$8, () => capabilities()?.trusted_executor?.location, _el$1);
-						insert(_el$8, () => capabilities()?.trusted_executor?.origin, null);
-						insert(_el$10, () => tr("模型数据将发送至所选 DeepSeek/OpenRouter 预设。供应商账户由你付费；费用未知不等于零，本应用不能限制 Key 在其他应用的支出。", "Model data goes to the selected DeepSeek/OpenRouter preset. Your provider account pays; unknown cost is not zero, and this app cannot cap spending by other apps."));
-						insert(_el$11, () => tr("Key 仅在本次执行端会话内存中使用。关闭网页后续期可能失效，不提供长期托管；已受理世界作业仍按世界规则推进。", "The key is held in executor session memory only. Closing the page may end renewal; long-term hosting is not provided. Accepted world jobs follow world rules."));
-						insert(_el$12, () => tr("会话有效期 / 绝对上限（秒）", "Session lease / absolute limit (seconds)"), _el$13);
-						insert(_el$12, () => Math.floor((capabilities()?.limits?.lease_ms || 0) / 1e3), _el$15);
-						insert(_el$12, () => Math.floor((capabilities()?.limits?.absolute_ms || 0) / 1e3), null);
-						insert(_el$16, () => tr("调用 / token / 并发上限", "Call / token / concurrency limits"), _el$17);
-						insert(_el$16, () => capabilities()?.limits?.max_calls ?? "—", _el$20);
-						insert(_el$16, () => capabilities()?.limits?.max_tokens ?? "—", _el$21);
-						insert(_el$16, () => capabilities()?.limits?.max_concurrent ?? "—", null);
-						return _el$5;
+						var _el$6 = _tmpl$2$33(), _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$7.nextSibling, _el$0 = _el$9.firstChild, _el$10 = _el$0.nextSibling;
+						_el$10.nextSibling;
+						var _el$11 = _el$9.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$13.firstChild, _el$16 = _el$14.nextSibling;
+						_el$16.nextSibling;
+						var _el$17 = _el$13.nextSibling, _el$18 = _el$17.firstChild, _el$21 = _el$18.nextSibling, _el$22 = _el$21.nextSibling.nextSibling;
+						_el$22.nextSibling;
+						insert(_el$7, () => tr("凭证接收方", "Credential recipient"), _el$8);
+						insert(_el$7, () => capabilities()?.trusted_executor?.display_name, null);
+						insert(_el$9, () => tr("执行位置", "Execution location"), _el$0);
+						insert(_el$9, () => capabilities()?.trusted_executor?.location, _el$10);
+						insert(_el$9, () => capabilities()?.trusted_executor?.origin, null);
+						insert(_el$11, () => tr("模型数据将发送至所选 DeepSeek/OpenRouter 预设。供应商账户由你付费；费用未知不等于零，本应用不能限制 Key 在其他应用的支出。", "Model data goes to the selected DeepSeek/OpenRouter preset. Your provider account pays; unknown cost is not zero, and this app cannot cap spending by other apps."));
+						insert(_el$12, () => tr("Key 仅在本次执行端会话内存中使用。关闭网页后续期可能失效，不提供长期托管；已受理世界作业仍按世界规则推进。", "The key is held in executor session memory only. Closing the page may end renewal; long-term hosting is not provided. Accepted world jobs follow world rules."));
+						insert(_el$13, () => tr("会话有效期 / 绝对上限（秒）", "Session lease / absolute limit (seconds)"), _el$14);
+						insert(_el$13, () => Math.floor((capabilities()?.limits?.lease_ms || 0) / 1e3), _el$16);
+						insert(_el$13, () => Math.floor((capabilities()?.limits?.absolute_ms || 0) / 1e3), null);
+						insert(_el$17, () => tr("调用 / token / 并发上限", "Call / token / concurrency limits"), _el$18);
+						insert(_el$17, () => capabilities()?.limits?.max_calls ?? "—", _el$21);
+						insert(_el$17, () => capabilities()?.limits?.max_tokens ?? "—", _el$22);
+						insert(_el$17, () => capabilities()?.limits?.max_concurrent ?? "—", null);
+						return _el$6;
 					})(),
 					createComponent(Show, {
 						get when() {
@@ -1532,55 +1536,55 @@ function ModelConnectionPanel(props) {
 						},
 						get fallback() {
 							return (() => {
-								var _el$35 = _tmpl$6$15();
-								insert(_el$35, () => tr("先选中你有权控制的 Agent；连接不能补授权限。", "Select an Agent you may control; a model connection cannot grant authority."));
-								return _el$35;
+								var _el$36 = _tmpl$6$15();
+								insert(_el$36, () => tr("先选中你有权控制的 Agent；连接不能补授权限。", "Select an Agent you may control; a model connection cannot grant authority."));
+								return _el$36;
 							})();
 						},
 						get children() {
-							var _el$22 = _tmpl$3$26(), _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$23.nextSibling, _el$27 = _el$26.firstChild, _el$28 = _el$26.nextSibling, _el$29 = _el$28.firstChild, _el$30 = _el$28.nextSibling;
-							_el$22.addEventListener("submit", create);
-							insert(_el$23, () => tr("供应商与模型", "Provider and model"), _el$24);
-							_el$24.addEventListener("change", (event) => setPreset(event.currentTarget.value));
-							insert(_el$25, () => tr("请选择本部署配置", "Choose a configured preset"));
-							insert(_el$24, createComponent(For, {
+							var _el$23 = _tmpl$3$26(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$27.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$29.nextSibling;
+							_el$23.addEventListener("submit", create);
+							insert(_el$24, () => tr("供应商与模型", "Provider and model"), _el$25);
+							_el$25.addEventListener("change", (event) => setPreset(event.currentTarget.value));
+							insert(_el$26, () => tr("请选择本部署配置", "Choose a configured preset"));
+							insert(_el$25, createComponent(For, {
 								get each() {
 									return capabilities()?.presets;
 								},
 								children: (item) => (() => {
-									var _el$36 = _tmpl$7$11(), _el$37 = _el$36.firstChild, _el$39 = _el$37.nextSibling;
-									_el$39.nextSibling;
-									insert(_el$36, () => item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter", _el$37);
-									insert(_el$36, () => item.model_id, _el$39);
-									insert(_el$36, (() => {
+									var _el$37 = _tmpl$7$11(), _el$38 = _el$37.firstChild, _el$40 = _el$38.nextSibling;
+									_el$40.nextSibling;
+									insert(_el$37, () => item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter", _el$38);
+									insert(_el$37, () => item.model_id, _el$40);
+									insert(_el$37, (() => {
 										var _c$2 = memo(() => item.protocol === "chat_completions");
 										return () => _c$2() ? tr("工具对话", "Chat tools") : "Responses";
 									})(), null);
-									createRenderEffect(() => _el$36.value = item.id);
-									return _el$36;
+									createRenderEffect(() => _el$37.value = item.id);
+									return _el$37;
 								})()
 							}), null);
-							insert(_el$26, () => tr("推理 API Key", "Inference API key"), _el$27);
+							insert(_el$27, () => tr("推理 API Key", "Inference API key"), _el$28);
 							var _ref$ = keyInput;
-							typeof _ref$ === "function" ? use(_ref$, _el$27) : keyInput = _el$27;
-							setAttribute(_el$27, "spellcheck", false);
-							_el$29.addEventListener("change", (event) => setConsent(event.currentTarget.checked));
-							insert(_el$28, () => tr("我知晓凭证接收方、会话隐私和供应商账户费用，同意本次连接使用。", "I understand the recipient, session privacy and provider charges, and consent to this connection."), null);
-							insert(_el$30, () => tr("保存本次连接", "Create session connection"));
+							typeof _ref$ === "function" ? use(_ref$, _el$28) : keyInput = _el$28;
+							setAttribute(_el$28, "spellcheck", false);
+							_el$30.addEventListener("change", (event) => setConsent(event.currentTarget.checked));
+							insert(_el$29, () => tr("我知晓凭证接收方、会话隐私和供应商账户费用，同意本次连接使用。", "I understand the recipient, session privacy and provider charges, and consent to this connection."), null);
+							insert(_el$31, () => tr("保存本次连接", "Create session connection"));
 							createRenderEffect((_p$) => {
 								var _v$ = busy(), _v$2 = busy(), _v$3 = busy() || !consent() || !preset();
-								_v$ !== _p$.e && (_el$24.disabled = _p$.e = _v$);
-								_v$2 !== _p$.t && (_el$27.disabled = _p$.t = _v$2);
-								_v$3 !== _p$.a && (_el$30.disabled = _p$.a = _v$3);
+								_v$ !== _p$.e && (_el$25.disabled = _p$.e = _v$);
+								_v$2 !== _p$.t && (_el$28.disabled = _p$.t = _v$2);
+								_v$3 !== _p$.a && (_el$31.disabled = _p$.a = _v$3);
 								return _p$;
 							}, {
 								e: void 0,
 								t: void 0,
 								a: void 0
 							});
-							createRenderEffect(() => _el$24.value = preset());
-							createRenderEffect(() => _el$29.checked = consent());
-							return _el$22;
+							createRenderEffect(() => _el$25.value = preset());
+							createRenderEffect(() => _el$30.checked = consent());
+							return _el$23;
 						}
 					}),
 					createComponent(Show, {
@@ -1588,24 +1592,24 @@ function ModelConnectionPanel(props) {
 							return connections().length;
 						},
 						get children() {
-							var _el$31 = _tmpl$4$23(), _el$32 = _el$31.firstChild;
-							insert(_el$31, () => tr("本会话连接", "Session connections"), _el$32);
-							_el$32.addEventListener("change", (event) => setSelectedId(event.currentTarget.value));
-							insert(_el$32, createComponent(For, {
+							var _el$32 = _tmpl$4$23(), _el$33 = _el$32.firstChild;
+							insert(_el$32, () => tr("本会话连接", "Session connections"), _el$33);
+							_el$33.addEventListener("change", (event) => setSelectedId(event.currentTarget.value));
+							insert(_el$33, createComponent(For, {
 								get each() {
 									return connections();
 								},
 								children: (item) => (() => {
-									var _el$40 = _tmpl$8$7(), _el$41 = _el$40.firstChild;
-									insert(_el$40, () => capabilities()?.presets.find((value) => value.id === item.preset_id)?.model_id || tr("模型配置", "Model configuration"), _el$41);
-									insert(_el$40, () => stateLabel(item.state), null);
-									createRenderEffect(() => _el$40.value = item.id);
-									return _el$40;
+									var _el$41 = _tmpl$8$7(), _el$42 = _el$41.firstChild;
+									insert(_el$41, () => capabilities()?.presets.find((value) => value.id === item.preset_id)?.model_id || tr("模型配置", "Model configuration"), _el$42);
+									insert(_el$41, () => stateLabel(item.state), null);
+									createRenderEffect(() => _el$41.value = item.id);
+									return _el$41;
 								})()
 							}));
-							createRenderEffect(() => _el$32.disabled = busy());
-							createRenderEffect(() => _el$32.value = selectedId());
-							return _el$31;
+							createRenderEffect(() => _el$33.disabled = busy());
+							createRenderEffect(() => _el$33.value = selectedId());
+							return _el$32;
 						}
 					}),
 					createComponent(Show, {
@@ -1613,75 +1617,75 @@ function ModelConnectionPanel(props) {
 							return selected();
 						},
 						children: (current) => (() => {
-							var _el$42 = _tmpl$9$6(), _el$43 = _el$42.firstChild, _el$44 = _el$43.firstChild, _el$45 = _el$43.nextSibling, _el$46 = _el$45.firstChild, _el$48 = _el$46.nextSibling;
-							_el$48.nextSibling;
-							var _el$51 = _el$45.nextSibling, _el$52 = _el$51.firstChild, _el$53 = _el$51.nextSibling, _el$54 = _el$53.nextSibling, _el$55 = _el$54.firstChild, _el$56 = _el$54.nextSibling, _el$57 = _el$56.firstChild, _el$58 = _el$57.nextSibling, _el$59 = _el$58.nextSibling, _el$60 = _el$56.nextSibling;
-							insert(_el$43, (() => {
+							var _el$43 = _tmpl$9$6(), _el$44 = _el$43.firstChild, _el$45 = _el$44.firstChild, _el$46 = _el$44.nextSibling, _el$47 = _el$46.firstChild, _el$49 = _el$47.nextSibling;
+							_el$49.nextSibling;
+							var _el$52 = _el$46.nextSibling, _el$53 = _el$52.firstChild, _el$54 = _el$52.nextSibling, _el$55 = _el$54.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$55.nextSibling, _el$58 = _el$57.firstChild, _el$59 = _el$58.nextSibling, _el$60 = _el$59.nextSibling, _el$61 = _el$57.nextSibling;
+							insert(_el$44, (() => {
 								var _c$3 = memo(() => current().state === "revoked");
 								return () => _c$3() ? stateLabel("revoked") : memo(() => !!expired(current()))() ? stateLabel("expired") : stateLabel(current().state);
-							})(), _el$44);
-							insert(_el$43, () => stateLabel(current().run_state), null);
-							insert(_el$45, () => tr("已占用调用预算 / token", "Call budget used / tokens reserved"), _el$46);
-							insert(_el$45, () => current().calls_spent ?? "—", _el$48);
-							insert(_el$45, () => current().tokens_reserved ?? "—", null);
-							insert(_el$42, createComponent(Show, {
+							})(), _el$45);
+							insert(_el$44, () => stateLabel(current().run_state), null);
+							insert(_el$46, () => tr("已占用调用预算 / token", "Call budget used / tokens reserved"), _el$47);
+							insert(_el$46, () => current().calls_spent ?? "—", _el$49);
+							insert(_el$46, () => current().tokens_reserved ?? "—", null);
+							insert(_el$43, createComponent(Show, {
 								get when() {
 									return current().error_code;
 								},
 								get children() {
-									var _el$49 = _tmpl$6$15();
-									insert(_el$49, () => message(current().error_code));
-									return _el$49;
+									var _el$50 = _tmpl$6$15();
+									insert(_el$50, () => message(current().error_code));
+									return _el$50;
 								}
-							}), _el$51);
-							insert(_el$42, createComponent(Show, {
+							}), _el$52);
+							insert(_el$43, createComponent(Show, {
 								get when() {
 									return !capabilities()?.executor_available;
 								},
 								get children() {
-									var _el$50 = _tmpl$6$15();
-									insert(_el$50, () => message("executor_unavailable"));
-									return _el$50;
+									var _el$51 = _tmpl$6$15();
+									insert(_el$51, () => message("executor_unavailable"));
+									return _el$51;
 								}
-							}), _el$51);
-							_el$52.addEventListener("change", (event) => setProbeConsent(event.currentTarget.checked));
-							insert(_el$51, () => tr("同意一次有界、可能计费的模型检查；不写游戏世界。", "Consent to a bounded, potentially billable model check; it does not write the world."), null);
-							_el$53.$$click = () => void act(async () => {
+							}), _el$52);
+							_el$53.addEventListener("change", (event) => setProbeConsent(event.currentTarget.checked));
+							insert(_el$52, () => tr("同意一次有界、可能计费的模型检查；不写游戏世界。", "Consent to a bounded, potentially billable model check; it does not write the world."), null);
+							_el$54.$$click = () => void act(async () => {
 								apply(await client.probe(current()));
 								setProbeConsent(false);
 								setRunConsent(false);
 							});
-							insert(_el$53, () => tr("测试连接", "Test connection"));
-							_el$55.addEventListener("change", (event) => setRunConsent(event.currentTarget.checked));
-							insert(_el$54, () => tr("确认当前 Agent、目标与上述运行限制，开始后供应商账户继续计费。", "Confirm this Agent, goal and limits; starting permits further provider charges."), null);
-							_el$57.$$click = () => void act(async () => {
+							insert(_el$54, () => tr("测试连接", "Test connection"));
+							_el$56.addEventListener("change", (event) => setRunConsent(event.currentTarget.checked));
+							insert(_el$55, () => tr("确认当前 Agent、目标与上述运行限制，开始后供应商账户继续计费。", "Confirm this Agent, goal and limits; starting permits further provider charges."), null);
+							_el$58.$$click = () => void act(async () => {
 								apply(await client.activate(current(), {
 									target_ref: { agent_id: agentId() },
 									limits: capabilities().limits
 								}));
 								setRunConsent(false);
 							});
-							insert(_el$57, () => tr("确认开始", "Confirm start"));
-							_el$58.$$click = () => void act(async () => {
+							insert(_el$58, () => tr("确认开始", "Confirm start"));
+							_el$59.$$click = () => void act(async () => {
 								apply(await client.stop(current()));
 								setRunConsent(false);
 							});
-							insert(_el$58, () => tr("停止新决策", "Stop new decisions"));
-							_el$59.$$click = () => void act(async () => {
+							insert(_el$59, () => tr("停止新决策", "Stop new decisions"));
+							_el$60.$$click = () => void act(async () => {
 								apply(await client.forget(current()));
 								setProbeConsent(false);
 								setRunConsent(false);
 							});
-							insert(_el$59, () => tr("断开并忘记", "Disconnect and forget"));
-							insert(_el$60, () => tr("停止保留本次有效连接；忘记会停用凭证。两者都不撤销供应商 Key、不保证已发调用退款，也不取消已提交世界作业。未知结果须按原操作核对。", "Stop retains the valid session connection; forget disables its credential. Neither revokes the provider key, refunds sent calls, nor cancels submitted world jobs. Unknown outcomes require original-operation lookup."));
+							insert(_el$60, () => tr("断开并忘记", "Disconnect and forget"));
+							insert(_el$61, () => tr("停止保留本次有效连接；忘记会停用凭证。两者都不撤销供应商 Key、不保证已发调用退款，也不取消已提交世界作业。未知结果须按原操作核对。", "Stop retains the valid session connection; forget disables its credential. Neither revokes the provider key, refunds sent calls, nor cancels submitted world jobs. Unknown outcomes require original-operation lookup."));
 							createRenderEffect((_p$) => {
 								var _v$4 = busy() || expired(current()), _v$5 = busy() || expired(current()) || !probeConsent(), _v$6 = busy() || expired(current()) || !capabilities()?.executor_available, _v$7 = busy() || expired(current()) || current().state !== "ready" || !runConsent() || !canControl() || !capabilities()?.executor_available, _v$8 = busy() || expired(current()), _v$9 = busy() || current().state === "revoked";
-								_v$4 !== _p$.e && (_el$52.disabled = _p$.e = _v$4);
-								_v$5 !== _p$.t && (_el$53.disabled = _p$.t = _v$5);
-								_v$6 !== _p$.a && (_el$55.disabled = _p$.a = _v$6);
-								_v$7 !== _p$.o && (_el$57.disabled = _p$.o = _v$7);
-								_v$8 !== _p$.i && (_el$58.disabled = _p$.i = _v$8);
-								_v$9 !== _p$.n && (_el$59.disabled = _p$.n = _v$9);
+								_v$4 !== _p$.e && (_el$53.disabled = _p$.e = _v$4);
+								_v$5 !== _p$.t && (_el$54.disabled = _p$.t = _v$5);
+								_v$6 !== _p$.a && (_el$56.disabled = _p$.a = _v$6);
+								_v$7 !== _p$.o && (_el$58.disabled = _p$.o = _v$7);
+								_v$8 !== _p$.i && (_el$59.disabled = _p$.i = _v$8);
+								_v$9 !== _p$.n && (_el$60.disabled = _p$.n = _v$9);
 								return _p$;
 							}, {
 								e: void 0,
@@ -1691,17 +1695,17 @@ function ModelConnectionPanel(props) {
 								i: void 0,
 								n: void 0
 							});
-							createRenderEffect(() => _el$52.checked = probeConsent());
-							createRenderEffect(() => _el$55.checked = runConsent());
-							return _el$42;
+							createRenderEffect(() => _el$53.checked = probeConsent());
+							createRenderEffect(() => _el$56.checked = runConsent());
+							return _el$43;
 						})()
 					})
 				];
 			}
-		}), _el$33);
-		_el$33.$$click = () => void refresh();
-		insert(_el$33, () => tr("刷新连接状态", "Refresh connection status"));
-		createRenderEffect(() => _el$33.disabled = busy());
+		}), _el$34);
+		_el$34.$$click = () => void refresh();
+		insert(_el$34, () => tr("刷新连接状态", "Refresh connection status"));
+		createRenderEffect(() => _el$34.disabled = busy());
 		return _el$;
 	})();
 }
