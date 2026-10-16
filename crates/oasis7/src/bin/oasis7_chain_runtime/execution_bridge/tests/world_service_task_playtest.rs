@@ -418,6 +418,12 @@ fn run_prepared_world_service_kind(
             while !stop.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // Darwin inherits the listener's O_NONBLOCK on accept.
+                        // HTTP reads below use blocking read_exact with the
+                        // existing timeout; a fragmented header/body must not
+                        // be mistaken for a disconnected client on WouldBlock.
+                        // Match the production status server's stream setup.
+                        stream.set_nonblocking(false).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(5)))
                             .unwrap();
