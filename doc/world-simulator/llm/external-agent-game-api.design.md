@@ -53,6 +53,9 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 当前 executor 以当前完整 fence 签署 POST `/v1/world/private-task/context-prepare`；同操作原 nonce 可恢复，异 nonce 冲突。私有记录包含完整 GoalContent/proof、同 pin 的原始 `world-agent-state/v1` AgentState、实际授权目录、Runtime/base binding、随机盐和原准备证明。独立 AEAD 密文保存并 fsync，不截断到旧 Harness 的 512 字节目标摘要。一个 Context 的租期为 `min(catalog.valid_until_tick, checked(base_tick + 16))`；canonical prefix 同样检验原 captured tick 的 16 tick 上限并拒绝溢出，不能靠后续 current tick 延期。超过期限不能获得正文或授权新效果。
 
+活跃任务的恢复证据保留必须覆盖该任务当前完整 fence 下所有已提交原 Context prefix、终止 outcome 与动作结果的实际历史提交材料，包括已消费或已过期 Context；不能只按 Context 当前可写性决定 GC pin。派生 pin 仅保留签名回读所需 snapshot、journal 与 head proof，不授予旧 Context 新写权，也不延长 16 tick 租期；任务／完整 fence 退休后释放对应依赖。原结果已确认但历史材料在既定保留范围外时返回 `HistoryUnavailable` 并保留原身份、停止新副作用；记录头仍存在但引用已压缩同样属于历史不可用，不伪装成可重试服务故障或 `Unknown`。损坏或冲突证据继续失败关闭。正常维护与重启可从当前 hot 权威结果重建依赖，并将已有派生 scope 指向的历史切点作为候选，与当前 hot／cold canonical 结果和完整 fence 逐条重验；scope 本身不证明结果或权限。既有 scope 损坏必须阻止 GC。所有派生 scope 均丢失、且原结果已全部转 cold 时的完整发现与重建尚未由此路径提供，不得宣称该损坏恢复能力已验收。
+
+
 准备不等于可用。客户端先提交 identity-only `SchedulerOperationV1::TaskProviderPrefix`，等待 canonical committed，再 POST `/v1/world/private-task/context-read`。回应包含原密文记录、实际捕获 CommitRef/receipt 及当前同 pin 的公共 base binding/观察/能力。客户端核对配置服务签名、原意图、完整目标 proof、盐承诺、捕获回执和新鲜 bundle。世界公开历史只存完整 fence、session/turn/request 标识及三项私有随机盐隔域承诺，不保存正文、原私有摘要、盐或完整 Provider request。受信服务签名证明所交付内容，不代替独立共识证书。
 
 当前目标激活和有效 Context 捕获所依赖的真实历史 snapshot/journal/head proof，由 canonical 世界状态派生专用 CAS pin scope；普通提交、catchup、checkpoint install 和全量维护均保留这些依赖，目标替换或 Context 失效后释放。派生 cache 不构成任务权威，丢失时从 canonical receipt 重建，损坏时阻止 GC。已经被旧版本清理且不可恢复的历史依赖返回 `recovery_required`，不能用当前 CommitRef 冒充历史激活证明。

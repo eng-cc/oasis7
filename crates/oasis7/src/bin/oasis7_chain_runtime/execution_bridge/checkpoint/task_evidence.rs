@@ -141,8 +141,39 @@ pub(super) fn protected_heights(
     }
     Ok(result)
 }
+// Receipt retention follows the task fence, independently of context write leases.
+fn current_task_receipt(world: &oasis7::runtime::World, result: &CanonicalIntentResultV1) -> bool {
+    if result.rejected.is_some() {
+        return false;
+    }
+    match &result.request.signed_payload {
+        WorldServicePayloadV1::Scheduler(signed) => match &signed.request.operation {
+            SchedulerOperationV1::TaskProviderPrefix { context }
+            | SchedulerOperationV1::TaskProviderFailure { context, .. } => {
+                game_task::validate_task_executor(world, &context.fence, &signed.subject_public_key)
+                    .is_ok()
+            }
+            _ => false,
+        },
+        WorldServicePayloadV1::Cognition(signed) => {
+            signed.request.task_fence.as_ref().is_some_and(|fence| {
+                game_task::validate_task_fence(
+                    world,
+                    fence,
+                    &signed.subject_public_key,
+                    signed.request.delegation_generation,
+                )
+                .is_ok()
+            })
+        }
+        _ => false,
+    }
+}
 fn live_results(
     world: &oasis7::runtime::World,
+    records: &Path,
+    store: &LocalCasStore,
+    previous: &BTreeSet<u64>,
 ) -> Result<BTreeMap<u64, Vec<CanonicalIntentResultV1>>, String> {
     let mut selected: BTreeMap<u64, Vec<CanonicalIntentResultV1>> = BTreeMap::new();
     for agent in world.state().agents.keys() {
@@ -157,22 +188,61 @@ fn live_results(
         correlation::validate_result(key, value)?;
         let result: CanonicalIntentResultV1 = serde_json::from_value(value.clone())
             .map_err(|_| "invalid canonical task retention result")?;
-        if result.rejected.is_some() {
-            continue;
-        }
-        let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
-            continue;
-        };
-        let SchedulerOperationV1::TaskProviderPrefix { context } = &signed.request.operation else {
-            continue;
-        };
-        if game_task::validate_task_context_capture(world, context, &signed.subject_public_key)
-            .is_ok()
-        {
+        if current_task_receipt(world, &result) {
             selected
                 .entry(result.committed_height)
                 .or_default()
                 .push(result);
+        }
+    }
+    let Some(identity) = selected
+        .values()
+        .flatten()
+        .next()
+        .map(|result| result.request.correlation.key.world.clone())
+    else {
+        return Ok(selected);
+    };
+    // Existing pins are bounded discovery hints when receipts move to cold history.
+    // Revalidate against current canonical results and the current full fence:
+    // neither a historical cut nor a pin grants authority or prolongs a context.
+    for height in previous {
+        let pinned = super::super::world_service_read::pin_at_height(
+            records,
+            store.root(),
+            &identity,
+            *height,
+        )?;
+        for (key, value) in &pinned
+            .world
+            .capability_revocation_state()
+            .world_service_results
+        {
+            correlation::validate_result(key, value)?;
+            let result: CanonicalIntentResultV1 = serde_json::from_value(value.clone())
+                .map_err(|_| "invalid historical task retention result")?;
+            if result.committed_height != *height || !current_task_receipt(world, &result) {
+                continue;
+            }
+            let canonical = if let Some(hot) = world
+                .capability_revocation_state()
+                .world_service_results
+                .get(key)
+            {
+                serde_json::from_value(hot.clone()).map_err(|_| "invalid current task receipt")?
+            } else {
+                world
+                    .read_retained_world_service_result(key)
+                    .map_err(|_| "live task canonical receipt recovery required")?
+                    .ok_or("live task canonical receipt unavailable")?
+            };
+            if canonical != result {
+                return Err("live task historical canonical receipt mismatch".into());
+            }
+            let results = selected.entry(*height).or_default();
+            if !results.contains(&result) {
+                results.push(result);
+            }
         }
     }
     Ok(selected)
@@ -186,7 +256,7 @@ pub(super) fn refresh(
     hot: u64,
 ) -> Result<(), String> {
     let previous = protected_heights(records, store)?;
-    let wanted = live_results(world)?;
+    let wanted = live_results(world, records, store, &previous)?;
     let latest = list_execution_bridge_record_heights(records)?
         .last()
         .copied()

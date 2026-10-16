@@ -112,3 +112,5 @@ The other supported reasons are `provider_failed` and `transport_exhausted`. Do 
 After goal publication, executor replacement, Stop or delegation revocation, old contexts cannot authorize new effects. Query original settled results, reread `task`, and capture a fresh context only while still authorized. On Stop or revoked authority, stop acting and report the boundary. Do not rebind yourself or alter the owner goal.
 
 Report the goal revision, chosen action, canonical result and observed effect concisely. Distinguish a prepared-world attached-agent run from cold entry or an OpenClaw integration test. If independent isolation is instruction-only, say so.
+
+原 operation 回读若为 `HistoryUnavailable`，保留原 request/correlation、run 与持久预算并停止新副作用；交由宿主恢复历史材料，不能把记录头仍存在当作回执可用，也不能换世界或新建操作来代替恢复。
