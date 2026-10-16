@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "e9a6aa50104d994c4536204fd853642de0dd064e2f62b6d1f39070b5804e9763",
+    "content_sha256": "1c522ab39469d1d93c07c23b7879ae95844e4f16a20922bc9f63fcba81971de9",
     "current_authority": "README.md",
     "decision_owner": "liveops_community",
     "disposition": "retain_current_authority",
-    "note": "current README and external-claim governance requirements",
+    "note": "current README and external-claim governance requirements; Prior review retained; AC-37-only terminology delta independently reviewed against access-modes section 2 at b5476a61; no full-document rereview claimed.",
     "path": "doc/readme/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
