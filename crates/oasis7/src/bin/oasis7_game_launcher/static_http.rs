@@ -207,11 +207,7 @@ pub(super) fn handle_http_connection(
                     .peer_addr()
                     .map(|a| a.ip())
                     .map_err(|_| "identity peer unavailable")?;
-                let source = identity_source(
-                    peer,
-                    service.config.trusted_proxy_loopback,
-                    request,
-                )?;
+                let source = identity_source(peer, service.config.trusted_proxy_loopback, request)?;
                 let reply = service.handle(
                     method,
                     path_only,
