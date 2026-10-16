@@ -329,6 +329,22 @@ class Workflow(unittest.TestCase):
             invocation='Execute selected group' if name=='launcher-web' else 'Run full test tier'
             self.assertLess(job.index('bash scripts/install-ci-trunk.sh'),job.index(invocation))
 
+    def test_failed_scope_planning_reports_gate_failure_before_artifact_download(self):
+        gate = JOBS['required-gate']
+        self.assertIn('always()', gate)
+        self.assertLess(gate.index('Require successful scope planning'),
+                        gate.index('actions/download-artifact@'))
+        script = gate.split('        run: |\n', 1)[1].split('      - uses:', 1)[0]
+        for state in ('failure', 'cancelled', 'skipped', '', 'success'):
+            with self.subTest(state=state):
+                result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
+                                        env=dict(os.environ, SELECT_RESULT=state))
+                self.assertEqual(result.returncode, 0 if state == 'success' else 1)
+                if state != 'success':
+                    self.assertIn('CI scope planning did not succeed', result.stdout)
+        for name in ('oasis7-test-build', 'formal-process-tests', 'command-center'):
+            self.assertIn("needs.select.result == 'success'", JOBS[name])
+
     def test_gate_is_last_and_all_groups_are_dependencies(self):
         gate = JOBS['required-gate']
         dependencies = re.search(r'    needs: \[(.*)\]', gate).group(1).split(', ')

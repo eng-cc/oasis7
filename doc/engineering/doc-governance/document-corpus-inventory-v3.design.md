@@ -565,7 +565,7 @@ git diff --check
 | DCI-T34 | bundle 成员有越界或跨 loop | 普通叶子拒绝；不能只审一个成员取得整组写权 |
 | DCI-T35 | candidate 改共享 loader、policy 或注入 import shadow | trusted admission 不消费候选 authority |
 | DCI-T36 | 未声明新 sidecar、已有 source out_of_scope、纯复核动作 | 前两者拒绝；后者有明确复核 scope 时允许 |
-| DCI-T37 | 纯文档 sidecar、checker、共享准入依赖、unknown 路径 | 能力集合符合 §8.4，unknown 保留 full |
+| DCI-T37 | 纯文档 sidecar、checker、共享准入依赖、unknown 路径 | 能力集合符合 §8.4；未登记路径按[CI 门禁](../../testing/ci/ci-tiered-execution.prd.md#ci-unknown-inputs)阻断，输入解析失败仍保留 full |
 | DCI-T38 | author/prepare/required 实际调用；checker 故意失败 | 所有适用入口阻断；无只登记不执行、无重复全库调用 |
 | DCI-T39 | full/full-core/full-support 和 renderer/receipt | 移动测试不漏跑，selector 与证据保持一致 |
 

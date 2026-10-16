@@ -313,7 +313,7 @@ jobs:
 
   formal-process-tests:
     needs: [select, oasis7-test-build]
-    if: needs.select.outputs.run_formal_process == 'true'
+    if: needs.select.result == 'success' && needs.select.outputs.run_formal_process == 'true'
     timeout-minutes: ${{ matrix.suite == 'world-history' && 45 || 90 }}
     strategy:
       fail-fast: false
@@ -1216,6 +1216,15 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [select, command-center, baseline, rust-baseline, oasis7-required, formal-process, consensus, distfs, node, net, viewer-js-required, viewer-performance-report, pixel-world-bridge, launcher-web, workspace-support, scenario-regression, operational-contracts, packaging-contracts, workflow-governance, codex-agent-config-validation, compile-metrics, site-quality, doc-checker-contracts, cargo-tooling-contracts, windows-rollout, macos-package-contract, fleet-health]
     steps:
+      - name: Require successful scope planning
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+        shell: bash
+        run: |
+          if [[ "$SELECT_RESULT" != success ]]; then
+            echo "::error::CI scope planning did not succeed ($SELECT_RESULT); see select diagnostics for unregistered paths or input errors."
+            exit 1
+          fi
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
