@@ -13,6 +13,12 @@ const reasons: Record<string, string> = {
 };
 const states: Record<string, string> = { read: '已读取', skipped: '已跳过', deleted: '已删除', error: '读取错误' };
 const categories: Record<string, string> = { proposed: '提议', draft: '草案', active: '现行', superseded: '已替代', retired: '已退役', other: '其他声明', unknown: '未声明' };
+const identityIssues: Record<string, string> = {
+  'multiple document ID declarations': '存在多条声明，未选定 ID',
+  'document ID declaration exceeds 512 bytes': '声明超过 512 字节，仅保留原文样本',
+  'multiline document ID declaration': '声明跨多行，未选定 ID',
+  'invalid document ID declaration': 'ID 为空或格式不支持，未选定 ID',
+};
 const kinds: Record<string, string> = { entry: '结构入口', prd: '需求', design: '设计', other: '其他文档' };
 
 export default function DocumentInventory(props: {
@@ -75,7 +81,7 @@ export default function DocumentInventory(props: {
     <div class="panel-body">
       <p class="muted small">仅列当前工作树纳入索引的 tracked Markdown，未跟踪文件不在此范围。按文件去重；读取状态不代表设计或实现完成。详情展示文件头的显式配对系统设计和设计上游声明；可打开已解析的目标章节并返回，尚未提供产品/专业树。</p>
       <form class="inventory-filters" onSubmit={event => { event.preventDefault(); if (!composing()) void load(); }}>
-        <label>标题或路径<input aria-label="筛选文档文件" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (composing() || e.isComposing || e.keyCode === 229) { if (e.key === 'Enter') e.preventDefault(); } }} /></label>
+        <label>标题、路径或文档 ID<input aria-label="筛选文档文件" value={query()} onInput={e => setQuery(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if (composing() || e.isComposing || e.keyCode === 229) { if (e.key === 'Enter') e.preventDefault(); } }} /></label>
         <label>读取结果<select aria-label="文档读取结果" value={filter()} onChange={e => setFilter(e.currentTarget.value)}><option value="all">全部文件</option><option value="read">已读取</option><option value="omitted">仅看遗漏</option></select></label>
         <button disabled={busy() || composing()} type="submit">应用筛选</button>
       </form>
@@ -89,6 +95,7 @@ export default function DocumentInventory(props: {
           <For each={result().files}>{file => <div class="row"><div class="row-content">
             <button class="row-title" aria-pressed={selected()?.fileKey === file.fileKey} onClick={() => setSelected(file)}>{file.title}</button>
             <div class="metadata"><span>{file.path}</span><span>{kinds[file.kind] ?? file.kind}</span><span>{states[file.state] ?? file.state}</span><span>{file.dirty ? '工作树有修改' : '未检测到修改'}</span></div>
+            <Show when={file.identity?.declaredId}><p class="muted small">文档 ID：{file.identity?.declaredId}<Show when={file.identity?.duplicateFiles}> · 相同 ID 另有 {file.identity?.duplicateFiles} 个已读文件</Show></p></Show>
             <Show when={file.reason}><p class="muted small">{reasons[file.reason!] ?? file.reason}</p></Show>
           </div></div>}</For>
           <Show when={!result().files.length}><p class="empty">当前筛选没有匹配文件；这不代表仓库没有文档。</p></Show>
@@ -100,6 +107,14 @@ export default function DocumentInventory(props: {
         <Show when={file().revision}><p class="muted small">内容摘要 {file().revision}</p></Show>
         <Show when={file().lifecycle}><p class="muted small">生命周期原声明：{file().lifecycle?.rawStatus ?? file().lifecycle?.status ?? '未声明'} · 类别 {categories[file().lifecycle?.category ?? 'unknown'] ?? '未分类'}<Show when={file().lifecycle?.issue}> · {file().lifecycle?.issue}</Show></p></Show>
         <Show when={file().state === 'read'}>
+          <section aria-label="文档身份声明"><h5>文档身份声明</h5>
+            <p class="muted small">仅解析文件头顶层“文档 ID”字段，ID 不决定文件身份、权威或实现状态。重复核对仅覆盖本次已读文件，区分大小写；搜索忽略大小写。</p>
+            <Show when={file().identity} fallback={<p>旧清单尚未解析文档 ID，请刷新本地事实。</p>}>{identity => <>
+              <Show when={identity().declarationLine} fallback={<p>本次文件头范围未发现文档 ID 声明。</p>}><p>第 {identity().declarationLine} 行 · 原声明样本：{identity().raw}</p></Show>
+              <Show when={identity().issue}><p role="status">文档 ID 解析不完整：{identityIssues[identity().issue!] ?? identity().issue}</p></Show>
+              <Show when={identity().duplicateFiles}><p role="status">重复文档 ID：相同 ID 另有 {identity().duplicateFiles} 个已读文件；文件仍分别保留。</p><p class="muted small">路径样本 {identity().duplicatePaths.length} / {identity().duplicateFiles}（最多 20 条）</p><ul><For each={identity().duplicatePaths}>{path => <li>{path}</li>}</For></ul></Show>
+            </>}</Show>
+          </section>
           <DocumentRelations relations={file().pairings} mode="pairing" sections={props.snapshot.sections} showSource={props.showSource} />
           <Show when={file().kind === 'design'}><DocumentRelations relations={file().upstream} mode="upstream" sections={props.snapshot.sections} showSource={props.showSource} /></Show>
         </Show>

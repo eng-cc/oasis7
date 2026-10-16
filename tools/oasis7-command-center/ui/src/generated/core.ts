@@ -42,7 +42,20 @@ resolution: string, targetSection: string | null, targetRevision: string | null,
  */
 targetKind: string | null, };
 export type DocumentPairings = { targets: Array<DocumentPairing>, issue: string | null, };
-export type IndexedDocument = { fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
+export type DocumentIdentity = { raw: string | null, declaredId: string | null, declarationLine: number | null, issue: string | null,
+/**
+ * Other read files declaring the same exact, case-sensitive ID.
+ */
+duplicateFiles: number,
+/**
+ * Stable path sample, at most 20; duplicate_files is the full count.
+ */
+duplicatePaths: Array<string>, };
+export type IndexedDocument = {
+/**
+ * Explicit file-header ID; None in older caches or unread files.
+ */
+identity: DocumentIdentity | null, fileKey: string, path: string, title: string, kind: string, state: string, reason: string | null, revision: string | null, bytes: number | null, dirty: boolean, lifecycle: DocumentLifecycle | null,
 /**
  * None in pre-pairing caches; refresh is required before claiming absence.
  */
