@@ -93,7 +93,15 @@ export type DocumentDirectoryEntry = { path: string, name: string,
 /**
  * directory / prd / design / entry. No semantic ownership is inferred.
  */
-kind: string, matchingFiles: number, depthLimited: boolean, file: IndexedDocument | null, };
+kind: string, matchingFiles: number, depthLimited: boolean,
+/**
+ * Non-historical read source files with verified explicit links, only in current view.
+ */
+historicalReferenceFiles: number,
+/**
+ * Stable sample of at most 20 distinct source paths; not proof of authority.
+ */
+historicalReferencePaths: Array<string>, file: IndexedDocument | null, };
 export type DocumentDirectoryPage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, parentPath: string,
 /**
  * Full scan coverage, independent of filters and this projection's kind scope.
