@@ -122,6 +122,8 @@ Trace ID: O7-REQ-1a903b9b-03df-4ae2-86f2-2a767affc9c1
 
 - 局部专业设计导航：[评分子链](../../playability_test_result/design.md#feedback-score-evidence-boundary)仅说明评分来源、尝试与评审归属保留及数值不可越级代签。这不是本要求的完整系统设计依据；原未核实状态、剩余范围和实现证据边界保持不变。
 
+- 局部专业设计导航：[玩法总纲的总纲评审证据分层](../../game/gameplay/gameplay-top-level-design.design.md#evidence-layer-boundary)仅接收本专题评审将结构回归、live/provider、L4A/L4B 和 L5 的证明范围分开；低层不能代签真人继续意愿。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
+
 <a id="ac-wr-pe-002"></a>
 ### AC-WR-PE-002：低层正向证据保持低层结论
 
@@ -149,6 +151,8 @@ Trace ID: O7-REQ-bacdddac-0615-4447-9242-0145c1cc4e07
 - 验收：[AC-WR-PE-003](#ac-wr-pe-003)
 
 - 局部专业设计导航：[评分子链](../../playability_test_result/design.md#feedback-score-comparison-boundary)仅说明描述性评分组与产品比较单位的区别及独立阻断保留。这不是本要求的完整系统设计依据；原未核实状态、剩余范围和实现证据边界保持不变。
+
+- 局部专业设计导航：[玩法总纲的总纲评审比较单位](../../game/gameplay/gameplay-top-level-design.design.md#comparison-unit-boundary)仅接收本专题建议固定体验目标、formal 入口、候选或明确变更范围、证据窗口；环境影响解释时纳入范围。 此为总纲局部职责与待执行验证计划，不是本要求完整系统设计或实现通过依据；原状态、剩余范围及既有证据边界保持不变。
 
 <a id="ac-wr-pe-003"></a>
 ### AC-WR-PE-003：不匹配样本不能抵消阻断
