@@ -4,7 +4,7 @@ use crate::world_service::{
         FormalReadTrustConfigV1, RemoteWorldServiceClient, WorldServiceClientConfig,
         WorldServiceClientError,
     },
-    formal_projection::{ProjectionAudienceV1, ProjectionCommitmentsV1},
+    formal_projection::ProjectionAudienceV1,
     formal_read::{FormalReadHistoryV1, FormalReadStepV1, FormalReadVerifier},
     formal_result::{FormalBusinessPageVerification, verify_formal_business_outcome_page},
     projection::WorldServiceProjection,
@@ -59,7 +59,8 @@ fn progress_page(
 ) -> FormalBusinessOutcomePageV1<WorldServiceProjection> {
     let view = projection(world);
     let audience = ProjectionAudienceV1::public();
-    let commitments = ProjectionCommitmentsV1::for_world(world).unwrap();
+    let commitments =
+        crate::world_service::formal_projection::commitments_for_world(world).unwrap();
     let inclusion = commitments.inclusion(&audience).unwrap();
     let verified_authority = anchor.authority();
     let parent = anchor.head().record();

@@ -1,11 +1,8 @@
 use super::*;
 use crate::world_service::formal_read_fixtures as fixtures;
 use crate::world_service::{
-    SignedReadRequest, authority,
-    client::FormalReadTrustConfigV1,
-    formal_projection::{ProjectionAudienceV1, ProjectionCommitmentsV1},
-    formal_read::*,
-    projection::WorldServiceProjection,
+    SignedReadRequest, authority, client::FormalReadTrustConfigV1,
+    formal_projection::ProjectionAudienceV1, formal_read::*, projection::WorldServiceProjection,
 };
 use fixtures::*;
 use oasis7_client_api::world_service::*;
@@ -42,7 +39,7 @@ fn response(
     )
     .unwrap();
     let anchor_ref = cache.anchor_ref().unwrap();
-    let inclusion = ProjectionCommitmentsV1::for_world(world)
+    let inclusion = crate::world_service::formal_projection::commitments_for_world(world)
         .unwrap()
         .inclusion(&ProjectionAudienceV1::public())
         .unwrap();
