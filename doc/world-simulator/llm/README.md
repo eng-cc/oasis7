@@ -72,6 +72,17 @@ and [implementation tracking](https://github.com/eng-cc/oasis7/issues/4726).
 The external Skill/HTTP product goal and independent Runtime acceptance remain
 unchanged; SDK extraction does not turn the product into a CLI-only interface.
 
+## Web self-supplied model connections
+
+The [product PRD](../../product/agents-world-simulation/self-supplied-model-connection.prd.md)
+and [paired interaction design](../../product/agents-world-simulation/self-supplied-model-connection.design.md)
+define browser setup using a player's DeepSeek/OpenRouter inference Key.
+The [model-connection system design](self-supplied-model-connection.design.md#des-byok-001)
+places credentials, protocol adapters and bounded session execution on the
+explicitly trusted first-party client side, not in World/Runtime or Token Bridge.
+This is a target with separate provider, deployment and gameplay verification;
+it does not enable an endpoint, persistent key custody or unattended hosting.
+
 ## Authority map
 
 - `decision-provider-contract.prd.md` and `.design.md` define the provider-

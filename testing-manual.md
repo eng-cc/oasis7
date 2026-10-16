@@ -1497,3 +1497,55 @@ Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；[准确专业接受关
 - 原权威oracle：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 原SC/AC/DEC、公式、严格比较、权限和状态以[专业原文](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#4-technical-specifications)与[原验收](doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#6-validation--decision-record)为准；另以[QA原verdict与审计项](doc/testing/governance/token-genesis-allocation-audit-checklist.prd.md#71-verdict-规则)、[freeze原前置](doc/p2p/token/mainchain-token-genesis-freeze-sheet.md#5-pre-mint-checklist)和[原ledger批准](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary) / [distribution闭合](doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#6-distribution-closure)分别核相应条款，不能混用模板和真实批准。
 - 失败边界：任一原成功条件未满足或无法证明时，不记录该项通过；保留原拒绝/未核实/降级/conditional/block语义及原因。本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次；不得凭其他项green代签。
 - 证据字段与层级：canonical批准行、最终金额复核、审批及distribution引用；另保存上述统一候选/环境/输入/预期实际/拒绝/剩余字段。沿原§6的test_tier_required。该项planned，不是执行日志。
+
+
+<a id="unified-world-resource-verification"></a>
+## 统一 seed/resource 已采用子范围与正式目标验证计划
+
+来源为 [unified 专业设计](doc/world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan)。本节仅登记现有合同的计划与阻塞，不改测试层级、原验收或正式设计选择；本次未运行。所有命令先核固定候选的 test discovery，0 tests 不视为通过。
+
+<a id="uws-v-local-spawn"></a>
+### UWS-V-LOCAL-SPAWN：本地默认初始化
+
+对固定 candidate 执行 `cargo test -p oasis7 --lib bootstrap_formal_release_runtime_world_uses_seeded_fragment_bootstrap_agent`，先确认 discovery 命中该具名测试。沿 [support.rs](crates/oasis7/src/viewer/runtime_live/support.rs) 原 fixture 核本地默认 Agent 坐标与 [gameplay_actions.rs](crates/oasis7/src/viewer/gameplay_actions.rs) 所取 seed-model 坐标，保存版本、有效配置、模型坐标、命令和原输出。该断言不验证正式 Agent location_id、链 provenance、claim 完整流程或玩家可读性；对应范围继续待验证，本次未运行。
+
+该具名旧 fixture 仅是正例。负例计划尚待实现：在隔离测试构造中使运行时 Agent 坐标不同于同一 seed-model Agent 坐标，或保持 seed 不变而改有效场景配置后仍错误复用旧坐标；按本地接线原 oracle，该比较必须报告不一致而不能通过。负例用于验证比较/接线，不新增生产 fallback 或正式 claim 模型。无 frag/边界降级沿出生专题原验证，不由本 fixture 代签。保存受控差异、两组坐标和预期/实际 verdict；目前没有声称该负例测试已存在。
+
+<a id="uws-v-artifact"></a>
+### 11.2 UWS-V-ARTIFACT：采用分离的离线核验计划
+
+由 artifact / QA owner 在待验候选中使用既有已批准测试 genesis 与尚不存在的临时输出路径（脚本拒绝已存在目录，不默认启用覆盖）。运行脚本 `create --genesis <fixture> --out-dir <temp> --world-scenario <existing-scenario> --merged-manifest-out <temp-manifest>`，再运行同脚本 `validate --world-dir <temp>/world --merged-public-manifest <temp-manifest>`；create 输出的 governed world 位于 `<temp>/world`，sidecar 位于同级 `<temp>/generated-scenario-world`，provenance 位于 `<temp>/world-generation-provenance.json`；validate 接收 world 子目录并从其父目录找 sidecar。具体参数沿脚本 usage，不填造 fixture、seed 或配置。保存 genesis 与 manifest hash、scenario/config/seed provenance、两目录 listing、audit 输出与退出码。断言 governed world 仍由 registry import/audit 路径拥有，generated-scenario-world sidecar 与 provenance 保留；不能以后一目录覆盖前者。缺 approved fixture 或脚本实际依赖时先记录 blocked，本计划不授权连接真实网络或激活世界。本次未运行。
+
+负例计划只在复制的离线输出中单项改变：删除必需 snapshot/journal、将 artifact_kind 改为不符、将 seed 变成非正数、清空 config、改 public_manifest_sha256 或 entry_count。按 [现有 validate 源](scripts/p2p-build-governed-bootstrap-world.sh) 对应校验，必须非零拒绝并保存精确报错，未运行不记为已覆盖。另将 sidecar 目录误作 governed world 输入，或把 sidecar snapshot/journal 覆盖到复制的 governed 目录：核 registry audit 是否拒绝、两来源身份是否失配，分离 oracle 是绝不能把 sidecar 证据当 audited governed 身份。该替换负例尚无已核实测试；若工具未拒绝，也必须作为分离验证失败/实现缺口记录，而非把它解释成已统一或自动选择新承载。保存原/篡改目录 hash、provenance、audit/validate 命令与输出；不得改真实工件。
+
+<a id="uws-v-status"></a>
+### 11.3 UWS-V-STATUS：当前 status 来源正负例
+
+源码与 [Cargo bin 配置](crates/oasis7/Cargo.toml)对应：对固定候选使用 `cargo test -p oasis7 --features node-libp2p --bin oasis7_chain_runtime <filter>`，filter 分别为 `status_prefers_latest_execution_record_cas_snapshot_over_stale_execution_world_json`、`status_rejects_tampered_authoritative_execution_record_cas_snapshot`、`status_rejects_invalid_latest_execution_record_over_ready_legacy_json`、`status_rejects_newer_execution_record_with_stale_verified_snapshot_height`；原测试使用临时离线材料。先核 discovery 每个命中具名测试，再保存原输出及使用的 record/CAS/height 关系，0 tests、编译失败或环境阻塞不报通过。另用现有 `status_uses_runtime_execution_snapshot_when_simulator_mirror_is_empty` 检查其真实 fallback fixture，不把一个 fallback 覆盖全部 recovery。范围只为来源读取和拒绝旧 ready，不启动链或证明共识。本次未运行。
+
+<a id="uws-v-consumers"></a>
+### 11.4 UWS-V-CONSUMERS：正式目标的对账与阻塞记录
+
+这是 R1–R6 的待实施验证计划，尚未核实完整可执行 harness，不伪装成已有测试。QA 分别记录 local/public/runtime-live 的候选、声明 profile、世界/链/genesis、effective seed/config/schema/算法版本、starter 选择及其批准来源。缺正式选择时对应场景标 blocked，不能以 Simulator 或本地默认替代。固定同 Agent、snapshot height/hash 与观察权限后取得 Viewer 原始 location/resource/seed/version 和 provider observation；按 R5 逐字段比较 IDs、附近资源与来源。兼容锚点、pending、provisional 分别核状态和正式动作拒绝，不自动等同 committed。
+
+R3/R4 用正常、有明确 empty-world 状态、缺 manifest、未 committed 与资源/出生缺失场景逐步核 §6 等待/错误，不把注册成功当资源绑定。R6 取得真实生成 result/commit、一次消费 delta、刷新及 replay 前后 remaining，证明同一记录引用和余额未被 generation 复原；没有获准的正式 record 时停止该场景并记录具体缺口，不新增 record/schema。执行范围与权限由实际实现/QA 任务另行确认；本次只建立计划与来源，不执行业务操作。
+
+
+<a id="uws-v-seed-reference"></a>
+### UWS-V-SEED-REFERENCE：R1/AC1/AC5 的来源一致性
+
+输入为同候选同 profile 的 Simulator、runtime snapshot 与 testnet replay/chain 材料，附已批准的 world/chain/genesis/manifest 关系、effective seed/config/schema/算法版本与 chunk coord/触发顺序。方法逐一追原引用再对照实际生成摘要；oracle 是同一有效输入产生一致 chunk/resource summary，且各入口引用同一 canonical seed 或其可验证派生证明，不能只比较最终数量。负例在隔离对照材料中分别换 world_id/genesis、seed、config hash 或 schema/version 中一项，或提供缺失的 seed 引用；必须记录引用/条件不一致，不能给 AC1/AC5 或 testnet readiness 的一致性通过。这里不定义新运行时错误码或替正式 seed 位置作决定。保存三份原材料、链上引用、每字段对比和缺失/不一致 verdict；正式承载未选或材料不足即 blocked，不能用本地 seed 常量填空。
+
+<a id="uws-v-resource-budget"></a>
+### UWS-V-RESOURCE-BUDGET：R2 的账本来源与不临时重算
+
+输入为固定候选和同一有效 seed/config/order 的 Simulator model，选真实存在且有 fragment 与所属 chunk total/remaining 的地点，再取同 profile snapshot/consumer 可采量。方法核 fragment profile、fragment/chunk 预算以及 consumer 所用来源；对一个原支持且合法的消费场景分别保存动作前、权威结果后与刷新后账本。oracle 来自原 R2 和 chunked 库存合同：total 为原定量，remaining 取当前账本；同一次实际资源消费的 fragment 与所属 chunk 扣减对应，consumer 可采量不等于重新生成的初始 total。不得将 runtime_agent_chunk_v1 的合成预算冒充 Simulator 自然资源。
+
+负例为非零已消耗后错误把初始生成预算作为当前可采量、缺 fragment/chunk budget 却临时重算、或把另一 chunk 的预算引用到当前 fragment。比较必须报告来源/余额不符，不能通过 R2；对正式可消费状态的处置继续由 R6/原动作合同决定，不在此新增 schema 或失败策略。保存原模型/来源引用、前后两级账本、真实动作结果、刷新 consumer 输出、反例差异与 verdict。实际消费/harness 尚未核实，只有 snapshot 具名 fixture 不足以覆盖上述矩阵，本次未运行。
+
+<a id="uws-v-observation-parity"></a>
+### UWS-V-OBSERVATION-PARITY：R5/AC4 同快照逐字段核对
+
+输入固定 candidate/profile、同一 Agent、同一 snapshot height/hash 及同等合法观察权限；分别保存 Viewer 实际 model.locations/terrain/resource summary 和 provider observation。oracle 是同一 location/resource IDs、附近资源摘要与 world seed/version，并保留 compat/provisional 来源标记；隐藏 frag 低层细节不允许替换正式资源身份。方法在同一快照静止窗口采两输出，逐字段及引用对账；异步到达但版本不同先归为不可比，不强行判一致。
+
+负例在隔离 harness 中使一方读取旧 snapshot、不同 location/resource ID、不同 seed/version 或将 compat anchor 标为正式资源来源，每次只改一项。比较必须显式报告对应 mismatch/stale/不可比，不能给 AC4 通过；正式动作是否拒绝另由 R6 和原权限/动作合同核验，不在本计划发明新 API 行为。保存两份完整原输出、snapshot/Agent/权限标识、受控差异、字段对照和 verdict。缺真实两消费者接线则 blocked，不能用同一 DTO 自比或两份模拟输出代签。

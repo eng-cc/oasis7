@@ -66,6 +66,8 @@ canonical 替代不是对原请求的静默自动执行。存在一个或多个�
 
 本产品层只定义上述玩家承诺和端到端边界；玩法动作粒度由 [`doc/game/prd.md`](../../game/prd.md) 与其核心玩法骨架拥有，物理/执行真值由 `world-runtime`，表现真值由 `world-simulator` 的对应专业域文档拥有。
 
+<a id="measurable-physical-truth-contract"></a>
+
 世界只有一条持续、权威的时间线和一套可测量的物理真值。厘米级距离、顺序、成本与持久化结果可以由工业、物流、治理等粗粒度子系统消费，也可以由 Viewer 做可读性抽象，但任何映射都必须确定、可追溯，不能因子系统分辨率或视觉夸张而改写权威结果。
 
 间接控制不等于旁观：对当前受支持的玩家意图，系统必须呈现意图是否被接受、Agent 如何解释并执行、主要世界后果，以及玩家可用的打断、重排、纠正、fallback 或恢复动作；不能以 Agent 自主性为由隐藏因果或让玩家失去下一次决策权。
@@ -149,6 +151,7 @@ Data 授权必须贯穿请求的完整生命周期，而不能只在预览或提
 
 中断后的玩家反馈至少回答：原任务及当前阶段、已经投入与仍被占用的价值、已形成或仍待形成的产出/副产物、保留与损失、对稳定产线候选进度的影响，以及当前真实可用的继续、等待、修复、改道、中止或重新规划动作。`game` 拥有这些选择的玩法取舍与平衡，`world-runtime` 拥有事件、状态、资源守恒、去重与 replay，Agent 拥有意图打断/换向的可解释 handoff，Viewer 与 pure API 拥有同一权威结果的表达，QA 拥有组合证据；产品层不规定取消 action、退款公式、队列算法、状态 schema 或 UI 布局。
 
+<a id="source-deposit-product-contract"></a>
 #### 原材料 source/deposit 的发现、争用、枯竭与补充
 
 原材料流水线不能从一个未解释的“可采资源”数字直接开始。任何可进入采集/补充决策的 source/deposit 都必须保留稳定身份，并把**观察到来源**、**当前可提交的采集机会**与**receipt 支持的实际采出**分开。地图提示、材质倾向、Agent 推荐或旧观察只能帮助发现候选，不能单独证明当前可采量、访问资格、优先级或未来补充；专业 profile 必须声明该来源适用的发现/可见范围、数量与质量事实的新鲜度、访问或作用域边界，以及 depletion/replenishment 是否存在。未知、过期或互相冲突的事实显示 `unknown/stale` 或等价产品语义，不能按零竞争、无限库存或可直接采集处理。现有 chunk/fragment 生成、预算、首次采集与 `FragmentsReplenished` 的场景 authority 继续由 [`chunked fragment generation`](../../world-simulator/scenario/chunked-fragment-generation.prd.md) 专题拥有；本节只冻结跨 source profile 共用的产品决策与反滥用边界，不另建资源生成或补充真值。
@@ -585,6 +588,42 @@ Checkpoint 只关闭一次 immutable review segment，不追加、不重开，�
 | 玩家目标、核心循环的产品结果、成长、资源压力与跨域世界不变量体验 | `doc/game/prd.md` 拥有玩法规则、moment-to-moment loop、数值平衡和专题验收；`doc/world-runtime/prd.md` 拥有权威验证、确定性状态与审计；`doc/world-simulator/prd.md` 拥有 Agent/LLM 与交互模拟合同；`doc/p2p/prd.md` 拥有网络、共识与治理技术边界 |
 
 产品层不用新细则或数值静默改写专业域权威。跨域冲突由 `producer_system_designer` 协调，并按受影响合同邀请对应的 `gameplay_designer`、`runtime_engineer`、`agent_engineer` / `world-simulator` owner 或 `blockchain_ops_engineer` / P2P owner 形成显式裁决；不得只以 gameplay 判断覆盖执行、Agent、网络或治理专业结论。
+
+
+
+## 既有统一生成合同的有限产品接收
+
+本节为 [unified 原需求](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#3-requirements)中已经存在的消费者承诺登记精确身份；逐卡原句来源限定其范围，不新增世界生成、出生、字段、参数或资源承载选择。已有专业目标不是新的实现完成声明；正式 profile 的 [四个未决问题](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-decision-profile)继续未定，已采用本地子范围不重新待选。原产品组合、叶项状态与验收层级保持不变。
+
+<a id="generated-resource-source"></a>
+### 功能状态卡：生成地点与资源预算的同一来源
+
+Trace ID: O7-REQ-112440b1-da55-4443-b513-58dbf9056511
+
+- 主责范围与成功标准：可玩大世界地点和资源优先来自既有 Simulator chunk/fragment 生成；可采量使用原 fragment/chunk total/remaining 账本，不允许运行时临时重算。
+- 原义接收来源：[原 R2](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r2-复用现有-chunkfragmentresource-生成)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC1](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#32-seed-派生)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R2 的来源和可采量承诺；chunk_seed 随机根、seed offset、公式和生成参数仍由原专业合同拥有，不增加材料、数值或采矿前置。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+
+<a id="committed-resource-continuity"></a>
+### 功能状态卡：正式资源的提交来源与余额连续性
+
+Trace ID: O7-REQ-2b3769ae-078a-4123-a0de-e20405b42c7c
+
+- 主责范围与成功标准：正式生成事实必须由链上可验证记录承载或引用（沿原 R6）；未提交 preview 不进入正式采矿、生产、provider 或交易账本；remaining 由链上 action/commit 驱动，刷新与 replay 不以本地重算恢复余额，readiness 证明同一 provenance。
+- 原义接收来源：[原 R6](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#r6-资源生成全部链上化)；本卡只接收该段玩家/Agent/入口结果，原专业约束、条件及排除项保持。
+- 对应验收：沿原 [AC5/AC6/AC7/AC8](../../world-simulator/scenario/unified-world-seed-fragment-runtime.prd.md#5-acceptance-criteria) 中本卡对应切片，不能用其他 AC 的局部通过代签。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#43-资源变更权威)；原目标已存在，正式接线与四项未决仍限制覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
+- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
+- 剩余范围：只接收 R6 原资源权威结果；具体 action/event 或专用 resource record 保持正式未定，字段/hash/版本和共识规则仍归专业 owner，不由本卡新增。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
 
 ## 4. 路线图
 
@@ -1670,3 +1709,80 @@ Trace ID: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa
 Trace refs: O7-REQ-e84d3e5c-af7c-4293-8d02-3b466af6dbfa；覆盖要求：[REQ-WR-ECONOMIC-GENESIS-REWARD](#req-wr-economic-genesis-reward)。
 
 在[原专业条件与场景](../../p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md#economic-contract-genesis-reward)适用的固定候选中逐项核验：独立reward reserve只按canonical README ledger中approved且完成distribution前actual-value review的最终金额执行；资格/评分仍归pack/ledger，不并ecosystem_pool，不按登录或游玩自动发放。 原验收成功/拒绝条件及层级不变，实际证据至少保留canonical批准行、最终金额复核、审批及distribution引用；没有对应完整证据时保持未核实。本轮无发放授权，不修改资格/金额/审批；模板不是已批准批次。本验收不授权执行经济操作。
+
+
+## 9. 既有补充决策切片的身份与范围
+
+以下只为[既有 source/deposit 合同](#source-deposit-product-contract)的两个独立消费者义务提供身份和精确导航，不新增产品政策或改变原条款；其他 source、allocation、材料 handoff 和经济义务保留原归属。
+
+<a id="source-assessment-replenishment-truth"></a>
+### 功能状态卡：补充评估的能力与数量时间事实
+
+Trace ID: O7-REQ-ff33b61a-c81c-46f8-8e34-928af72858ef
+
+- 主责范围：仅原 source/deposit 条款中：当前专业 profile 真正支持的补充选择、未知/过期与已知零的区分、时刻/数量不可证明时显示未知与复查条件，不伪造精确倒计时或保证。
+- 适用 profile：仅实际声明相关 source/补充能力的路径；不支持补充时保留真实禁用反馈，能力/来源未知时保留不可用。不能要求 production_only 额外经历采集/精炼。
+- 系统设计依据：[`chunked fragment generation`](../../world-simulator/scenario/chunked-fragment-generation.design.md#des-frfr-capability)；该设计仅接收当前 chunked/profile 的有限切片。
+- 专业需求接收：[REQ-FRFR-1](../../world-simulator/scenario/chunked-fragment-generation.prd.md#req-frfr-1) 至 [REQ-FRFR-4](../../world-simulator/scenario/chunked-fragment-generation.prd.md#req-frfr-4)；能力与来源、下一机会时间、下一机会目标量。 具体后端、周期、预算与事件算法仍归原专业 owner，不是产品新增算法。
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 实现与验证依据：本文未执行业务测试；真实候选与验证沿[专业验证映射](../../world-simulator/scenario/chunked-fragment-generation.design.md#111-验证映射表)，源码定位不能代签通过。
+- 剩余范围：其他 source profile、真实网络/玩家端到端及未提供权威投影的 live 路径均未由本文闭合。
+
+<a id="source-replenishment-effect-recheck"></a>
+### 功能状态卡：只读评估与权威补充后的复查
+
+Trace ID: O7-REQ-dcbc5b97-bbfb-4345-b411-926bd9dff3d9
+
+- 主责范围：仅原 source/deposit 条款中：预览/扫描/推荐/刷新无世界效果，只有权威 replenishment effect 后 fresh assessment 才见新增可分配量，补充单次生效，等待不续期或承诺 ETA。
+- 适用 profile：仅实际声明相关 source/补充能力的路径；不支持补充时保留真实禁用反馈，能力/来源未知时保留不可用。不能要求 production_only 额外经历采集/精炼。
+- 系统设计依据：[`chunked fragment generation`](../../world-simulator/scenario/chunked-fragment-generation.design.md#des-frfr-readonly)；该设计仅接收当前 chunked/profile 的有限切片。
+- 专业需求接收：[REQ-FRFR-5](../../world-simulator/scenario/chunked-fragment-generation.prd.md#req-frfr-5) 与运行期补种落账；按实际后端、当前状态、事件和快照复查。 具体后端、周期、预算与事件算法仍归原专业 owner，不是产品新增算法。
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 实现与验证依据：本文未执行业务测试；真实候选与验证沿[专业验证映射](../../world-simulator/scenario/chunked-fragment-generation.design.md#111-验证映射表)，源码定位不能代签通过。
+- 剩余范围：其他 source profile、真实网络/玩家端到端及未提供权威投影的 live 路径均未由本文闭合。
+
+<a id="generation-physical-truth"></a>
+### 功能状态卡：生成场景的可测量物理真值
+
+Trace ID: O7-REQ-b4be4414-7def-4831-8302-f9523e82f944
+
+- 主责范围：仅原文“一套可测量的物理真值”及确定、可追溯且不被表现抽象改写的映射；本切片适用于既有 chunk/fragment 场景的物理与资源量事实。 正证为[原产品条款](#measurable-physical-truth-contract)，本卡仅接收既有身份，不新增数值、算法、类型或正式 profile 选择。
+- 专业边界：已采用的物理公式、化学映射、中心取整不跨账及 legacy Data 净前后余额分别沿 chunked 原专业条款；这些不是本产品卡新推导的规则，也不映射到 M4 材料类型。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[既有专业设计切片](../../world-simulator/scenario/chunked-fragment-generation.design.md#chunk-generation-existing-obligations)，仅对应本卡有限义务，不代表全产品或所有 source profile 覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[专业验证映射](../../world-simulator/scenario/chunked-fragment-generation.design.md#111-验证映射表)定位相应真实源码和计划断言；未执行业务测试，center/legacy 实现偏差仍由原文保留。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：实际固定候选、其他 profile 与玩家端到端结果未核实；source allocation/handoff、正式链资源 record 选择不由本卡覆盖。
+
+<a id="source-location-quantity-truth"></a>
+### 功能状态卡：来源作用域与数量的同一权威事实
+
+Trace ID: O7-REQ-218aeae3-6a52-423a-9b69-9570975edc3c
+
+- 主责范围：仅原 source 评估中身份、作用域、预计可满足量及权威/估计边界，以及 chunk/fragment 生成与预算由既有专题拥有的切片；消费与表现不得把另一来源/作用域的数量冒充当前事实。 正证为[原产品条款](#source-deposit-product-contract)，本卡仅接收既有身份，不新增数值、算法、类型或正式 profile 选择。
+- 专业边界：已采用的物理公式、化学映射、中心取整不跨账及 legacy Data 净前后余额分别沿 chunked 原专业条款；这些不是本产品卡新推导的规则，也不映射到 M4 材料类型。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[既有专业设计切片](../../world-simulator/scenario/chunked-fragment-generation.design.md#fragment-center-budget-design)，仅对应本卡有限义务，不代表全产品或所有 source profile 覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[专业验证映射](../../world-simulator/scenario/chunked-fragment-generation.design.md#111-验证映射表)定位相应真实源码和计划断言；未执行业务测试，center/legacy 实现偏差仍由原文保留。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：实际固定候选、其他 profile 与玩家端到端结果未核实；source allocation/handoff、正式链资源 record 选择不由本卡覆盖。
+
+<a id="source-current-goal-impact"></a>
+### 功能状态卡：来源准备的成本与当前目标影响
+
+Trace ID: O7-REQ-1c30e45e-99f4-4353-8f80-380f23243cbe
+
+- 主责范围：仅原 source 评估中时间/资源/物流成本及对当前配方/首个工业目标的影响可读；本切片接收当前专业 profile 的真实目标影响，不以正产出自动冒充目标推进。 正证为[原产品条款](#source-deposit-product-contract)，本卡仅接收既有身份，不新增数值、算法、类型或正式 profile 选择。
+- 专业边界：已采用的物理公式、化学映射、中心取整不跨账及 legacy Data 净前后余额分别沿 chunked 原专业条款；这些不是本产品卡新推导的规则，也不映射到 M4 材料类型。
+- 系统设计状态：部分覆盖
+- 系统设计依据：[既有专业设计切片](../../world-simulator/scenario/chunked-fragment-generation.design.md#legacy-simulator-refining-design)，仅对应本卡有限义务，不代表全产品或所有 source profile 覆盖。
+- 实现状态：未核实
+- 实现与验证依据：[专业验证映射](../../world-simulator/scenario/chunked-fragment-generation.design.md#111-验证映射表)定位相应真实源码和计划断言；未执行业务测试，center/legacy 实现偏差仍由原文保留。
+- 核对日期与基线：2026-10-15；6ac8637a3e32a9b1870f88da6f808e73f4622454。
+- 剩余范围：实际固定候选、其他 profile 与玩家端到端结果未核实；source allocation/handoff、正式链资源 record 选择不由本卡覆盖。
