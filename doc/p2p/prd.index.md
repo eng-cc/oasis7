@@ -83,7 +83,7 @@
 | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | GitHub Issue / GitHub Project |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md` | `doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md` | GitHub Issue / GitHub Project |
-| [hosted-public-join-key-based-onboarding.prd.md](blockchain/hosted-public-join-key-based-onboarding.prd.md) | [hosted-public-join-key-based-onboarding.design.md](blockchain/hosted-public-join-key-based-onboarding.design.md) | `draft`；Git / PR / 实际 CI 与评审记录 |
+| [hosted-public-join-key-based-onboarding.prd.md](blockchain/hosted-public-join-key-based-onboarding.prd.md) | [hosted-public-join-key-based-onboarding.design.md](blockchain/hosted-public-join-key-based-onboarding.design.md) | P0 账号接入合同已采用；P1 原生密钥未发布；实现、部署与验收按 Git / PR / 实际 CI 与评审记录分别核验 |
 | `doc/p2p/consensus/builtin-wasm-identity-consensus.prd.md` | `doc/p2p/consensus/builtin-wasm-identity-consensus.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md` | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.prd.md` | `doc/p2p/distfs/distfs-feedback-ledger-and-replication.design.md` | GitHub Issue / GitHub Project |
