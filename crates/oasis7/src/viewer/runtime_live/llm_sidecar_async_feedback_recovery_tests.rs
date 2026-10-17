@@ -67,7 +67,9 @@ fn recovery_feedback(agent: &str, session: &str, seq: u64, id: &str) -> Feedback
 fn enqueue_acknowledged_feedback(world: &mut RuntimeWorld, feedback: FeedbackEnvelopeV1) {
     let feedback_id = feedback.feedback_id.clone();
     world
-        .enqueue_runtime_feedback(feedback)
+        .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+            &feedback,
+        ))
         .expect("Runtime stores feedback history");
     world
         .claim_runtime_feedback(&feedback_id)

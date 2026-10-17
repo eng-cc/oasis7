@@ -6,9 +6,9 @@ use super::capability_grant_v2::*;
 use oasis7_wasm_abi::{AgentCommandResponse, CapabilityPresenter};
 use serde_json::json;
 
-fn feedback(seq: u64, feedback_id: &str) -> crate::simulator::FeedbackEnvelopeV1 {
+fn feedback(seq: u64, feedback_id: &str) -> oasis7_agent_api::FeedbackEnvelopeV1 {
     let request_id = format!("request-{seq}");
-    crate::simulator::FeedbackEnvelopeV1 {
+    oasis7_agent_api::FeedbackEnvelopeV1 {
         feedback_id: feedback_id.to_string(),
         feedback_seq: seq,
         agent_subject: SUBJECT_ID.to_string(),

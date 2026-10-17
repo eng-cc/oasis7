@@ -71,7 +71,7 @@ mod tests {
 
     fn outbox_record(feedback: &FeedbackEnvelopeV1, state: &str) -> RuntimeFeedbackOutboxRecordV1 {
         let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-            feedback,
+            &crate::simulator::agent_api_compat::feedback_to_api(feedback),
             RuntimeFeedbackProjectionV1::default(),
         )
         .expect("feedback creates a valid outbox record");
@@ -123,7 +123,9 @@ mod tests {
         let mut world = RuntimeWorld::new();
         let feedback = feedback("agent-a", "session-a", 2, "feedback-gap");
         world
-            .enqueue_runtime_feedback(feedback.clone())
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                &feedback,
+            ))
             .expect("Runtime stores feedback history");
         world
             .claim_runtime_feedback(&feedback.feedback_id)

@@ -602,7 +602,7 @@ mod tests {
 
     fn record(feedback: &OasisFeedbackEnvelopeV1, state: &str) -> RuntimeFeedbackOutboxRecordV1 {
         let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-            feedback,
+            &crate::simulator::agent_api_compat::feedback_to_api(feedback),
             RuntimeFeedbackProjectionV1::default(),
         )
         .expect("feedback creates a valid outbox record");
@@ -618,10 +618,16 @@ mod tests {
         let mut world = RuntimeWorld::new();
         let acked = rejected_feedback("agent-a", "session-a", 1);
         let pending = rejected_feedback("agent-a", "session-a", 2);
-        world.enqueue_runtime_feedback(acked.clone()).unwrap();
+        world
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(&acked))
+            .unwrap();
         world.claim_runtime_feedback(&acked.feedback_id).unwrap();
         world.ack_runtime_feedback(&acked.feedback_id).unwrap();
-        world.enqueue_runtime_feedback(pending.clone()).unwrap();
+        world
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                &pending,
+            ))
+            .unwrap();
 
         let authority = RuntimeWorldAuthority::new(&world);
         let history = authority.validated_feedback_history().unwrap();
@@ -645,7 +651,9 @@ mod tests {
         let mut forged = record(&feedback, "acked");
         forged.envelope_digest = format!("blake3:{}", "b".repeat(64));
         world
-            .enqueue_runtime_feedback(feedback)
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                &feedback,
+            ))
             .expect("Runtime accepts the original payload");
         // The authority reads only the actual World record; a detached record
         // cannot be substituted for that durable history.

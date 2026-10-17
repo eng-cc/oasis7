@@ -1040,9 +1040,15 @@ impl RuntimeLlmSidecar {
                     None,
                     Some("no_effect".to_string()),
                 );
-                world.enqueue_runtime_feedback(feedback).map_err(|error| {
-                    format!("Runtime feedback outbox enqueue failed after provider wait: {error:?}")
-                })?;
+                world
+                    .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                        &feedback,
+                    ))
+                    .map_err(|error| {
+                        format!(
+                            "Runtime feedback outbox enqueue failed after provider wait: {error:?}"
+                        )
+                    })?;
                 self.record_provider_terminal_state(
                     agent_id.as_str(),
                     &context,

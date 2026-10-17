@@ -21,7 +21,7 @@ fn feedback(agent: &str, session: &str, seq: u64, feedback_id: &str) -> Feedback
 
 fn acked_record(feedback: &FeedbackEnvelopeV1) -> RuntimeFeedbackOutboxRecordV1 {
     let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-        feedback,
+        &crate::simulator::agent_api_compat::feedback_to_api(feedback),
         RuntimeFeedbackProjectionV1::default(),
     )
     .expect("feedback fixture forms a canonical Runtime outbox record");

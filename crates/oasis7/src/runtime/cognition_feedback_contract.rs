@@ -264,7 +264,7 @@ impl RuntimeFeedbackOutboxRecordV1 {
         let bounded = |value: &str| !value.trim().is_empty() && value.len() <= 256;
         let valid_state = matches!(self.state.as_str(), "pending" | "in_flight" | "acked");
         let payload =
-            serde_json::from_value::<crate::simulator::FeedbackEnvelopeV1>(self.payload.clone())
+            serde_json::from_value::<oasis7_agent_api::FeedbackEnvelopeV1>(self.payload.clone())
                 .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
         let canonical_base_payload = serde_json::to_value(&payload)
             .map_err(|_| CognitionRecoveryError::new("runtime_feedback_payload_invalid"))?;
@@ -313,7 +313,7 @@ impl RuntimeFeedbackOutboxRecordV1 {
     }
 
     pub(crate) fn from_feedback_with_projection(
-        feedback: &crate::simulator::FeedbackEnvelopeV1,
+        feedback: &oasis7_agent_api::FeedbackEnvelopeV1,
         projection: RuntimeFeedbackProjectionV1,
     ) -> Result<Self, CognitionRecoveryError> {
         let payload = serde_json::to_value(feedback)

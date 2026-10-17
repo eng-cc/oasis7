@@ -205,7 +205,7 @@ pub fn validate_feedback_ack(
         .find(|r| r.feedback_id == ack.feedback_id)
         .ok_or("canonical feedback acknowledgement record missing")?;
     record.validate().map_err(|e| e.to_string())?;
-    let feedback: crate::simulator::FeedbackEnvelopeV1 =
+    let feedback: oasis7_agent_api::FeedbackEnvelopeV1 =
         serde_json::from_value(record.payload).map_err(|e| e.to_string())?;
     if feedback.status != "committed" {
         return Err(

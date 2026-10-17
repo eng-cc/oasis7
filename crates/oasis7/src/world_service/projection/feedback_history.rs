@@ -181,7 +181,9 @@ mod tests {
     }
     fn enqueue(world: &mut World, agent: &str, session: &str, seq: u64) {
         let f = feedback(agent, session, seq);
-        world.enqueue_runtime_feedback(f.clone()).unwrap();
+        world
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(&f))
+            .unwrap();
         world.claim_runtime_feedback(&f.feedback_id).unwrap();
         world
             .retry_runtime_feedback(&f.feedback_id, "private delivery diagnostic")

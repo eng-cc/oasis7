@@ -1140,7 +1140,7 @@ fn provider_lineage_restore_quarantines_missing_or_mismatched_active_identity() 
 fn provider_lineage_hydrates_sequences_and_session_from_runtime_projection() {
     let mut world = RuntimeWorld::default();
     world
-        .enqueue_runtime_feedback(crate::simulator::FeedbackEnvelopeV1 {
+        .enqueue_runtime_feedback(oasis7_agent_api::FeedbackEnvelopeV1 {
             feedback_id: "runtime-feedback:agent-0:7".to_string(),
             feedback_seq: 7,
             agent_subject: "agent-0".to_string(),
