@@ -1,13 +1,13 @@
 # 指挥中心文档树系统设计
 
 - 文档 ID：`DESIGN-ENGINEERING-CC-DOCUMENT-TREE`
-- 状态：`draft`；树目标方案尚未完整实现，已有章节索引基础见 §4；未验收树桌面交互
+- 状态：`draft`；已有文件清单、显式树和阅读恢复，完整目标及阅读体验尚未验收；实现边界见 §11
 - owner_role：`runtime_engineer`
 - module：`engineering`
 - 上游：[REQ-CC-016](command-center.prd.md#REQ-CC-016)、[AC-CC-016](command-center.prd.md#AC-CC-016)
 - 总体设计：[指挥客户端系统设计](command-center.design.md)
-- last_reviewed_at：2026-10-13
-- 核对基线：`main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3`
+- last_reviewed_at：2026-10-17
+- 核对基线：`main@0ec10379419b0aaedb9d16157b81c92f4e6e3495`；仅源码及文档核对，未执行新桌面验收
 
 ## 1. 目标、现状与边界
 
@@ -29,6 +29,7 @@
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 三种层级、确定关系与来源；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=三种层级、确定关系与来源 | [DES-CC-TREE-001](#DES-CC-TREE-001) | 文档 owner；产品 README、专业入口及显式配对 | 不推断语义主责或设计完成率 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 版本、覆盖、局部失败和只读边界；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=版本、覆盖、局部失败和只读边界 | [DES-CC-TREE-002](#DES-CC-TREE-002) | Git / Rust adapter、既有索引 | 不扫描私有库，不访问任意远端 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | AC-CC-016：定位、往返、恢复与可访问操作；产品适用性：N/A；reason=只读开发文档导航、索引与个人阅读体验，不定义游戏规则或玩家验收；scope=定位、往返、恢复与可访问操作 | [DES-CC-TREE-003](#DES-CC-TREE-003) | Solid UI / Tauri 宿主 / QA | 设计交付不证明真实桌面通过 |
+| Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；[REQ-CC-016](command-center.prd.md#REQ-CC-016) | 以产品/专业主题为默认阅读入口，目录和解析诊断按需展开；产品适用性：N/A；reason=开发者文档阅读能力，不定义游戏或玩家功能；scope=文档全局入口与详情信息顺序 | [DES-CC-TREE-004](#DES-CC-TREE-004) | DocumentInventory / DocumentSemanticTree / 来源详情 | 不改变导航和配对语义，不隐藏影响所选条款的缺口 |
 
 <a id="DES-CC-TREE-001"></a>
 
@@ -60,7 +61,7 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 本功能不执行 fetch、checkout、模型调用或源文档写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
 
-现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；逐文件覆盖由下述清单切片承接；独立树 attempt/generation、树缓存与树 UI 合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
+现有章节索引已承接 §4 的扫描前后复核基础：复核 tracked 清单、dirty 路径、HEAD 与预算内已读文件的内容摘要；发现变化返回可重试的读取错误，由既有刷新路径保留旧索引和来源版本。校验是有界的二次观察，不提供文件系统锁或固定提交 blob 快照；逐文件覆盖、已有显式树 UI 及阅读恢复的范围见 §11；独立树 attempt/generation 与树缓存合同仍待实现。确定性并发反例见 `core/src/index_consistency_tests.rs`，实际运行结果归实现 PR。
 
 <a id="DES-CC-TREE-003"></a>
 
@@ -75,6 +76,26 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 偏好采用独立版本化 personal 记录，与可重建清单及原 Snapshot 分离；读取损坏或未知版本只报告恢复不可用，不删改原记录及其他个人数据。只有实际用户操作才替换可支持版本的偏好，不以启动默认值覆盖不可读记录；保存失败显示提示且保留当前会话位置。路由、展开数量、搜索长度和滚动值须有明确预算，超限恢复有提示，不进行无限遍历。个人记录更新不重置当前树，缓存刷新不删除偏好。
 
 UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折叠、Enter 打开详情，IME 组合输入不触发跳转。窄窗口以树/详情两页和返回入口保持阅读上下文；加载、空结果、部分结果与错误分别呈现。数量和预算采用实现后代表性语料验证，不预写性能达标结论。
+
+<a id="DES-CC-TREE-004"></a>
+
+### 5.1 面向主题的默认阅读与诊断分层
+
+本节是读取现有投影的目标交互，不增加文件扫描、模型归纳或文档权威。已有 [DocumentInventory](../../../tools/oasis7-command-center/ui/src/DocumentInventory.tsx) 的文件清单和元数据优先布局需按此调整；已有两棵显式树继续复用，不重做解析器来代替阅读体验。
+
+直接进入“文档全局”且没有可恢复偏好时，默认显示产品树的四模块入口，专业系统树与其并列可切换。已有用户明确选择的视图优先恢复；从工作详情或准确条款进入时直接打开对应文档、来源版本及关系，不要求先切换树、填写路径或理解扫描器。目录与文件清单放在“按路径查找/检查缺口”入口，仍能查漏；不能作为首次阅读的默认平铺列表。
+
+| 区域 | 默认信息与顺序 | 按需展开 |
+| --- | --- | --- |
+| 导航 | 产品/专业主题、标题、文档类型及草稿/历史标记；搜索保留祖先 | 目录、文件清单、缺口筛选与完整计数口径 |
+| 阅读详情 | 标题与适用范围 → 所选条款正文 → 显式配对/上游及理由入口 → 返回原工作或树位置 | 文件路径、文档/章节完整 ID、摘要、读取字节和原始声明样本 |
+| 来源提示 | 所选基线、最后成功读取和影响当前阅读的过期/部分/冲突提示 | 完整覆盖、未归属集合、解析规则及诊断样本 |
+
+正文按安全的标题、段落、列表、表格和代码块阅读层级展示，原始 Markdown 另可查看；不让整页原文预格式化框承担所有正文阅读。链接仍通过受控来源打开，代码和原文命令均不可执行。长正文使用主要阅读区域滚动，避免正文、列表与诊断各占满高度形成竞争滚动区；窄窗口沿 §5 的树/详情往返，不缩小正文掩盖内容。
+
+诊断隐藏只改变信息层级。所选文件未读取、关系歧义、过期快照或范围不完整，必须在受影响内容旁显示原因和具体下一入口；不能把失败显示为空目录、把未解析显示为无设计，或折叠掉判断所需的旧版本。无结果保留当前筛选和范围，并提供清除筛选/查看目录；读取失败保留最后成功内容、版本和重试入口；重复 ID 与多配对仍按原关系合同分别呈现。
+
+新增偏好字段使用独立可选版本化记录，沿 §5/§10 恢复和兼容规则。默认视图不回写覆盖用户旧偏好；外部条款跳转的临时定位与用户保存的长期阅读位置区分，返回时恢复原筛选、焦点和滚动。UI 复用同一文件详情与受控源组件，各入口不复制选择状态或建立另一份解析结论。
 
 ## 6. 接口合同与关键运行流程
 
@@ -129,6 +150,7 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 生命周期基础已有程序回归；树关系反例待实现 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 章节索引并发反例已有程序回归；独立树快照、迁移与完整 corpus 性能未验证 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | AC-CC-016：搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
+| Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；[REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-004](#DES-CC-TREE-004) | 默认主题阅读、诊断分层和原工作往返 | 扩展 [文档阅读回归](../../../tools/oasis7-command-center/ui/src/AppDocumentReading.test.tsx)：首次默认/已保存偏好、空筛选/部分读取/失效引用、条款直达、返回栈及迟到恢复；真实 macOS 按 AC-CC-016 定位产品专题及配对设计，再返回原工作、筛选和焦点，记录额外搜索与切换 | 实现 PR source/build、语料、任务耗时及真实截图 | 尚未实现本节阅读调整；DOM/设计检查不证明实际阅读或原生可访问性 |
 
 生命周期解析基础已由 [lifecycle_metadata.rs](../../../tools/oasis7-command-center/core/src/lifecycle_metadata.rs) 和现有来源详情承接：原始声明与规范化类别分开，新增可选字段兼容旧阅读记录；[生命周期回归](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)覆盖附注、全角分隔符、未知原值和错误声明。这不提供文件级树、筛选或真实桌面验收。
 

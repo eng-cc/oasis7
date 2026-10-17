@@ -109,10 +109,12 @@ pub(super) fn run(
     listen: SocketAddr,
     timeout: Duration,
 ) -> Result<(), String> {
+    let preparation_started = std::time::Instant::now();
     if bootstrap.management_listen == listen {
         return Err("healthy management and ordinary ports must be distinct".into());
     }
     let verified = bootstrap.verify(&initial, &initial_qualified, config_parent)?;
+    report_bootstrap_timing("lineage", preparation_started);
     let public = hex::encode(authentication.verifying_key().to_bytes());
     let successor = &verified.sealed.transition().body().successor;
     let old = verified.old.definition();
@@ -247,8 +249,10 @@ pub(super) fn run(
             &target,
         )
         .map_err(|e| e.to_string())?;
+        let manifest_started = std::time::Instant::now();
         let manifest: SignedFormalArchiveTransferV1 =
             remote.archive_manifest().map_err(|e| e.to_string())?;
+        report_bootstrap_timing("archive_manifest", manifest_started);
         DurableSetCandidateV1::stage_replica(
             data_dir,
             verified.sealed.clone(),
@@ -262,6 +266,7 @@ pub(super) fn run(
     let management = TcpListener::bind(bootstrap.management_listen).map_err(|e| e.to_string())?;
     let mut server = DurableSetCandidateServerV1::new(candidate, verified.sealed, role, timeout)
         .map_err(|e| e.to_string())?;
+    report_bootstrap_timing("management_ready", preparation_started);
     println!(
         "formal_endpoint_awaiting_management={}",
         management.local_addr().map_err(|e| e.to_string())?
@@ -275,6 +280,14 @@ pub(super) fn run(
             Ok(None) => {}
             Err(error) => report_management_error(&error),
         }
+    }
+}
+fn report_bootstrap_timing(phase: &'static str, started: std::time::Instant) {
+    if std::env::var_os("OASIS7_HEALTHY_NATIVE_TRACE").is_some_and(|value| value == "1") {
+        eprintln!(
+            "healthy-native-bootstrap phase={phase} elapsed_us={}",
+            started.elapsed().as_micros(),
+        );
     }
 }
 fn report_management_error(error: &impl std::fmt::Display) {

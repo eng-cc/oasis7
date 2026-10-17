@@ -29,6 +29,7 @@ pub(super) fn exercise_long_history(
     original: &SubmitIntentRequest<WorldServicePayloadV1>,
     original_commit: &oasis7_client_api::world_service::CommitRef,
 ) -> Result<(), String> {
+    let history_started = Instant::now();
     let owner = RemoteWorldServiceClient::new(owner_config.clone()).map_err(|e| e.to_string())?;
     let original_tick = runtime
         .published
@@ -38,6 +39,12 @@ pub(super) fn exercise_long_history(
         .map_err(|e| format!("original Tick fixture: {e:?}"))?
         .ok_or("original Tick certificate missing")?;
     for ordinal in 0..70_u64 {
+        let request_started = Instant::now();
+        eprintln!(
+            "formal_world_history stage=request ordinal={} event=begin elapsed_ms={}",
+            ordinal + 1,
+            history_started.elapsed().as_millis()
+        );
         let current = runtime.published.current()?;
         let binding = current
             .world
@@ -107,6 +114,13 @@ pub(super) fn exercise_long_history(
                 "long history accepted delegation did not update the canonical ledger".into(),
             );
         }
+        eprintln!(
+            "formal_world_history stage=request ordinal={} event=end stage_ms={} elapsed_ms={} position={}",
+            ordinal + 1,
+            request_started.elapsed().as_millis(),
+            history_started.elapsed().as_millis(),
+            runtime.published.position()?
+        );
         if ordinal % 16 == 15 {
             eprintln!(
                 "long history reopening after {} completed changes",
@@ -115,6 +129,7 @@ pub(super) fn exercise_long_history(
             stop_long_history_runtime(&mut runtime)?;
             let before = runtime.published.current()?;
             drop(runtime);
+            let reopen_started = Instant::now();
             runtime = FormalLiveRuntime::open_with_native_history(config).map_err(|error| {
                 format!("long history reopen after {} changes: {error}", ordinal + 1)
             })?;
@@ -122,8 +137,19 @@ pub(super) fn exercise_long_history(
                 return Err("long-running World changed after qualified reopen".into());
             }
             runtime.start()?;
+            eprintln!(
+                "formal_world_history stage=reopen completed={} stage_ms={} elapsed_ms={}",
+                ordinal + 1,
+                reopen_started.elapsed().as_millis(),
+                history_started.elapsed().as_millis()
+            );
         }
     }
+    // The 70 distinct results are already qualified. Stop while completing
+    // that boundary, before cold reads and the deliberately large byte scan
+    // allow unrelated empty Ticks to begin. In-flight stop still drains normally.
+    stop_long_history_runtime(&mut runtime)?;
+    let cold_started = Instant::now();
     let before = runtime.published.current()?;
     if before.anchor.head().record().position <= 64
         || before.world.tick_consensus_records().len() > 32
@@ -173,12 +199,22 @@ pub(super) fn exercise_long_history(
             "actual World closed-record bytes only {bytes}; C10 threshold unmet"
         ));
     }
-    stop_long_history_runtime(&mut runtime)?;
+    eprintln!(
+        "formal_world_history stage=stopped_cold_history_and_material_scan stage_ms={} elapsed_ms={}",
+        cold_started.elapsed().as_millis(),
+        history_started.elapsed().as_millis()
+    );
     drop(runtime);
     eprintln!("long history final reopen after 70 completed changes");
+    let reopen_started = Instant::now();
     let mut reopened = FormalLiveRuntime::open_with_native_history(config)
         .map_err(|error| format!("long history final reopen: {error}"))?;
-    reopened.start()?;
+    eprintln!(
+        "formal_world_history stage=final_open stage_ms={} elapsed_ms={}",
+        reopen_started.elapsed().as_millis(),
+        history_started.elapsed().as_millis()
+    );
+    let verify_started = Instant::now();
     if reopened
         .published
         .current()?
@@ -189,6 +225,7 @@ pub(super) fn exercise_long_history(
     {
         return Err("reopened archive changed original Tick bytes".into());
     }
+    reopened.start()?;
     let owner = RemoteWorldServiceClient::new(owner_config).map_err(|e| e.to_string())?;
     let public = RemoteWorldServiceClient::new(public_config).map_err(|e| e.to_string())?;
     let view = read_until_position(&public, identity, before.anchor.head().record().position)?;
@@ -207,9 +244,11 @@ pub(super) fn exercise_long_history(
     )?;
     wait_for_published_position(&reopened, next)?;
     let after = reopened.published.current()?;
+    let duplicate_commit = lookup_original_commit(&owner, original)?;
+    stop_long_history_runtime(&mut reopened)?;
     if retained_result_from_hot_or_cold(&after.world, &original_key)? != original_result
         || game_task::current_control(&after.world, "agent").map_err(|e| e.to_string())? != control
-        || lookup_original_commit(&owner, original)? != *original_commit
+        || duplicate_commit != *original_commit
     {
         return Err(
             "old request produced a second effect or changed its original CommitRef".into(),
@@ -221,20 +260,38 @@ pub(super) fn exercise_long_history(
         before.world.tick_consensus_records().len(),
         before.world.tick_consensus_record_count()
     );
-    stop_long_history_runtime(&mut reopened)
+    eprintln!(
+        "formal_world_history stage=final_verification_and_stop stage_ms={} elapsed_ms={}",
+        verify_started.elapsed().as_millis(),
+        history_started.elapsed().as_millis()
+    );
+    Ok(())
 }
 
 /// Retry only the documented pending outcome on the same owned runtime. A
 /// large final Tick may still be publishing when graceful stop is requested.
 fn stop_long_history_runtime(runtime: &mut FormalLiveRuntime) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(120);
+    eprintln!(
+        "formal_world_history stage=stop event=begin position={} pending_open={}",
+        runtime.published.position()?,
+        runtime.durable_set_arm.pending_open()?
+    );
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             return Err("long history graceful stop still pending after 120s".into());
         }
         match runtime.stop(remaining.min(Duration::from_secs(10))) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                eprintln!(
+                    "formal_world_history stage=stop event=end stage_ms={} position={}",
+                    started.elapsed().as_millis(),
+                    runtime.published.position()?
+                );
+                return Ok(());
+            }
             Err(error) if error == "formal Node stop is still pending; runtime remains owned" => {
                 eprintln!("long history graceful stop pending; retaining the same runtime owner");
             }
@@ -250,72 +307,10 @@ fn wait_for_new_long_history_result(
     runtime: &FormalLiveRuntime,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> Result<(), String> {
-    let key = correlation::key_digest(&request.correlation.key).map_err(|e| e.to_string())?;
-    // Volatile admission has no execution SLO. Keep this fixture bounded while
-    // allowing a request to wait for an already-running Tick and its own Tick.
-    let started = Instant::now();
-    let deadline = started + Duration::from_secs(120);
-    let mut next_diagnostic = Duration::from_secs(20);
-    loop {
-        let current = runtime.published.current()?;
-        // Each generation/nonce here is new and the next request is not
-        // submitted until this one is published. Its result must therefore be
-        // in this qualified publication's recent hot results. Probing older
-        // cold history for an unexecuted request competes with publication.
-        if fresh_long_history_result(&current.world, &key, request)?.is_some() {
-            return Ok(());
-        }
-        let snapshot = runtime
-            .runtime
-            .lock()
-            .map_err(|_| "long history runtime lock poisoned")?
-            .snapshot();
-        if let Some(error) = snapshot.last_error {
-            return Err(format!(
-                "long history task failed before publication: {error}"
-            ));
-        }
-        let now = Instant::now();
-        if now >= deadline {
-            // Publication may have advanced while the Node snapshot was read.
-            let current = runtime.published.current()?;
-            if fresh_long_history_result(&current.world, &key, request)?.is_some() {
-                return Ok(());
-            }
-            return Err(format!(
-                "long history task {key} missing after 120s at position {}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
-                current.anchor.head().record().position,
-                snapshot.running,
-                snapshot.tick_count,
-                snapshot.consensus.slot,
-                snapshot.consensus.latest_height,
-                snapshot.consensus.committed_height,
-                snapshot.consensus.last_execution_height,
-                snapshot.consensus.pending_consensus_actions,
-                snapshot.consensus.pending_proposal,
-                snapshot.consensus.last_status,
-            ));
-        }
-        if now.duration_since(started) >= next_diagnostic {
-            eprintln!(
-                "long history task {key} still awaiting exact publication after {}s (diagnostic threshold {}s); position={} running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
-                now.duration_since(started).as_secs(),
-                next_diagnostic.as_secs(),
-                current.anchor.head().record().position,
-                snapshot.running,
-                snapshot.tick_count,
-                snapshot.consensus.slot,
-                snapshot.consensus.latest_height,
-                snapshot.consensus.committed_height,
-                snapshot.consensus.last_execution_height,
-                snapshot.consensus.pending_consensus_actions,
-                snapshot.consensus.pending_proposal,
-                snapshot.consensus.last_status,
-            );
-            next_diagnostic += Duration::from_secs(20);
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
+    // Volatile admission has no execution SLO. Keep the original bound while
+    // allowing an already-running Tick followed by this request's own Tick.
+    wait_for_new_request_result(runtime, request, Duration::from_secs(120), "long history")
+        .map(|_| ())
 }
 
 fn fresh_long_history_result(
@@ -323,23 +318,7 @@ fn fresh_long_history_result(
     key: &str,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> Result<Option<oasis7::world_service::CanonicalIntentResultV1>, String> {
-    let Some(value) = world
-        .capability_revocation_state()
-        .world_service_results
-        .get(key)
-    else {
-        return Ok(None);
-    };
-    correlation::validate_result(key, value)?;
-    let result: oasis7::world_service::CanonicalIntentResultV1 =
-        serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
-    if result.request != *request || result.rejected.is_some() {
-        return Err(format!(
-            "long history exact task outcome mismatch or rejection: {:?}",
-            result.rejected
-        ));
-    }
-    Ok(Some(result))
+    fresh_request_result(world, key, request)
 }
 
 #[test]

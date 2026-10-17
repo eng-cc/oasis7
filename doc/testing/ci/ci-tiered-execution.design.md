@@ -247,7 +247,13 @@ TOML 中单引号字符串、引号表名和同行元素均以解析后语义为
 
 Trace refs: O7-REQ-d9292810-5229-417f-9fc8-262ee04759c7
 
-承接[共享产物要求](ci-tiered-execution.prd.md#ci-formal-process)。`oasis7-test-build` 从 Cargo JSON 的 executable 字段收集可执行文件；普通 `oasis7-required` 与 `formal-process-tests` 共同依赖它。产物以 tar 保存权限，不传输整个 target。保持 debug/test harness、required features 的 production runtime、release endpoint 及 default-feature snapshot harness 的不同构建变体；Viewer 与 Cargo 集成测试引用的普通二进制同时保存。保持相同 checkout 布局，恢复编译时嵌入的 Cargo 程序路径，设置包工作目录、动态库路径及既有二进制环境。
+承接[共享产物要求](ci-tiered-execution.prd.md#ci-formal-process)。`ci-test-artifacts.py` 从 Cargo JSON 的 executable 字段收集可执行文件，并区分 formal、ordinary 与兼容本地入口的 all 构建范围。正式最小 producer 仅构建 required-feature 的 oasis7 library / chain-runtime binary harness、production runtime、release endpoint 及 default-feature distfs library harness；`oasis7-test-build` 保留普通 required 全包、Viewer 和 default-feature snapshot 的原变体。两个构建范围独立依赖 select，正式矩阵不等待普通 producer 完成。
+
+正式 harness 的最小构建显式启用 `oasis7/ci_formal_required_features`，通过 native target 与 host build 的 optional dependency aliases 保留完整 required 根包共同构建时的依赖 feature 集合。该标记不参与业务 `cfg`，不自动启用，也不加入 production runtime、ordinary 或 default-feature snapshot 的原命令；依赖版本复用现有锁文件。验证比较完整构建与正式最小构建保留的完整依赖子树，并分别核对 host/build 与 target context 的实际 feature 组合，不能只比较根包上的 `test_tier_required` 字符串或把同包不同 context 合并后判断等价。
+
+正式 producer 分为互斥的候选只读入口 `formal-test-build` 和可信 main 写缓存入口 `formal-test-build-trusted`，共享相同构建步骤，每轮恰好运行一个。可信入口仅用于默认 main 上的 push、schedule 或 manual-full；其他候选不能取得缓存写权限。矩阵和固定汇总显式依赖两个入口，选中时要求恰有一项 success 且另一项 skipped；任何失败、取消或未知状态均阻断，不能让 skipped 的隐式 needs 传播掩盖应运行的矩阵。
+
+producer 核对完整清单后，为普通组及各物理分片输出独立 tar.gz，gzip level 1；保留 executable 权限，不传输整个 target。每包只带该消费者的 harness、生产子进程和动态库闭包，并报告原始字节、压缩字节和逐 binary 体积分布。consumer 核对原 run/source/tested identity、全局清单及所选闭包的 hash、profile 和实际 `--list`，不能因缺少不属于自己的二进制而补编。producer attempt 记录供审计；同 run、相同源码和构建身份的 consumer 重跑可复用先前 attempt 的产物。保持相同 checkout 布局，恢复编译时嵌入的 Cargo 程序路径，设置包工作目录、动态库路径及原二进制环境。普通集成测试需要的 Cargo binary 和 default-feature snapshot 不得被正式分包移除。
 
 分片清单由 `scripts/ci-formal-process-suites.json` 拥有，实际名称以下载 harness 的 `--list`/`--ignored --list` 核对。清单中的旧过滤器用于检出重命名、遗漏和新增未分配验收；辅助入口单独登记，不运行整个 ignored 集合。
 
@@ -261,7 +267,11 @@ Trace refs: O7-REQ-d9292810-5229-417f-9fc8-262ee04759c7
 | oasis7 lib / runtime bin required-feature 的非 ignored formal | runtime-protocol，保留原二进制环境 |
 | distfs default-feature lib 的非 ignored formal | storage-recovery，保留原二进制环境 |
 
-后三类原 formal 命令未证明与普通环境等价，继续执行；snapshot_progress 与 legacy fields 回填仍使用原 default features。独立 ignored 验收按 `--exact --ignored --test-threads=1 --nocapture` 串行运行，矩阵 `fail-fast: false`、`max-parallel: 5`。world-history job 上限 45 分钟，其他分片初始保护上限 90 分钟；每次子命令绝对上限 40 分钟，均为防挂保护而非性能目标，后续按真实基线调整。
+表中归属保持为逻辑 suite。物理分片可将 healthy-set 或 runtime-protocol 的完整慢用例放到较轻的分片；执行摘要同时记录逻辑 suite 与物理 shard，并对全集检查恰好一次归属。world-history 的单个 70 次连续操作场景保持完整，不能以切断历史链消除增长成本。上述非 ignored formal 命令未证明与普通环境等价，继续执行；snapshot_progress 与 legacy fields 回填仍使用原 default features。独立 ignored 验收按 `--exact --ignored --test-threads=1 --nocapture` 串行运行，矩阵 `fail-fast: false`、`max-parallel: 5`。world-history job 上限 45 分钟，其他分片初始保护上限 90 分钟；每次子命令绝对上限 40 分钟，均为防挂保护而非性能目标，后续按真实基线调整。
+
+正式 workspace 缓存使用官方 restore/save 的独立步骤，限定正式 target 整体原样保存，不手工拼接 Cargo fingerprint。key 隔离平台/架构、Rust 与 WASM 工具链、Cargo lock/manifests/config、正式构建脚本和 features/profile，source SHA 用于精确条目，同一兼容前缀才可回退。候选只读；可信 producer 完成构建后测量原始 target，最多 8 GiB，超限正常跳过 save。未恢复 workspace 缓存时可使用既有可信依赖缓存，避免命中后重复下载依赖 target。缓存缺失仍走完整冷构建，损坏不得成为合格产物；节省量包含恢复与保存成本。
+
+运行时优化遵循[单次 open 预热复用](../../world-runtime/runtime/formal-world-storage-efficiency.design.md#formal-open-prewarm-reuse)和[健康 Replica 归档安装](../../p2p/design.md#formal-replica-staging-content-reuse)。新请求等待只读取精确请求的 hot result，使用轻量发布切面观察避免每 25ms 克隆完整 World；历史原请求仍保留认证冷查断言。正常成功路径达到目标 publication 后可先停止同一 runtime owner，再做不依赖活服务的材料统计与历史断言，减少测试自身继续产生的空 Tick。生产 Node 的 in-flight stop/join 语义不变，专门的 pending/in-flight 停止场景继续覆盖。阶段诊断记录 open/prewarm/restore、70/40 次操作、冷查及 stop 的单调耗时；不改变原请求绝对期限、签名、fsync 或原验收断言。
 
 链节点入口由独立包 `oasis7_chain_runtime` 拥有，保留 `oasis7_chain_runtime` 可执行文件名、CLI、正式协议与持久化格式。`oasis7` 保留世界执行、状态和读投影；链节点以关闭默认 features 的显式依赖接入，并按需转发 Wasmtime、网络和测试 features。投影承诺树、规范编码和包含证明算法下沉到 `oasis7_client_api::formal_projection`，仅接收序列化投影和显式 audience；世界侧只枚举已授权 audience 并生成投影。通用端点协议、持久化和恢复仍由 `oasis7_distfs` / `oasis7_node` 拥有，链节点只负责世界适配与进程组合，不把这类代码重新放回游戏包。
 

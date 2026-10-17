@@ -214,7 +214,6 @@ jobs:
     if: >-
       needs.select.result == 'success' &&
       (needs.select.outputs.run_oasis7_required == 'true' ||
-       needs.select.outputs.run_formal_process == 'true' ||
        fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
     steps:
@@ -244,20 +243,137 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Build test artifacts once
+      - name: Build ordinary test artifacts
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          python3 scripts/ci-test-artifacts.py build --bundle "$RUNNER_TEMP/native-tests"
-          tar -C "$RUNNER_TEMP/native-tests" -cf "$RUNNER_TEMP/native-tests.tar" .
+          python3 scripts/ci-test-artifacts.py build --scope ordinary --bundle "$RUNNER_TEMP/native-tests"
+          python3 scripts/ci-test-artifacts.py pack --bundle "$RUNNER_TEMP/native-tests" --suite ordinary --output "$RUNNER_TEMP/native-tests.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-tests-${{ github.sha }}
-          path: ${{ runner.temp }}/native-tests.tar
+          path: ${{ runner.temp }}/native-tests.tar.gz
           compression-level: 0
           overwrite: true
           if-no-files-found: error
           retention-days: 2
+
+  formal-test-build:
+    cache-mode: read
+    needs: select
+    if: >-
+      needs.select.result == 'success' && needs.select.outputs.run_formal_process == 'true' &&
+      !(github.ref == 'refs/heads/main' &&
+        (github.event_name == 'push' || github.event_name == 'schedule' ||
+         (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full')))
+    runs-on: ubuntu-24.04
+    steps: &formal-build-steps
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchains
+        shell: bash
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+          rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
+          rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
+          rustup target add wasm32-unknown-unknown
+      - name: Restore compatible formal workspace cache
+        id: formal-workspace-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target
+          key: formal-workspace-v1-ubuntu24-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.OASIS7_WASM_TOOLCHAIN }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/config.toml', '.github/workflows/rust.yml', 'scripts/ci-test-artifacts.py', 'scripts/ci-formal-process-suites.json') }}-${{ github.sha }}
+          restore-keys: |
+            formal-workspace-v1-ubuntu24-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.OASIS7_WASM_TOOLCHAIN }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/config.toml', '.github/workflows/rust.yml', 'scripts/ci-test-artifacts.py', 'scripts/ci-formal-process-suites.json') }}-
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        if: steps.formal-workspace-cache.outputs.cache-matched-key == ''
+        with:
+          save-if: false
+          shared-key: ci-full-regression-trusted-v2
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
+          cache-on-failure: true
+      - name: Install native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - name: Build only formal process dependencies
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 scripts/ci-test-artifacts.py build --scope formal --bundle "$RUNNER_TEMP/formal-tests"
+          python3 scripts/ci-test-artifacts.py pack --bundle "$RUNNER_TEMP/formal-tests" --split-formal --output "$RUNNER_TEMP/formal-archives"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-tests-runtime-protocol-${{ github.sha }}
+          path: ${{ runner.temp }}/formal-archives/runtime-protocol.tar.gz
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-tests-world-history-${{ github.sha }}
+          path: ${{ runner.temp }}/formal-archives/world-history.tar.gz
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-tests-healthy-set-${{ github.sha }}
+          path: ${{ runner.temp }}/formal-archives/healthy-set.tar.gz
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-tests-storage-recovery-${{ github.sha }}
+          path: ${{ runner.temp }}/formal-archives/storage-recovery.tar.gz
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: formal-tests-lifecycle-cli-${{ github.sha }}
+          path: ${{ runner.temp }}/formal-archives/lifecycle-cli.tar.gz
+          compression-level: 0
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 2
+      - name: Check disposable workspace cache budget
+        id: cache-budget
+        run: python3 scripts/ci-test-artifacts.py cache-budget --max-bytes 8589934592 --github-output "$GITHUB_OUTPUT"
+      - name: Save bounded trusted formal workspace cache
+        if: >-
+          success() && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'schedule' ||
+           (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full')) &&
+          steps.cache-budget.outputs.save == 'true' &&
+          steps.formal-workspace-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target
+          key: ${{ steps.formal-workspace-cache.outputs.cache-primary-key }}
+
+  formal-test-build-trusted:
+    cache-mode: write
+    needs: select
+    if: >-
+      needs.select.result == 'success' && needs.select.outputs.run_formal_process == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))
+    runs-on: ubuntu-24.04
+    steps: *formal-build-steps
 
   oasis7-required:
     needs: [select, oasis7-test-build]
@@ -300,7 +416,7 @@ jobs:
       - name: Unpack native executables preserving modes
         run: |
           mkdir -p "$RUNNER_TEMP/native-tests"
-          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
+          tar -C "$RUNNER_TEMP/native-tests" -xzf "$RUNNER_TEMP/native-tests.tar.gz"
       - name: Execute selected group
         shell: bash
         env:
@@ -312,14 +428,17 @@ jobs:
         run: bash ./scripts/ci-tests.sh required --group "oasis7_required" --repo-root "$GITHUB_WORKSPACE"
 
   formal-process-tests:
-    needs: [select, oasis7-test-build]
-    if: needs.select.result == 'success' && needs.select.outputs.run_formal_process == 'true'
-    timeout-minutes: ${{ matrix.suite == 'world-history' && 45 || 90 }}
+    needs: [select, formal-test-build, formal-test-build-trusted]
+    if: >-
+      always() && needs.select.result == 'success' && needs.select.outputs.run_formal_process == 'true' &&
+      ((needs.formal-test-build.result == 'success' && needs.formal-test-build-trusted.result == 'skipped') ||
+       (needs.formal-test-build.result == 'skipped' && needs.formal-test-build-trusted.result == 'success'))
+    timeout-minutes: ${{ matrix.shard == 'world-history' && 45 || 90 }}
     strategy:
       fail-fast: false
       max-parallel: 5
       matrix:
-        suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]
+        shard: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -335,28 +454,30 @@ jobs:
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: native-tests-${{ github.sha }}
+          name: formal-tests-${{ matrix.shard }}-${{ github.sha }}
           path: ${{ runner.temp }}
       - name: Unpack native executables preserving modes
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           mkdir -p "$RUNNER_TEMP/native-tests"
-          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
+          tar -C "$RUNNER_TEMP/native-tests" -xzf "$RUNNER_TEMP/$SHARD.tar.gz"
       - name: Run exact formal process suite without Cargo
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          SUITE: ${{ matrix.suite }}
-        run: python3 scripts/ci-test-artifacts.py run --bundle "$RUNNER_TEMP/native-tests" --suite "$SUITE" --results output/formal-process/results.jsonl
+          SHARD: ${{ matrix.shard }}
+        run: python3 scripts/ci-test-artifacts.py run --bundle "$RUNNER_TEMP/native-tests" --shard "$SHARD" --results output/formal-process/results.jsonl
       - name: Upload safe process diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: formal-process-${{ matrix.suite }}-${{ github.run_attempt }}
+          name: formal-process-${{ matrix.shard }}-${{ github.run_attempt }}
           path: output/formal-process/results.jsonl
           if-no-files-found: warn
           retention-days: 7
 
   formal-process:
-    needs: [select, oasis7-test-build, formal-process-tests]
+    needs: [select, formal-test-build, formal-test-build-trusted, formal-process-tests]
     if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_mode == 'full')
     runs-on: ubuntu-24.04
     steps:
@@ -1370,7 +1491,7 @@ jobs:
       - name: Unpack native executables preserving modes
         run: |
           mkdir -p "$RUNNER_TEMP/native-tests"
-          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
+          tar -C "$RUNNER_TEMP/native-tests" -xzf "$RUNNER_TEMP/native-tests.tar.gz"
       - name: Run full test tier
         env:
           OASIS7_CI_TEST_BUNDLE: ${{ runner.temp }}/native-tests
@@ -1509,7 +1630,7 @@ jobs:
       - name: Unpack native executables preserving modes
         run: |
           mkdir -p "$RUNNER_TEMP/native-tests"
-          tar -C "$RUNNER_TEMP/native-tests" -xf "$RUNNER_TEMP/native-tests.tar"
+          tar -C "$RUNNER_TEMP/native-tests" -xzf "$RUNNER_TEMP/native-tests.tar.gz"
       - name: Run full test tier
         env:
           OASIS7_CI_TEST_BUNDLE: ${{ runner.temp }}/native-tests

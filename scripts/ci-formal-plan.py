@@ -16,7 +16,13 @@ def selected(plan, known_groups):
 def aggregate(selected_value, needs):
     if needs.get('select', {}).get('result') != 'success':
         raise ValueError('formal selection failed')
-    required = {'oasis7-test-build': 'success', 'formal-process-tests': 'success'} if selected_value else {'formal-process-tests': 'skipped'}
+    builders = (needs.get('formal-test-build', {}).get('result'),
+                needs.get('formal-test-build-trusted', {}).get('result'))
+    if selected_value and builders not in (('success', 'skipped'), ('skipped', 'success')):
+        raise ValueError('formal builders require exactly one success and one skipped')
+    if not selected_value and builders != ('skipped', 'skipped'):
+        raise ValueError('unselected formal builders must both be skipped')
+    required = {'formal-process-tests': 'success' if selected_value else 'skipped'}
     for job, expected in required.items():
         if needs.get(job, {}).get('result') != expected:
             raise ValueError(f'{job}: expected {expected}')

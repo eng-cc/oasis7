@@ -1,5 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "case_shards": {
+    "runtime-tests": {
+      "formal_live_runtime::tests::protected_process_tests::durable_set_tests::formal_protected_healthy_durable_set_cold_original_lookup_after_restart": "storage-recovery",
+      "formal_live_runtime::tests::protected_process_tests::healthy_operation_tests::formal_protected_healthy_durable_set_operation_cli_owner_and_original_result": "lifecycle-cli"
+    }
+  },
+  "binary_dependencies": {
+    "runtime-tests": ["runtime", "endpoint"],
+    "oasis7-lib-tests": ["runtime", "endpoint"],
+    "distfs-tests": ["endpoint"]
+  },
+  "script_dependencies": {
+    "local-node-lifecycle.test.sh": ["runtime", "runtime-tests"],
+    "legacy-observer-migration.test.sh": ["runtime", "runtime-tests"]
+  },
   "suites": {
     "runtime-protocol": [
       {
@@ -161,6 +176,7 @@
     "runtime-tests": [
       "formal_live_runtime::tests::protected_process_tests::crash_tests::protected_runtime_crash_child",
       "formal_live_runtime::tests::protected_process_tests::oracle_support::handoff_tests::protected_handoff_owner_worker",
+      "node_lifecycle::tests::local_node_export_existing_world_fixture",
       "node_lifecycle::legacy_migration::tests::legacy_export_real_source_fixture"
     ],
     "distfs-tests": [

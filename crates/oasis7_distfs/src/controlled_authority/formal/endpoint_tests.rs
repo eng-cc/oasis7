@@ -976,3 +976,5 @@ fn marked_shadow_cannot_initialize_a_serving_endpoint() {
     assert!(matches!(result, Err(FormalError::Invalid(ref message)) if message.contains("shadow")));
     assert!(!shadow.join("formal-checkpoint-v1.cbor").exists());
 }
+#[path = "endpoint_durable_set_copy_source_tests.rs"]
+mod durable_set_copy_source_tests;

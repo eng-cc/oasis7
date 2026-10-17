@@ -12,8 +12,21 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = (ROOT / '.github/workflows/rust.yml').read_text()
 CONFIG = json.loads((ROOT / 'scripts/ci-required-scope.json').read_text())
-JOBS = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
-                       WORKFLOW.split('\njobs:\n', 1)[1], re.M | re.S))
+def workflow_jobs(workflow):
+    jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
+                          workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+    anchors = {}
+    for job in jobs.values():
+        match = re.search(r'^    steps: &([a-z0-9-]+)\n(.*)', job, re.M | re.S)
+        if match:
+            anchors[match[1]] = match[2]
+    return {name: re.sub(r'^    steps: &[a-z0-9-]+\n', '    steps:\n',
+                        re.sub(r'^    steps: \*([a-z0-9-]+)\n',
+                               lambda match: '    steps:\n' + anchors[match[1]], job, flags=re.M), flags=re.M)
+            for name, job in jobs.items()}
+
+
+JOBS = workflow_jobs(WORKFLOW)
 
 
 def validate_candidate_graph(workflow, config):
@@ -88,26 +101,58 @@ class Workflow(unittest.TestCase):
 
     def test_formal_suites_share_build_and_propagate_all_failures(self):
         matrix = JOBS['formal-process-tests']
-        self.assertIn('needs: [select, oasis7-test-build]', matrix)
+        self.assertIn('needs: [select, formal-test-build, formal-test-build-trusted]', matrix)
         self.assertNotIn('needs: oasis7-required', matrix)
         self.assertIn('fail-fast: false', matrix)
         self.assertIn('max-parallel: 5', matrix)
-        self.assertIn('suite: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]', matrix)
+        self.assertIn('shard: [runtime-protocol, world-history, healthy-set, storage-recovery, lifecycle-cli]', matrix)
         self.assertIn('actions/download-artifact@', matrix)
         self.assertNotIn('cargo build', matrix)
         self.assertNotIn('cargo test', matrix)
         self.assertNotIn('rust-cache@', matrix)
         self.assertIn('--results output/formal-process/results.jsonl', matrix)
-        self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', JOBS['formal-process'])
+        self.assertIn('needs: [select, formal-test-build, formal-test-build-trusted, formal-process-tests]', JOBS['formal-process'])
         for name in ['full-regression', 'candidate-full-regression']:
             self.assertIn('./scripts/ci-tests.sh full-standard', JOBS[name])
             self.assertIn('needs: oasis7-test-build', JOBS[name])
         self.assertIn('compression-level: 0', JOBS['oasis7-test-build'])
         self.assertIn('overwrite: true', JOBS['oasis7-test-build'])
+        self.assertIn('--scope ordinary', JOBS['oasis7-test-build'])
+        self.assertNotIn('run_formal_process', JOBS['oasis7-test-build'])
+        self.assertIn('--scope formal', JOBS['formal-test-build'])
+        self.assertIn('--split-formal', JOBS['formal-test-build'])
+        self.assertIn('formal-tests-${{ matrix.shard }}-${{ github.sha }}', matrix)
+        self.assertIn('--shard "$SHARD"', matrix)
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
         required_body = driver.split('run_oasis7_required_tier_tests() {', 1)[1].split('run_scenario_regression_tests()', 1)[0]
         self.assertNotIn('formal-live-local-tests.sh', required_body)
         self.assertIn('if [[ "$tier" == full ]]; then run_group formal_process; fi', driver)
+
+    def test_formal_workspace_cache_has_exclusive_trust_and_a_size_budget(self):
+        reader, writer = JOBS['formal-test-build'], JOBS['formal-test-build-trusted']
+        self.assertIn('cache-mode: read', reader)
+        self.assertNotIn('cache-mode: write', reader)
+        self.assertIn('cache-mode: write', writer)
+        for text in ('refs/heads/main', "github.event_name == 'push'", "github.event_name == 'schedule'",
+                     "github.event_name == 'workflow_dispatch'", "inputs.run_mode == 'full'"):
+            self.assertIn(text, writer.split('    steps:', 1)[0])
+            self.assertIn(text, reader.split('    steps:', 1)[0])
+        self.assertIn('!(', reader.split('    steps:', 1)[0])
+        self.assertEqual(reader.split('    steps:', 1)[1].strip(), writer.split('    steps:', 1)[1].strip())
+        for job in (reader, writer):
+            self.assertIn('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9', job)
+            self.assertIn('actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9', job)
+            self.assertIn('cache-budget --max-bytes 8589934592', job)
+            self.assertIn("steps.cache-budget.outputs.save == 'true'", job)
+            self.assertIn('formal-workspace-v1-ubuntu24-', job)
+            for value in ('runner.arch', 'RUST_TOOLCHAIN', 'OASIS7_WASM_TOOLCHAIN', 'Cargo.lock',
+                          '**/Cargo.toml', '.cargo/config.toml', '.github/workflows/rust.yml', 'github.sha'):
+                self.assertIn(value, job)
+        matrix = JOBS['formal-process-tests']
+        self.assertIn('always()', matrix)
+        for name in ('formal-test-build', 'formal-test-build-trusted'):
+            self.assertIn(f"needs.{name}.result == 'success'", matrix)
+            self.assertIn(f"needs.{name}.result == 'skipped'", matrix)
 
     def test_manual_candidate_full_is_read_only_and_not_scheduled(self):
         candidate = JOBS['candidate-full-regression']
@@ -497,7 +542,7 @@ run_cargo() {
                 self.assertEqual(result.returncode, 0 if state == 'success' else 1)
                 if state != 'success':
                     self.assertIn('CI scope planning did not succeed', result.stdout)
-        for name in ('oasis7-test-build', 'formal-process-tests', 'command-center'):
+        for name in ('oasis7-test-build', 'formal-test-build', 'formal-test-build-trusted', 'formal-process-tests', 'command-center'):
             self.assertIn("needs.select.result == 'success'", JOBS[name])
 
     def test_gate_is_last_and_all_groups_are_dependencies(self):
@@ -510,7 +555,7 @@ run_cargo() {
             job = JOBS[group.replace('_', '-')]
             if group == 'formal_process':
                 self.assertIn('always()', job)
-                self.assertIn('needs: [select, oasis7-test-build, formal-process-tests]', job)
+                self.assertIn('needs: [select, formal-test-build, formal-test-build-trusted, formal-process-tests]', job)
                 continue
             dependency = 'needs: [select, oasis7-test-build]' if group == 'oasis7_required' else 'needs: select'
             self.assertIn(dependency, job)
