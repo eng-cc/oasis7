@@ -213,8 +213,8 @@ Trace ID: O7-REQ-d4944a59-ccf3-4f96-95ac-45c0ca50cf51
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。snapshot实际汇总blocker、fallback和next decision；工厂failure disposition存在时清除过时恢复投影。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L124-L248)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L6-L105)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/player_gameplay.rs#L480-L525)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L294-L380)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：需对实际依赖来源/精炼的 profile 核 source receipt、owner ledger handoff、损耗/lineage 和 ready_for_logistics；现有 canonical 输入路径不自动承担或证明这些条件义务。
 
 - 适用条件：选定配方/profile 明确要求来源获取/精炼、source/owner ledger handoff 及物流供应输入；不适用于已由其专业 authority 证明无需这些阶段的 canonical 输入路径。
@@ -265,10 +265,10 @@ Trace ID: O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48
 Trace ID: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3
 
 - 系统设计状态：未核实
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已交付工业快照的blocker/复查提示及enabled-action fallback；无安全fallback显示下一决策，failure disposition存在时清除过时恢复选择。全部工业来源/物流/接收类blocker与实际恢复效果仍未闭合。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L124-L248)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot_fallback.rs#L6-L105)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/player_gameplay.rs#L480-L525)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L294-L380)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：存在工业阻塞与 fallback 投影；所有来源、规格、电力、物流、齐套、接收/终端 blocker 的最早可行动原因、已保留价值及真实恢复动作未逐项证明。
 
 - 适用条件：工业链路出现来源、规格、权限、电力、物流、容量、输入齐套、产出接收或终端阻塞。
@@ -283,11 +283,11 @@ Trace ID: O7-REQ-d0041aa9-1dfb-46a0-95e0-67417b39bfa3
 Trace ID: O7-REQ-df0617cf-2ab6-40ca-934b-f050d6a66812
 
 - 系统设计状态：未核实
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：共享 DTO/authority_snapshot 仅为入口同义基础；未获得同一工业候选与世界状态的 Viewer、pure API 各自实际消费证据。
+- 实现与验证依据：已核清两入口真实消费者接线：pure API发RequestSnapshot并序列化最新player_gameplay；Viewer buildGameplaySummary从同一snapshot读取目标、blocker、下一步/恢复及工业profile，并实际渲染首工业结果卡。首工业完成边界按settlement、正量iron_ingot和durable milestone归一化；不是只有共享DTO。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/control_blocking.rs#L373-L413)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_client_cli/src/bin/oasis7_pure_api_client.rs#L82-L103)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js#L332-L350)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js#L1115-L1157)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/industrial_starter_outcome.js#L5-L16)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_app.jsx#L2690-L2700)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：已核清两入口实际consumer，不再以仅共享DTO作为缺口；Viewer存在缺实体/本地fallback归一化，需逐字段核清中断/重连、旧feedback隔离、主blocker优先级、恢复动作和复查点与pure API原始读面同义，含每种适用工业profile。未取得同候选双入口组合运行证据。
 
 - 适用条件：Viewer 与 pure API 表达同一工业链路或恢复状态。
 - 要求：两入口必须消费同一权威事实，并对动作、主 blocker、完成边界、下一步和复查点保持同义；允许布局和操作方式不同，但不得让玩家猜测不同的世界结果。
@@ -425,10 +425,10 @@ Trace refs: O7-REQ-81c0bc21-36ef-400d-9398-31859b9a08b2；声明：[REQ-FIRST-IN
 Trace ID: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / branch-stage-projection](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-stage-projection)。已承接：分支当前阶段投影或样例回退窗口的一致性。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已交付按当前工业阶段和可执行动作过滤的分支解释，snapshot实际消费该投影；禁用动作不推荐，regional specialist保留工业路线。local_need与后续两步仍是静态说明，不能当作当前区域真实需求或可玩结果。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L8-L167)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L139-L160)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L200-L265)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：Viewer 分支条款与工业阶段投影存在；尚未证明模块/工厂核心/合金选择的真实本地需求、风险及后续两步在正式入口可达。
 
 - 适用条件：当前主目标允许玩家从已形成的工业能力转向本地或区域专业化。
@@ -457,8 +457,8 @@ Trace ID: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / fixture-rollback-window](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#fixture-rollback-window)。已承接：分支当前阶段投影或样例回退窗口的一致性。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。按stage/status和enabled action过滤branch recommendations；local_need/后续路线文案是静态模板，不证明实时需求。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L8-L167)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L139-L160)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L200-L265)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：需绑定具体回退窗口 authority 与关闭事件；当前状态不足、窗口关闭及已兑现收益/既有义务保全的正式入口组合未核清。
 
 - 适用条件：当前路线提供有明确有效窗口的回退选择。

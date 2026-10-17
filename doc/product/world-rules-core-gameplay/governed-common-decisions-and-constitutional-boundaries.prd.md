@@ -116,8 +116,8 @@ Trace ID: O7-REQ-f282f0ef-655c-4e41-a1b6-fa37482d663b
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[gameplay-war-politics-mvp-baseline.design / des-war-politics-002](../../game/gameplay/gameplay-war-politics-mvp-baseline.design.md#des-war-politics-002)。已承接：普通治理白名单内的参数与提案/投票预览。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。emergency brake/release/veto有签名与状态检查，但仅局部治理动作。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L344-L443)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L638-L688)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L583)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：既有玩法设计只承接普通提案白名单部分；组合提案、紧急/升级旁路的原子拒绝或路由与当前授权执行链未完整核验。
 
 - 要求：普通提案必须在提交时声明类别、目标、范围和授权来源；不匹配白名单或触及保护边界的事项必须原子拒绝或明确路由，不得以紧急、技术升级、复合提案或先行实现产生部分效果。
@@ -142,8 +142,8 @@ Trace ID: O7-REQ-79b6687e-3b8c-42a3-a266-df4d191fec06
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。emergency brake/release/veto有签名与状态检查，但仅局部治理动作。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L344-L443)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L638-L688)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L583)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：未核清独立宪制变更的影响说明、延迟复核、独立确认、审计/申诉全部条件及缺项拒绝；普通 proposal 不代替。
 
 - 要求：改变非保护性宪制规则的事项必须同时具备影响说明、延迟/复核窗口、适用的独立确认、审计、申诉和连续 receipt；缺少任一条件时保持待决或拒绝。
@@ -168,8 +168,8 @@ Trace ID: O7-REQ-4f6597ff-8e34-4d12-bb60-060df0e09595
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。emergency brake/release/veto有签名与状态检查，但仅局部治理动作。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L344-L443)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L638-L688)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L583)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：未核清已通过事项在执行点的当前授权/范围/前置重验及跨重试单次世界效果；治理数据类型不证明所有执行路径。
 
 - 要求：普通事项通过只取得有限执行资格；执行时必须重新校验当前授权、范围、前置条件和反滥用边界，同一事项最多产生一个 receipt 支持的世界效果。
@@ -194,8 +194,8 @@ Trace ID: O7-REQ-b584b2ab-bc38-43a1-a8fd-1b89dc3d20cd
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。identity penalty→appeal→resolution包含期限/状态检查；不证明所有freeze/veto/降权动作、绑定聚合或计票纠正。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_identity_penalty.rs#L10-L141)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L303-L376)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_node/src/node_engine_slashing.rs#L24-L36)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：未核清 authenticated account、managed signer、external wallet 的主体聚合、控制人上限、challenge→merge/revocation→计票纠正→appeal 完整链。
 
 - 要求：经验证游戏账户聚合其已批准的玩家身份、managed signer 与 external wallet bindings 作为一个治理主体；线性锁定 OC、明确范围内可撤销委托与按实际控制人聚合后的影响上限共同防止账户/组织拆分、重复绑定或循环转移放大普通治理影响。普通假名得到保留，公开审计只暴露必要的委托关系、最终计票/结果与纠错因果；重复主体 challenge 必须有 review、merge 或 revocation、计票 correction 与 appeal，并保留原历史 receipt。
@@ -220,8 +220,8 @@ Trace ID: O7-REQ-4b64b7c5-9819-4932-a1ad-3cdb09fa82e5
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。emergency brake/release/veto有签名与状态检查，但仅局部治理动作。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L344-L443)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance.rs#L638-L688)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L583)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：未核清 OC 锁定/snapshot/解绑与链上转让并发、截止后不能改票/双投；quota bridge 的存在不证明治理资格隔离。
 
 - 要求：外部 OC 可转让，但持有、转入或转出不自动取得或保留游戏内普通治理权、高影响资格、区域权利、世界资产或行动结果；游戏内治理权只来自事项范围内可审计的锁定、snapshot 与退出/解除绑定。有效窗口后的转让或解除绑定不得追溯改票、双投或同时行使同一权利；既有 operator-managed 单向 `OC -> LetAI Run quota` 桥保持非治理、非赎回，额度、`token_key` 与服务消费不得影响治理资格。
@@ -246,9 +246,9 @@ Trace ID: O7-REQ-c3d848a8-0668-408a-99ca-ef08a7c64be8
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：未核清冻结/否决/降权/惩罚逐类动作的授权证据、期限、重复效果、恢复复核/申诉和失败结果；局部 emergency veto 不代签全部。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。identity penalty→appeal→resolution包含期限/状态检查；不证明所有freeze/veto/降权动作、绑定聚合或计票纠正。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_identity_penalty.rs#L10-L141)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L303-L376)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_node/src/node_engine_slashing.rs#L24-L36)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：未核清冻结/否决/降权/惩罚逐类动作的授权证据、期限、重复效果、恢复复核/申诉和失败结果；局部 emergency veto 不代签全部。 本轮定位node slashing意图为pending_governance_submission且enforced=false；apply_identity_penalty虽有实现，正式执行调用入口仍未核清，不能由零搜索断言不存在。
 
 - 要求：冻结、否决、降权、惩罚或其他高影响保护动作只能在专业合同声明的授权、理由、证据、作用范围和有效期限内发生，并且必须保留可审计 receipt、恢复/复核/申诉路径与明确的失败结果。紧急动作不得扩大普通治理白名单、改写已确认历史或取消申诉；同一证据或请求至多产生一个世界效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)

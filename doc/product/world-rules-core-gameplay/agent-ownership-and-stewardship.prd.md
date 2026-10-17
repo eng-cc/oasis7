@@ -170,8 +170,8 @@ Trace ID: O7-REQ-e7deec0c-7c4b-4f08-a2df-db2839cda928
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-010](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-010)。已承接：经本条对应 AC 承接的工业供给授权边界或转让资格与历史连续性。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。claim quote按owned count/reputation计价，epoch执行upkeep/grace/reclaim；不等于工业制造订单或五门槛经济转让。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_claims.rs#L20-L164)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_claims.rs#L1-L80)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：高后果授权条款不拥有 Agent 制造配方、产能占用和交付 producer；未核清额外 Agent 工业订单到取得控制权的完整实现。
 
 - 要求：额外 Agent 的常态取得路径应通过世界内工业订单表达，并让玩家或组织理解资源投入、适用产能占用和可读交付时间；普通治理 quota 不得直接发放 Agent 或替代工业供给约束，取得后的维护、授权与协调义务仍持续。
@@ -196,8 +196,8 @@ Trace ID: O7-REQ-42168149-c979-4211-9777-2d72f7050147
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[indirect-control-agency-execution-and-continuation.design / des-wr-ia-011](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-011)。已承接：经本条对应 AC 承接的工业供给授权边界或转让资格与历史连续性。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。claim quote按owned count/reputation计价，epoch执行upkeep/grace/reclaim；不等于工业制造订单或五门槛经济转让。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_claims.rs#L20-L164)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_claims.rs#L1-L80)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
 - 剩余范围：owner-change/旧 grant 失效不等于经济转让；资格、容量、资源、治理、反滥用五门槛同一原子提交及未决义务连续性未核清。
 
 - 要求：Agent 的经济转让只能在当时有效的资格、容量、资源、治理和反滥用条件下生效，并保留既有身份、来源、审计历史、已生效结果和未决义务；经济转让本身不得推导额外自治、委托或世界权力。
