@@ -16,6 +16,7 @@ export default function WorkOverview(props: Props) {
   let disposed = false;
   let origin: HTMLElement | undefined;
   let detail: HTMLElement | undefined;
+  let list: HTMLElement | undefined;
   let unlisten: (() => void) | undefined;
   let currentScope = '';
   async function read() {
@@ -48,9 +49,16 @@ export default function WorkOverview(props: Props) {
     origin = button; setSelected(keyOf(item.reference));
     queueMicrotask(() => { detail?.focus(); detail?.scrollIntoView?.({block:'nearest'}); });
   }
-  function close() { setSelected(undefined); if (origin?.isConnected) origin.focus(); }
+  function close() {
+    const reference = selected();
+    const current = Array.from(list?.querySelectorAll<HTMLButtonElement>('button[data-work-ref]') ?? [])
+      .find(button => button.dataset.workRef === reference);
+    setSelected(undefined);
+    const target = current ?? origin;
+    if (target?.isConnected) target.focus();
+  }
   return <Show when={props.snapshot?.project && (props.view === 'direction' || props.view === 'execution')}>
-    <section class="panel" aria-label="已有工作">
+    <section class="panel" ref={list} aria-label="已有工作">
       <div class="panel-title"><h3>返回已有工作</h3><button disabled={loading()} onClick={() => void read()}>{loading() ? '正在读取工作' : '刷新工作列表'}</button></div>
       <div class="panel-body"><p class="muted">按已读取来源列出，未按优先级排序。进入详情核对结果、剩余条件和原工作入口。</p>
         <Show when={error()}><p role="alert" class="notice">工作读取失败：{error()}。保留本项目最近结果。</p></Show>
@@ -58,7 +66,7 @@ export default function WorkOverview(props: Props) {
         <Show when={!projection() && loading()}><p role="status">正在读取已有工作来源。</p></Show>
         <Show when={projection() && !projection()!.items.length}><p>当前已读取范围未列出工作；请核对来源覆盖。可在开发执行连接 GitHub 或查看自管会话。</p><button onClick={props.onExecution}>查看开发执行</button></Show>
       </div>
-      <For each={expanded() ? projection()?.items : projection()?.items.slice(0, 3)}>{work => <div class="row"><div class="row-content"><button class="row-title" onClick={e => open(work, e.currentTarget)}>{work.purpose.value}</button><p>{work.result.value}</p><span class="muted small">{work.goals.length} 项明确目标关系 · {work.reference.kind === 'pullRequest' ? 'PR 来源' : '会话来源'}</span></div><span class="tag">完成条件待核实</span></div>}</For>
+      <For each={expanded() ? projection()?.items : projection()?.items.slice(0, 3)}>{work => <div class="row"><div class="row-content"><button class="row-title" data-work-ref={keyOf(work.reference)} onClick={e => open(work, e.currentTarget)}>{work.purpose.value}</button><p>{work.result.value}</p><span class="muted small">{work.goals.length} 项明确目标关系 · {work.reference.kind === 'pullRequest' ? 'PR 来源' : '会话来源'}</span></div><span class="tag">完成条件待核实</span></div>}</For>
       <Show when={(projection()?.items.length ?? 0) > 3}><div class="panel-body"><button onClick={() => setExpanded(!expanded())}>{expanded() ? '收起其余工作' : `显示其余 ${projection()!.items.length - 3} 项工作`}</button></div></Show>
     </section>
     <Show when={item()} fallback={<Show when={selected()}><section class="panel"><div class="panel-body"><p>原工作不在当前来源窗口中；尚未据此认定工作完成或删除。</p><button onClick={close}>返回工作列表</button></div></section></Show>}>{work => <section class="panel detail" ref={detail} tabindex="-1" aria-label="工作详情">

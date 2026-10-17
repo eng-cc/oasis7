@@ -60,3 +60,14 @@ it('shows a bounded first list with an explicit remaining-work entry', async () 
   fireEvent.click(screen.getByRole('button',{name:'显示其余 1 项工作'}));
   expect(screen.getByRole('button',{name:'工作 3'})).toBeInTheDocument();
 });
+
+it('restores focus to the current source row after a background projection replaces objects', async () => {
+  vi.mocked(bridge.workProjection).mockResolvedValueOnce(projection()).mockResolvedValueOnce(projection());
+  render(() => <WorkOverview snapshot={snapshot()} view="direction" sourceGeneration={0} onExecution={() => {}}/>);
+  const original = await screen.findByRole('button',{name:'修复本地工具'});
+  fireEvent.click(original);
+  fireEvent.click(screen.getByRole('button',{name:'刷新工作列表'}));
+  await waitFor(() => expect(screen.getByRole('button',{name:'修复本地工具'})).not.toBe(original));
+  fireEvent.click(screen.getByRole('button',{name:'返回工作列表'}));
+  expect(screen.getByRole('button',{name:'修复本地工具'})).toHaveFocus();
+});
