@@ -100,4 +100,5 @@ oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = f
 oasis7_hosted_access = { path = "../oasis7_hosted_access", features = ["test-support"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+oasis7_runtime = { path = "../oasis7_runtime", default-features = false, features = ["test-support"] }
 async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }

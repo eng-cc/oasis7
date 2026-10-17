@@ -413,7 +413,7 @@ fn cleanup_stale_sidecar_generation_staging(store_root: &Path) -> Result<(), Wor
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn maybe_fail_after_sidecar_stage(store_root: &Path) -> Result<(), WorldError> {
     let fail_path = sidecar_generation_root_dir(store_root).join(".test-fail-after-stage");
     if fail_path.exists() {
@@ -424,7 +424,7 @@ fn maybe_fail_after_sidecar_stage(store_root: &Path) -> Result<(), WorldError> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn maybe_fail_sidecar_commit_seam(store_root: &Path, seam: &str) -> Result<(), WorldError> {
     let fail_path = sidecar_generation_root_dir(store_root).join(format!(".test-fail-{seam}"));
     if fail_path.exists() {
@@ -435,12 +435,12 @@ fn maybe_fail_sidecar_commit_seam(store_root: &Path, seam: &str) -> Result<(), W
     Ok(())
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "test-support")))]
 fn maybe_fail_sidecar_commit_seam(_store_root: &Path, _seam: &str) -> Result<(), WorldError> {
     Ok(())
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "test-support")))]
 fn maybe_fail_after_sidecar_stage(_store_root: &Path) -> Result<(), WorldError> {
     Ok(())
 }
