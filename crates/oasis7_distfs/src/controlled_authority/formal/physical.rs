@@ -24,6 +24,9 @@ const LIMIT: usize = 64 * 1024 * 1024;
 const META_LIMIT: usize = 16 * 1024 * 1024;
 const FRAME: usize = 65536;
 const MAX_OBJECTS: usize = 65536;
+#[path = "physical_batch.rs"]
+mod batch;
+pub(crate) use batch::read_durable_batch;
 struct Span {
     id: String,
     start: u64,
@@ -479,10 +482,7 @@ pub(crate) fn persist_guarded(
     if new_bytes >= payload.len() {
         return Ok(false);
     }
-    for (id, bytes) in fresh {
-        publication::publish(root, &root.join(FRAMES).join(id), &bytes)?;
-    }
-    sync(&root.join(FRAMES))?;
+    publication::publish_frames(root, fresh, writer)?;
     let first = &objects[0].0;
     let source = root.join(SELECTORS).join(first);
     publication::publish(root, &source, &encoded)?;

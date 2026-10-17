@@ -25,6 +25,54 @@ struct PublicPreparedRequest {
     request_digest: String,
     trusted_issuer_public_key: String,
 }
+const CLI_IDLE: Duration = Duration::from_secs(40);
+#[derive(Clone)]
+struct CliWait {
+    expires: Instant,
+    progress: Arc<std::sync::Mutex<CliProgress>>,
+}
+struct CliProgress {
+    last: Instant,
+    completed: u64,
+    last_rpc: String,
+    error: Option<String>,
+}
+impl CliWait {
+    fn new() -> Self {
+        Self {
+            expires: Instant::now() + Duration::from_secs(5 * 60),
+            progress: Arc::new(std::sync::Mutex::new(CliProgress {
+                last: Instant::now(),
+                completed: 0,
+                last_rpc: "none".into(),
+                error: None,
+            })),
+        }
+    }
+    fn begin(&self) {
+        self.progress.lock().unwrap().last = Instant::now();
+    }
+    fn failure(&self) -> Result<Option<String>, String> {
+        let progress = self.progress.lock().map_err(|_| "CLI progress lock")?;
+        let reason = if Instant::now() >= self.expires {
+            Some("five-minute scenario deadline")
+        } else if progress.last.elapsed() >= CLI_IDLE {
+            Some("40s without a completed P/R RPC")
+        } else {
+            None
+        };
+        Ok(progress.error.clone().or_else(|| {
+            reason.map(|reason| {
+                format!(
+                    "{reason}; completed={} last_rpc={} idle={:?}",
+                    progress.completed,
+                    progress.last_rpc,
+                    progress.last.elapsed()
+                )
+            })
+        }))
+    }
+}
 type CliOutput = thread::JoinHandle<Result<Vec<u8>, String>>;
 struct CliChild(
     Child,
@@ -32,6 +80,7 @@ struct CliChild(
     Option<CliOutput>,
     String,
     Arc<AtomicBool>,
+    Option<CliWait>,
 );
 impl Drop for CliChild {
     fn drop(&mut self) {
@@ -111,7 +160,14 @@ fn start_cli(binary: &Path, args: &[&str]) -> Result<CliChild, String> {
         stopped.clone(),
     );
     let stage = args.iter().take(3).copied().collect::<Vec<_>>().join(" ");
-    Ok(CliChild(child, Some(stdout), Some(stderr), stage, stopped))
+    Ok(CliChild(
+        child,
+        Some(stdout),
+        Some(stderr),
+        stage,
+        stopped,
+        None,
+    ))
 }
 fn collected(reader: Option<CliOutput>) -> Result<Vec<u8>, String> {
     reader
@@ -121,12 +177,18 @@ fn collected(reader: Option<CliOutput>) -> Result<Vec<u8>, String> {
 }
 fn finish_cli(mut child: CliChild, success: bool) -> Result<Vec<u8>, String> {
     let started = Instant::now();
-    // Preserve the existing test bound while draining both pipes. Stage and
-    // captured output diagnose slow native work separately from pipe blockage.
-    let budget = Duration::from_secs(40);
+    // Keep the original 40s inactivity bound. Native CLI work may span many
+    // completed RPC pages inside the one fixed scenario expiry.
+    let budget = CLI_IDLE;
     let mut timed_out = false;
+    let mut timeout_reason = None;
     while child.0.try_wait().map_err(|e| e.to_string())?.is_none() {
-        if started.elapsed() >= budget {
+        timeout_reason = if let Some(wait) = &child.5 {
+            wait.failure()?
+        } else {
+            (started.elapsed() >= budget).then(|| "40s process deadline".to_owned())
+        };
+        if timeout_reason.is_some() {
             timed_out = true;
             child.0.kill().map_err(|e| e.to_string())?;
             break;
@@ -134,6 +196,10 @@ fn finish_cli(mut child: CliChild, success: bool) -> Result<Vec<u8>, String> {
         thread::sleep(Duration::from_millis(10));
     }
     let status = child.0.wait().map_err(|e| e.to_string())?;
+    if !timed_out && let Some(wait) = &child.5 {
+        timeout_reason = wait.failure()?;
+        timed_out = timeout_reason.is_some();
+    }
     child.4.store(true, Ordering::Release);
     let mut stdout = collected(child.1.take())?;
     let stderr = collected(child.2.take())?;
@@ -144,7 +210,7 @@ fn finish_cli(mut child: CliChild, success: bool) -> Result<Vec<u8>, String> {
     );
     if timed_out || status.success() != success {
         return Err(format!(
-            "world-init stage={} expected success={success} timed_out={timed_out} budget={budget:?}: {status}: stdout={} stderr={}",
+            "world-init stage={} expected success={success} timed_out={timed_out} budget={budget:?} reason={timeout_reason:?}: {status}: stdout={} stderr={}",
             child.3,
             String::from_utf8_lossy(&stdout),
             String::from_utf8_lossy(&stderr)
@@ -181,12 +247,59 @@ fn world_init_cli_collection_does_not_wait_for_inherited_pipe_eof() {
     assert_eq!(collected(Some(reader)).unwrap(), b"original child output");
     drop(inherited);
 }
+#[test]
+fn world_init_cli_progress_requires_completed_rpc_and_preserves_total_deadline() {
+    let target = TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut wait = CliWait::new();
+    let proxy =
+        ReplicaPrepareGate::start(target.local_addr().unwrap(), false, "primary", wait.clone())
+            .unwrap();
+    let frame = serde_cbor::to_vec(&serde_json::json!({"body":{"command":"Head"}})).unwrap();
+    let original = frame.clone();
+    let (arrived, observed) = std::sync::mpsc::channel();
+    let (release, response_ready) = std::sync::mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = target.accept().unwrap();
+        assert_eq!(read_frame(&mut stream).unwrap(), original);
+        arrived.send(()).unwrap();
+        response_ready.recv().unwrap();
+        write_frame(&mut stream, b"original response").unwrap();
+    });
+    let address = proxy.address;
+    let client = thread::spawn(move || {
+        let mut stream = TcpStream::connect(address).unwrap();
+        write_frame(&mut stream, &frame).unwrap();
+        assert_eq!(read_frame(&mut stream).unwrap(), b"original response");
+    });
+    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    {
+        let mut progress = wait.progress.lock().unwrap();
+        assert_eq!(progress.completed, 0);
+        progress.last = Instant::now() - Duration::from_secs(41);
+    }
+    assert!(wait.failure().unwrap().unwrap().contains("40s without"));
+    release.send(()).unwrap();
+    client.join().unwrap();
+    server.join().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while wait.progress.lock().unwrap().completed == 0 {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(wait.failure().unwrap().is_none());
+    assert_eq!(wait.progress.lock().unwrap().last_rpc, "primary:Head");
+    wait.expires = Instant::now() - Duration::from_secs(1);
+    wait.begin();
+    assert!(
+        wait.failure()
+            .unwrap()
+            .unwrap()
+            .contains("five-minute scenario")
+    );
+}
 fn p(path: &Path) -> Result<&str, String> {
     path.to_str()
         .ok_or_else(|| "world-init non UTF8 fixture path".into())
-}
-fn execute(binary: &Path, args: &[&str], success: bool) -> Result<Vec<u8>, String> {
-    finish_cli(start_cli(binary, args)?, success)
 }
 fn approve(
     request: &Path,
@@ -270,6 +383,15 @@ fn activation_args<'a>(
     ])
 }
 fn run_initialization() -> Result<(), String> {
+    // Linux CI observed 77s of successful original native transfer before the
+    // first Prepare. Bound inactivity across both endpoints, not total pages.
+    let wait = CliWait::new();
+    let execute = |binary: &Path, args: &[&str], success| {
+        wait.begin();
+        let mut child = start_cli(binary, args)?;
+        child.5 = Some(wait.clone());
+        finish_cli(child, success)
+    };
     let binary = PathBuf::from(
         std::env::var_os("OASIS7_FORMAL_NODE_TEST_BIN")
             .ok_or("set shipping OASIS7_FORMAL_NODE_TEST_BIN")?,
@@ -398,10 +520,12 @@ fn run_initialization() -> Result<(), String> {
     )?;
     let (_pchild, paddr) = oracle_support::start_endpoint(&endpoint_binary, &pcfg)?;
     let (_rchild, raddr) = oracle_support::start_endpoint(&endpoint_binary, &rcfg)?;
-    let gate = ReplicaPrepareGate::start(raddr)?;
-    let paddr_text = paddr.to_string();
+    let primary_proxy = ReplicaPrepareGate::start(paddr, false, "primary", wait.clone())?;
+    let gate = ReplicaPrepareGate::start(raddr, true, "replica", wait.clone())?;
+    let paddr_text = primary_proxy.address.to_string();
     let gate_text = gate.address.to_string();
-    let raddr_text = raddr.to_string();
+    let raddr_text = gate.address.to_string();
+    wait.begin();
     let mut interrupted = start_cli(
         &binary,
         &activation_args(
@@ -414,10 +538,9 @@ fn run_initialization() -> Result<(), String> {
             &output,
         )?,
     )?;
-    // Native activation first transfers a bounded original image closure. The
-    // fault is at Prepare, so bound inactivity during that progressing transfer
-    // rather than treating its total bytes as an idle Prepare wait. The suite's
-    // process deadline still bounds the whole test.
+    interrupted.5 = Some(wait.clone());
+    // Observe completed RPCs at both endpoints: primary verification can keep
+    // progressing while replica is idle. Every step shares the original expiry.
     while !gate.blocked.load(Ordering::Acquire) {
         if let Some(status) = interrupted.0.try_wait().map_err(|e| e.to_string())? {
             let diagnostics = finish_cli(interrupted, status.success())?;
@@ -429,16 +552,8 @@ fn run_initialization() -> Result<(), String> {
         if let Some(error) = gate.error.lock().map_err(|_| "gate error lock")?.clone() {
             return Err(error);
         }
-        if gate
-            .last_progress
-            .lock()
-            .map_err(|_| "gate progress lock")?
-            .elapsed()
-            >= Duration::from_secs(30)
-        {
-            return Err(
-                "world-init made no RPC progress toward replica Prepare for 30 seconds".into(),
-            );
+        if let Some(reason) = wait.failure()? {
+            return Err(reason);
         }
         thread::sleep(Duration::from_millis(5));
     }
@@ -447,7 +562,7 @@ fn run_initialization() -> Result<(), String> {
     if killed.signal() != Some(9) || output.exists() {
         return Err("world-init interruption did not preserve unknown/unpublished result".into());
     }
-    drop(gate);
+    gate.release();
     let genesis = authority
         .definition()
         .world
@@ -572,19 +687,24 @@ struct ReplicaPrepareGate {
     blocked: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     error: Arc<std::sync::Mutex<Option<String>>>,
-    last_progress: Arc<std::sync::Mutex<Instant>>,
+    hold_prepare: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
 }
 impl ReplicaPrepareGate {
-    fn start(target: SocketAddr) -> Result<Self, String> {
+    fn start(
+        target: SocketAddr,
+        hold: bool,
+        role: &'static str,
+        wait: CliWait,
+    ) -> Result<Self, String> {
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let address = listener.local_addr().map_err(|e| e.to_string())?;
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
         let blocked = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
         let error = Arc::new(std::sync::Mutex::new(None));
-        let last_progress = Arc::new(std::sync::Mutex::new(Instant::now()));
-        let progress = last_progress.clone();
+        let hold_prepare = Arc::new(AtomicBool::new(hold));
+        let held = hold_prepare.clone();
         let (b, s, e) = (blocked.clone(), stop.clone(), error.clone());
         let worker = thread::spawn(move || {
             while !s.load(Ordering::Acquire) {
@@ -593,31 +713,49 @@ impl ReplicaPrepareGate {
                         let outcome = (|| -> Result<(), String> {
                             incoming.set_nonblocking(false).map_err(|e| e.to_string())?;
                             incoming
-                                .set_read_timeout(Some(Duration::from_secs(5)))
+                                .set_read_timeout(Some(Duration::from_secs(30)))
                                 .map_err(|e| e.to_string())?;
                             let frame = read_frame(&mut incoming)?;
                             let probe: CommandProbe =
                                 serde_cbor::from_slice(&frame).map_err(|e| e.to_string())?;
-                            if probe.body.command.0 {
+                            if probe.body.command.0 == "Prepare" && held.load(Ordering::Acquire) {
                                 b.store(true, Ordering::Release);
-                                while !s.load(Ordering::Acquire) {
+                                while !s.load(Ordering::Acquire) && held.load(Ordering::Acquire) {
                                     thread::sleep(Duration::from_millis(5));
                                 }
                                 return Ok(());
                             }
                             let mut outgoing =
-                                TcpStream::connect_timeout(&target, Duration::from_secs(5))
+                                TcpStream::connect_timeout(&target, Duration::from_secs(30))
                                     .map_err(|e| e.to_string())?;
                             outgoing
-                                .set_read_timeout(Some(Duration::from_secs(5)))
+                                .set_read_timeout(Some(Duration::from_secs(30)))
+                                .map_err(|e| e.to_string())?;
+                            outgoing
+                                .set_write_timeout(Some(Duration::from_secs(30)))
+                                .map_err(|e| e.to_string())?;
+                            incoming
+                                .set_write_timeout(Some(Duration::from_secs(30)))
                                 .map_err(|e| e.to_string())?;
                             write_frame(&mut outgoing, &frame)?;
                             let response = read_frame(&mut outgoing)?;
                             write_frame(&mut incoming, &response)?;
-                            *progress.lock().map_err(|_| "gate progress lock")? = Instant::now();
+                            let mut progress =
+                                wait.progress.lock().map_err(|_| "gate progress lock")?;
+                            progress.last = Instant::now();
+                            progress.completed += 1;
+                            progress.last_rpc = format!("{role}:{}", probe.body.command.0);
+                            if progress.completed.is_multiple_of(128) {
+                                eprintln!(
+                                    "world-init RPC progress completed={} last={}",
+                                    progress.completed, progress.last_rpc
+                                );
+                            }
                             Ok(())
                         })();
                         if let Err(reason) = outcome {
+                            wait.progress.lock().unwrap().error =
+                                Some(format!("{role} proxy: {reason}"));
                             *e.lock().unwrap() = Some(reason);
                             break;
                         }
@@ -626,6 +764,7 @@ impl ReplicaPrepareGate {
                         thread::sleep(Duration::from_millis(5))
                     }
                     Err(err) => {
+                        wait.progress.lock().unwrap().error = Some(format!("{role} accept: {err}"));
                         *e.lock().unwrap() = Some(err.to_string());
                         break;
                     }
@@ -637,9 +776,14 @@ impl ReplicaPrepareGate {
             blocked,
             stop,
             error,
-            last_progress,
+            hold_prepare,
             worker: Some(worker),
         })
+    }
+}
+impl ReplicaPrepareGate {
+    fn release(&self) {
+        self.hold_prepare.store(false, Ordering::Release);
     }
 }
 impl Drop for ReplicaPrepareGate {
@@ -658,7 +802,7 @@ struct CommandProbe {
 struct CommandBodyProbe {
     command: IsPrepare,
 }
-struct IsPrepare(bool);
+struct IsPrepare(String);
 impl<'de> serde::Deserialize<'de> for IsPrepare {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct Visitor;
@@ -678,7 +822,7 @@ impl<'de> serde::Deserialize<'de> for IsPrepare {
                 } else {
                     variant.newtype_variant::<serde::de::IgnoredAny>()?;
                 }
-                Ok(IsPrepare(name == "Prepare"))
+                Ok(IsPrepare(name))
             }
         }
         d.deserialize_enum("Command", &[], Visitor)

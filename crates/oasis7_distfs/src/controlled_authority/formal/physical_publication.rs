@@ -2,6 +2,14 @@
 use super::*;
 const STAGING: &str = ".physical-staging-v1";
 pub(super) fn publish(root: &Path, target: &Path, bytes: &[u8]) -> Result<(), FormalError> {
+    publish_inner(root, target, bytes, true)
+}
+fn publish_inner(
+    root: &Path,
+    target: &Path,
+    bytes: &[u8],
+    flush_dirs: bool,
+) -> Result<(), FormalError> {
     let staging = root.join(STAGING);
     directory(&staging)?;
     let temporary = staging.join(super::super::fencing::fresh_challenge().map_err(io)?);
@@ -19,18 +27,74 @@ pub(super) fn publish(root: &Path, target: &Path, bytes: &[u8]) -> Result<(), Fo
         }
         Err(e) => return Err(io(e)),
     }
-    sync(
-        target
-            .parent()
-            .ok_or_else(|| invalid("publication parent"))?,
-    )?;
+    if flush_dirs {
+        sync(
+            target
+                .parent()
+                .ok_or_else(|| invalid("publication parent"))?,
+        )?;
+    }
     if target.parent() == Some(root.join(SELECTORS).as_path()) {
         fault(2)?;
     }
     fs::remove_file(&temporary).map_err(io)?;
-    sync(&staging)?;
+    if flush_dirs {
+        sync(&staging)?;
+    }
     Ok(())
 }
+const FRAME_BATCH_BYTES: usize = 8 * 1024 * 1024;
+/// This invocation owns the publication mutex and live retirement pin. Each
+/// file is durable before its no-clobber link. Only frame/staging directories
+/// share barriers, in at most 8 MiB pages, before any recipe can reference them.
+/// An interrupted page has no selector authority and is safe to verify/retry.
+pub(super) fn publish_frames(
+    root: &Path,
+    frames: BTreeMap<String, Vec<u8>>,
+    writer: &PublicationGuard,
+) -> Result<(), FormalError> {
+    if writer.root != root || frames.len() > MAX_OBJECTS {
+        return Err(invalid("physical frame publication scope/budget"));
+    }
+    let total = frames.values().try_fold(0usize, |total, bytes| {
+        total
+            .checked_add(bytes.len())
+            .filter(|total| *total <= LIMIT)
+            .ok_or_else(|| invalid("physical frame publication byte budget"))
+    })?;
+    if total == 0 {
+        return if frames.is_empty() {
+            sync(&root.join(FRAMES))
+        } else {
+            Err(invalid("physical frame publication empty frame"))
+        };
+    }
+    let mut pending = 0usize;
+    for (id, bytes) in frames {
+        hash_hex(&id)?;
+        if bytes.is_empty() || bytes.len() > FRAME || blake3::hash(&bytes).to_hex().as_str() != id {
+            return Err(invalid("physical frame publication checksum/bound"));
+        }
+        if pending + bytes.len() > FRAME_BATCH_BYTES {
+            flush_frame_directories(root)?;
+            pending = 0;
+        }
+        publish_inner(root, &root.join(FRAMES).join(id), &bytes, false)?;
+        pending += bytes.len();
+    }
+    flush_frame_directories(root)
+}
+fn flush_frame_directories(root: &Path) -> Result<(), FormalError> {
+    // Test a crash after durable files/links but before their directory barrier.
+    fault(8)?;
+    sync(&root.join(FRAMES))?;
+    sync(&root.join(STAGING))?;
+    #[cfg(test)]
+    FRAME_BATCH_BARRIERS.with(|count| count.set(count.get() + 1));
+    Ok(())
+}
+#[cfg(test)]
+thread_local! { static FRAME_BATCH_BARRIERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 /// Caller holds the stable root's exclusive kernel fence and endpoint lease.
 /// A durable selector binds a complete immutable recipe; finish all members,
 /// including members not present in a retry's smaller object input set.
@@ -270,4 +334,86 @@ pub(super) fn reset_recipe_syncs() {
 #[cfg(test)]
 pub(super) fn recipe_syncs() -> usize {
     RECIPE_SYNCS.with(|count| count.get())
+}
+
+#[cfg(test)]
+mod frame_batch_tests {
+    use super::super::tests::{Fixture, object};
+    use super::*;
+
+    #[test]
+    fn frame_publication_batches_directory_barriers_with_eight_mib_cap() {
+        let fixture = Fixture::new();
+        let writer = publication_guard(&fixture.0).unwrap();
+        let mut frames = BTreeMap::new();
+        for index in 0u16..129 {
+            let mut bytes = vec![0; FRAME];
+            bytes[..2].copy_from_slice(&index.to_be_bytes());
+            frames.insert(blake3::hash(&bytes).to_hex().to_string(), bytes);
+        }
+        FRAME_BATCH_BARRIERS.with(|count| count.set(0));
+        publish_frames(&fixture.0, frames.clone(), &writer).unwrap();
+        assert_eq!(
+            FRAME_BATCH_BARRIERS.with(|count| count.get()),
+            2,
+            "129 durable files share two bounded frame/staging directory barriers"
+        );
+        for (id, expected) in frames {
+            assert_eq!(
+                read(&fixture.0.join(FRAMES).join(id), FRAME).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn frame_batch_failure_before_directory_barrier_keeps_source_and_retries_exactly() {
+        let fixture = Fixture::new();
+        let item = object((0..300000).map(|value| (value % 251) as u8).collect());
+        fs::write(fixture.0.join(&item.0), &item.1).unwrap();
+        File::open(fixture.0.join(&item.0))
+            .unwrap()
+            .sync_all()
+            .unwrap();
+        fail_at(8);
+        assert!(persist(&fixture.0, std::slice::from_ref(&item)).is_err());
+        assert!(
+            !fixture.0.join(SELECTORS).join(&item.0).exists(),
+            "no selector can reference a frame batch whose directory flush failed"
+        );
+        assert!(
+            fs::read_dir(fixture.0.join(FRAMES))
+                .unwrap()
+                .next()
+                .is_some()
+        );
+        assert_eq!(fs::read(fixture.0.join(&item.0)).unwrap(), item.1);
+        // Existing files from the interrupted batch are reread and fsynced by
+        // persist_guarded before the retry's frame-directory barrier and selector.
+        assert!(persist(&fixture.0, std::slice::from_ref(&item)).unwrap());
+        assert_eq!(
+            read_object(&fixture.0.join(&item.0), &item.0, true)
+                .unwrap()
+                .unwrap(),
+            item.1
+        );
+        assert_eq!(fs::read(fixture.0.join(&item.0)).unwrap(), item.1);
+    }
+
+    #[test]
+    fn frame_batch_rejects_changed_existing_target_without_clobber() {
+        let fixture = Fixture::new();
+        let writer = publication_guard(&fixture.0).unwrap();
+        let bytes = vec![17; FRAME];
+        let id = blake3::hash(&bytes).to_hex().to_string();
+        let frames = BTreeMap::from([(id.clone(), bytes)]);
+        publish_frames(&fixture.0, frames.clone(), &writer).unwrap();
+        fs::write(fixture.0.join(FRAMES).join(&id), b"corrupt-existing").unwrap();
+        assert!(publish_frames(&fixture.0, frames, &writer).is_err());
+        assert_eq!(
+            fs::read(fixture.0.join(FRAMES).join(&id)).unwrap(),
+            b"corrupt-existing"
+        );
+        assert_eq!(fs::read_dir(fixture.0.join(SELECTORS)).unwrap().count(), 0);
+    }
 }
