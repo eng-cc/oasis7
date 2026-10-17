@@ -643,6 +643,9 @@ fn emit_event_value(value: &Value) -> Result<(), JsValue> {
         .map_err(|_| JsValue::from_str("event callback failed"))
 }
 
+#[path = "camera_viewport.rs"]
+mod camera_viewport;
+
 fn emit_camera_state(camera: &CameraState) -> Result<(), JsValue> {
     emit_event_value(&json!({
         "type": "camera_state_changed",
@@ -1031,7 +1034,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
                 runtime.active_follow_target = None;
                 runtime.pending_focus_target = None;
                 runtime.hit_regions_dirty = true;
-                let _ = emit_camera_state(&runtime.camera);
+                let _ = camera_viewport::emit(&runtime);
                 return;
             }
 
@@ -1072,7 +1075,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
             runtime.active_follow_target = None;
             runtime.pending_focus_target = None;
             runtime.hit_regions_dirty = true;
-            let _ = emit_camera_state(&runtime.camera);
+            let _ = camera_viewport::emit(&runtime);
         }
         InputEvent::Click { x, y } => {
             if let Some((kind, id)) = click_selection_from_hit(hit_test(&runtime.hit_regions, x, y))

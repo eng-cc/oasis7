@@ -52,9 +52,9 @@ server.on("upgrade", (req, socket) => {
   socket.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
     while (buffer.length >= 2) {
-      const opcode = buffer[0] & 15; let size = buffer[1] & 127; let offset = 2;
-      if (size === 126) { if (buffer.length < 4) return; size = buffer.readUInt16BE(2); offset = 4; }
-      if (size === 127 || size > 65535) return socket.destroy();
+      const opcode = buffer[0] & 15; const lengthMarker = buffer[1] & 127; let size = lengthMarker; let offset = 2;
+      if (lengthMarker === 126) { if (buffer.length < 4) return; size = buffer.readUInt16BE(2); offset = 4; }
+      if (lengthMarker === 127 || size > 65535) return socket.destroy();
       const masked = buffer[1] & 128; const mask = masked ? buffer.subarray(offset, offset + 4) : null; offset += masked ? 4 : 0;
       if (buffer.length < offset + size) return;
       const payload = Buffer.from(buffer.subarray(offset, offset + size)); buffer = buffer.subarray(offset + size);

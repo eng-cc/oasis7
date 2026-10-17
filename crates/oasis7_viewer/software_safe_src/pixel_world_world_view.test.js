@@ -65,3 +65,32 @@ it('downgrades every accumulated page when the source is frozen',async()=>{
  client.reset('s');await client.query({});expect(client.state().view.source_frozen).toBe(true);
  expect(client.state().view.entities.map(e=>e.provenance.freshness)).toEqual(['last_known','last_known']);
 });
+
+it('accumulates relation pages with their endpoints and downgrades the entire frozen cut',async()=>{
+ const relation={relation_id:'r',kind:'logistics_route',source_class:'runtime_projection',status:'active',freshness:'current',valid_at_source_cut:'10',from:{kind:'agent',id:'A'},to:{kind:'factory',id:'F'}};
+ let call=0;const client=createWorldViewClient({request:async q=>page({request_generation:q.request_generation,...(++call===1?{entities:[{kind:'agent',entity_id:'A'}],relations:[relation],next_cursor:'p2',completeness:'partial'}:{entities:[{kind:'factory',entity_id:'F'}],source_frozen:true})})});
+ client.reset('s');await client.query({});const view=client.state().view;
+ expect(view.relations).toHaveLength(1);expect(view.relations[0].freshness).toBe('last_known');
+ const {worldViewRelations}=await import('./pixel_world_world_view.js');expect(worldViewRelations(view)).toHaveLength(1);
+ expect(worldViewRelations({...view,entities:view.entities.slice(0,1)})).toHaveLength(0);
+});
+it('counts routes and entities together against the response page budget',async()=>{
+ const client=createWorldViewClient({request:async q=>page({request_generation:q.request_generation,entities:Array.from({length:200},(_,i)=>({kind:'agent',entity_id:String(i)})),relations:[{relation_id:'overflow'}]})});
+ client.reset('s');expect(await client.query({})).toBeNull();expect(client.state().error).toMatch(/binding/);
+});
+it('does not invent coordinates from missing or blank decimal fields',async()=>{
+ const {worldViewPosition}=await import('./pixel_world_world_view.js');
+ for (const x_cm of [null,'',undefined]) expect(worldViewPosition({position:{x_cm,y_cm:'2',z_cm:'0'},provenance:{freshness:'current',geometry_source:'authoritative',valid_at_source_cut:'10'}},page())).toBeNull();
+});
+it('keeps verified pinned geometry when a dense scope reaches the display budget',async()=>{
+ const entities=Array.from({length:1001},(_,i)=>({kind:'agent',entity_id:i===0?'original-target':`A${i}`,position:{x_cm:'1',y_cm:'2',z_cm:'0'},provenance:{freshness:'current',geometry_source:'authoritative',valid_at_source_cut:'10'}}));
+ let calls=0;const client=createWorldViewClient({request:async q=>{calls++;const offset=Number(q.cursor||0);const end=offset+q.page_size;return page({request_generation:q.request_generation,entities:entities.slice(offset,end),next_cursor:end<entities.length?String(end):null,completeness:end<entities.length?'partial':'complete'});}});
+ client.reset('s');const view=await client.query({pinned_entities:[{kind:'agent',id:'original-target'}]});
+ expect(calls).toBe(5);expect(view.entities).toHaveLength(1000);expect(view.budget_limited).toBe(true);expect(view.completeness).toBe('partial');expect(view.next_cursor).toBe('1000');
+ expect(client.state().stale).toBe(false);expect(client.state().error).toBeNull();expect(client.state().loading).toBe(false);
+ const {worldViewPosition}=await import('./pixel_world_world_view.js');expect(worldViewPosition(view.entities[0],view)).toEqual({x_cm:1,y_cm:2,z_cm:0});
+});
+it('stops before a whole fixed-size cursor page would exceed the combined object budget',async()=>{
+ const sizes=[];const client=createWorldViewClient({request:async q=>{sizes.push(q.page_size);const offset=Number(q.cursor||0);return page({request_generation:q.request_generation,entities:Array.from({length:q.page_size},(_,i)=>({kind:'agent',entity_id:`A${offset+i}`})),next_cursor:String(offset+q.page_size),completeness:'partial'});}});
+ client.reset('s');const view=await client.query({page_size:67});expect(view.entities).toHaveLength(938);expect(sizes).toEqual(Array(14).fill(67));expect(view.budget_limited).toBe(true);expect(client.state().stale).toBe(false);
+});

@@ -1336,13 +1336,13 @@ function createViewerModelConnectionClient({ fetch: fetchImpl = globalThis.fetch
 }
 //#endregion
 //#region software_safe_src/model_connection_panel.jsx
-var _tmpl$$36 = /*#__PURE__*/ template(`<p role=alert>`);
-var _tmpl$2$34 = /*#__PURE__*/ template(`<div class=model-connection-panel__boundary><p>: </p><p>: <!> · </p><p></p><p></p><p>: <!> / </p><p>: <!> / <!> / `);
-var _tmpl$3$27 = /*#__PURE__*/ template(`<form class=model-connection-panel__form><label><select required><option value></option></select></label><label><input type=password name=model-inference-key autocomplete=off maxlength=4096 required></label><label class=model-connection-panel__check><input type=checkbox></label><button type=submit>`);
-var _tmpl$4$24 = /*#__PURE__*/ template(`<label><select>`);
-var _tmpl$5$22 = /*#__PURE__*/ template(`<details class=model-connection-panel data-testid=model-connection-panel><style></style><summary></summary><p></p><button type=button>`);
-var _tmpl$6$15 = /*#__PURE__*/ template(`<p role=status>`);
-var _tmpl$7$11 = /*#__PURE__*/ template(`<option> · <!> · `);
+var _tmpl$$38 = /*#__PURE__*/ template(`<p role=alert>`);
+var _tmpl$2$35 = /*#__PURE__*/ template(`<div class=model-connection-panel__boundary><p>: </p><p>: <!> · </p><p></p><p></p><p>: <!> / </p><p>: <!> / <!> / `);
+var _tmpl$3$28 = /*#__PURE__*/ template(`<form class=model-connection-panel__form><label><select required><option value></option></select></label><label><input type=password name=model-inference-key autocomplete=off maxlength=4096 required></label><label class=model-connection-panel__check><input type=checkbox></label><button type=submit>`);
+var _tmpl$4$25 = /*#__PURE__*/ template(`<label><select>`);
+var _tmpl$5$23 = /*#__PURE__*/ template(`<details class=model-connection-panel data-testid=model-connection-panel><style></style><summary></summary><p></p><button type=button>`);
+var _tmpl$6$16 = /*#__PURE__*/ template(`<p role=status>`);
+var _tmpl$7$12 = /*#__PURE__*/ template(`<option> · <!> · `);
 var _tmpl$8$7 = /*#__PURE__*/ template(`<option> · `);
 var _tmpl$9$6 = /*#__PURE__*/ template(`<div class=model-connection-panel__connection><p role=status> · </p><p>: <!> / </p><label class=model-connection-panel__check><input type=checkbox></label><button type=button></button><label class=model-connection-panel__check><input type=checkbox></label><div class=model-connection-panel__actions><button type=button></button><button type=button></button><button type=button></button></div><p>`);
 var _tmpl$0$6 = /*#__PURE__*/ template(`<p role=status> · <!>: `);
@@ -1555,7 +1555,7 @@ function ModelConnectionPanel(props) {
 		previousAgent = id;
 	});
 	return (() => {
-		var _el$ = _tmpl$5$22(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling, _el$34 = _el$4.nextSibling;
+		var _el$ = _tmpl$5$23(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.nextSibling, _el$34 = _el$4.nextSibling;
 		insert(_el$2, modelConnectionStyles);
 		insert(_el$3, () => tr("实验模型连接 · 第一方执行方", "Experimental model connection · first-party executor"));
 		insert(_el$4, () => tr("连接模型不会认领 Agent、授予游戏权限或自动开始运行。", "Connecting a model does not claim an Agent, grant game authority, or start a run."));
@@ -1564,7 +1564,7 @@ function ModelConnectionPanel(props) {
 				return error();
 			},
 			get children() {
-				var _el$5 = _tmpl$$36();
+				var _el$5 = _tmpl$$38();
 				insert(_el$5, error);
 				return _el$5;
 			}
@@ -1575,7 +1575,7 @@ function ModelConnectionPanel(props) {
 			},
 			get fallback() {
 				return (() => {
-					var _el$35 = _tmpl$6$15();
+					var _el$35 = _tmpl$6$16();
 					insert(_el$35, (() => {
 						var _c$ = memo(() => !!capabilities());
 						return () => _c$() ? message(capabilities().reason || (capabilities().authenticated ? "untrusted_executor" : "authentication_required")) : tr("正在核对部署与登录状态；暂不接收凭证。", "Checking deployment and sign-in; credentials are not accepted yet.");
@@ -1586,7 +1586,7 @@ function ModelConnectionPanel(props) {
 			get children() {
 				return [
 					(() => {
-						var _el$6 = _tmpl$2$34(), _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$7.nextSibling, _el$0 = _el$9.firstChild, _el$10 = _el$0.nextSibling;
+						var _el$6 = _tmpl$2$35(), _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$7.nextSibling, _el$0 = _el$9.firstChild, _el$10 = _el$0.nextSibling;
 						_el$10.nextSibling;
 						var _el$11 = _el$9.nextSibling, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$13.firstChild, _el$16 = _el$14.nextSibling;
 						_el$16.nextSibling;
@@ -1614,13 +1614,13 @@ function ModelConnectionPanel(props) {
 						},
 						get fallback() {
 							return (() => {
-								var _el$36 = _tmpl$6$15();
+								var _el$36 = _tmpl$6$16();
 								insert(_el$36, () => tr("先选中你有权控制的 Agent；连接不能补授权限。", "Select an Agent you may control; a model connection cannot grant authority."));
 								return _el$36;
 							})();
 						},
 						get children() {
-							var _el$23 = _tmpl$3$27(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$27.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$29.nextSibling;
+							var _el$23 = _tmpl$3$28(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.firstChild, _el$27 = _el$24.nextSibling, _el$28 = _el$27.firstChild, _el$29 = _el$27.nextSibling, _el$30 = _el$29.firstChild, _el$31 = _el$29.nextSibling;
 							_el$23.addEventListener("submit", create);
 							insert(_el$24, () => tr("供应商与模型", "Provider and model"), _el$25);
 							_el$25.addEventListener("change", (event) => setPreset(event.currentTarget.value));
@@ -1630,7 +1630,7 @@ function ModelConnectionPanel(props) {
 									return capabilities()?.presets;
 								},
 								children: (item) => (() => {
-									var _el$37 = _tmpl$7$11(), _el$38 = _el$37.firstChild, _el$40 = _el$38.nextSibling;
+									var _el$37 = _tmpl$7$12(), _el$38 = _el$37.firstChild, _el$40 = _el$38.nextSibling;
 									_el$40.nextSibling;
 									insert(_el$37, () => item.provider_id === "deepseek" ? "DeepSeek" : "OpenRouter", _el$38);
 									insert(_el$37, () => item.model_id, _el$40);
@@ -1670,7 +1670,7 @@ function ModelConnectionPanel(props) {
 							return connections().length;
 						},
 						get children() {
-							var _el$32 = _tmpl$4$24(), _el$33 = _el$32.firstChild;
+							var _el$32 = _tmpl$4$25(), _el$33 = _el$32.firstChild;
 							insert(_el$32, () => tr("本会话连接", "Session connections"), _el$33);
 							_el$33.addEventListener("change", (event) => setSelectedId(event.currentTarget.value));
 							insert(_el$33, createComponent(For, {
@@ -1738,7 +1738,7 @@ function ModelConnectionPanel(props) {
 									return current().error_code;
 								},
 								get children() {
-									var _el$50 = _tmpl$6$15();
+									var _el$50 = _tmpl$6$16();
 									insert(_el$50, () => message(current().error_code));
 									return _el$50;
 								}
@@ -1748,7 +1748,7 @@ function ModelConnectionPanel(props) {
 									return !capabilities()?.executor_available;
 								},
 								get children() {
-									var _el$51 = _tmpl$6$15();
+									var _el$51 = _tmpl$6$16();
 									insert(_el$51, () => message("executor_unavailable"));
 									return _el$51;
 								}
@@ -2254,8 +2254,8 @@ function canonicalAckMatches(ack, request) {
 }
 //#endregion
 //#region software_safe_src/canonical_agent_goal.jsx
-var _tmpl$$35 = /*#__PURE__*/ template(`<p data-canonical-agent-goal-pending role=status>`);
-var _tmpl$2$33 = /*#__PURE__*/ template(`<p data-canonical-agent-goal>: `);
+var _tmpl$$37 = /*#__PURE__*/ template(`<p data-canonical-agent-goal-pending role=status>`);
+var _tmpl$2$34 = /*#__PURE__*/ template(`<p data-canonical-agent-goal>: `);
 function CanonicalAgentGoal(props) {
 	const goal = () => authenticatedCanonicalGoal(props.state, props.agentId);
 	const pending = () => props.state.lastChatFeedback?.agentId === props.agentId && props.state.lastChatFeedback?.stage === "pending" && props.state.lastChatFeedback?.canonicalRequest;
@@ -2265,7 +2265,7 @@ function CanonicalAgentGoal(props) {
 			return goal();
 		},
 		children: (current) => (() => {
-			var _el$2 = _tmpl$2$33(), _el$3 = _el$2.firstChild;
+			var _el$2 = _tmpl$2$34(), _el$3 = _el$2.firstChild;
 			insert(_el$2, () => zh() ? "当前目标" : "Current goal", _el$3);
 			insert(_el$2, () => current().message, null);
 			return _el$2;
@@ -2275,7 +2275,7 @@ function CanonicalAgentGoal(props) {
 			return pending();
 		},
 		get children() {
-			var _el$ = _tmpl$$35();
+			var _el$ = _tmpl$$37();
 			insert(_el$, () => zh() ? "目标已提交，等待世界确认。" : "Goal submitted; waiting for world confirmation.");
 			return _el$;
 		}
@@ -2283,11 +2283,11 @@ function CanonicalAgentGoal(props) {
 }
 //#endregion
 //#region software_safe_src/industrial_starter_outcome_card.jsx
-var _tmpl$$34 = /*#__PURE__*/ template(`<section class=panel-section><h3></h3><p> · revision </p><p>`);
-var _tmpl$2$32 = /*#__PURE__*/ template(`<p>`);
-var _tmpl$3$26 = /*#__PURE__*/ template(`<p><strong>: `);
-var _tmpl$4$23 = /*#__PURE__*/ template(`<p>: `);
-var _tmpl$5$21 = /*#__PURE__*/ template(`<p>: <!> · job <!> · tick `);
+var _tmpl$$36 = /*#__PURE__*/ template(`<section class=panel-section><h3></h3><p> · revision </p><p>`);
+var _tmpl$2$33 = /*#__PURE__*/ template(`<p>`);
+var _tmpl$3$27 = /*#__PURE__*/ template(`<p><strong>: `);
+var _tmpl$4$24 = /*#__PURE__*/ template(`<p>: `);
+var _tmpl$5$22 = /*#__PURE__*/ template(`<p>: <!> · job <!> · tick `);
 function IndustrialStarterOutcomeCard(props) {
 	const tr = (zh, en) => props.locale() === "zh" ? zh : en;
 	const materials = (items) => items.map((item) => `${item.kind} × ${item.amount}`).join(" · ");
@@ -2296,7 +2296,7 @@ function IndustrialStarterOutcomeCard(props) {
 			return props.profile;
 		},
 		get children() {
-			var _el$ = _tmpl$$34(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.firstChild, _el$5 = _el$3.nextSibling;
+			var _el$ = _tmpl$$36(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.firstChild, _el$5 = _el$3.nextSibling;
 			insert(_el$2, () => tr("首条工业线成果", "Starter industrial outcome"));
 			insert(_el$3, () => props.profile.profileId, _el$4);
 			insert(_el$3, () => props.profile.profileRevision, null);
@@ -2306,32 +2306,32 @@ function IndustrialStarterOutcomeCard(props) {
 				},
 				get fallback() {
 					return (() => {
-						var _el$6 = _tmpl$2$32();
+						var _el$6 = _tmpl$2$33();
 						insert(_el$6, () => tr("首产物数量与配方用电尚未发布。", "First settled output quantity and recipe power have not been published."));
 						return _el$6;
 					})();
 				},
 				children: (settled) => [
 					(() => {
-						var _el$7 = _tmpl$3$26(), _el$8 = _el$7.firstChild, _el$9 = _el$8.firstChild;
+						var _el$7 = _tmpl$3$27(), _el$8 = _el$7.firstChild, _el$9 = _el$8.firstChild;
 						insert(_el$8, () => tr("已结算产出", "Settled output"), _el$9);
 						insert(_el$8, () => materials(settled().produce), null);
 						return _el$7;
 					})(),
 					(() => {
-						var _el$0 = _tmpl$4$23(), _el$1 = _el$0.firstChild;
+						var _el$0 = _tmpl$4$24(), _el$1 = _el$0.firstChild;
 						insert(_el$0, () => tr("实际投入材料", "Committed input materials"), _el$1);
 						insert(_el$0, () => materials(settled().consume), null);
 						return _el$0;
 					})(),
 					(() => {
-						var _el$10 = _tmpl$4$23(), _el$11 = _el$10.firstChild;
+						var _el$10 = _tmpl$4$24(), _el$11 = _el$10.firstChild;
 						insert(_el$10, () => tr("已结算配方用电需求", "Settled recipe power requirement"), _el$11);
 						insert(_el$10, () => settled().powerRequired, null);
 						return _el$10;
 					})(),
 					(() => {
-						var _el$12 = _tmpl$5$21(), _el$13 = _el$12.firstChild, _el$16 = _el$13.nextSibling, _el$17 = _el$16.nextSibling.nextSibling;
+						var _el$12 = _tmpl$5$22(), _el$13 = _el$12.firstChild, _el$16 = _el$13.nextSibling, _el$17 = _el$16.nextSibling.nextSibling;
 						_el$17.nextSibling;
 						insert(_el$12, () => tr("接受批次", "Accepted batches"), _el$13);
 						insert(_el$12, () => settled().acceptedBatches, _el$16);
@@ -2340,13 +2340,13 @@ function IndustrialStarterOutcomeCard(props) {
 						return _el$12;
 					})(),
 					(() => {
-						var _el$18 = _tmpl$4$23(), _el$19 = _el$18.firstChild;
+						var _el$18 = _tmpl$4$24(), _el$19 = _el$18.firstChild;
 						insert(_el$18, () => tr("产出归属 Agent", "Output owner Agent"), _el$19);
 						insert(_el$18, () => settled().owner, null);
 						return _el$18;
 					})(),
 					(() => {
-						var _el$20 = _tmpl$2$32();
+						var _el$20 = _tmpl$2$33();
 						insert(_el$20, () => tr("首产物里程碑已记录（production_only）。稳定运行与交付仍需分别验证。", "First output milestone recorded (production_only). Stability and delivery require separate verification."));
 						return _el$20;
 					})()
@@ -2767,6 +2767,9 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 	};
 	return {
 		state: () => state,
+		invalidate() {
+			generation += 1;
+		},
 		reset(nextScope, worldId = null) {
 			generation += 1;
 			scope = nextScope;
@@ -2782,18 +2785,19 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 			const current = ++generation, currentScope = scope;
 			const active = () => current === generation && currentScope === scope;
 			const requestGeneration = String(current);
+			const pageSize = Math.min(200, query.page_size || 200);
 			publish({
 				loading: true,
 				error: null
 			});
-			let first = null, cursor, entities = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set(), pages = 0;
+			let first = null, cursor, entities = /* @__PURE__ */ new Map(), relations = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set(), pages = 0;
 			const deadline = Date.now() + 3e4;
 			try {
 				do {
 					if (++pages > 20 || Date.now() > deadline) throw Error("World view request budget exceeded");
 					const page = await request({
 						...query,
-						page_size: Math.min(200, query.page_size || 200),
+						page_size: pageSize,
 						request_generation: requestGeneration,
 						...cursor ? { cursor } : {}
 					});
@@ -2802,7 +2806,7 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 					if (expectedWorld && page?.world_id !== expectedWorld) throw Error("World view world binding mismatch");
 					if (!page || !Array.isArray(page.entities) || !page.world_id || !page.source_cut || page.request_generation !== requestGeneration) throw Error("World view response binding mismatch");
 					if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 2097152) throw Error("World view page byte budget exceeded");
-					if (page.entities.length > 200 || first && binding(first) !== binding(page)) throw Error("World view page binding mismatch");
+					if (page.entities.length + (page.relations?.length || 0) > pageSize || first && binding(first) !== binding(page)) throw Error("World view page binding mismatch");
 					first || (first = page);
 					if (page.source_frozen) {
 						first = {
@@ -2817,6 +2821,10 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 								reason: "frozen_pagination_cut"
 							}
 						} : entity]));
+						relations = new Map([...relations].map(([key, relation]) => [key, relation.freshness === "current" ? {
+							...relation,
+							freshness: "last_known"
+						} : relation]));
 					}
 					for (let entity of page.entities) {
 						if (first.source_frozen && entity.provenance?.freshness === "current") entity = {
@@ -2832,7 +2840,17 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 						if (entities.has(key) && JSON.stringify(entities.get(key)) !== JSON.stringify(entity)) throw Error("World view conflicting entity");
 						entities.set(key, entity);
 					}
-					if (entities.size > 1e3) throw Error("World view entity budget exceeded");
+					if (page.relations != null && !Array.isArray(page.relations)) throw Error("World view relations unavailable");
+					for (let relation of page.relations || []) {
+						if (!relation.relation_id) throw Error("World view relation identity missing");
+						if (first.source_frozen && relation.freshness === "current") relation = {
+							...relation,
+							freshness: "last_known"
+						};
+						if (relations.has(relation.relation_id) && JSON.stringify(relations.get(relation.relation_id)) !== JSON.stringify(relation)) throw Error("World view conflicting relation");
+						relations.set(relation.relation_id, relation);
+					}
+					if (entities.size + relations.size > 1e3) throw Error("World view object budget exceeded");
 					cursor = page.next_cursor || null;
 					if (cursor && seen.has(cursor)) throw Error("World view cursor cycle");
 					if (cursor) seen.add(cursor);
@@ -2840,11 +2858,23 @@ function createWorldViewClient({ request, onChange = () => {} }) {
 						view: {
 							...first,
 							entities: [...entities.values()],
+							relations: [...relations.values()],
 							next_cursor: cursor,
 							completeness: cursor ? "partial" : page.completeness
 						},
 						stale: false
 					});
+					if (cursor && entities.size + relations.size + pageSize > 1e3) {
+						publish({
+							view: {
+								...state.view,
+								completeness: "partial",
+								budget_limited: true
+							},
+							loading: false
+						});
+						return state.view;
+					}
 				} while (cursor);
 				if (active()) {
 					publish({ loading: false });
@@ -2867,6 +2897,11 @@ function worldViewPosition(entity, view, stale = false, allowDerived = false) {
 	if (stale || p?.freshness !== "current" || p?.valid_at_source_cut !== view?.source_cut || !(p?.geometry_source === "authoritative" || allowDerived && p?.geometry_source === "location_derived")) return null;
 	const point = entity.position;
 	if (!point) return null;
+	if (![
+		"x_cm",
+		"y_cm",
+		"z_cm"
+	].every((key) => typeof point[key] === "number" || typeof point[key] === "string" && /^-?(0|[1-9]\d*)$/.test(point[key]))) return null;
 	const converted = Object.fromEntries([
 		"x_cm",
 		"y_cm",
@@ -2931,6 +2966,10 @@ function createWorldViewTransport({ send, timeoutMs = 1e4, getScope = () => null
 			pending.clear();
 		}
 	};
+}
+function worldViewRelations(view) {
+	const entities = new Set((view?.entities || []).map((entity) => `${entity.kind}:${entity.entity_id}`));
+	return (view?.relations || []).filter((relation) => relation.relation_id && relation.kind === "logistics_route" && relation.source_class === "runtime_projection" && relation.valid_at_source_cut === view.source_cut && entities.has(`${relation.from?.kind}:${relation.from?.id}`) && entities.has(`${relation.to?.kind}:${relation.to?.id}`));
 }
 //#endregion
 //#region software_safe_src/viewer_account_email_recovery.js
@@ -12578,7 +12617,11 @@ function attachSocket(ws) {
 			type: "hello_v2",
 			client: "viewer",
 			version: 2,
-			capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY, "world_view"]
+			capabilities: [
+				PROMPT_CONTROL_RESULT_CAPABILITY,
+				"world_view",
+				"world_view_pins_v1"
+			]
 		});
 		scheduleHelloAckTimeout(ws);
 		syncHostedSessionRefreshLoop();
@@ -13235,8 +13278,8 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 //#endregion
 //#region software_safe_src/first_chat_unlock_preview.jsx
-var _tmpl$$33 = /*#__PURE__*/ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`);
-var _tmpl$2$31 = /*#__PURE__*/ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
+var _tmpl$$35 = /*#__PURE__*/ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`);
+var _tmpl$2$32 = /*#__PURE__*/ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
 var CHAT_PURPOSE = "Start a first conversation with the Agent you control.";
 var CHAT_GATE_EXPLANATION = "First chat passes the starter OC gate with a positive liquid OC balance or an existing starter OC claim record. An existing starter OC record keeps this gate open even after the balance is spent.";
 var RESOURCE_BOUNDARY = `Starter OC grants initial liquid OC and a one-time first-chat unlock. ${CHAT_GATE_EXPLANATION} It is separate from economic slot-1 claim and upkeep funding.`;
@@ -13286,13 +13329,13 @@ function FirstChatUnlockPreview(props) {
 	];
 	const value = (field) => field === "recommended_unlock_action" ? recommendedActionValue(props.preview?.[field], locale()) : previewValue(field, props.preview?.[field], locale());
 	return (() => {
-		var _el$ = _tmpl$$33();
+		var _el$ = _tmpl$$35();
 		insert(_el$, createComponent(For, {
 			get each() {
 				return fields();
 			},
 			children: ([field, label]) => (() => {
-				var _el$2 = _tmpl$2$31(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
+				var _el$2 = _tmpl$2$32(), _el$3 = _el$2.firstChild, _el$4 = _el$3.nextSibling;
 				setAttribute(_el$2, "data-preview-field", field);
 				insert(_el$3, label);
 				className(_el$4, field === "chat_purpose" ? "feedback-summary" : "feedback-detail");
@@ -13304,9 +13347,354 @@ function FirstChatUnlockPreview(props) {
 	})();
 }
 //#endregion
+//#region software_safe_src/pixel_world_spatial_controller.js
+var refKey = (ref) => `${ref.kind}:${ref.id}`;
+function viewportBounds(value) {
+	if (!value || ![
+		"min_x_cm",
+		"max_x_cm",
+		"min_y_cm",
+		"max_y_cm"
+	].every((key) => typeof value[key] === "string" && /^-?(0|[1-9]\d*)$/.test(value[key]))) return null;
+	if (BigInt(value.min_x_cm) > BigInt(value.max_x_cm) || BigInt(value.min_y_cm) > BigInt(value.max_y_cm)) return null;
+	return Object.fromEntries([
+		"min_x_cm",
+		"max_x_cm",
+		"min_y_cm",
+		"max_y_cm"
+	].map((key) => [key, value[key]]));
+}
+function createPixelWorldSpatialController({ core, enabled, getRenderState, getLocale, debounceMs = 180 }) {
+	const [state, setState] = createSignal({
+		view: null,
+		loading: false,
+		stale: false,
+		error: null
+	});
+	const [navigation, setNavigation] = createSignal(null);
+	const [pauseVersion, setPauseVersion] = createSignal(0);
+	const [spatialSelection, setSpatialSelection] = createSignal(null);
+	const client = createWorldViewClient({
+		request: core.requestWorldView,
+		onChange: setState
+	});
+	let scope = pixelWorldScope(core.state), lastSnapshot = null, lastPins = "", currentQuery = {};
+	let cameraBounds = null, cameraKey = "", timer = null, command = 0, disposed = false;
+	let following = null, selectedCoreKey = null;
+	const coreKey = () => `${core.state.selectedKind}:${core.state.selectedId}`;
+	client.reset(scope, core.state.worldId);
+	const mainTarget = () => core.buildGameplaySummary(getLocale()).acceptedIntentTarget || getRenderState()?.commercial_surface?.next_action?.target_agent_id || null;
+	const selection = () => {
+		if (untrack(() => pixelWorldScope(core.state)) !== scope) return null;
+		const selected = spatialSelection();
+		if (selected) return state().view?.entities?.some((entity) => entity.kind === selected.kind && entity.entity_id === selected.id) ? selected : null;
+		return untrack(() => core.state.selectedKind && core.state.selectedId ? {
+			kind: core.state.selectedKind,
+			id: core.state.selectedId
+		} : null);
+	};
+	function pins() {
+		const result = [], seen = /* @__PURE__ */ new Set();
+		for (const ref of [
+			selection(),
+			mainTarget() ? {
+				kind: "agent",
+				id: mainTarget()
+			} : null,
+			following
+		]) {
+			if (!ref || ![
+				"agent",
+				"location",
+				"factory"
+			].includes(ref.kind) || !ref.id || seen.has(refKey(ref))) continue;
+			seen.add(refKey(ref));
+			result.push({
+				kind: ref.kind,
+				id: ref.id
+			});
+		}
+		return result.slice(0, 3);
+	}
+	function cancelScheduled() {
+		if (timer != null) clearTimeout(timer);
+		timer = null;
+	}
+	function navigate(mode, target = null) {
+		following = mode === "follow" ? target : null;
+		setNavigation({
+			request_id: String(++command),
+			mode,
+			target
+		});
+	}
+	async function read() {
+		if (disposed || !enabled()) return null;
+		const pinned = pins();
+		lastPins = JSON.stringify(pinned);
+		const query = { ...currentQuery };
+		delete query.pinned_entities;
+		if (core.state.viewerProtocol?.capabilities?.includes("world_view_pins_v1")) query.pinned_entities = pinned;
+		return client.query(query);
+	}
+	function schedule() {
+		cancelScheduled();
+		client.invalidate();
+		timer = setTimeout(() => {
+			timer = null;
+			read();
+		}, debounceMs);
+	}
+	function query(query = {}) {
+		command += 1;
+		cancelScheduled();
+		currentQuery = { ...query };
+		return read();
+	}
+	function select(ref) {
+		if (pixelWorldScope(core.state) !== scope) return null;
+		command += 1;
+		const view = state().view;
+		if (view) {
+			const entity = view.entities?.find((entity) => entity.entity_id === ref?.id && (entity.kind === ref.kind || entity.kind === "factory" && ref.kind === "module_visual"));
+			if (!entity) return null;
+			const selected = {
+				kind: entity.kind,
+				id: entity.entity_id
+			};
+			selectedCoreKey = coreKey();
+			setSpatialSelection(selected);
+			const model = core.state.snapshot?.model;
+			if ((entity.kind === "agent" ? model?.agents : entity.kind === "location" ? model?.locations : null)?.[entity.entity_id]) {
+				selectedCoreKey = refKey(selected);
+				core.applySelection(selected);
+			}
+			return selected;
+		}
+		setSpatialSelection(null);
+		return core.applySelection(ref);
+	}
+	const controller = {
+		state,
+		navigation,
+		pauseVersion,
+		selection,
+		scope: () => scope,
+		query,
+		select,
+		navigate,
+		locate(ref) {
+			select(ref);
+			navigate("locate", ref);
+		},
+		follow(ref) {
+			navigate(ref ? "follow" : "stop", ref);
+		},
+		pauseFollow() {
+			navigate("stop");
+			setPauseVersion((value) => value + 1);
+		},
+		overview() {
+			navigate("overview");
+		},
+		cameraChanged(camera) {
+			if (disposed || !enabled()) return;
+			const bounds = viewportBounds(camera?.viewport_bounds);
+			if (!bounds) return;
+			const key = JSON.stringify(bounds);
+			if (key === cameraKey) return;
+			cameraBounds = bounds;
+			cameraKey = key;
+			currentQuery = {
+				...currentQuery,
+				bounds: cameraBounds
+			};
+			schedule();
+		},
+		resetScope() {
+			scope = pixelWorldScope(core.state);
+			cancelScheduled();
+			command += 1;
+			lastSnapshot = null;
+			lastPins = "";
+			cameraBounds = null;
+			cameraKey = "";
+			currentQuery = {};
+			following = null;
+			selectedCoreKey = null;
+			setSpatialSelection(null);
+			setNavigation(null);
+			client.reset(scope, core.state.worldId);
+		},
+		refresh(snapshot) {
+			if (!snapshot || !enabled() || disposed) return;
+			if (spatialSelection() && selectedCoreKey !== coreKey()) setSpatialSelection(null);
+			const pinKey = JSON.stringify(pins());
+			if (snapshot === lastSnapshot && pinKey === lastPins) return;
+			lastSnapshot = snapshot;
+			if (timer != null) return;
+			read();
+		},
+		async returnTarget() {
+			const id = mainTarget();
+			if (!id) return;
+			const expectedScope = scope, expectedCommand = ++command;
+			cancelScheduled();
+			currentQuery = { search: id };
+			const view = await read();
+			if (!view || expectedScope !== pixelWorldScope(core.state) || command !== expectedCommand) return;
+			const target = view.entities.find((entity) => entity.kind === "agent" && entity.entity_id === id);
+			if (!target || !worldViewPosition(target, view, false, true)) {
+				setState((previous) => ({
+					...previous,
+					notice: "target_unavailable"
+				}));
+				return;
+			}
+			select({
+				kind: "agent",
+				id
+			});
+			currentQuery = {};
+			cameraKey = "";
+			navigate("locate", {
+				kind: "agent",
+				id
+			});
+		},
+		dispose() {
+			disposed = true;
+			cancelScheduled();
+			client.reset(null);
+		}
+	};
+	onCleanup(controller.dispose);
+	return controller;
+}
+//#endregion
+//#region software_safe_src/pixel_world_world_view_inspector.jsx
+var _tmpl$$34 = /*#__PURE__*/ template(`<p>: <!>, <!>, <!> cm`);
+var _tmpl$2$31 = /*#__PURE__*/ template(`<section class=pixel-world-entity-inspection tabindex=-1><strong></strong><p> · <!> · `);
+var _tmpl$3$26 = /*#__PURE__*/ template(`<p>`);
+var _tmpl$4$23 = /*#__PURE__*/ template(`<div role=region><p>`);
+var _tmpl$5$21 = /*#__PURE__*/ template(`<section><h4></h4><ul>`);
+var _tmpl$6$15 = /*#__PURE__*/ template(`<li><button type=button></button><span> · </span><span> → `);
+var _tmpl$7$11 = /*#__PURE__*/ template(`<div><button type=button> </button><button type=button> `);
+function PixelWorldEntityInspector(props) {
+	const entity = () => props.view?.entities?.find((value) => value.kind === props.selection?.kind && value.entity_id === props.selection?.id);
+	const point = () => worldViewPosition(entity(), props.view, props.stale, true);
+	return createComponent(Show, {
+		get when() {
+			return entity();
+		},
+		get children() {
+			var _el$ = _tmpl$2$31(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.firstChild, _el$6 = _el$4.nextSibling;
+			_el$6.nextSibling;
+			insert(_el$2, () => entity().label || entity().entity_id);
+			insert(_el$3, () => props.text("只读观察", "Read-only observation"), _el$4);
+			insert(_el$3, () => props.geometryLabel(entity().provenance?.geometry_source), _el$6);
+			insert(_el$3, () => props.freshnessLabel(entity().provenance?.freshness), null);
+			insert(_el$, createComponent(Show, {
+				get when() {
+					return point();
+				},
+				get fallback() {
+					return (() => {
+						var _el$13 = _tmpl$3$26();
+						insert(_el$13, () => props.text("没有当前可信位置；不提供地图定位。", "No current trusted position; map location unavailable."));
+						return _el$13;
+					})();
+				},
+				get children() {
+					var _el$7 = _tmpl$$34(), _el$8 = _el$7.firstChild, _el$10 = _el$8.nextSibling, _el$11 = _el$10.nextSibling.nextSibling, _el$12 = _el$11.nextSibling.nextSibling;
+					_el$12.nextSibling;
+					insert(_el$7, () => props.text("显示坐标", "Display coordinates"), _el$8);
+					insert(_el$7, () => point()?.x_cm, _el$10);
+					insert(_el$7, () => point()?.y_cm, _el$11);
+					insert(_el$7, () => point()?.z_cm, _el$12);
+					return _el$7;
+				}
+			}), null);
+			createRenderEffect(() => setAttribute(_el$, "aria-label", props.text("对象检查", "Object inspection")));
+			return _el$;
+		}
+	});
+}
+function PixelWorldRouteExplorer(props) {
+	const [inspected, setInspected] = createSignal(null);
+	const routes = () => worldViewRelations(props.view);
+	const entity = (ref) => props.view.entities.find((value) => value.kind === ref.kind && value.entity_id === ref.id);
+	const label = (ref) => entity(ref)?.label || ref.id;
+	const route = () => routes().find((value) => value.relation_id === inspected());
+	const point = (ref) => worldViewPosition(entity(ref), props.view, props.stale, true);
+	return createComponent(Show, {
+		get when() {
+			return routes().length;
+		},
+		get children() {
+			var _el$14 = _tmpl$5$21(), _el$15 = _el$14.firstChild, _el$16 = _el$15.nextSibling;
+			insert(_el$15, () => props.text("路线与端点", "Routes and endpoints"));
+			insert(_el$16, createComponent(For, {
+				get each() {
+					return routes();
+				},
+				children: (value) => (() => {
+					var _el$19 = _tmpl$6$15(), _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$21.firstChild, _el$23 = _el$21.nextSibling, _el$24 = _el$23.firstChild;
+					_el$20.$$click = () => setInspected(value.relation_id);
+					insert(_el$20, () => value.label || value.relation_id);
+					insert(_el$21, (() => {
+						var _c$ = memo(() => value.status === "active");
+						return () => _c$() ? props.text("可用", "Available") : props.text("不可用", "Unavailable");
+					})(), _el$22);
+					insert(_el$21, () => props.freshnessLabel(value.freshness), null);
+					insert(_el$23, () => label(value.from), _el$24);
+					insert(_el$23, () => label(value.to), null);
+					return _el$19;
+				})()
+			}));
+			insert(_el$14, createComponent(Show, {
+				get when() {
+					return route();
+				},
+				get children() {
+					var _el$17 = _tmpl$4$23(), _el$18 = _el$17.firstChild;
+					insert(_el$18, () => props.text("路线仅供观察，不会提交行动。", "Routes are read-only and do not submit actions."));
+					insert(_el$17, createComponent(For, {
+						get each() {
+							return [route().from, route().to];
+						},
+						children: (ref) => (() => {
+							var _el$25 = _tmpl$7$11(), _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$26.nextSibling, _el$29 = _el$28.firstChild;
+							_el$26.$$click = () => props.onSelect?.({
+								kind: ref.kind,
+								id: ref.id
+							});
+							insert(_el$26, () => props.text("检查", "Inspect"), _el$27);
+							insert(_el$26, () => label(ref), null);
+							_el$28.$$click = () => props.onLocate?.({
+								kind: ref.kind,
+								id: ref.id
+							}, point(ref));
+							insert(_el$28, () => props.text("定位", "Locate"), _el$29);
+							insert(_el$28, () => label(ref), null);
+							createRenderEffect(() => _el$28.disabled = !point(ref));
+							return _el$25;
+						})()
+					}), null);
+					createRenderEffect(() => setAttribute(_el$17, "aria-label", props.text("路线检查", "Route inspection")));
+					return _el$17;
+				}
+			}), null);
+			createRenderEffect(() => setAttribute(_el$14, "aria-label", props.text("授权路线", "Authorized routes")));
+			return _el$14;
+		}
+	});
+}
+delegateEvents(["click"]);
+//#endregion
 //#region software_safe_src/pixel_world_world_view_explorer.jsx
-var _tmpl$$32 = /*#__PURE__*/ template(`<p>`);
-var _tmpl$2$30 = /*#__PURE__*/ template(`<section class=pixel-world-exploration><form><label> <input maxlength=128></label><button type=submit></button><button type=button></button><button type=button></button></form><p role=status></p><ul style=max-height:14rem;overflow-y:auto>`);
+var _tmpl$$33 = /*#__PURE__*/ template(`<p>`);
+var _tmpl$2$30 = /*#__PURE__*/ template(`<section class=pixel-world-exploration><form><label> <input maxlength=128></label><button type=submit></button><button type=button></button><button type=button></button></form><p role=status></p><ul>`);
 var _tmpl$3$25 = /*#__PURE__*/ template(`<span> `);
 var _tmpl$4$22 = /*#__PURE__*/ template(`<li><button type=button></button><span> · <!> · </span><button type=button></button><button type=button></button><button type=button>`);
 function PixelWorldWorldViewExplorer(props) {
@@ -13314,6 +13702,7 @@ function PixelWorldWorldViewExplorer(props) {
 	const text = (cn, en) => zh() ? cn : en;
 	const [search, setSearch] = createSignal("");
 	const [following, setFollowing] = createSignal(null);
+	const [inspected, setInspected] = createSignal(null);
 	const view = () => props.state?.view;
 	const entities = () => view()?.entities || [];
 	const kindLabel = (kind) => ({
@@ -13321,14 +13710,19 @@ function PixelWorldWorldViewExplorer(props) {
 		location: text("地点", "Location"),
 		factory: text("设施", "Facility")
 	})[kind] || text("对象", "Object");
+	const geometryLabel = (source) => ({
+		authoritative: text("权威位置", "Authoritative position"),
+		location_derived: text("地点派生", "Derived from location"),
+		relationship_layout: text("关系布局", "Relationship layout")
+	})[source] || text("位置未知", "Position unknown");
 	const freshnessLabel = (freshness) => ({
 		current: text("当前", "Current"),
 		last_known: text("最近已知", "Last known"),
 		conflict: text("冲突", "Conflict"),
 		expired: text("已过期", "Expired")
-	})[freshness] || text("时效未知", "Freshness unknown");
+	})[props.state?.stale && freshness === "current" ? "last_known" : freshness] || text("时效未知", "Freshness unknown");
 	const position = (entity) => worldViewPosition(entity, view(), props.state?.stale, true);
-	const followPosition = (entity) => worldViewPosition(entity, view(), props.state?.stale);
+	const followPosition = (entity) => entity?.kind === "agent" ? worldViewPosition(entity, view(), props.state?.stale) : null;
 	createEffect(() => {
 		const id = following();
 		if (!id) return;
@@ -13357,10 +13751,12 @@ function PixelWorldWorldViewExplorer(props) {
 		};
 	}
 	function select(entity) {
-		props.onSelect?.({
+		const ref = {
 			kind: entity.kind,
 			id: entity.entity_id
-		});
+		};
+		setInspected(ref);
+		props.onSelect?.(ref);
 	}
 	return (() => {
 		var _el$ = _tmpl$2$30(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$3.nextSibling, _el$7 = _el$6.nextSibling, _el$8 = _el$7.nextSibling, _el$9 = _el$2.nextSibling, _el$1 = _el$9.nextSibling;
@@ -13382,6 +13778,7 @@ function PixelWorldWorldViewExplorer(props) {
 		};
 		insert(_el$7, () => text("返回总览", "World overview"));
 		_el$8.$$click = () => {
+			setSearch("");
 			setFollowing(null);
 			props.onFollow?.(null);
 			props.onReturnTarget?.();
@@ -13391,6 +13788,14 @@ function PixelWorldWorldViewExplorer(props) {
 			var _c$ = memo(() => !!props.state?.loading);
 			return () => _c$() ? text("正在读取授权范围…", "Reading authorized scope…") : memo(() => !!props.state?.stale)() ? text("最近已知；当前范围读取失败", "Last known; scope refresh failed") : memo(() => view()?.completeness === "complete")() ? text("当前查询范围完整", "Current query scope complete") : memo(() => view()?.completeness === "partial")() ? text("当前查询范围不完整", "Current query scope partial") : text("查询范围完整性未知", "Query scope completeness unknown");
 		})(), null);
+		insert(_el$9, createComponent(Show, {
+			get when() {
+				return view()?.budget_limited;
+			},
+			get children() {
+				return [" · ", memo(() => text("当前范围对象过密，请缩小视口或搜索。", "This area is dense. Narrow the viewport or search."))];
+			}
+		}), null);
 		insert(_el$9, createComponent(Show, {
 			get when() {
 				return view()?.source_frozen;
@@ -13412,7 +13817,7 @@ function PixelWorldWorldViewExplorer(props) {
 				return props.state?.notice === "target_unavailable";
 			},
 			get children() {
-				var _el$0 = _tmpl$$32();
+				var _el$0 = _tmpl$$33();
 				insert(_el$0, () => text("主目标当前没有获准且可信的位置；可检查目标上下文。", "The target has no authorized trusted position; inspect its context instead."));
 				return _el$0;
 			}
@@ -13490,6 +13895,37 @@ function PixelWorldWorldViewExplorer(props) {
 				return _el$10;
 			})()
 		}));
+		insert(_el$, createComponent(PixelWorldEntityInspector, {
+			get view() {
+				return view();
+			},
+			get selection() {
+				return props.selection || inspected();
+			},
+			get stale() {
+				return props.state?.stale;
+			},
+			text,
+			geometryLabel,
+			freshnessLabel
+		}), null);
+		insert(_el$, createComponent(PixelWorldRouteExplorer, {
+			get view() {
+				return view();
+			},
+			get stale() {
+				return props.state?.stale;
+			},
+			text,
+			freshnessLabel,
+			onSelect: (ref) => {
+				setInspected(ref);
+				props.onSelect?.(ref);
+			},
+			get onLocate() {
+				return props.onLocate;
+			}
+		}), null);
 		createRenderEffect((_p$) => {
 			var _v$ = text("授权世界探索", "Authorized world exploration"), _v$2 = props.state?.loading, _v$3 = text("获准对象与重叠候选", "Authorized objects and overlapping candidates");
 			_v$ !== _p$.e && setAttribute(_el$, "aria-label", _p$.e = _v$);
@@ -13506,6 +13942,63 @@ function PixelWorldWorldViewExplorer(props) {
 	})();
 }
 delegateEvents(["input", "click"]);
+//#endregion
+//#region software_safe_src/pixel_world_spatial_explorer.jsx
+var _tmpl$$32 = /*#__PURE__*/ template(`<div class=pixel-world-exploration-panel>`);
+function PixelWorldSpatialExplorer(props) {
+	let root, openedSelection = null;
+	createEffect(() => {
+		const selected = props.controller.selection();
+		const key = selected?.kind === "factory" ? selected.id : null;
+		if (key === openedSelection) return;
+		openedSelection = key;
+		if (!key) return;
+		queueMicrotask(() => {
+			if (!root?.isConnected) return;
+			const disclosure = root.closest("details");
+			if (disclosure) disclosure.open = true;
+			root.querySelector(".pixel-world-entity-inspection")?.focus();
+		});
+	});
+	return (() => {
+		var _el$ = _tmpl$$32();
+		var _ref$ = root;
+		typeof _ref$ === "function" ? use(_ref$, _el$) : root = _el$;
+		insert(_el$, createComponent(PixelWorldWorldViewExplorer, {
+			get state() {
+				return props.controller.state();
+			},
+			get locale() {
+				return props.locale;
+			},
+			get selection() {
+				return props.controller.selection();
+			},
+			get pauseVersion() {
+				return props.controller.pauseVersion();
+			},
+			get onQuery() {
+				return props.controller.query;
+			},
+			get onSelect() {
+				return props.controller.select;
+			},
+			get onLocate() {
+				return props.controller.locate;
+			},
+			get onFollow() {
+				return props.controller.follow;
+			},
+			get onOverview() {
+				return props.controller.overview;
+			},
+			get onReturnTarget() {
+				return props.controller.returnTarget;
+			}
+		}));
+		return _el$;
+	})();
+}
 //#endregion
 //#region software_safe_src/pixel_world_runtime_loader.js
 function resolvePixelWorldRuntimeModuleUrl() {
@@ -17015,39 +17508,31 @@ function PixelWorldHost(props) {
 	const [worldRevision, setWorldRevision] = createSignal(0);
 	const selectedEntity = () => {
 		coreRevision();
-		return state.selectedKind && state.selectedId ? {
-			kind: state.selectedKind,
-			id: state.selectedId
-		} : null;
+		return spatial.selection();
 	};
-	const [worldViewState, setWorldViewState] = createSignal({
-		view: null,
-		loading: false,
-		stale: false,
-		error: null
+	const spatial = createPixelWorldSpatialController({
+		core: legacy_core_exports,
+		enabled: () => state.viewerProtocol?.capabilities?.includes("world_view"),
+		getLocale: locale,
+		getRenderState: () => rustRenderState()
 	});
-	const [navigation, setNavigation] = createSignal(null);
-	const [followPauseVersion, setFollowPauseVersion] = createSignal(0);
-	let navigationSequence = 0;
-	let currentSpatialQuery = {};
-	const worldViewClient = createWorldViewClient({
-		request: requestWorldView,
-		onChange: setWorldViewState
-	});
-	let lastWorldViewScope = pixelWorldScope(state), lastWorldViewSnapshot = null;
-	worldViewClient.reset(lastWorldViewScope, state.worldId);
+	const worldViewState = spatial.state, navigation = spatial.navigation;
 	const spatialSupported = () => {
 		coreRevision();
 		return state.viewerProtocol?.capabilities?.includes("world_view");
 	};
 	const renderInput = createMemo(() => {
 		worldRevision();
-		const spatial = worldViewState();
+		const spatialState = worldViewState();
 		return {
 			...buildPixelWorldRenderInput(locale()),
-			...spatial.view ? {
-				worldView: spatial.view,
-				worldViewStale: spatial.stale
+			...spatialState.view ? {
+				worldView: spatialState.view,
+				worldViewStale: spatialState.stale
+			} : {},
+			...spatial.selection() ? {
+				selectedKind: spatial.selection().kind,
+				selectedId: spatial.selection().id
 			} : {},
 			navigation: navigation()
 		};
@@ -17104,7 +17589,7 @@ function PixelWorldHost(props) {
 	});
 	const adapter = createMemo(() => createPixelWorldHostAdapter({
 		onSelectEntity(selection) {
-			if (applySelection(selection)?.kind === "module_visual") focusViewerPanel("viewer-details-panel");
+			if (spatial.select(selection)?.kind === "module_visual") focusViewerPanel("viewer-details-panel");
 		},
 		onHoverEntity(selection) {
 			setHoverSelection(selection);
@@ -17112,6 +17597,7 @@ function PixelWorldHost(props) {
 		onFatal(fatal, nextCameraState) {
 			if (nextCameraState) {
 				setCameraState(nextCameraState);
+				spatial.cameraChanged(nextCameraState);
 				updatePixelWorldRuntimeMeta({
 					runtimeStatus: rendererStatus(),
 					runtimeSource: runtimeSource(),
@@ -17153,10 +17639,7 @@ function PixelWorldHost(props) {
 			});
 		};
 		let start = null;
-		const stopFollow = () => {
-			navigate("stop");
-			setFollowPauseVersion((v) => v + 1);
-		};
+		const stopFollow = spatial.pauseFollow;
 		const down = (event) => {
 			start = {
 				id: event.pointerId,
@@ -17301,14 +17784,12 @@ function PixelWorldHost(props) {
 		onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
 		const unsubscribeRenderHook = subscribeRenderHook?.((invalidation) => {
 			const scope = scopeGuard.check();
-			if (scope.scope !== lastWorldViewScope) {
-				lastWorldViewScope = scope.scope;
+			if (scope.scope !== spatial.scope()) {
 				if (scope.changed) {
 					setRendererStatus("unavailable");
 					setRustRenderState(null);
 				}
-				worldViewClient.reset(scope.scope, state.worldId);
-				setNavigation(null);
+				spatial.resetScope();
 			}
 			if (scope.changed) {
 				state.selectedKind = null;
@@ -17335,11 +17816,7 @@ function PixelWorldHost(props) {
 				}
 				return;
 			}
-			const snapshot = state.snapshot;
-			if (snapshot && snapshot !== lastWorldViewSnapshot && state.viewerProtocol?.capabilities?.includes("world_view")) {
-				lastWorldViewSnapshot = snapshot;
-				worldViewClient.query(currentSpatialQuery);
-			}
+			spatial.refresh(state.snapshot);
 			if (invalidation?.pixelWorldChanged === false) return;
 			setWorldRevision((revision) => revision + 1);
 			if (rendererStatus() === "ready") applyRendererUpdate();
@@ -17378,18 +17855,11 @@ function PixelWorldHost(props) {
 	createEffect(() => {
 		worldViewState();
 		navigation();
+		spatial.selection();
 		untrack(() => {
 			if (mountedCanvas && rendererStatus() === "ready") applyRendererUpdate();
 		});
 	});
-	function navigate(mode, target = null) {
-		setNavigation({
-			request_id: String(++navigationSequence),
-			mode,
-			target
-		});
-	}
-	onCleanup(() => worldViewClient.reset(null));
 	return (() => {
 		var _el$160 = _tmpl$43$1(), _el$167 = _el$160.firstChild, _el$168 = _el$167.firstChild, _el$169 = _el$168.nextSibling, _el$206 = _el$167.nextSibling, _el$207 = _el$206.firstChild;
 		setAttribute(_el$160, "data-visual-fixture", visualFixtureName || "");
@@ -17411,55 +17881,10 @@ function PixelWorldHost(props) {
 			get children() {
 				var _el$165 = _tmpl$35$1(), _el$166 = _el$165.firstChild;
 				insert(_el$166, () => tr$1(locale(), "探索世界", "Explore world"));
-				insert(_el$165, createComponent(PixelWorldWorldViewExplorer, {
-					get state() {
-						return worldViewState();
-					},
+				insert(_el$165, createComponent(PixelWorldSpatialExplorer, {
+					controller: spatial,
 					get locale() {
 						return locale();
-					},
-					get pauseVersion() {
-						return followPauseVersion();
-					},
-					onQuery: (query) => {
-						navigationSequence += 1;
-						currentSpatialQuery = query;
-						return worldViewClient.query(query);
-					},
-					onSelect: (selection) => {
-						navigationSequence += 1;
-						applySelection(selection);
-					},
-					onLocate: (selection) => {
-						applySelection(selection);
-						navigate("locate", selection);
-					},
-					onFollow: (selection) => navigate(selection ? "follow" : "stop", selection),
-					onOverview: () => navigate("overview"),
-					onReturnTarget: () => {
-						const id = buildGameplaySummary(locale()).acceptedIntentTarget || renderState()?.commercial_surface?.next_action?.target_agent_id;
-						if (!id) return;
-						const scope = pixelWorldScope(state), command = ++navigationSequence;
-						currentSpatialQuery = { search: id };
-						worldViewClient.query(currentSpatialQuery).then((view) => {
-							if (!view || scope !== pixelWorldScope(state) || command !== navigationSequence) return;
-							const target = view.entities.find((entity) => entity.kind === "agent" && entity.entity_id === id);
-							if (!target || !worldViewPosition(target, view, false, true)) {
-								setWorldViewState((previous) => ({
-									...previous,
-									notice: "target_unavailable"
-								}));
-								return;
-							}
-							applySelection({
-								kind: "agent",
-								id
-							});
-							navigate("locate", {
-								kind: "agent",
-								id
-							});
-						});
 					}
 				}), null);
 				return _el$165;

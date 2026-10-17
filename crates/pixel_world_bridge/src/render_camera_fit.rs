@@ -80,5 +80,5 @@ pub(super) fn maybe_auto_fit_camera(runtime: &mut BevyRuntimeState, width: f64, 
     runtime.camera.pan_x_px = -(centered_x * target_zoom);
     runtime.camera.pan_y_px = -(centered_y * target_zoom);
     runtime.camera_fit_version = runtime.render_version;
-    let _ = emit_camera_state(&runtime.camera);
+    let _ = camera_viewport::emit(runtime);
 }

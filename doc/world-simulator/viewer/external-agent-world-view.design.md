@@ -130,9 +130,23 @@ owner指导沿固定主体与方案→核验owner权限及适用控制/审批条
 
 ### 5.5 初始实现范围
 
+#### 绑定来源与空间查询扩展
+
+远端空间观察复用服务端已验证的 WorldService 投影，不接受客户端自报 current。当前性须同时匹配读取配置、world/branch/权限/投影版本、普通证据策略、Runtime 的空间依赖字段与兼容 snapshot；未知、observer、回放或不匹配时降级。出站仅含非秘密来源绑定，不发布 read key 或其身份摘要。分页保留同一切点；仍能验证为当前同一来源切点时保留当前，来源推进或无法比较时冻结并降为最近已知；权限、来源范围或 epoch 改变立即使旧 cursor 失效。
+
+设施从获准 snapshot 的 factories 投影，路线从同源 runtime_snapshot 的 logistics_routes 投影。路线端点只引用同一可见投影中的 Agent、设施或地点，不从邻近或 Agent 所在位置推断设施位置、归属或路线。设施明确绝对空间锚点可保留权威位置；只有地点身份或来源不足的派生坐标保持未知，可搜索和只读检查，不能伪装为可定位实体。路线 unavailable 与 active 分开，只有同切点、当前且端点可信的 active 路线绘制连线。
+
+客户端和服务端仅在共同协商 `world_view_pins_v1` 后使用新增请求字段；旧 `world_view` 服务端继续使用原 bounds/search/cursor，不发送其不认识的字段。
+
+`request_world_view.query.pinned_entities` 可携带最多三个 `{kind,id}`，仅在原授权可见集合内合并选择、目标和跟随对象并优先分页；不存在或越权 ID 不增加存在性信息。实体与关系共同消耗每页 200 项、累计 1000 项和字节上限；客户端达到累计上限即保留 partial 和现有可信对象，提示缩小范围，不伪装读取失败或完整结果。关系的两端点可跨页到达，未齐不绘制。范围外对象和聚合淘汰仍不表示世界删除。
+
+相机事件增加十进制字符串 `viewport_bounds` 与逻辑像素尺寸，使用 Rust 绘制转换的逆变换，向外取整并裁至世界边界；宿主不重算另一套坐标。连续平移/缩放立即使旧查询代际失效，尾部防抖发出最新 bounds；应用查询结果不触发自动总览或查询循环。服务端在完整授权投影建立有界二维包围盒索引，查询索引后再筛选文本、稳定分页并合并获准 pin/路线端点；索引和来源切点一起重建，不能跨权限复用。
+
+该扩展不包含原生容器、事件增量流或工业语义多尺度聚合。索引正确性与候选裁剪可用确定性测试证明，50k 世界、P95 与长期驻留内存仍须按质量条款独立实测。
+
 当前空间读模型使用已协商 `world_view` 的 Viewer WebSocket：`request_world_view` 请求带 `request_generation`、可选 `search`/`bounds`/`cursor` 和 `page_size`，响应为 `world_view`。它只裁剪同一连接本来可读的兼容 snapshot，不新增 Agent 私有观察权限。展示字段经 allowlist；world、reorg、audience 和查询范围隔离分页。每会话只保留一份有界短期只读投影，不能用旧 audience 的 cursor读取。
 
-初次查询仅在本地权威 Runtime 的 Agent 位置上声明current；远端/回放和缺独立来源的地点位置保留unknown。冻结续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；当前不提供权威 tombstone 流。请求代际、输入导航、world/task流分别处理。
+初次查询只在匹配本地权威 Runtime 或已验证远端来源的 Agent/显式设施位置上声明current；回放、observer、来源不匹配和缺几何证明的地点/设施位置保留unknown。仍能证明来源切点未变的续页保留current；冻结历史续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；当前不提供权威 tombstone 流。请求代际、输入导航、world/task流分别处理。
 
 图形context loss停止原会话和命中，保留仍获准的文本/原回执并提供显式重试；授权身份或world变化先清显示，旧异步挂载和事件不再生效，新scope通过带请求身份、socket和作用域代际校验的 `request_scope_snapshot` 定向重读后才可解锁；普通迟到snapshot不能解除锁定。旧本地反馈按提交scope隐藏，但原pending操作身份保留，不重新提交。导航明确区分选择、定位、跟随、停止和总览；手动平移/缩放退出跟随，失去可信位置后不会自动恢复。
 

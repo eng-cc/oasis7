@@ -260,7 +260,7 @@ fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, heigh
     runtime.camera_user_override = true;
     runtime.camera_fit_version = runtime.render_version;
     runtime.pending_focus_target = None;
-    let _ = emit_camera_state(&runtime.camera);
+    let _ = camera_viewport::emit(runtime);
 }
 pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
     let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);

@@ -1,6 +1,6 @@
-import { createWorldViewClient, worldViewPosition } from "./pixel_world_world_view.js";
-import { PixelWorldWorldViewExplorer } from "./pixel_world_world_view_explorer.jsx";
-import { createPixelWorldScopeGuard, pixelWorldScope } from "./pixel_world_scope.js";
+import { createPixelWorldSpatialController } from "./pixel_world_spatial_controller.js";
+import { PixelWorldSpatialExplorer } from "./pixel_world_spatial_explorer.jsx";
+import { createPixelWorldScopeGuard } from "./pixel_world_scope.js";
 import { createPixelWorldHostAdapter } from "./pixel_world_host_adapter.js";
 import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount, untrack } from "solid-js";
 import * as core from "./legacy_core.js";
@@ -849,27 +849,21 @@ export function PixelWorldHost(props) {
   const [worldRevision, setWorldRevision] = createSignal(0);
   const selectedEntity = () => {
     coreRevision();
-    return core.state.selectedKind && core.state.selectedId
-      ? { kind: core.state.selectedKind, id: core.state.selectedId }
-      : null;
+    return spatial.selection();
   };
-  const [worldViewState, setWorldViewState] = createSignal({view:null,loading:false,stale:false,error:null});
-  const [navigation, setNavigation] = createSignal(null);
-  const [followPauseVersion, setFollowPauseVersion] = createSignal(0);
-  let navigationSequence = 0;
-  let currentSpatialQuery = {};
-  const worldViewClient = createWorldViewClient({request: core.requestWorldView, onChange:setWorldViewState});
-  let lastWorldViewScope = pixelWorldScope(core.state), lastWorldViewSnapshot = null;
-  worldViewClient.reset(lastWorldViewScope, core.state.worldId);
+  const spatial = createPixelWorldSpatialController({core,enabled:()=>core.state.viewerProtocol?.capabilities?.includes("world_view"),
+    getLocale:locale,getRenderState:()=>rustRenderState()});
+  const worldViewState = spatial.state, navigation = spatial.navigation;
   const spatialSupported = () => {
     coreRevision();
     return core.state.viewerProtocol?.capabilities?.includes("world_view");
   };
   const renderInput = createMemo(() => {
     worldRevision();
-    const spatial = worldViewState();
+    const spatialState = worldViewState();
     return {...buildPixelWorldRenderInput(locale()),
-      ...(spatial.view ? {worldView:spatial.view,worldViewStale:spatial.stale} : {}),
+      ...(spatialState.view ? {worldView:spatialState.view,worldViewStale:spatialState.stale} : {}),
+      ...(spatial.selection() ? {selectedKind:spatial.selection().kind,selectedId:spatial.selection().id} : {}),
       navigation:navigation()};
   });
   const scopeGuard = createPixelWorldScopeGuard(core.state);
@@ -927,7 +921,7 @@ export function PixelWorldHost(props) {
   });
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
-      const applied = core.applySelection(selection);
+      const applied = spatial.select(selection);
       if (applied?.kind === "module_visual") {
         focusViewerPanel("viewer-details-panel");
       }
@@ -938,6 +932,7 @@ export function PixelWorldHost(props) {
     onFatal(fatal, nextCameraState) {
       if (nextCameraState) {
         setCameraState(nextCameraState);
+        spatial.cameraChanged(nextCameraState);
         core.updatePixelWorldRuntimeMeta({
           runtimeStatus: rendererStatus(),
           runtimeSource: runtimeSource(),
@@ -977,7 +972,7 @@ export function PixelWorldHost(props) {
       adapter().simulateFatal({ code: "pixel_world_context_lost", message: "World graphics interrupted. Retry to restore the authorized view." });
     };
     let start = null;
-    const stopFollow = () => { navigate("stop"); setFollowPauseVersion(v => v + 1); };
+    const stopFollow = spatial.pauseFollow;
     const down = event => { start = {id:event.pointerId,x:event.clientX,y:event.clientY}; };
     const move = event => {
       if (start && start.id === event.pointerId && Math.hypot(event.clientX-start.x,event.clientY-start.y)>4) {
@@ -1114,11 +1109,9 @@ export function PixelWorldHost(props) {
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
     const unsubscribeRenderHook = core.subscribeRenderHook?.((invalidation) => {
       const scope = scopeGuard.check();
-      if (scope.scope !== lastWorldViewScope) {
-        lastWorldViewScope = scope.scope;
+      if (scope.scope !== spatial.scope()) {
         if (scope.changed) { setRendererStatus("unavailable"); setRustRenderState(null); }
-        worldViewClient.reset(scope.scope, core.state.worldId);
-        setNavigation(null);
+        spatial.resetScope();
       }
       if (scope.changed) {
         // Selection is display state. Feedback projection is scope-masked without
@@ -1144,11 +1137,7 @@ export function PixelWorldHost(props) {
         }
         return;
       }
-      const snapshot = core.state.snapshot;
-      if (snapshot && snapshot !== lastWorldViewSnapshot && core.state.viewerProtocol?.capabilities?.includes("world_view")) {
-        lastWorldViewSnapshot = snapshot;
-        void worldViewClient.query(currentSpatialQuery);
-      }
+      spatial.refresh(core.state.snapshot);
       // An absent hint remains conservatively dirty, including mutable state.
       if (invalidation?.pixelWorldChanged === false) return;
       setWorldRevision((revision) => revision + 1);
@@ -1183,13 +1172,9 @@ export function PixelWorldHost(props) {
     });
   });
   createEffect(() => {
-    worldViewState(); navigation();
+    worldViewState(); navigation(); spatial.selection();
     untrack(() => { if (mountedCanvas && rendererStatus() === "ready") applyRendererUpdate(); });
   });
-  function navigate(mode, target = null) {
-    setNavigation({request_id:String(++navigationSequence),mode,target});
-  }
-  onCleanup(() => worldViewClient.reset(null));
   return (
     <div
       class={`pixel-world-host stack ${focusMode() ? "pixel-world-host--focus" : ""} ${focusMode() && maximized() ? "pixel-world-host--focus-maximized" : ""}`}
@@ -1214,28 +1199,7 @@ export function PixelWorldHost(props) {
       </Show>
       <Show when={spatialSupported()}><details class="pixel-world-exploration-disclosure">
         <summary>{tr(locale(), "探索世界", "Explore world")}</summary>
-        <PixelWorldWorldViewExplorer state={worldViewState()} locale={locale()} pauseVersion={followPauseVersion()}
-        onQuery={(query) => { navigationSequence += 1; currentSpatialQuery = query; return worldViewClient.query(query); }}
-        onSelect={(selection) => { navigationSequence += 1; core.applySelection(selection); }}
-        onLocate={(selection) => { core.applySelection(selection); navigate("locate",selection); }}
-        onFollow={(selection) => navigate(selection ? "follow" : "stop",selection)}
-        onOverview={() => navigate("overview")}
-        onReturnTarget={() => {
-          const id = core.buildGameplaySummary(locale()).acceptedIntentTarget || renderState()?.commercial_surface?.next_action?.target_agent_id;
-          if (!id) return;
-          const scope = pixelWorldScope(core.state), command = ++navigationSequence;
-          currentSpatialQuery = {search:id};
-          void worldViewClient.query(currentSpatialQuery).then(view => {
-            if (!view || scope !== pixelWorldScope(core.state) || command !== navigationSequence) return;
-            const target = view.entities.find(entity => entity.kind === "agent" && entity.entity_id === id);
-            if (!target || !worldViewPosition(target, view, false, true)) {
-              setWorldViewState(previous => ({...previous,notice:"target_unavailable"}));
-              return;
-            }
-            core.applySelection({kind:"agent",id});
-            navigate("locate",{kind:"agent",id});
-          });
-        }} /></details></Show>
+        <PixelWorldSpatialExplorer controller={spatial} locale={locale()} /></details></Show>
       <div
         class="pixel-world-focus-entry"
         data-viewer-overlay="cinematic-entry"
