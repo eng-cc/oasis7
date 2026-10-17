@@ -134,9 +134,9 @@ Trace ID: O7-REQ-fd8b7e31-afa8-4361-81f0-849c07099dfd
 - 系统设计状态：部分覆盖
 - 系统设计依据：[unified 原设计条款](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-observation)；原目标已存在，正式接线与四项未决仍限制覆盖。
 - 实现状态：未核实
-- 实现与验证依据：[逐项验证计划](../../world-simulator/scenario/unified-world-seed-fragment-runtime.design.md#unified-verification-plan) 与 [消费者验证入口](../../../testing-manual.md#uws-v-consumers)，本次未执行业务测试，局部源码和采用记录不证明正式组合。
-- 核对日期与基线：2026-10-15；`a90a1384fb94fc036c929125c84717e5614762ad`；实际实施候选与运行环境未核实。
-- 剩余范围：只接收 R5 原观察一致性；不新增观察权限、不保证任意 surface 可读性或选择新的 DTO/表示模型。 对应正式 profile 的输入、权威材料、真实消费者输出和完整验收仍须同候选核实。
+- 实现与验证依据：已按固定源码 `6463975178f3d32ef6d8e19e14f0b24f1c7f9471` 核查：Viewer compat_snapshot 从 runtime snapshot 调用共享 mapper 并复制 chain resource manifest/delta；Provider 从 Runtime state 或 canonical service projection 重建 shadow 后 observe，沿同一 mapper 继承 seed location ID，但 shadow manifest/delta 为 Default，provider resource_summary 来自 Agent self_resources。共享 mapper 与 seed ID 是已实现局部事实，不能证明共同 snapshot identity、附近 fragment remaining/chunk 资源摘要或正式 provenance 贯通。#4693 同树 required 的具名 TCP 周期读与迟到完成围栏 PASS 只覆盖读取可靠性，不覆盖本卡组合验收。 定位：[mapping](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/viewer/runtime_live/mapping.rs)；[control_blocking](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/viewer/runtime_live/control_blocking.rs)；[llm_sidecar_runtime_support](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/viewer/runtime_live/llm_sidecar_runtime_support.rs)；[llm_sidecar_provider_observation](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/viewer/runtime_live/llm_sidecar_provider_observation.rs)。
+- 核对日期与基线：2026-10-17；`6463975178f3d32ef6d8e19e14f0b24f1c7f9471`；13份合同/源码本地字节与该 SHA tree blob 一致；本轮只读审查，未执行业务测试或现场验收。
+- 剩余范围：只接收 R5 原观察一致性；不新增观察权限、不保证任意 surface 可读性或选择新的 DTO/表示模型。待核清 Viewer 与 Provider 共同采样身份和切点、正式 profile 的 fragment terrain/附近资源 remaining 与 chunk 摘要及其权威来源贯通、fallback/派生锚点不误标规则，并取得同候选真实消费者组合证据；不能把自资源或周期传输可靠性代签同快照资源观察。
 
 ## 4. 路线图
 
