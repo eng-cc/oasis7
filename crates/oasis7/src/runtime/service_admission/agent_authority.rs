@@ -89,7 +89,7 @@ pub fn validate_cognition_staged(
     if matches!(
         intent.action,
         crate::runtime::Action::WorldServiceIntent { .. }
-    ) || crate::consensus_action_payload::main_token_action_auth_required(&intent.action)
+    ) || oasis7_agent_api::world_action::main_token_action_auth_required(&intent.action)
     {
         return Err(
             "cognition cannot authorize nested service or main-token controller actions".into(),

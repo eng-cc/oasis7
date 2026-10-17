@@ -37,7 +37,7 @@ fn prefix(
                 delegation_generation: generation,
                 captured_base_binding: world.current_cognition_base_binding().unwrap(),
                 operation: SchedulerOperationV1::ProviderPrefix {
-                    request: context.clone(),
+                    request: crate::simulator::agent_api_compat::request_context_to_api(&context),
                     context_digest: oasis7_agent_api::h_v1("oasis7.cognition.context.v1", &logical)
                         .to_string(),
                 },

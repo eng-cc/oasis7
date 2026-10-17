@@ -5,7 +5,7 @@ pub use oasis7_client_api::world_service_wire::{
     SignedServiceResponse, VIEW_PATH,
 };
 pub type SchedulerOperationV1 = oasis7_client_api::world_service_wire::SchedulerOperationV1<
-    crate::simulator::ContinuousAgentRequestContextV1,
+    oasis7_agent_api::ContinuousAgentRequestContextV1,
     crate::runtime::CognitionLeaseRequestV1,
     crate::runtime::CognitionContinuationProposalV1,
     crate::runtime::ContinuationStatusV1,

@@ -496,7 +496,7 @@ impl RuntimeLlmSidecar {
             (
                 format!("prefix:{}", request.transport_attempt),
                 crate::world_service::wire::SchedulerOperationV1::ProviderPrefix {
-                    request: request.clone(),
+                    request: crate::simulator::agent_api_compat::request_context_to_api(request),
                     context_digest: async_support::runtime_provider_context_digest(request),
                 },
             )

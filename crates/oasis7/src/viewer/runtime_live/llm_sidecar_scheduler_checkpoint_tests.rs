@@ -190,7 +190,7 @@ fn new_prefix_checkpoint_binds_verified_post_reserve_view_and_replays_original()
     sidecar.provider_service_lineage_store_explicit = true;
     sidecar.provider_service_required = true;
     let operation = SchedulerOperationV1::ProviderPrefix {
-        request: request.clone(),
+        request: crate::simulator::agent_api_compat::request_context_to_api(&request),
         context_digest: async_support::runtime_provider_context_digest(&request),
     };
     let (original, existed) = sidecar
