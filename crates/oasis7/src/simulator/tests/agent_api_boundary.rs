@@ -244,3 +244,35 @@ fn transport_attempt_and_legacy_timeout_stay_outside_request_identity() {
         json!(6)
     );
 }
+
+#[test]
+fn scheduler_api_preserves_capability_digest_rejection_diagnostics() {
+    for catalog_mismatch in [true, false] {
+        let mut request = super::agent_cognition_identity::request_from_value(
+            super::agent_cognition_identity::production_request_fixture(1, 60_000),
+        );
+        if catalog_mismatch {
+            request.capability_catalog_digest = Digest32(format!("blake3:{}", "0".repeat(64)));
+        } else {
+            request.capability_invocation_context_digest =
+                Digest32(format!("blake3:{}", "0".repeat(64)));
+        }
+        request.request_digest = request.request_digest();
+        let api = super::super::agent_api_compat::request_context_to_api(&request);
+        let host_error = request
+            .validate_production_lane()
+            .expect_err("tampered digest");
+        let api_error = api.validate_production_lane().expect_err("tampered digest");
+        assert_eq!(host_error.code, "capability_context_digest_mismatch");
+        assert_eq!(
+            host_error.message,
+            if catalog_mismatch {
+                "capability catalog digest does not match the Runtime-bound snapshot"
+            } else {
+                "capability invocation context digest does not match the Runtime-bound context"
+            }
+        );
+        assert_eq!(api_error.code, host_error.code);
+        assert_eq!(api_error.message, host_error.message);
+    }
+}
