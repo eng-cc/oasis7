@@ -239,6 +239,11 @@ impl NativeCheckpointVerdictV1 {
                 record: parent.decision.record,
                 finalizing_authority_id: parent.decision.primary.body.finalizing_authority_id,
             })
+        } else if target.position == 1 {
+            // An imported checkpoint may retain this initial cut as its sealed
+            // base_parent. That archive boundary is not a canonical predecessor
+            // of the initial activation, which has no parent proof.
+            None
         } else {
             body.base_parent.clone()
         };
@@ -449,5 +454,112 @@ mod tests {
         fork.record_id = h(98);
         assert!(verify(&checkpoint, &fork, false).is_err());
         assert!(verify(&checkpoint, &commit.head(), true).is_err());
+    }
+    /// Recovery imports retain the sealed cut as checkpoint base_parent, but
+    /// that is an archive boundary, not the parent of the initial activation.
+    #[test]
+    fn imported_initial_cut_has_no_parent_despite_checkpoint_base_parent() {
+        let (certificate, authority, proof, commit) = initial();
+        let mut objects = std::collections::BTreeMap::new();
+        let mut put = |bytes: Vec<u8>| {
+            let id = blake3::hash(&bytes).to_hex().to_string();
+            objects.insert(id.clone(), bytes);
+            id
+        };
+        let entry = put(serde_cbor::to_vec(&Entry::Qualified { proof: &proof }).unwrap());
+        let node = NativeHistoryNodeV1 {
+            head: commit.head(),
+            request: proof.decision.record.request_digest.clone(),
+            entry,
+            ancestors: vec![],
+        };
+        let node = put(serde_cbor::to_vec(&node).unwrap());
+        let body = NativeHotBodyV1 {
+            version: 1,
+            instance_digest: authority.definition().primary.instance.digest().unwrap(),
+            authority_id: authority.authority_id().unwrap(),
+            activation_ref: authority.activation_ref().into(),
+            epoch: 1,
+            revision: 7,
+            head: commit.head(),
+            head_node: None,
+            imported_head_node: Some(node),
+            import_digest: Some(h(97)),
+            base_parent: Some(NativeCheckpointParentV1 {
+                record: commit.record().clone(),
+                finalizing_authority_id: commit.finalizing_authority_id().into(),
+            }),
+            index: None,
+            pending: None,
+            decision_head: None,
+            seal: None,
+            durable_set: None,
+        };
+        let bytes = serde_cbor::to_vec(&Signed {
+            body: &body,
+            signature: sign(crypto::bytes(DOMAIN, &body).unwrap(), 5),
+        })
+        .unwrap();
+        let checkpoint = fencing::EndpointCheckpointBindingV1 {
+            revision: 7,
+            commitment: blake3::hash(&bytes).to_hex().to_string(),
+            head: crate::controlled_authority::replicated_protocol::HeadAnchor {
+                position: commit.head().position,
+                decision_hash: commit.head().record_id,
+                qualified: true,
+            },
+        };
+        let statement = fencing::MonotonicProviderStatementV1 {
+            schema_version: 1,
+            capability: fencing::ProviderCapabilityV1::MonotonicExclusiveSignerStorageV1,
+            resource_binding: authority.policy().authorized_fencing_resource_bindings[0].clone(),
+            instance_digest: body.instance_digest.clone(),
+            checkpoint: checkpoint.clone(),
+            epoch_floor: 1,
+            seal_digest: None,
+        };
+        let provider = fencing::MonotonicProviderEvidenceV1 {
+            signature: fencing::sign(fencing::PROVIDER_DOMAIN, &statement, &key(3)).unwrap(),
+            statement,
+        };
+        let evidence = NativeCheckpointVerdictV1::verify(
+            &bytes,
+            &authority,
+            &public(5),
+            &checkpoint,
+            &provider,
+            &commit.head(),
+            &commit.head(),
+            &authority.authority_id().unwrap(),
+            |id| {
+                objects
+                    .get(id)
+                    .cloned()
+                    .ok_or_else(|| invalid("test missing imported object"))
+            },
+        )
+        .unwrap();
+        assert!(
+            evidence.verified_parent_record().is_none(),
+            "imported initial cut must not become its own historical parent"
+        );
+        assert!(evidence.verified_parent_finalizing_authority_id().is_none());
+        let restored =
+            restore_formal_commit_from_checkpoint(&proof, &authority, None, &evidence).unwrap();
+        assert_eq!(restored.record(), commit.record());
+        let trust = InitialActivationTrustV1 {
+            issuer_public_key: public(9),
+            world: authority.definition().world.clone(),
+            initial_state_root: certificate.body.initial_state_root.clone(),
+            governing_manifest_digest: certificate.body.governing_manifest_digest.clone(),
+            recovery_policy_digest: authority.policy().digest().unwrap(),
+        };
+        let trusted =
+            VerifiedFormalReadAnchorV1::from_initial(&certificate, &trust, &proof).unwrap();
+        let publication = VerifiedFormalReadAnchorV1::from_native_historical_service_restore(
+            &trusted, &evidence, &authority, &restored,
+        )
+        .unwrap();
+        assert_eq!(publication.checkpoint(), trusted.checkpoint());
     }
 }
