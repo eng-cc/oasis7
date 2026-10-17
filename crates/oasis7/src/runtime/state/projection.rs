@@ -7,6 +7,7 @@ use super::governance_identity_projection::{
 use super::module_admission_freeze::serialize_module_instance_projection;
 use super::module_release_transition::ReleaseMapProjection;
 use super::*;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
 /// Borrowed typed overlays preserving canonical serialization.
@@ -16,7 +17,7 @@ pub struct WorldStateProjection<'a> {
     body_overlay: Option<BodyOverlay>,
     command_overlay: Option<CommandStateOverlay<'a>>,
     module_visual_entities_overlay:
-        Option<&'a BTreeMap<String, oasis7_agent_api::world_entity::ModuleVisualEntity>>,
+        Option<&'a BTreeMap<String, ModuleVisualEntity>>,
     module_instance_overlay: Option<&'a module_instance_transition::PreparedModuleInstance>,
     module_release_overlay: Option<&'a module_release_transition::PreparedModuleRelease>,
     module_marketplace_overlay:
@@ -271,10 +272,7 @@ impl<'a> WorldStateProjection<'a> {
 
     pub(crate) fn with_module_visual_entities_overlay(
         mut self,
-        module_visual_entities: &'a BTreeMap<
-            String,
-            oasis7_agent_api::world_entity::ModuleVisualEntity,
-        >,
+        module_visual_entities: &'a BTreeMap<String, ModuleVisualEntity>,
     ) -> Self {
         self.module_visual_entities_overlay = Some(module_visual_entities);
         self
@@ -372,9 +370,7 @@ fn serialize_world_state<S>(
     state: &WorldState,
     body_overlay: Option<&BodyOverlay>,
     command_overlay: Option<&CommandStateOverlay<'_>>,
-    module_visual_entities_overlay: Option<
-        &BTreeMap<String, oasis7_agent_api::world_entity::ModuleVisualEntity>,
-    >,
+    module_visual_entities_overlay: Option<&BTreeMap<String, ModuleVisualEntity>>,
     module_instance_overlay: Option<&module_instance_transition::PreparedModuleInstance>,
     module_release_overlay: Option<&module_release_transition::PreparedModuleRelease>,
     module_marketplace_overlay: Option<&module_marketplace_transition::PreparedModuleMarketplace>,
