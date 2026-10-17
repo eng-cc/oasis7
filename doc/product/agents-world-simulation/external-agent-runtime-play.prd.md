@@ -381,11 +381,11 @@ Trace ID: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e
 
 - 功能点：[REQ-EXT-007](#req-ext-007)；适用范围沿本条原条件与 [AC-EXT-007](#ac-ext-007)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-liveness)已承接心跳过期、执行诊断及本机权限/停止边界；同文件需求承接/验证表反链本条AC。剩余：独立于GUI的持续执行设计与loop之间的精确承接仍须核对；adapter-liveness已覆盖心跳/本机权限与停止诊断。 不代表实现或发布。
+- 系统设计依据：[adapter结构与控制循环](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-loop)已明确独立worker、关闭Viewer不退出worker、控制/决策循环分离；[adapter-liveness](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-liveness)承接诊断时效、自有进程与本机权限边界。原“独立于GUI设计仍未核清”已缩小；各声明viewer/pure_api入口的观战、执行、委托及结果四层状态生产到消费的完整承接仍待逐项核对，不据此提升设计状态。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：独立于GUI的持续执行设计与loop之间的精确承接仍须核对；adapter-liveness已覆盖心跳/本机权限与停止诊断。；实现/验证：完整适用入口与验收尚未闭合。
+- 实现与验证依据：[真实启动者](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_model_client/execution.rs#L85-L136)将SessionModelProvider交给后台NativeTaskRunner；[页面续期](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx#L116-L134)与[服务端过期/资格重验](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_model_provider/src/connection.rs#L604-L636)说明这是第一方BYOK会话执行切片，不能用线程不随HTTP返回退出证明外部Runtime独立委托。已核清native的ownership、预算、fence及停止原因，但OpenClaw/Codex实际driver、observer断连后的持续执行与分层反馈生产链仍未核清；本轮仅静态审读，未执行AC-EXT-007。
+- 核对日期与基线：2026-10-17；本条需求、设计及本轮新增静态源码固定`bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5`；只读GitHub与本地文本。历史native prepared-world记录仍限定其原候选/入口，不作为本候选观战断连或Runtime停止验收；未调用外部Runtime、模型、浏览器、部署或用户电脑。
+- 剩余范围：核清每个声明外部Runtime/profile的启动者与进程所有者、独立委托及预算续存条件、observer连接关闭/重连与executor控制的实际关系、心跳生产/过期诊断和四层状态在viewer/pure_api的消费者；分别取得断开观战仍产生真实后果、停止/失权阻止新决策或受限提交而世界推进与既有行动仍可查的同案证据。BYOK会话到期是资格边界，不能误报为外部Runtime缺陷或已证明独立执行；全部实现义务仍未闭合。
 
 - 要求：无 GUI 的 Runtime 执行路径必须可用；关闭或断开观战界面时，只要 Runtime、所需连接、预算和独立委托仍有效，任务应继续。Runtime 停止或执行资格失效时必须如实表达，不能承诺继续产生新决策，也不能暂停世界或伪造既有行动取消。
 - 理由：用户能够离开界面，并准确理解持续运行所需条件。

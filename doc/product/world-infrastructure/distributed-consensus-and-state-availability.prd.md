@@ -226,10 +226,10 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 - 适用范围：本条要求及对应 AC-DCS-005，保留原文入口、前置条件及测试层级。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[p2p 承接条款](../../p2p/design.md#des-p2p-target-service-gate)；服务闸门已有目标设计；结构化附件、正向续跑、同窗口故障与消费者完整范围仍须核对。
-- 实现状态：未核实
-- 实现与验证依据：正式读面有 root/world/governing 绑定与独立 light-path 复验；它只定位到可信读取子机制。 [crates/oasis7/src/world_service/formal_read_service.rs L20-L49](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_service.rs#L20-L49)；[doc/p2p/design.md L24-L56](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/p2p/design.md#L24-L56)。测试定义：[crates/oasis7/src/world_service/formal_read_adapter_tests.rs L11-L74](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_adapter_tests.rs#L11-L74)。[相关历史交付/跟踪 #4838](https://github.com/nil-studio/oasis7/issues/4838)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
-- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
-- 剩余范围：设计方面，服务闸门已有目标设计；结构化附件、正向续跑、同窗口故障与消费者完整范围仍须核对；本轮实现与验证细化：四种可用性等级转换、非 serving 新 intent receipt=0、恢复后合法新配方正向完成、三类消费者 blocker/next-step 及 DC-5 同候选结构化附件未核清，不能仅从 read proof 升级状态。
+- 实现状态：部分实现
+- 实现与验证依据：formal HTTP 准入在 ready=false 时于入队前拒绝，degraded 仅保留最后 qualified CommitRef 的精确只读；writer 经正式 proof 校验后才推进并发布 cut。 [准入与只读](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/formal_live_service.rs#L594-L634)、[准入](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/formal_live_service.rs#L784-L861)、[提交发布](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/formal_writer.rs#L965-L1081)。 [C06 定义](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/formal_live_protected_availability_tests.rs#L38-L226)覆盖副本失联、原 GameTaskCreate 恢复及重试同结果；测试 ignored、本轮未运行，不是 full 或合法新配方通过；本轮未核清这些实现的精确交付 PR/Task，[#4838](https://github.com/nil-studio/oasis7/issues/4838) 仅承接剩余恢复验收。
+- 核对日期与基线：2026-10-17；需求与实现语义均读取基线 `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5`；仅核源码和测试定义，未运行；验收原文及测试层级不变。
+- 剩余范围：设计方面，服务闸门已有目标设计；结构化附件、正向续跑、同窗口故障与消费者完整范围仍须核对。 实现与验证：四级转换与证明冲突隔离、全部非 serving 等级及跨入口逐 intent receipt=0、恢复 pending 当前条件/期限/优先级重审、新请求与模块行动不中断对照和合法新配方、三消费者 blocker/next-step 与 DC-5 同候选结构化附件及 test_tier_full 执行仍未核实。ready/503、旧 cut 可读或 C06 定义均不代签完整合同。
 
 只有“已验证可服务”同时满足 `world_id`、checkpoint/head、hash-bound 状态、finality/追加条件、manifest compatibility 和单调 head continuity 时，消费者才可提交新的权威 intent；其他等级必须保持只读、无效果待决或不可用/隔离，并说明 blocker 与下一步。
 
