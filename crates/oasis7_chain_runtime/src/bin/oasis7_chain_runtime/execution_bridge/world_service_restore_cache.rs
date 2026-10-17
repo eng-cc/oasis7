@@ -55,7 +55,7 @@ pub(super) fn restore(
     restore_with(
         cache,
         Key::from_bytes(snapshot_bytes, journal_bytes),
-        || World::from_snapshot(snapshot, journal),
+        || oasis7::runtime_host::world::from_snapshot(snapshot, journal),
     )
 }
 

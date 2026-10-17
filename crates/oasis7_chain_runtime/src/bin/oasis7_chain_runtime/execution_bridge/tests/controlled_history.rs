@@ -76,7 +76,7 @@ fn controlled_history_rejects_decodable_service_envelopes_without_dropping_them(
     let legacy = context(1, 1);
     let original = capture::supported_origin(&legacy).unwrap();
     assert_eq!(original.submission.auth_nonce, 1);
-    let world = RuntimeWorld::new();
+    let world = oasis7::runtime_host::world::new();
     capture::prepare(&world, &legacy).unwrap();
     let signed = sign_read_request(
         "scheduler",
@@ -256,7 +256,7 @@ fn module_world() -> RuntimeWorld {
             max_emits: 16,
         },
     };
-    let mut world = RuntimeWorld::new();
+    let mut world = oasis7::runtime_host::world::new();
     world
         .bind_node_identity(
             TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
@@ -318,8 +318,11 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
         "original-bootstrap-config",
         "original-bootstrap-generator",
     );
-    let world =
-        RuntimeWorld::from_snapshot(cached_snapshot, original_world.journal().clone()).unwrap();
+    let world = oasis7::runtime_host::world::from_snapshot(
+        cached_snapshot,
+        original_world.journal().clone(),
+    )
+    .unwrap();
     let initial_height = world.state().time;
     let initial_root = execution_world_snapshot_root(&world).unwrap();
     let store = LocalCasStore::new(dir.join("store"));
@@ -441,7 +444,8 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
     let pre_snapshot = capture::decode_snapshot(&first_preparation.before_snapshot).unwrap();
     let pre_journal: oasis7::runtime::Journal =
         capture::decode_generic(&first_preparation.before_journal).unwrap();
-    let pre_world = RuntimeWorld::from_snapshot(pre_snapshot, pre_journal.clone()).unwrap();
+    let pre_world =
+        oasis7::runtime_host::world::from_snapshot(pre_snapshot, pre_journal.clone()).unwrap();
     let resource_commit =
         super::super::execution_hash::execution_resource_commit_hash("w1", initial_height);
     let resource_hash = super::super::execution_hash::execution_resource_context_hash("w1");
@@ -831,7 +835,7 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
 #[cfg(feature = "wasmtime")]
 fn controlled_history_first_intent_write_retains_original_preparation_on_reopen() {
     let dir = temp_dir("controlled-history-marker-first");
-    let world = RuntimeWorld::new();
+    let world = oasis7::runtime_host::world::new();
     let before = to_cbor(world.snapshot()).unwrap();
     let ctx = context(1, 1);
     let preparation = capture::prepare(&world, &ctx).unwrap();

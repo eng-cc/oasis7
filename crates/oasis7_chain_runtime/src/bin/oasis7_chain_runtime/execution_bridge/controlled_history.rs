@@ -8,8 +8,7 @@ use super::execution_hash::{
 };
 use super::{ExecutionExternalEffectMaterialization, to_cbor};
 use oasis7::runtime::{
-    ChainResourceDerivationContext, Journal, RuntimeCommittedTickContext, Snapshot, World,
-    blake3_hex,
+    ChainResourceDerivationContext, Journal, RuntimeCommittedTickContext, Snapshot, blake3_hex,
 };
 use oasis7_distfs::controlled_authority::{
     LocalRequestIdentity,
@@ -259,7 +258,7 @@ fn validate_published_initial_anchor(
     }
     // Validate the published diagnostic context exactly as the existing driver
     // constructed it; it is never interpreted as a formal genesis identity.
-    let world = World::from_snapshot(snapshot.clone(), journal.clone())
+    let world = oasis7::runtime_host::world::from_snapshot(snapshot.clone(), journal.clone())
         .map_err(|e| format!("published anchor restore: {e:?}"))?;
     let commit = execution_resource_commit_hash(&record.world_id, record.height);
     let resource_hash = execution_resource_context_hash(&record.world_id);
@@ -311,7 +310,7 @@ fn reexecute(
     }
     let before: Snapshot = capture::decode_snapshot(&preparation.before_snapshot)?;
     let journal: Journal = capture::decode_generic(&preparation.before_journal)?;
-    let mut world = World::from_snapshot(before, journal)
+    let mut world = oasis7::runtime_host::world::from_snapshot(before, journal)
         .map_err(|e| format!("world restore: {e:?}"))?
         .with_release_security_policy(preparation.release_security_policy.clone());
     let context = &preparation.context;

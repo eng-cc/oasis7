@@ -141,7 +141,7 @@ pub(super) fn validate_snapshot_continuity(
 ) -> Result<(), String> {
     use oasis7::runtime::ChainResourceDerivationContext;
     use sha2::{Digest, Sha256};
-    let world = World::from_snapshot(post.clone(), journal)
+    let world = oasis7::runtime_host::world::from_snapshot(post.clone(), journal)
         .map_err(|e| format!("prefix restore: {e:?}"))?;
     let incoming = decode_snapshot(&next.before_snapshot)?;
     let manifest_hash = hex::encode(Sha256::digest(
@@ -261,8 +261,11 @@ pub(super) fn build(
     let after: Snapshot = decode_snapshot(snapshot_bytes)?;
     // Validate both historical byte sets using the existing restore contract,
     // including inline module SHA256 and journal-prefix commitments.
-    World::from_snapshot(after.clone(), decode_generic::<Journal>(journal_bytes)?)
-        .map_err(|e| format!("invalid post-execution world: {e:?}"))?;
+    oasis7::runtime_host::world::from_snapshot(
+        after.clone(),
+        decode_generic::<Journal>(journal_bytes)?,
+    )
+    .map_err(|e| format!("invalid post-execution world: {e:?}"))?;
     if before.state.time.saturating_add(1) != preparation.context.height
         || after.state.time != preparation.context.height
         || record.height != preparation.context.height
@@ -272,7 +275,7 @@ pub(super) fn build(
     {
         return Err("capture state/context binding mismatch".into());
     }
-    let before_world = World::from_snapshot(
+    let before_world = oasis7::runtime_host::world::from_snapshot(
         before.clone(),
         decode_generic::<Journal>(&preparation.before_journal)?,
     )

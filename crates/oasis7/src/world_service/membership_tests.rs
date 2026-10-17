@@ -1,5 +1,5 @@
 use super::*;
-use crate::runtime::{GovernanceValidatorAdmissionRecord, World, WorldState};
+use crate::runtime::{GovernanceValidatorAdmissionRecord, WorldState};
 
 fn fixture() -> (ReadMembershipRequest, ReadMembershipResponse) {
     let mut state = WorldState {
@@ -30,7 +30,7 @@ fn fixture() -> (ReadMembershipRequest, ReadMembershipResponse) {
             ..Default::default()
         },
     );
-    let mut world = World::new_with_state(state);
+    let mut world = crate::runtime_host::world::new_with_state(state);
     world
         .bind_cognition_runtime("world", "main", 0, None, "pending", 0)
         .unwrap();

@@ -41,7 +41,7 @@ impl VerifiedRuntimeHead {
         &self,
         policy: &oasis7::runtime::ReleaseSecurityPolicy,
     ) -> Result<World, String> {
-        World::from_snapshot(self.snapshot.clone(), self.journal.clone())
+        oasis7::runtime_host::world::from_snapshot(self.snapshot.clone(), self.journal.clone())
             .map(|w| w.with_release_security_policy(policy.clone()))
             .map_err(|e| format!("verified controlled world restore: {e:?}"))
     }

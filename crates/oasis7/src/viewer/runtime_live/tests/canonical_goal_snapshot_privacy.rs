@@ -24,7 +24,7 @@ fn observer_fixture() -> (PathBuf, RuntimeWorld, String, serde_json::Value) {
     let public = sign_read_request("fixture", (), &private)
         .unwrap()
         .subject_public_key;
-    let mut world = RuntimeWorld::new_with_state(WorldState::default());
+    let mut world = crate::runtime_host::world::new_with_state(WorldState::default());
     world.submit_action(RuntimeAction::RegisterAgent {
         agent_id: "owner-agent".into(),
         pos: crate::GeoPos::new(0, 0, 0),

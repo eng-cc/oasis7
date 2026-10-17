@@ -266,9 +266,10 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
         restarted_readiness.candidate_state_root, blocked_receipt.target_state_root,
         "persisted all-clear evidence records the observed candidate root"
     );
-    let restored = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
-        .expect("load generation")
-        .expect("persisted generation");
+    let restored =
+        crate::runtime_host::world::load_authoritative_recovery_generation(&recovery_dir)
+            .expect("load generation")
+            .expect("persisted generation");
     let generation: RuntimeAuthoritativeRecoveryGeneration =
         serde_json::from_slice(&restored.recovery_metadata).expect("decode generation");
     let mut restarted_server =
@@ -554,9 +555,10 @@ fn durable_receipt_does_not_fabricate_player_compensation_for_system_events() {
     assert!(classified.player_id.is_none());
     assert!(classified.compensation.is_none());
 
-    let restored_generation = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
-        .expect("load generation")
-        .expect("committed recovery generation");
+    let restored_generation =
+        crate::runtime_host::world::load_authoritative_recovery_generation(&recovery_dir)
+            .expect("load generation")
+            .expect("committed recovery generation");
     let generation: RuntimeAuthoritativeRecoveryGeneration =
         serde_json::from_slice(&restored_generation.recovery_metadata)
             .expect("decode recovery generation");
@@ -937,9 +939,10 @@ fn authorized_rejected_compensation_transition_survives_restart() {
             .ready_for_all_clear,
         "GetRollbackReceipt must preserve Reevaluate readiness for rejected terminal cases"
     );
-    let restored = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
-        .expect("load generation")
-        .expect("durable generation");
+    let restored =
+        crate::runtime_host::world::load_authoritative_recovery_generation(&recovery_dir)
+            .expect("load generation")
+            .expect("durable generation");
     let restored_generation: RuntimeAuthoritativeRecoveryGeneration =
         serde_json::from_slice(&restored.recovery_metadata).expect("decode generation");
     let mut restarted =

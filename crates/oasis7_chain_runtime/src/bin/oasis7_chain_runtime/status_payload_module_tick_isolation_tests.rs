@@ -1,10 +1,12 @@
 use super::super::execution_bridge;
-use super::{World, build_minimal_status_payload_with_world_dir, fs, temp_dir};
+use super::{build_minimal_status_payload_with_world_dir, fs, temp_dir};
 
 #[test]
 fn persisted_module_tick_status_is_isolated_from_parallel_test_live_metrics() {
     let dir = temp_dir("module-routing-parallel-test-isolation");
-    World::new().save_to_dir(&dir).expect("save healthy world");
+    oasis7::runtime_host::world::new()
+        .save_to_dir(&dir)
+        .expect("save healthy world");
     let published = std::sync::Barrier::new(2);
     let reader_finished = std::sync::Barrier::new(2);
 

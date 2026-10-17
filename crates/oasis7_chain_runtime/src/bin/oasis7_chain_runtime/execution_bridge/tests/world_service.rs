@@ -39,7 +39,7 @@ fn request(
 }
 
 pub(crate) fn live_fixture_world(world_id: &str, public: &str) -> RuntimeWorld {
-    let mut world = RuntimeWorld::new_with_state(WorldState::default());
+    let mut world = oasis7::runtime_host::world::new_with_state(WorldState::default());
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-a".into(),
         pos: oasis7::GeoPos::new(0, 0, 0),
@@ -388,7 +388,7 @@ fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() 
         committed_actions: vec![committed.clone()],
         committed_at_unix_ms: 3000,
     };
-    let mut world = RuntimeWorld::new();
+    let mut world = oasis7::runtime_host::world::new();
     for index in 0..4 {
         world.submit_action(Action::RegisterAgent {
             agent_id: format!("queued-{index}"),
@@ -425,7 +425,7 @@ fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() 
     assert_eq!(snapshot.pending_actions[4].action, action);
     let dir = temp_dir("service-recipe-origin");
     world.save_to_dir(&dir).unwrap();
-    let restored = RuntimeWorld::load_from_dir(&dir).unwrap();
+    let restored = oasis7::runtime_host::world::load_from_dir(&dir).unwrap();
     assert_eq!(
         restored.snapshot().pending_actions[4].committed_recipe_origin,
         Some(origin)

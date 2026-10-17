@@ -340,7 +340,7 @@ impl Drop for EnvVarGuard {
 
 #[test]
 fn deploy_module_artifact_action_registers_artifact_bytes() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     let wasm_bytes = b"module-action-loop-deploy".to_vec();
@@ -376,7 +376,7 @@ fn deploy_module_artifact_action_registers_artifact_bytes() {
 
 #[test]
 fn deploy_module_artifact_action_rejects_hash_mismatch() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     let action_id = world.submit_action(Action::DeployModuleArtifact {
@@ -409,7 +409,7 @@ fn compile_module_artifact_from_source_registers_compiled_artifact() {
         oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -473,7 +473,7 @@ fn compile_module_artifact_from_source_rejects_removed_old_brand_compiler_env() 
         );
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -518,7 +518,7 @@ fn compile_module_artifact_from_source_rejects_in_production_release_policy() {
         oasis7::env_mut::remove_var(removed_old_brand_compiler.as_str());
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     world.enable_production_release_policy();
     register_agent(&mut world, "publisher-1");
 
@@ -542,7 +542,7 @@ fn compile_module_artifact_from_source_rejects_in_production_release_policy() {
 
 #[test]
 fn compile_module_artifact_from_source_rejects_when_manifest_path_missing_in_files() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     let action_id = world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -576,7 +576,7 @@ fn compile_module_artifact_from_source_rejects_when_file_count_exceeds_limit() {
         oasis7::env_mut::remove_var(removed_old_brand_max_files.as_str());
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     let action_id = world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -618,7 +618,7 @@ fn compile_module_artifact_from_source_rejects_when_compiler_times_out() {
         oasis7::env_mut::set_var(SOURCE_COMPILE_TIMEOUT_MS_ENV, "20");
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     let action_id = world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -664,7 +664,7 @@ fn compile_module_artifact_from_source_sanitizes_env_and_isolates_tmpdir() {
         oasis7::env_mut::set_var(SOURCE_SANDBOX_SECRET_ENV, "must-not-leak");
     }
 
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "publisher-1");
 
     world.submit_action(Action::CompileModuleArtifactFromSource {
@@ -690,7 +690,7 @@ fn compile_module_artifact_from_source_sanitizes_env_and_isolates_tmpdir() {
 
 #[test]
 fn install_module_from_artifact_action_runs_governance_closure() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let wasm_bytes = b"module-action-loop-install".to_vec();
@@ -755,7 +755,7 @@ fn install_module_from_artifact_action_runs_governance_closure() {
 
 #[test]
 fn install_module_to_target_from_artifact_action_emits_target() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let wasm_bytes = b"module-action-loop-install-target".to_vec();
@@ -798,7 +798,7 @@ fn install_module_to_target_from_artifact_action_emits_target() {
 
 #[test]
 fn install_module_from_artifact_action_without_activate_keeps_module_inactive() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let wasm_bytes = b"module-action-loop-install-inactive".to_vec();
@@ -840,7 +840,7 @@ fn install_module_from_artifact_action_without_activate_keeps_module_inactive() 
 
 #[test]
 fn install_module_from_artifact_action_rejects_missing_artifact() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let action_id = world.submit_action(Action::InstallModuleFromArtifact {
@@ -857,7 +857,7 @@ fn install_module_from_artifact_action_rejects_missing_artifact() {
 
 #[test]
 fn upgrade_module_from_artifact_action_updates_instance_and_emits_audit_event() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let wasm_v1_bytes = b"module-action-loop-upgrade-v1".to_vec();
@@ -973,7 +973,7 @@ fn upgrade_module_from_artifact_action_updates_instance_and_emits_audit_event() 
 
 #[test]
 fn upgrade_module_from_artifact_rejects_incompatible_interface() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     register_agent(&mut world, "installer-1");
 
     let wasm_v1_bytes = b"module-action-loop-upgrade-guard-v1".to_vec();
@@ -1074,7 +1074,7 @@ fn runtime_source_compiler_is_process_local_and_policy_gated() {
     }
     let calls = Arc::new(AtomicUsize::new(0));
     for production in [false, true] {
-        let mut world = World::new();
+        let mut world = crate::runtime_host::world::new();
         register_agent(&mut world, "publisher-1");
         if production { world.set_release_security_policy(ReleaseSecurityPolicy::production_hardened()); }
         world.set_module_source_compiler(Arc::new(Compiler(calls.clone())));

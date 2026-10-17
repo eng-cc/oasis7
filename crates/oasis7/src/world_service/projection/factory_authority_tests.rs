@@ -54,7 +54,7 @@ fn construction_projection_scopes_authorities_and_preserves_public_anchor_regist
             }
         })).unwrap());
     }
-    let world = World::new_with_state(state);
+    let world = crate::runtime_host::world::new_with_state(state);
     let before = serde_json::to_value(world.snapshot()).unwrap();
     let scoped = WorldServiceProjection::from_world(&world, Some("agent-a")).unwrap();
     assert_eq!(scoped.state.agent_location_authorities.len(), 1);

@@ -95,7 +95,7 @@ mod tests {
                 0,
             ),
         );
-        server.world = RuntimeWorld::new_with_state(state);
+        server.world = crate::runtime_host::world::new_with_state(state);
         let world = WorldIdentity {
             world_id: "view-world".into(),
             genesis_digest: "genesis".into(),
@@ -202,7 +202,7 @@ mod tests {
         let mut server = fixture();
         let mut changed = server.world.state().clone();
         changed.agents.get_mut("a").unwrap().state.pos.x_cm += 1;
-        server.world = RuntimeWorld::new_with_state(changed);
+        server.world = crate::runtime_host::world::new_with_state(changed);
         assert!(!server.world_view_source_authority("alice").current());
         let mut server = fixture();
         server

@@ -93,7 +93,7 @@ fn outcome() -> FormalBusinessOutcomeLeafV1 {
 }
 
 fn delegated_world(delegate_key: u8, generation: u64) -> World {
-    let mut seed = World::new();
+    let mut seed = crate::runtime_host::world::new();
     seed.submit_action(crate::runtime::Action::RegisterAgent {
         agent_id: "agent-7".into(),
         pos: crate::geometry::GeoPos {
@@ -113,7 +113,7 @@ fn delegated_world(delegate_key: u8, generation: u64) -> World {
         "source_treasury_bucket_id": null,
     });
     let state = serde_json::from_value(state).unwrap();
-    let mut world = World::new_with_state(state);
+    let mut world = crate::runtime_host::world::new_with_state(state);
     world
         .bind_cognition_runtime("world", "main", 0, None, "pending", 0)
         .unwrap();
@@ -256,7 +256,7 @@ fn changes_context(
         canonical_agent_chat: None,
         game_task_control: None,
         feedback_history: None,
-        state: World::new().state().clone(),
+        state: crate::runtime_host::world::new().state().clone(),
         events: vec![event(12), event(25)],
         runtime_binding: None,
         agent_context: None,
@@ -468,12 +468,12 @@ fn gameplay_result_scope_is_private_to_the_target_agent_and_unknown_payloads_fai
     };
     let payload = WorldServicePayloadV1::GameplayJson(serde_json::to_vec(&request).unwrap());
     assert_eq!(
-        outcome_agent_id(&World::new(), &payload).unwrap(),
+        outcome_agent_id(&crate::runtime_host::world::new(), &payload).unwrap(),
         "agent-private"
     );
     assert!(
         outcome_agent_id(
-            &World::new(),
+            &crate::runtime_host::world::new(),
             &WorldServicePayloadV1::GameplayJson(vec![1, 2, 3])
         )
         .is_err()

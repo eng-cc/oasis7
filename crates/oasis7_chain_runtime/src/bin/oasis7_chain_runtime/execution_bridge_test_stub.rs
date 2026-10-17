@@ -78,9 +78,9 @@ pub(super) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(RuntimeWorld::new_production_hardened());
+        return Ok(oasis7::runtime_host::world::new_production_hardened());
     }
-    RuntimeWorld::load_from_dir(world_dir)
+    oasis7::runtime_host::world::load_from_dir(world_dir)
         .map_err(|err| {
             format!(
                 "load execution world from {} failed: {:?}",

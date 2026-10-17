@@ -247,7 +247,7 @@ fn full_sync_fixture() -> (
     ClosedRecord,
     FormalQualifiedCommitProofV1,
 ) {
-    let mut world = World::new_production_hardened()
+    let mut world = oasis7::runtime_host::world::new_production_hardened()
         .try_with_cognition_scheduler(
             oasis7::runtime::SchedulerPolicyV1 {
                 schema_version: oasis7::runtime::SchedulerPolicyV1::SCHEMA_VERSION.into(),
@@ -280,7 +280,7 @@ fn full_sync_fixture() -> (
         test_hash(10),
         test_hash(11),
     );
-    world = World::from_snapshot(snapshot, world.journal().clone()).unwrap();
+    world = oasis7::runtime_host::world::from_snapshot(snapshot, world.journal().clone()).unwrap();
     let snapshot = world.snapshot();
     let snapshot_bytes = serde_cbor::to_vec(&snapshot).unwrap();
     let journal_bytes = serde_cbor::to_vec(world.journal()).unwrap();

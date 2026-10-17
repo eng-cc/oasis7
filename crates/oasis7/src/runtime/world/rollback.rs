@@ -747,6 +747,7 @@ impl World {
         let mut consumed_nonces = self.consumed_rollback_nonces.clone();
         consumed_nonces.insert(approval.intent.nonce.clone());
         let mut world = Self::from_snapshot(snapshot.clone(), journal)?;
+        world.source_compiler = self.source_compiler.clone();
         world.receipt_signer = signer;
         world.rollback_authority_registry = authority_registry;
         world.consumed_rollback_nonces = consumed_nonces;

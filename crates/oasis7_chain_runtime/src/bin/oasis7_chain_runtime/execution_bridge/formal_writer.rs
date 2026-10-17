@@ -180,7 +180,7 @@ fn restore(
         .map_err(|e| e.to_string())?;
     let snapshot: Snapshot = capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?;
     let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
-    let world = World::from_snapshot(snapshot, journal)
+    let world = oasis7::runtime_host::world::from_snapshot(snapshot, journal)
         .map_err(|e| format!("{e:?}"))?
         .with_release_security_policy(release.clone());
     if blake3_hex(&to_cbor(world.snapshot())?) != candidate.candidate.record.after_state_root {
@@ -215,9 +215,11 @@ fn restore_qualified(
     }
     let bytes = to_cbor(&snapshot)?;
     let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
-    let world = World::from_verified_formal_snapshot(snapshot, journal, parent, reader)
-        .map_err(|e| format!("{e:?}"))?
-        .with_release_security_policy(release.clone());
+    let world = oasis7::runtime_host::world::from_verified_formal_snapshot(
+        snapshot, journal, parent, reader,
+    )
+    .map_err(|e| format!("{e:?}"))?
+    .with_release_security_policy(release.clone());
     super::formal_business_package::tree(
         &candidate.material,
         &candidate.candidate.record,

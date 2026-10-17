@@ -1,8 +1,6 @@
 //! Regression for checkpoint boundaries in one-shot formal executor attempts.
 use super::*;
-use oasis7::runtime::{
-    ReleaseSecurityPolicy, VerifiedFormalRetainedHistoryParentV1, World, blake3_hex,
-};
+use oasis7::runtime::{ReleaseSecurityPolicy, VerifiedFormalRetainedHistoryParentV1, blake3_hex};
 use oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader;
 use std::{
     collections::BTreeMap,
@@ -132,7 +130,7 @@ fn formal_profile2_checkpoint_boundary_case() {
     let retained_parent =
         VerifiedFormalRetainedHistoryParentV1::verify(&parent, &to_cbor(&snapshot).unwrap())
             .unwrap();
-    let world = World::from_verified_formal_snapshot(
+    let world = oasis7::runtime_host::world::from_verified_formal_snapshot(
         snapshot,
         world.journal().clone(),
         retained_parent,

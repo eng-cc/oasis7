@@ -5,7 +5,7 @@ use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
 use oasis7::geometry::GeoPos;
-use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
+use oasis7::runtime::{Action, ChainResourceDerivationContext};
 use oasis7_node::{
     NodeConfig, NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
     NodeReplicatedExecutionInputV1, NodeRole, NodeRuntime,
@@ -16,7 +16,7 @@ use oasis7_node::{
 fn provider_bootstrap_fixture(
     world_dir: &std::path::Path,
 ) -> oasis7::runtime::ProviderBackedBootstrapAuthorityV1 {
-    let mut world = RuntimeWorld::new();
+    let mut world = oasis7::runtime_host::world::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-a".to_string(),
         pos: GeoPos::new(0, 0, 0),
@@ -179,7 +179,7 @@ fn provider_bootstrap_preflight_reconciles_record_ahead_of_world_cache() {
     // its existing finality authority can be reused for agent-b. The regular
     // fixture installer intentionally rejects replacing an immutable
     // authority record, which is exactly what the production state must do.
-    let mut authoritative_fixture = RuntimeWorld::new();
+    let mut authoritative_fixture = oasis7::runtime_host::world::new();
     authoritative_fixture.submit_action(Action::RegisterAgent {
         agent_id: "agent-b".to_string(),
         pos: GeoPos::new(1, 1, 0),

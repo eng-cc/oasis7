@@ -105,7 +105,7 @@ pub(crate) fn verify_archived_initial_publication(
     {
         return Err("pinned proof does not bind execution record and CAS refs".into());
     }
-    let world = World::from_snapshot(snapshot, journal)
+    let world = oasis7::runtime_host::world::from_snapshot(snapshot, journal)
         .map_err(|_| "pinned world snapshot could not be restored")?;
     let binding = world
         .current_cognition_runtime_binding()

@@ -3,7 +3,7 @@ use crate::runtime::{Action, AgentDelegationGrantV1};
 
 #[test]
 fn native_grant_projection_is_agent_scoped_and_absent_from_generic_reads() {
-    let mut world = World::new();
+    let mut world = crate::runtime_host::world::new();
     let public = super::super::authority::sign_read_request("fixture", (), &"71".repeat(32))
         .unwrap()
         .subject_public_key;
@@ -26,7 +26,7 @@ fn native_grant_projection_is_agent_scoped_and_absent_from_generic_reads() {
             .unwrap(),
         );
     }
-    let mut world = World::new_with_state(state);
+    let mut world = crate::runtime_host::world::new_with_state(state);
     for agent in ["agent-a", "agent-b"] {
         world
             .install_capability_agent_identity(agent, "owner", 1)

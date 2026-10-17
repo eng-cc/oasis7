@@ -351,10 +351,10 @@ fn validate_transition_inner(
         None
     } else {
         Some((
-            World::from_snapshot(before.clone(), before_journal.clone())
+            oasis7::runtime_host::world::from_snapshot(before.clone(), before_journal.clone())
                 .map_err(|e| format!("live predecessor restore: {e:?}"))?
                 .with_release_security_policy(release_policy.clone()),
-            World::from_snapshot(after.clone(), after_journal.clone())
+            oasis7::runtime_host::world::from_snapshot(after.clone(), after_journal.clone())
                 .map_err(|e| format!("live candidate restore: {e:?}"))?,
         ))
     };

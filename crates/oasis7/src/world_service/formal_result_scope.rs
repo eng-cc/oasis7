@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn formal_first_agent_receipt_is_readable_only_by_its_original_sender_without_owner_grant() {
         let request = request(crate::viewer::ACTION_CLAIM_FIRST_AGENT);
-        let world = World::new();
+        let world = crate::runtime_host::world::new();
         let result = CanonicalIntentResultV1 {
             request: request.clone(),
             action_id: 1,
@@ -94,7 +94,7 @@ mod tests {
     fn formal_ordinary_gameplay_results_keep_current_agent_authorization() {
         let request = request(crate::viewer::ACTION_CLAIM_STARTER_OC);
         assert_eq!(
-            for_request(&World::new(), &request).unwrap(),
+            for_request(&crate::runtime_host::world::new(), &request).unwrap(),
             format!("agent:{}", crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
         );
     }

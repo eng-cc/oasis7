@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn local_runtime_recovery_uses_world_authority_projection_before_dispatch() {
-        let mut world = RuntimeWorld::new();
+        let mut world = crate::runtime_host::world::new();
         let feedback = feedback("agent-a", "session-a", 2, "feedback-gap");
         world
             .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(

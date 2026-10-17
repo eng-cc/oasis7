@@ -602,7 +602,6 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use oasis7::node_points_observation::measure_directory_storage_bytes;
-    use oasis7::runtime::World as RuntimeWorld;
     use oasis7_proto::storage_profile::StorageProfile;
 
     use super::super::{
@@ -864,7 +863,7 @@ mod tests {
         fs::create_dir_all(paths.execution_world_dir.as_path())
             .expect("create execution world dir");
 
-        let world = RuntimeWorld::new();
+        let world = oasis7::runtime_host::world::new();
         world
             .save_to_dir(paths.execution_world_dir.as_path())
             .expect("initial save should succeed");

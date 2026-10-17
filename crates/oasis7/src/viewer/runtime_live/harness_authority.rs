@@ -433,7 +433,7 @@ mod world_readback_tests {
 
     #[test]
     fn runtime_world_authority_verifies_durable_receipt_and_response_before_minting_handle() {
-        let mut world = RuntimeWorld::new();
+        let mut world = crate::runtime_host::world::new();
         world
             .bind_cognition_runtime("world-readback", "main", 0, None, "pending", 0)
             .expect("bind Runtime World");
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn runtime_history_projects_ack_state_from_durable_outbox() {
-        let mut world = RuntimeWorld::new();
+        let mut world = crate::runtime_host::world::new();
         let acked = rejected_feedback("agent-a", "session-a", 1);
         let pending = rejected_feedback("agent-a", "session-a", 2);
         world
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn history_rejects_a_forged_durable_envelope_digest() {
-        let mut world = RuntimeWorld::new();
+        let mut world = crate::runtime_host::world::new();
         let feedback = rejected_feedback("agent-a", "session-a", 1);
         let mut forged = record(&feedback, "acked");
         forged.envelope_digest = format!("blake3:{}", "b".repeat(64));

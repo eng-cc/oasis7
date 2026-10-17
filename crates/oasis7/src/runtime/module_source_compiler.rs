@@ -12,10 +12,7 @@ impl std::fmt::Debug for RuntimeSourceCompiler {
 }
 impl Default for RuntimeSourceCompiler {
     fn default() -> Self {
-        // Existing host assembly; moved to the host when Runtime is extracted.
-        Self(Arc::new(
-            crate::module_source_compiler::HostModuleSourceCompiler,
-        ))
+        Self(Arc::new(UnavailableCompiler))
     }
 }
 impl RuntimeSourceCompiler {
@@ -41,4 +38,17 @@ fn map_compile_result(
         ModuleSourceCompileError::Io(message) => WorldError::Io(message),
         ModuleSourceCompileError::Unavailable(reason) => WorldError::ModuleChangeInvalid { reason },
     })
+}
+
+struct UnavailableCompiler;
+impl ModuleSourceCompiler for UnavailableCompiler {
+    fn compile(
+        &self,
+        _: &str,
+        _: &ModuleSourcePackage,
+    ) -> Result<Vec<u8>, ModuleSourceCompileError> {
+        Err(ModuleSourceCompileError::Unavailable(
+            "source compilation requires a host compiler capability".into(),
+        ))
+    }
 }

@@ -31,7 +31,7 @@ pub(super) fn fixture_kind(
         world_id: "w1".into(),
         genesis_digest: "fixture-genesis-v1".into(),
     };
-    let mut world = RuntimeWorld::new_with_state(if starter_chain {
+    let mut world = oasis7::runtime_host::world::new_with_state(if starter_chain {
         super::starter_chain_playtest::initial_state()
     } else {
         initial_state()

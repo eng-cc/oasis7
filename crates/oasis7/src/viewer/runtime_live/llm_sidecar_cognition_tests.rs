@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn runtime_continuation_hydration_reads_typed_active_projection() {
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     let mut continuation: crate::runtime::AgentContinuation =
         serde_json::from_value(serde_json::json!({
             "schema_version": "agent-continuation.v1",
@@ -82,7 +82,7 @@ fn runtime_continuation_hydration_reads_typed_active_projection() {
 
 #[test]
 fn fresh_resume_leaves_past_schedule_tick_for_runtime_derivation() {
-    let world = RuntimeWorld::new();
+    let world = crate::runtime_host::world::new();
     let continuation: crate::runtime::AgentContinuation = serde_json::from_value(serde_json::json!({
         "schema_version": "agent-continuation.v1",
         "continuation_id": "continuation-past", "wake_id": "wake-past",

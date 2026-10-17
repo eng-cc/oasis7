@@ -77,7 +77,7 @@ fn bound_provider_lease_test_world_with_binding(
     finality_status: &str,
     finality_block_hash: Option<String>,
 ) -> RuntimeWorld {
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime(
             "lease-recovery-world",
@@ -964,8 +964,9 @@ fn malformed_runtime_wake_projection_fences_provider_dispatch_and_persists_recov
         "schema_version": "scheduler.v1",
         "in_flight": "malformed"
     });
-    let mut malformed_world = RuntimeWorld::from_snapshot(snapshot, valid_world.journal().clone())
-        .expect("malformed scheduler projection remains loadable for adapter fault injection");
+    let mut malformed_world =
+        crate::runtime_host::world::from_snapshot(snapshot, valid_world.journal().clone())
+            .expect("malformed scheduler projection remains loadable for adapter fault injection");
 
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
     sidecar.configure_provider_lineage_store(path.clone());

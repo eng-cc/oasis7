@@ -122,7 +122,7 @@ fn register_agent(world: &mut World, agent_id: &str) {
 }
 
 fn configure_claim_world() -> World {
-    let mut world = World::new();
+    let mut world = oasis7::runtime_host::world::new();
     world
         .set_governance_execution_policy(oasis7::runtime::GovernanceExecutionPolicy {
             epoch_length_ticks: 1,

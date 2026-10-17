@@ -25,6 +25,10 @@ impl World {
             parent,
             std::sync::Arc::new(reader.clone()),
         )
+        .map(|mut world| {
+            world.source_compiler = self.source_compiler.clone();
+            world
+        })
     }
     pub fn read_retained_tick_journal_event(
         &self,

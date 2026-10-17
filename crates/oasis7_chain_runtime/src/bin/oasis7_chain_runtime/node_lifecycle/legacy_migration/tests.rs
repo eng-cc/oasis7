@@ -1,5 +1,5 @@
 use super::{io, source, transaction, tree};
-use oasis7::runtime::{Action, ChainResourceDerivationContext, LocalCasStore, World};
+use oasis7::runtime::{Action, ChainResourceDerivationContext, LocalCasStore};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use std::{
     collections::BTreeMap,
@@ -102,7 +102,7 @@ fn export_fixture_kind(root: &Path, with_simulator_action: bool) {
     .unwrap();
     let world_id = "legacy-migration-world";
     let genesis = format!("sha256:{}", hex::encode([0x42; 32]));
-    let initial = World::new();
+    let initial = oasis7::runtime_host::world::new();
     initial
         .save_to_dir_with_chain_resource_context(
             &world,
@@ -167,7 +167,7 @@ fn export_fixture_kind(root: &Path, with_simulator_action: bool) {
     let record: serde_json::Value = io::read(&records.join(format!("{:020}.json", 1))).unwrap();
     let store = LocalCasStore::new(cas.clone());
     let cas_bytes = |name: &str| store.get_verified(record[name].as_str().unwrap()).unwrap();
-    let before = World::from_snapshot(
+    let before = oasis7::runtime_host::world::from_snapshot(
         serde_cbor::from_slice(&cas_bytes("snapshot_ref")).unwrap(),
         serde_cbor::from_slice(&cas_bytes("journal_ref")).unwrap(),
     )
@@ -201,7 +201,7 @@ fn export_fixture_kind(root: &Path, with_simulator_action: bool) {
     staged.enqueue_runtime_feedback(feedback.clone()).unwrap();
     staged.enqueue_runtime_feedback(feedback).unwrap();
     staged.save_to_dir(&world).unwrap();
-    let staged = World::load_from_dir(&world).unwrap();
+    let staged = oasis7::runtime_host::world::load_from_dir(&world).unwrap();
     let staged_root = oasis7::runtime::blake3_hex(&serde_cbor::to_vec(&staged.snapshot()).unwrap());
     io::write(&records.join("product-validation-intent.json"),&serde_json::json!({"schema_version":1,"world_id":world_id,"height":2,"journal_len":staged.journal().len(),"pre_step_execution_state_root":before_root,"staged_execution_state_root":staged_root})).unwrap();
     // Distinct replication CAS, writer/guard state and reward-prefixed data.

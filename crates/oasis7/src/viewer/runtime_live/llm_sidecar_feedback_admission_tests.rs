@@ -20,7 +20,7 @@ fn actual_world_history(
     crate::world_service::projection::WorldServiceProjection,
     String,
 ) {
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime("feedback-guard-world", "main", 0, None, "pending", 0)
         .unwrap();

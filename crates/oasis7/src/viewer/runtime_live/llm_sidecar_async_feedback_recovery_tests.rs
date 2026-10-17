@@ -111,7 +111,7 @@ fn async_poll_delivers_completed_result_then_skips_only_fenced_session() {
     let blocked_agent = "agent-a-blocked";
     let allowed_agent = "agent-z-allowed";
     let world_id = "feedback-admission-fence-world";
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime(
             world_id,

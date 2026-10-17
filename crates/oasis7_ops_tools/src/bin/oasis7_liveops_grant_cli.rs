@@ -513,7 +513,7 @@ fn load_existing_world(world_dir: &Path) -> Result<World, String> {
             world_dir.display()
         ));
     }
-    World::load_from_dir(world_dir)
+    oasis7::runtime_host::world::load_from_dir(world_dir)
         .map_err(|err| format!("load world {} failed: {err:?}", world_dir.display()))
 }
 
@@ -848,7 +848,7 @@ mod tests {
 
     fn sample_world_dir() -> PathBuf {
         let world_dir = temp_dir("world");
-        let mut world = World::new();
+        let mut world = oasis7::runtime_host::world::new();
         world.set_main_token_supply(MainTokenSupplyState {
             total_supply: 10_000,
             circulating_supply: 0,
@@ -922,7 +922,8 @@ mod tests {
                 .any(|event| event.kind == "restricted_grant_issued")
         );
 
-        let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
+        let restored =
+            oasis7::runtime_host::world::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
             .restricted_starter_claim_grant("oc:pk:beneficiary")
             .expect("grant exists");
@@ -964,7 +965,8 @@ mod tests {
                 .any(|event| event.kind == "restricted_grant_revoked")
         );
 
-        let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
+        let restored =
+            oasis7::runtime_host::world::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
             .restricted_starter_claim_grant("oc:pk:beneficiary")
             .expect("grant exists");

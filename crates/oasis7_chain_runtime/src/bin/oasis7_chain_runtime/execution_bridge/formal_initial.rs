@@ -157,9 +157,10 @@ impl InitialWorldClosure {
             );
         }
         validate_modules(&snapshot)?;
-        let mut restored = World::from_snapshot(snapshot.clone(), world.journal().clone())
-            .map_err(|e| format!("{e:?}"))?
-            .with_release_security_policy(release.clone());
+        let mut restored =
+            oasis7::runtime_host::world::from_snapshot(snapshot.clone(), world.journal().clone())
+                .map_err(|e| format!("{e:?}"))?
+                .with_release_security_policy(release.clone());
         if snapshot.state.retained_history_root.is_some() {
             // Explicit initial preparation may inspect only the canonical empty
             // index. Restore its process-local reader without minting lineage.

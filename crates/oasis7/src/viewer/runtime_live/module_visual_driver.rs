@@ -315,7 +315,7 @@ fn ack_path_for(command_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{World, WorldEventBody};
+    use crate::runtime::WorldEventBody;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_path() -> PathBuf {
@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn fresh_world_does_not_bootstrap_test_driver_module() {
-        let world = World::new();
+        let world = crate::runtime_host::world::new();
         assert!(
             !world
                 .module_registry()
@@ -362,7 +362,7 @@ mod tests {
         let command_path = test_path();
         let _ = fs::remove_file(&command_path);
         let _ = fs::remove_file(ack_path_for(&command_path));
-        let mut world = World::new();
+        let mut world = crate::runtime_host::world::new();
         let mut driver = RuntimeModuleVisualDriver {
             command_path: command_path.clone(),
             ack_path: ack_path_for(&command_path),
