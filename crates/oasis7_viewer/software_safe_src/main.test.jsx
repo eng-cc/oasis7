@@ -1016,6 +1016,11 @@ describe("viewer web ui automation baseline", () => {
 
   it("routes the empty-world Claim First Agent button into gameplay action feedback", async () => {
     const { core, container } = await renderViewerApp({
+      setupCore(core) {
+        // Hold one legal player scope before the button creates its feedback.
+        bindFirstSnapshotAgentForTest(core, sampleSnapshot());
+        core.state.auth.boundAgentId = null;
+      },
       snapshot: sampleSnapshot({
         model: {
           agents: {},

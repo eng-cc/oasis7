@@ -262,6 +262,76 @@ fn decimal(value: Value) -> Value {
     }
 }
 
+pub(super) struct SessionProjection {
+    world: String,
+    epoch: u64,
+    audience: String,
+    created: std::time::Instant,
+    space: crate::simulator::SpaceConfig,
+    prepared: Prepared,
+}
+pub(super) fn build_session(
+    cache: &mut Option<SessionProjection>,
+    snapshot: impl FnOnce() -> WorldSnapshot,
+    world: &str,
+    epoch: u64,
+    audience: &str,
+    query: Value,
+    local_runtime: bool,
+) -> Value {
+    let valid_query = serde_json::from_value::<Query>(query.clone())
+        .ok()
+        .is_some_and(|q| {
+            q.page_size > 0
+                && q.page_size <= 200
+                && q.request_generation.len() <= 64
+                && q.search.as_ref().is_none_or(|s| s.len() <= 128)
+        });
+    if !valid_query {
+        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["invalid_query"]});
+    }
+    let bounds_valid = serde_json::from_value::<Query>(query.clone())
+        .ok()
+        .is_some_and(|q| {
+            q.bounds.as_ref().is_none_or(|b| {
+                let parsed =
+                    [&b.min_x_cm, &b.max_x_cm, &b.min_y_cm, &b.max_y_cm].map(|v| v.parse::<i64>());
+                matches!(parsed,[Ok(x0),Ok(x1),Ok(y0),Ok(y1)] if x0<=x1 && y0<=y1)
+            })
+        });
+    if !bounds_valid {
+        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["invalid_bounds"]});
+    }
+    let continuation = query.get("cursor").is_some_and(|c| !c.is_null());
+    let valid = cache.as_ref().is_some_and(|c| {
+        c.world == world
+            && c.epoch == epoch
+            && c.audience == audience
+            && c.created.elapsed() < std::time::Duration::from_secs(10)
+    });
+    if continuation && !valid {
+        *cache = None;
+        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["cursor_reset_required"]});
+    }
+    if !continuation {
+        *cache = None;
+        let snapshot = snapshot();
+        let Some(prepared) = prepare(&snapshot, world, epoch, audience, local_runtime) else {
+            return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["projection_limit_exceeded"]});
+        };
+        *cache = Some(SessionProjection {
+            world: world.into(),
+            epoch,
+            audience: audience.into(),
+            created: std::time::Instant::now(),
+            space: snapshot.config.space.clone(),
+            prepared,
+        });
+    }
+    let cached = cache.as_ref().expect("prepared above");
+    build_inner(&cached.space, world, query, &cached.prepared, continuation)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,74 +486,4 @@ mod tests {
             "invalid_bounds"
         );
     }
-}
-
-pub(super) struct SessionProjection {
-    world: String,
-    epoch: u64,
-    audience: String,
-    created: std::time::Instant,
-    space: crate::simulator::SpaceConfig,
-    prepared: Prepared,
-}
-pub(super) fn build_session(
-    cache: &mut Option<SessionProjection>,
-    snapshot: impl FnOnce() -> WorldSnapshot,
-    world: &str,
-    epoch: u64,
-    audience: &str,
-    query: Value,
-    local_runtime: bool,
-) -> Value {
-    let valid_query = serde_json::from_value::<Query>(query.clone())
-        .ok()
-        .is_some_and(|q| {
-            q.page_size > 0
-                && q.page_size <= 200
-                && q.request_generation.len() <= 64
-                && q.search.as_ref().is_none_or(|s| s.len() <= 128)
-        });
-    if !valid_query {
-        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["invalid_query"]});
-    }
-    let bounds_valid = serde_json::from_value::<Query>(query.clone())
-        .ok()
-        .is_some_and(|q| {
-            q.bounds.as_ref().is_none_or(|b| {
-                let parsed =
-                    [&b.min_x_cm, &b.max_x_cm, &b.min_y_cm, &b.max_y_cm].map(|v| v.parse::<i64>());
-                matches!(parsed,[Ok(x0),Ok(x1),Ok(y0),Ok(y1)] if x0<=x1 && y0<=y1)
-            })
-        });
-    if !bounds_valid {
-        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["invalid_bounds"]});
-    }
-    let continuation = query.get("cursor").is_some_and(|c| !c.is_null());
-    let valid = cache.as_ref().is_some_and(|c| {
-        c.world == world
-            && c.epoch == epoch
-            && c.audience == audience
-            && c.created.elapsed() < std::time::Duration::from_secs(10)
-    });
-    if continuation && !valid {
-        *cache = None;
-        return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["cursor_reset_required"]});
-    }
-    if !continuation {
-        *cache = None;
-        let snapshot = snapshot();
-        let Some(prepared) = prepare(&snapshot, world, epoch, audience, local_runtime) else {
-            return json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["projection_limit_exceeded"]});
-        };
-        *cache = Some(SessionProjection {
-            world: world.into(),
-            epoch,
-            audience: audience.into(),
-            created: std::time::Instant::now(),
-            space: snapshot.config.space.clone(),
-            prepared,
-        });
-    }
-    let cached = cache.as_ref().expect("prepared above");
-    build_inner(&cached.space, world, query, &cached.prepared, continuation)
 }

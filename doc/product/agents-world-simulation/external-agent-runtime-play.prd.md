@@ -543,10 +543,10 @@ Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；本条在外部 Runtim
 - 功能点：[REQ-EXT-016](#req-ext-016)；适用范围沿本条原条件与 [AC-EXT-016](#ac-ext-016)，不扩大入口或阶段。
 - 系统设计状态：已覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)覆盖多尺度浏览、授权搜索选择和回到主目标；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
+- 实现状态：部分实现
+- 实现与验证依据：Web Agent/Location 探索切片已实现，待完整测试；[PR #4825](https://github.com/nil-studio/oasis7/pull/4825)，实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`。已完成局部自动化和本地无 LLM 浏览器检查，完整试玩与范围见[世界舞台实现摘要](player-readable-world-stage.prd.md#stage-implementation-status)。
 - 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+- 剩余范围：设施/路线/事件及完整空间投影尚未实现；真实指导与世界结果、私有账号切换、容量和完整适用入口验收尚未闭合。
 
 - 要求：用户应能从有权观看的世界总览进入区域/Fragment，平移/缩放、搜索定位 Agent/设施/路线，选中对象或事件并查看身份、来源时效及下一步；未知/权限外的世界不能伪装全图实时情报。
 - 上位承诺：[根 SC-13/14](prd.md)。消费主责：[世界探索](player-readable-world-stage.prd.md#req-agent-stage-003)。
