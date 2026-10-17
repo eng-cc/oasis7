@@ -72,7 +72,7 @@ device_config_path = "/absolute/private/device.json"
 
 当前实现边界：`SessionModelProvider` 的结构化 conversation 只保存在该适配器实例内；`NativeTaskRunner::run(self)` 消耗 runner/provider，Launcher 后续重新开始会构造新的 provider（`conversation: None`）。因此同一存活适配器的 input-limit/preflight 测试只证明实例内历史保持，不证明 runner 退出、Stop/重新开始后所需 conversation/工具历史可恢复。跨此生命周期的必要历史恢复仍有实现与验证缺口，不能把重新开始当成容量恢复办法或宣称上述目标已全量满足。原世界 operation 的持久恢复与稳定 run 预算是独立合同，仍按下段执行；此缺口不意味着预算可绕过，也不允许暴露私有历史。
 
-内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求；只有 SDK 校验的 canonical `stale_base` 终结反馈允许新 slot 重新读取上下文和决策，不替换或重签原件。
+内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求，不替换或重签原件。SDK 校验的 canonical `stale_base` 终结反馈可按既有合同进入新 slot；另在完整任务 fence 与当前执行许可仍有效、全部原件已扫描、原 prefix 已 committed 且无竞争 action/outcome、Context 严格过期时，可按[过期 Context 恢复合同](agent-game-client-boundary.design.md#des-agc-004)提交原身份 `context_expired`。只有该终止 outcome committed 后才取得新 Context，继续使用原 run 身份与剩余持久预算，且不计成功业务 turn。其他 aborted、Unknown/Pending、清理 Rejected、Stop、撤权或 fence 变化均不因此允许继续。
 
 设备登记固定账号和 SDK 设备边界，不把启动时的活动任务永久缓存为权限。任务暂时停止、尚无有效目标或该设备只是备用执行器时，Launcher 仍可启动，但当前执行能力关闭。任务/目标或执行器 fence 更新后，旧运行代继续失效；玩家须重新确认开始，由服务端读取当前签名任务视图并核对账号玩家归属，创建携带完整 fence 摘要的新代绑定，无需重启 Launcher。该摘要只由受控执行端生成，网页仅提交 Agent 引用；不能用新代复活旧输出或跳过仍占用设备的旧 worker。相同完整 fence 继续复用原 run 身份与预算；不同合法 fence 才形成新的 run 身份，历史原件仍保留。
 

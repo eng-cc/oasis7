@@ -76,7 +76,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-deterministic-design)；同输入执行与原子拒绝已有设计；全部验证者组合、实例隔离和消费者完整范围仍须逐项核对。
 - 实现状态：部分实现
-- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，该回归使用空action局部输入，不证明全活动验证者、完整实例隔离、越权/缺证原子拒绝及native/WASM/transport组合；本轮未执行回归。
 
