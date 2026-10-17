@@ -215,9 +215,16 @@ fn restore(
     candidate: &FormalCandidateMaterialV1,
     release: &ReleaseSecurityPolicy,
 ) -> Result<World, String> {
-    verify_record_material(&candidate.candidate.record, &candidate.material)
+    let expanded_snapshot =
+        oasis7_distfs::controlled_authority::formal::verify_record_material_retaining_snapshot(
+            &candidate.candidate.record,
+            &candidate.material,
+        )
         .map_err(|e| e.to_string())?;
-    let snapshot: Snapshot = capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?;
+    let snapshot: Snapshot = match expanded_snapshot {
+        Some(bytes) => capture::decode_generic(&bytes)?,
+        None => capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?,
+    };
     let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
     let world = World::from_snapshot(snapshot, journal)
         .map_err(|e| format!("{e:?}"))?
@@ -239,12 +246,19 @@ fn restore_qualified(
     anchor: &VerifiedFormalReadAnchorV1,
     reader: std::sync::Arc<dyn business_index::BusinessIndexNodeReader + Send + Sync>,
 ) -> Result<World, String> {
-    verify_record_material(&candidate.candidate.record, &candidate.material)
+    let expanded_snapshot =
+        oasis7_distfs::controlled_authority::formal::verify_record_material_retaining_snapshot(
+            &candidate.candidate.record,
+            &candidate.material,
+        )
         .map_err(|e| e.to_string())?;
     if &candidate.candidate.record != anchor.head().record() {
         return Err("formal restore candidate differs from qualified anchor".into());
     }
-    let snapshot: Snapshot = capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?;
+    let snapshot: Snapshot = match expanded_snapshot {
+        Some(bytes) => capture::decode_generic(&bytes)?,
+        None => capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?,
+    };
     let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
     if snapshot.state.retained_history_root.is_none() {
         if anchor.authority().definition().profile_version == 2 {

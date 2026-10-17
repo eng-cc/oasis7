@@ -26,10 +26,14 @@ fn descriptor(material: &ClosedRecord) -> Result<Option<RetainedRoot>, FormalErr
     let bytes = material
         .snapshot_bytes()
         .map_err(|e| invalid(e.to_string()))?;
+    descriptor_from_bytes(&bytes)
+}
+
+fn descriptor_from_bytes(bytes: &[u8]) -> Result<Option<RetainedRoot>, FormalError> {
     // Abstract protocol fixtures predate the actual World snapshot contract.
     // Once a root exists, malformed/missing successor state is rejected below.
     let root = if bytes.first().is_some_and(|byte| byte >> 5 == 5) {
-        serde_cbor::from_slice::<SnapshotDescriptor>(&bytes)
+        serde_cbor::from_slice::<SnapshotDescriptor>(bytes)
             .map_err(|error| invalid(format!("retention snapshot descriptor: {error}")))?
             .state
             .retained_history_root
@@ -77,6 +81,43 @@ pub(super) fn verify_retained_transition(
         )
         .map_err(invalid)?;
     }
+    verify_retained_roots(initial, before, after, delta, reader)
+}
+
+/// Only the caller's exact, already verified candidate/Frozen byte pair may
+/// enter this request-local path. No reader or persistence cache is introduced.
+pub(super) fn verify_retained_transition_from_bytes(
+    initial: bool,
+    after_bytes: &[u8],
+    before_bytes: Option<&[u8]>,
+    delta: Option<&BusinessIndexDeltaV1>,
+    reader: &impl BusinessIndexNodeReader,
+) -> Result<(), FormalError> {
+    let before = before_bytes
+        .map(descriptor_from_bytes)
+        .transpose()?
+        .flatten();
+    let after = descriptor_from_bytes(after_bytes)?;
+    if after.is_some() {
+        tick_material::verify_tick_prefix_material(
+            before_bytes,
+            after_bytes,
+            after.as_ref().map(|root| &root.index_root),
+            delta,
+            reader,
+        )
+        .map_err(invalid)?;
+    }
+    verify_retained_roots(initial, before, after, delta, reader)
+}
+
+fn verify_retained_roots(
+    initial: bool,
+    before: Option<RetainedRoot>,
+    after: Option<RetainedRoot>,
+    delta: Option<&BusinessIndexDeltaV1>,
+    reader: &impl BusinessIndexNodeReader,
+) -> Result<(), FormalError> {
     let empty = BusinessIndexRootV1::empty().map_err(invalid)?;
     if initial && after.as_ref().is_some_and(|root| root.index_root != empty) {
         return Err(invalid("fresh initial retained index must be empty"));

@@ -295,3 +295,6 @@ fn prepare_material_closure_token_binds_exact_frozen_body_and_material() {
         .is_err()
     );
 }
+
+#[path = "endpoint_business_snapshot_reuse_tests.rs"]
+mod snapshot_reuse;

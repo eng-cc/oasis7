@@ -57,14 +57,28 @@ fn snapshot_delta_records_have_explicit_protocol_versions_and_expanded_state_roo
     record.after_state_root = material.after_state_root.clone();
     record.artifact_roots = material.roots.clone();
     verify_record_material(&record, &material).unwrap();
+    assert_eq!(
+        verify_record_material_retaining_snapshot(&record, &material)
+            .unwrap()
+            .unwrap(),
+        material.snapshot_bytes().unwrap(),
+    );
+    let mut missing = material.clone();
+    missing.objects.pop();
+    assert!(verify_record_material_retaining_snapshot(&record, &missing).is_err());
+    let mut corrupt = material.clone();
+    corrupt.objects[0].bytes.push(0);
+    assert!(verify_record_material_retaining_snapshot(&record, &corrupt).is_err());
     let mut legacy = record.clone();
     legacy.schema_version = 1;
     assert!(verify_record_material(&legacy, &material).is_err());
+    assert!(verify_record_material_retaining_snapshot(&legacy, &material).is_err());
     let mut wrong = record.clone();
     wrong.after_state_root = h(90);
     let mut wrong_material = material.clone();
     wrong_material.after_state_root = h(90);
     assert!(verify_record_material(&wrong, &wrong_material).is_err());
+    assert!(verify_record_material_retaining_snapshot(&wrong, &wrong_material).is_err());
     let mut transition = record;
     transition.schema_version = 4;
     transition.durable_set_transition_digest = Some(h(91));
@@ -126,6 +140,36 @@ fn legacy_frozen_verification_does_not_add_snapshot_expansion() {
     verify_frozen_material(&body, &material).unwrap();
     assert!(
         verify_frozen_material_retaining_snapshot(&body, &material)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn legacy_record_retaining_verification_preserves_opaque_raw_snapshot_contract() {
+    let mut material = delta_material();
+    // Deliberately not CBOR. The old record contract accepts opaque raw bytes.
+    let bytes = b"legacy opaque raw Snapshot".to_vec();
+    let hash = blake3::hash(&bytes).to_hex().to_string();
+    material.objects = vec![ArtifactObject {
+        content_hash: hash.clone(),
+        bytes,
+        references: vec![],
+    }];
+    for root in material.roots.values_mut() {
+        *root = hash.clone();
+    }
+    material.payload_digest = hash.clone();
+    material.before_state_root = hash.clone();
+    material.after_state_root = hash;
+    let mut record = fixtures::initial().3.record().clone();
+    record.payload_digest = material.payload_digest.clone();
+    record.before_state_root = material.before_state_root.clone();
+    record.after_state_root = material.after_state_root.clone();
+    record.artifact_roots = material.roots.clone();
+    verify_record_material(&record, &material).unwrap();
+    assert!(
+        verify_record_material_retaining_snapshot(&record, &material)
             .unwrap()
             .is_none()
     );

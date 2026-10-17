@@ -438,6 +438,10 @@ attempt 回收要求原 Published envelope 与 P/R 分别完成的独立 typed �
 
 SnapshotDelta 的验证接受上限仍为深度 32、链输入 256 MiB；生产者不必耗尽该上限。新生成 Snapshot 默认最多连续 8 层 delta，下一次变更写完整 checkpoint，以限制逐层重组、hash 和闭包解码的重复成本；不重写已有签名历史，也不删除早期 checkpoint 或 delta。原 Snapshot 字节、状态根和业务效果保持一致，新 artifact 的身份随合法 producer 输出重新生成。完整 checkpoint 仍经过相同有界物理 CDC/压缩和完整性验证；不能预先宣称更密 checkpoint 的实际空间开销为零，须将完整长历史耗时和容量证据一起报告。验证器对已有 9–32 层合法链继续完整验证，超过上限仍拒绝，不能把 producer 策略变成历史读取上限。
 
+单个端点 Prepare 的既有 request-local 候选闭包证明，允许保留同一完整验证 pass 得到的原 before Frozen 与 after record 的 Snapshot 字节，供原前态匹配、retention descriptor 和 Tick prefix 检查借用。证明仍绑定精确借用的 candidate、record、material、Frozen body/source；不跨端点、RPC 或 Decision 复用，不接收执行后 World 作为原前态替代。完整闭包、对象 hash、原前后状态根、证书、native 环境、两个 delta 及原 retention/prefix 校验全部保留；只消除同一不可变材料在一次校验中的重复展开。两个原字节缓冲各不超过 64 MiB、合计不超过 128 MiB，不克隆额外缓冲；已有两个 encoded 闭包各 8 MiB 上限保持。原 typed Tick tail 允许合法 legacy 长度，不能把其 Value 容器误称固定小型视图，需保留原解码语义并分别测量峰值。公开 record/Frozen verifier 的旧行为保持：旧 schema 本来不展开时仍不新增展开、校验或分配，只在原来就需要 Snapshot 的 Prepare 路径补一次原读取。Decision 是新的独立校验调用，不能沿用 Prepare 的证明。实现和验收须区分源码消除的重复次数与真实 Linux 进程耗时，不以次数变化代替完整场景通过。
+
+Node writer 从同一不可变候选恢复时，也可将 record 完整验证同一 pass 返回的原 Snapshot 字节直接交给原 typed Snapshot decoder，避免验证后立即再次展开同一链。该原字节仅在本次恢复内使用、解码后释放；旧 schema 未返回字节时沿原读取路径。原 journal、状态根、qualified anchor、retained parent、World boundary、树及 release policy 检查不变，不能将这种字节复用视为免除其他恢复检查或跨候选缓存。
+
 阶段是技术依赖顺序，可合并实施，不新增 workflow、审批次数或每阶段强制 PR。当前无运行世界时直接创建新表示；本地实现与验证不代替真实节点部署验收。
 
 S0–S3 的物理优化与生命周期治理可按已验证范围独立交付、部署。S4 完整 delta 与 S5 Merkle v2 可以分别后置，彼此也不作为物理优化的前置条件。S6 对本次实际启用的子集执行全部适用部署验收；未启用能力维持原数据/格式与必要限制，明确标为未验证，不要求等待所有逻辑演进后才能部署已通过的物理优化。

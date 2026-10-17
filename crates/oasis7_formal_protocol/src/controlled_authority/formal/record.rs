@@ -272,6 +272,16 @@ pub fn verify_record_material(
     record: &CanonicalRecordV1,
     material: &ClosedRecord,
 ) -> Result<(), FormalError> {
+    verify_record_material_retaining_snapshot(record, material).map(|_| ())
+}
+
+/// Complete original verification, retaining only a versioned Snapshot already
+/// expanded by this pass. Legacy schemas preserve their original checks and
+/// return None without an additional Snapshot read or allocation.
+pub fn verify_record_material_retaining_snapshot(
+    record: &CanonicalRecordV1,
+    material: &ClosedRecord,
+) -> Result<Option<Vec<u8>>, FormalError> {
     record.validate()?;
     material.validate().map_err(|e| invalid(e.to_string()))?;
     if record.payload_digest != material.payload_digest
@@ -310,6 +320,7 @@ pub fn verify_record_material(
                 "formal delta Snapshot expanded state-root mismatch",
             ));
         }
+        return Ok(Some(expanded));
     }
-    Ok(())
+    Ok(None)
 }
