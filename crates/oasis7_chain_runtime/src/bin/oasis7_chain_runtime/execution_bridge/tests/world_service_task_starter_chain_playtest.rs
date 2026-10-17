@@ -4,6 +4,8 @@ use oasis7::runtime::*;
 use oasis7::world_service::private_task_context::*;
 use oasis7::world_service::task_factory_quote::*;
 use oasis7::world_service::task_recipe_quote::*;
+#[path = "world_service_task_starter_chain_factory_quote_retry.rs"]
+mod factory_quote_retry;
 const SITE: &str = "starter-site";
 const FACTORY: &str = STARTER_SMELTER_FACTORY_ID;
 
@@ -709,6 +711,9 @@ fn build_action(
         assert!(quote.quote.rejection.is_none());
         assert_eq!(quote.quote.authorization.cost_units, 6);
         assert_eq!(quote.quote.electricity_after, Some(94));
+        factory_quote_retry::assert_delayed_factory_quote_retry_reuses_original(
+            &proof, &quote, delegate,
+        );
         let pin = || {
             super::super::super::super::world_service_read::pin(
                 &root.join("records"),
@@ -719,7 +724,12 @@ fn build_action(
             .unwrap()
         };
         let before = pin();
-        match client.quote_task_factory(&proof) {
+        let repeated = super::production_playtest::retry_same_signed_private_quote_until(
+            &proof,
+            deadline,
+            |original| client.quote_task_factory(original),
+        );
+        match repeated {
             Ok(repeated) => {
                 assert_eq!(repeated.quote, quote.quote);
                 let after = pin();

@@ -917,12 +917,16 @@ impl World {
             world.enforce_pending_action_limit();
             world.enforce_pending_effect_limit();
             world.enforce_inflight_effect_limit();
+            let has_journal_tail = snapshot.journal_len < world.journal.len();
             world.replay_from(snapshot.journal_len)?;
-            // Individually valid tail receipts may still consume a missing or
-            // already-consumed task predecessor. Validate the replayed chain
-            // before publishing the recovered world or trimming its journal.
-            crate::world_service::game_task::validate_history(&world)
-                .map_err(|reason| super::capability_authorization::deny(&reason))?;
+            if has_journal_tail {
+                // Individually valid tail receipts may still consume a missing
+                // or already-consumed task predecessor. Validate the replayed
+                // chain before publishing the recovered world or trimming its
+                // journal. With no tail, the pre-replay history is unchanged.
+                crate::world_service::game_task::validate_history(&world)
+                    .map_err(|reason| super::capability_authorization::deny(&reason))?;
+            }
             world.enforce_journal_event_limit();
         }
         world.verify_tick_consensus_chain()?;

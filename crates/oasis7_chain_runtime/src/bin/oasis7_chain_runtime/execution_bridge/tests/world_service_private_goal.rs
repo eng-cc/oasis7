@@ -36,6 +36,33 @@ pub(super) fn http_with_hook(
     headers: &str,
     before_delivery: impl FnOnce(),
 ) -> (u16, serde_json::Value) {
+    let (status, body, _) = http_with_diagnostic_hook(
+        dir,
+        runtime,
+        signer,
+        store,
+        path,
+        body,
+        headers,
+        before_delivery,
+    );
+    (status, body)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit fixture, deterministic delivery hook, and bounded stage observation"
+)]
+pub(super) fn http_with_diagnostic_hook(
+    dir: &Path,
+    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
+    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
+    store: Option<&PrivateGoalStore>,
+    path: &str,
+    body: &impl serde::Serialize,
+    headers: &str,
+    before_delivery: impl FnOnce(),
+) -> (u16, serde_json::Value, Option<&'static str>) {
     let body = serde_json::to_vec(body).unwrap();
     let mut bytes=format!("POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\n\r\n",body.len()).into_bytes();
     bytes.extend(body);
@@ -45,6 +72,7 @@ pub(super) fn http_with_hook(
     client.write_all(&bytes).unwrap();
     let mut read = vec![0; bytes.len()];
     server.read_exact(&mut read).unwrap();
+    let mut read_conflict_stage = None;
     let private = crate::world_service_api::private_goal::maybe_handle_with_delivery_hook(
         &mut server,
         &read,
@@ -58,6 +86,7 @@ pub(super) fn http_with_hook(
         signer,
         store,
         before_delivery,
+        |stage| read_conflict_stage = Some(stage),
     )
     .unwrap();
     if !private {
@@ -88,6 +117,7 @@ pub(super) fn http_with_hook(
     (
         status,
         serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap(),
+        read_conflict_stage,
     )
 }
 pub(super) fn consumer<T>(
@@ -98,11 +128,38 @@ pub(super) fn consumer<T>(
     world: &WorldIdentity,
     call: impl FnOnce(&oasis7::world_service::client::RemoteWorldServiceClient) -> T,
 ) -> T {
+    // Functional recovery requests rebuild canonical worlds and fsync private
+    // records, so normal consumer fixtures retain a bounded 30s response budget.
+    let (result, outcome) = consumer_with_delivery_hook(
+        dir,
+        runtime,
+        signer,
+        store,
+        world,
+        std::time::Duration::from_secs(30),
+        || {},
+        call,
+    );
+    assert_eq!(outcome, "response_written");
+    result
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Real private client, isolated server, and deterministic delivery delay"
+)]
+fn consumer_with_delivery_hook<T>(
+    dir: &Path,
+    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
+    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
+    store: &PrivateGoalStore,
+    world: &WorldIdentity,
+    request_timeout: std::time::Duration,
+    before_delivery: impl FnOnce() + Send,
+    call: impl FnOnce(&oasis7::world_service::client::RemoteWorldServiceClient) -> T,
+) -> (T, &'static str) {
     use oasis7::world_service::client::{RemoteWorldServiceClient, WorldServiceClientConfig};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    // Functional recovery requests rebuild current/historical worlds and fsync
-    // private records. Keep a finite CI budget without imposing a 5s latency SLA.
-    let request_timeout = std::time::Duration::from_secs(30);
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         trusted_service_public_key: signer.public_key_hex.clone(),
@@ -115,7 +172,7 @@ pub(super) fn consumer<T>(
     })
     .unwrap();
     std::thread::scope(|scope| {
-        let serving = scope.spawn(|| {
+        let serving = scope.spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             let mut bytes = Vec::new();
             while !bytes.ends_with(b"\r\n\r\n") {
@@ -139,7 +196,14 @@ pub(super) fn consumer<T>(
             stream.read_exact(&mut body).unwrap();
             bytes.extend(body);
             let request_started = std::time::Instant::now();
-            let handled = crate::world_service_api::private_goal::maybe_handle(
+            let route = if path == GOAL_CURRENT_PATH {
+                "goal_current"
+            } else if path == GOAL_PREPARE_PATH {
+                "goal_prepare"
+            } else {
+                "other"
+            };
+            let handled = crate::world_service_api::private_goal::maybe_handle_with_delivery_hook(
                 &mut stream,
                 &bytes,
                 runtime,
@@ -151,16 +215,27 @@ pub(super) fn consumer<T>(
                 &dir.join("store"),
                 signer,
                 Some(store),
+                before_delivery,
+                |stage| {
+                    eprintln!("TASK_PRIVATE_CONTEXT_REJECT route={route} stage={stage}");
+                },
             );
+            let outcome = match handled {
+                Ok(true) => "response_written",
+                Ok(false) => "unhandled",
+                Err(error) if error == "private response write failed" => "write_failed",
+                Err(_) => "handler_failed",
+            };
             eprintln!(
-                "private HTTP fixture {path}: handler_elapsed={:?}, client_timeout={request_timeout:?}",
-                request_started.elapsed()
+                "TASK_PRIVATE_HTTP_FIXTURE route={route} outcome={outcome} elapsed_ms={} client_timeout_ms={}",
+                request_started.elapsed().as_millis(),
+                request_timeout.as_millis()
             );
-            assert!(handled.unwrap());
+            outcome
         });
         let result = call(&client);
-        serving.join().unwrap();
-        result
+        let outcome = serving.join().unwrap();
+        (result, outcome)
     })
 }
 #[test]
@@ -292,6 +367,25 @@ fn private_goal_native_tcp_prepare_publish_read_restart_and_recovery() {
         client.read_current_goal(&read).unwrap()
     });
     assert!(consumed == response.payload);
+    let (timed_out, server_outcome) = consumer_with_delivery_hook(
+        &dir,
+        &runtime,
+        &signer,
+        &store,
+        &identity,
+        std::time::Duration::from_millis(100),
+        || std::thread::sleep(std::time::Duration::from_millis(250)),
+        |client| client.read_current_goal(&read),
+    );
+    assert!(matches!(
+        timed_out,
+        Err(oasis7::world_service::client::WorldServiceClientError::Transport(ref reason))
+            if reason == "private transport timed out"
+    ));
+    assert!(
+        matches!(server_outcome, "response_written" | "write_failed"),
+        "a timed-out client leaves server delivery unknown"
+    );
 
     assert_eq!(response.payload.activation_commit.unwrap().position, 4);
     assert_eq!(

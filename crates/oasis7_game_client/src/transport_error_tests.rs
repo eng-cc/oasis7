@@ -84,6 +84,78 @@ fn transport(endpoint: String) -> WorldServiceTransport {
     WorldServiceTransport::new(config).unwrap()
 }
 
+fn read_request(stream: &mut std::net::TcpStream) {
+    let mut request = Vec::new();
+    loop {
+        let mut chunk = [0; 1024];
+        let count = stream.read(&mut chunk).unwrap();
+        assert!(count > 0, "client closed before sending a complete request");
+        request.extend_from_slice(&chunk[..count]);
+        if let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+                .unwrap();
+            if request.len() >= header_end + 4 + length {
+                return;
+            }
+        }
+    }
+}
+
+#[test]
+fn private_send_errors_preserve_timeout_classification_and_keep_peer_close_non_timeout() {
+    fn short_transport(listener: &TcpListener) -> WorldServiceTransport {
+        let mut config = tests::config(format!("http://{}", listener.local_addr().unwrap()));
+        config.timeout = Duration::from_millis(100);
+        WorldServiceTransport::new(config).unwrap()
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let client = short_transport(&listener);
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        read_request(&mut stream);
+        thread::sleep(Duration::from_millis(250));
+    });
+    let timeout = client
+        .private_response_bytes(LOOKUP_PATH, &json!({"request":"original"}), 16 * 1024)
+        .unwrap_err();
+    server.join().unwrap();
+    assert!(matches!(
+        timeout,
+        WorldServiceClientError::Transport(ref reason) if reason == "private transport timed out"
+    ));
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let client = short_transport(&listener);
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        read_request(&mut stream);
+    });
+    let closed = client
+        .private_response_bytes(LOOKUP_PATH, &json!({"request":"original"}), 16 * 1024)
+        .unwrap_err();
+    server.join().unwrap();
+    assert!(matches!(
+        closed,
+        WorldServiceClientError::Transport(ref reason)
+            if reason.starts_with("private transport ")
+                && reason != "private transport timed out"
+    ));
+}
+
 #[test]
 fn shared_signed_rejection_preserves_verified_reason_and_bounds_unicode_characters() {
     for message in [
