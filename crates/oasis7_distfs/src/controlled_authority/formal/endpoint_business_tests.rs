@@ -49,7 +49,7 @@ pub(super) fn fixture_with_snapshot(
     .unwrap();
     let envelope = envelope(delta);
     let bytes = envelope.encode().unwrap();
-    let mut body = fixture.authority.initial.clone().unwrap();
+    let mut body = fixture.authority.initial_body().cloned().unwrap();
     body.authority.profile_version = 2;
     body.initial_state_root = blake3::hash(&snapshot).to_hex().to_string();
     body.artifact_roots

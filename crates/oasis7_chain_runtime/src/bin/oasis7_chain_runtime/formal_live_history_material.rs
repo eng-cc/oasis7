@@ -276,7 +276,8 @@ impl NativeHistoryResolver {
             }
             return Ok(self.trusted.clone());
         }
-        VerifiedFormalReadAnchorV1::from_native_historical_service_restore(&self.trusted, restored)
+        restored
+            .service_read_anchor(&self.trusted)
             .map_err(|e| e.to_string())
     }
     pub(super) fn world_for(

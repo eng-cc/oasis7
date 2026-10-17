@@ -122,10 +122,16 @@ impl VerifiedFormalReadAnchorV1 {
     /// must still verify every response against their own canonical anchor.
     pub fn from_native_historical_service_restore(
         trusted: &Self,
-        restored: &super::endpoint::VerifiedNativeHistoricalRestoreV1,
+        restored: &super::NativeCheckpointVerdictV1,
+        authority: &VerifiedAuthorityV1,
+        commit: &VerifiedFormalCommitV1,
     ) -> Result<Self, FormalError> {
-        let authority = restored.authority();
-        let record = restored.commit().record();
+        let record = commit.record();
+        if commit.head() != *restored.head()
+            || commit.finalizing_authority_id() != restored.authority_id()
+        {
+            return Err(invalid("native historical exact checked provenance"));
+        }
         if restored.minimum() != &trusted.head.head()
             || record.position < trusted.head.record().position
             || restored.current_head().position < record.position
@@ -134,7 +140,7 @@ impl VerifiedFormalReadAnchorV1 {
             || authority.activation_ref() != trusted.authority.activation_ref()
             || record.world != trusted.head.record().world
             || record.activation_ref != trusted.authority.activation_ref()
-            || restored.commit().finalizing_authority_id() != authority.authority_id()?
+            || commit.finalizing_authority_id() != authority.authority_id()?
         {
             return Err(invalid(
                 "native historical service publication trust binding",
@@ -147,7 +153,7 @@ impl VerifiedFormalReadAnchorV1 {
         }
         Ok(Self {
             authority: authority.clone(),
-            head: restored.commit().clone(),
+            head: commit.clone(),
             initial_certificate: trusted.initial_certificate.clone(),
         })
     }

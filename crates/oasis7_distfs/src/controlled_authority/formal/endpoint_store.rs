@@ -19,48 +19,14 @@ pub(super) mod durable_set;
 #[path = "endpoint_store_native.rs"]
 mod native;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct HotBody {
-    pub version: u32,
-    pub instance_digest: String,
-    pub authority_id: String,
-    pub activation_ref: String,
-    pub epoch: u64,
-    pub revision: u64,
-    pub head: FormalHeadRefV1,
-    pub head_node: Option<String>,
-    pub imported_head_node: Option<String>,
-    pub import_digest: Option<String>,
-    pub base_parent: Option<CheckpointParent>,
-    pub index: Option<String>,
-    pub pending: Option<String>,
-    pub decision_head: Option<FormalHeadRefV1>,
-    pub seal: Option<fencing::EpochSealBodyV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub durable_set: Option<fencing::DurableSetNativeBindingV1>,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct CheckpointParent {
-    pub record: CanonicalRecordV1,
-    pub finalizing_authority_id: String,
-}
+pub(super) use oasis7_formal_protocol::controlled_authority::formal::proof::{
+    NativeCheckpointParentV1 as CheckpointParent, NativeHistoryLinkV1 as HistoryLink,
+    NativeHistoryNodeV1 as HistoryNode, NativeHotBodyV1 as HotBody,
+};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Hot {
     body: HotBody,
     signature: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct HistoryNode {
-    pub head: FormalHeadRefV1,
-    pub request: String,
-    pub entry: String,
-    /// Link 0 is the immediate predecessor; link k is 2^k positions behind.
-    pub ancestors: Vec<HistoryLink>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct HistoryLink {
-    pub head: FormalHeadRefV1,
-    pub node: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Index {

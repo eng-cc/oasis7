@@ -138,7 +138,14 @@ class BuildAndBundles(unittest.TestCase):
         snapshot = next(args for name, args, _ in ordinary if name == 'snapshot-tests')
         self.assertNotIn('--features', snapshot)
         required = next(args for name, args, _ in ordinary if name == 'required')
-        self.assertEqual(required.count('-p'), 15)
+        required_packages = [required[index + 1] for index, value in enumerate(required) if value == '-p']
+        self.assertCountEqual(required_packages, [
+            'oasis7', 'oasis7_chain_runtime', 'oasis7_client_cli', 'oasis7_launcher_backend',
+            'oasis7_newapi_bridge_service', 'oasis7_ops_tools', 'oasis7_provider_local_bridge',
+            'oasis7_provider_tools', 'oasis7_viewer_runtime', 'oasis7_observability',
+            'oasis7_hosted_access', 'oasis7_letai_credit_adapter', 'oasis7_launcher_config',
+            'oasis7_wasm_materializer', 'oasis7_game_client', 'oasis7_cas', 'oasis7_formal_protocol',
+        ])
         self.assertIn('--tests', required)
 
     def test_closure_contains_child_executables_but_not_other_suites(self):

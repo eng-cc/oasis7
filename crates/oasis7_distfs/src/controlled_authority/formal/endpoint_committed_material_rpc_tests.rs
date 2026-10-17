@@ -71,7 +71,7 @@ fn delegated_historical_material_rpc_reads_below_native_minimum_without_rewindin
     let second = coordinator.submit(candidate).unwrap();
     let second_commit =
         verify_formal_qualified(&second, &fixture.authority, Some(&first_commit), None).unwrap();
-    let body = fixture.authority.initial.clone().unwrap();
+    let body = fixture.authority.initial_body().cloned().unwrap();
     let certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&body).unwrap(), 9),
         body,

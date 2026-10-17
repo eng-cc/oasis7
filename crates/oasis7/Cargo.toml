@@ -48,7 +48,7 @@ toml = "0.9.12"
 tracing = "0.1"
 
 # Only the formal harness producer enables these aliases. They preserve the
-# shared dependency features previously unified by the 15 required-test roots.
+# shared dependency features unified by the complete required-test roots.
 ci_formal_hyper_rustls = { package = "hyper-rustls", version = "0.27", default-features = false, features = ["ring", "webpki-tokio"], optional = true }
 ci_formal_idna = { package = "idna", version = "1", optional = true }
 ci_formal_rand_chacha = { package = "rand_chacha", version = "0.9", optional = true }

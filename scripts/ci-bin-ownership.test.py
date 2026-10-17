@@ -72,6 +72,17 @@ class Ownership(unittest.TestCase):
         self.assertIs(data['dependencies']['oasis7']['default-features'], False)
         self.assertFalse(data['dependencies']['oasis7'].get('features', []))
 
+    def test_storage_and_protocol_consumers_have_direct_owners(self):
+        for package in ('oasis7_consensus', 'oasis7_wasm_materializer'):
+            data = manifest(package)
+            dependencies = dict(data.get('dependencies', {}))
+            for target in data.get('target', {}).values():
+                dependencies.update(target.get('dependencies', {}))
+            self.assertIn('oasis7_cas', dependencies)
+            self.assertNotIn('oasis7_distfs', dependencies)
+        dependencies = manifest('oasis7_formal_protocol')['dependencies']
+        self.assertTrue({'oasis7_distfs', 'oasis7_cas', 'zstd'}.isdisjoint(dependencies))
+
     def test_client_proof_library_has_no_normal_world_or_node_dependency(self):
         pending, visited = ['oasis7_game_client'], set()
         while pending:
@@ -86,7 +97,7 @@ class Ownership(unittest.TestCase):
                 for name, dependency in table.items():
                     if isinstance(dependency, dict) and 'path' in dependency:
                         pending.append(dependency.get('package', name))
-        self.assertTrue({'oasis7', 'oasis7_node', 'oasis7_wasm_executor'}.isdisjoint(visited))
+        self.assertTrue({'oasis7', 'oasis7_node', 'oasis7_wasm_executor', 'oasis7_distfs', 'oasis7_cas'}.isdisjoint(visited))
 
     def test_world_library_does_not_own_launcher_or_network_hosting(self):
         source = ROOT / 'crates/oasis7/src'

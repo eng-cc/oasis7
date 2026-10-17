@@ -1,6 +1,7 @@
 //! Candidate owners cannot issue formal durability receipts. Their only path to
 //! a writable endpoint consumes a fully verified dual-install activation.
 use super::*;
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 use crate::controlled_authority::formal::fencing::{
     DurableSetNativeActivationRequestV1, DurableSetNativeInstallRequestV1,
 };
@@ -505,7 +506,7 @@ impl DurableSetCandidateV1 {
             controlled: false,
         };
         let _guard = endpoint.guard()?;
-        endpoint.reload_parent()?;
+        endpoint.reload_parent(&_guard.evidence().map_err(fencing_error)?)?;
         endpoint.verify_business_checkpoint()?;
         Ok(endpoint)
     }
@@ -621,7 +622,7 @@ impl FileFormalEndpoint {
             controlled: false,
         };
         let _guard = endpoint.guard()?;
-        endpoint.reload_parent()?;
+        endpoint.reload_parent(&_guard.evidence().map_err(fencing_error)?)?;
         endpoint.verify_business_checkpoint()?;
         Ok(endpoint)
     }

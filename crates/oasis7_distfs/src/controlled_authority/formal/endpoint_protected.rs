@@ -1,4 +1,5 @@
 use super::*;
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 use std::fs;
 use std::io::Read;
 
@@ -317,7 +318,7 @@ impl FileFormalEndpoint {
             controlled: false,
         };
         let _guard = endpoint.guard()?;
-        endpoint.reload_parent()?;
+        endpoint.reload_parent(&_guard.evidence().map_err(fencing_error)?)?;
         endpoint.verify_business_checkpoint()?;
         Ok(endpoint)
     }

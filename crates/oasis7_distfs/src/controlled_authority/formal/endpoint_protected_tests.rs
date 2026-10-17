@@ -288,7 +288,7 @@ fn simulated_remote_protected_signer_qualifies_reopens_and_seals_without_local_r
         .locate_native_position(1, &fixture.authority, &fixture.authority, None)
         .unwrap();
     assert_eq!(located.reference(), first.head());
-    let initial_body = fixture.authority.initial.clone().unwrap();
+    let initial_body = fixture.authority.initial_body().cloned().unwrap();
     let initial_certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&initial_body).unwrap(), 9),
         body: initial_body,
@@ -306,11 +306,23 @@ fn simulated_remote_protected_signer_qualifies_reopens_and_seals_without_local_r
     )
     .unwrap();
     assert_eq!(
-        VerifiedFormalReadAnchorV1::from_native_historical_service_restore(&trusted, &historical)
+        historical
+            .service_read_anchor(&trusted)
             .unwrap()
             .head()
             .head(),
         first.head()
+    );
+    let publication = historical.service_read_anchor(&trusted).unwrap();
+    assert_eq!(publication.checkpoint(), trusted.checkpoint());
+    assert_eq!(
+        publication.authority().context_digest().unwrap(),
+        historical.authority().context_digest().unwrap()
+    );
+    assert_eq!(publication.head().record(), historical.commit().record());
+    assert_eq!(
+        publication.head().finalizing_authority_id(),
+        historical.commit().finalizing_authority_id()
     );
     let later_trusted = trusted
         .after_verified_commit(fixture.authority.clone(), second_verified.clone())
@@ -318,13 +330,7 @@ fn simulated_remote_protected_signer_qualifies_reopens_and_seals_without_local_r
     let before_pin = historical_client(second_verified.head())
         .locate_native_position(1, &fixture.authority, &fixture.authority, None)
         .unwrap();
-    assert!(
-        VerifiedFormalReadAnchorV1::from_native_historical_service_restore(
-            &later_trusted,
-            &before_pin
-        )
-        .is_err()
-    );
+    assert!(before_pin.service_read_anchor(&later_trusted).is_err());
     assert!(
         historical_client(first.head())
             .restore_native_at(
@@ -516,7 +522,7 @@ fn formal_endpoint_child_process_dual_qualification_sigkill_reopen_original() {
         .unwrap();
     file.write_all(hex::encode([17u8; 32]).as_bytes()).unwrap();
     drop(file);
-    let body = fixture.authority.initial.clone().unwrap();
+    let body = fixture.authority.initial_body().cloned().unwrap();
     let certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&body).unwrap(), 9),
         body,
@@ -607,7 +613,7 @@ fn formal_endpoint_child_process_dual_qualification_sigkill_reopen_original() {
     fs::set_permissions(&failed_fixture.pdir, fs::Permissions::from_mode(0o700)).unwrap();
     let mut config: serde_json::Value =
         serde_json::from_slice(&fs::read(&configs[0]).unwrap()).unwrap();
-    let weak_body = failed_fixture.authority.initial.clone().unwrap();
+    let weak_body = failed_fixture.authority.initial_body().cloned().unwrap();
     let weak_certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&weak_body).unwrap(), 9),
         body: weak_body,
