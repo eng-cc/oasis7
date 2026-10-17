@@ -344,6 +344,16 @@ class Process(unittest.TestCase):
                 self.assertEqual(records[0]['suite'], 'healthy-set')
                 self.assertEqual(records[0]['shard'], 'storage-recovery')
                 self.assertEqual(records[0]['test_name'], 'formal_acceptance')
+                previous = results.read_text()
+                original_open = Path.open
+                def reject_final_append(path, *args, **kwargs):
+                    if path == results and args == ('a',):
+                        raise OSError('final journal is not writable')
+                    return original_open(path, *args, **kwargs)
+                with patch.object(Path, 'open', reject_final_append):
+                    with self.assertRaisesRegex(OSError, 'final journal is not writable'):
+                        artifacts.execute(consumer, 'ordinary', results, shard='storage-recovery')
+                self.assertEqual(results.read_text(), previous)
                 with self.assertRaisesRegex(ValueError, 'selection mismatch'):
                     artifacts.load(consumer, shard='healthy-set')
                 manifest_path = consumer / 'manifest.json'

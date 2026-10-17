@@ -73,7 +73,7 @@ def cleanup(process, marker):
     return ('unresolved' if members() else 'clean'), bool(initial)
 
 
-def run(command, cwd, env, suite, name, results, expected_count=None, timeout_seconds=2400, heartbeat_seconds=20, shard=None):
+def run(command, cwd, env, suite, name, results, expected_count=None, timeout_seconds=2400, heartbeat_seconds=20):
     marker = uuid.uuid4().hex
     env = dict(env, OASIS7_CI_PROCESS_OWNER=marker)
     started = datetime.now(timezone.utc).isoformat()
@@ -105,7 +105,7 @@ def run(command, cwd, env, suite, name, results, expected_count=None, timeout_se
                 timed_out = True
                 break
             if now >= next_heartbeat:
-                print(f'suite={suite} shard={shard} test={name} elapsed={int(now-start)}s state=running', flush=True)
+                print(f'suite={suite} test={name} elapsed={int(now-start)}s state=running', flush=True)
                 next_heartbeat = now + heartbeat_seconds
             time.sleep(min(0.2, heartbeat_seconds))
     except InterruptedError:
@@ -123,7 +123,7 @@ def run(command, cwd, env, suite, name, results, expected_count=None, timeout_se
     if not reader.is_alive():
         process.stdout.close()
     count_ok = expected_count is None or (expected_count > 0 and bool(summaries) and summaries[-1][0] == expected_count and summaries[-1][1] == 0)
-    result = dict(suite=suite, shard=shard, test_name=name, started_at=started,
+    result = dict(suite=suite, test_name=name, started_at=started,
                   elapsed_seconds=round(time.monotonic()-start, 3), exit_code=process.returncode,
                   timeout=timed_out, cancelled=cancelled, cleanup_result=cleanup_result, leaked_processes=leaked,
                   expected_count=expected_count, count_ok=count_ok,

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -417,7 +418,18 @@ def execute(bundle, suite, results, shard=None):
                 command += ['--test-threads=1', '--nocapture']
             cwd = ROOT / binary['cwd']
         test_env = dict(env, CARGO_MANIFEST_DIR=str(cwd))
-        result = run(command, cwd, test_env, logical_suite, name, results, expected_count=count, shard=shard)
+        if shard:
+            # The generic runner owns cleanup and all result checks. Keep shard
+            # metadata in this execution entry point, after its complete result.
+            with tempfile.TemporaryDirectory(prefix='oasis7-ci-result-') as temporary:
+                result = run(command, cwd, test_env, logical_suite, name,
+                             Path(temporary) / 'result.jsonl', expected_count=count)
+            result = dict(result, shard=shard)
+            results.parent.mkdir(parents=True, exist_ok=True)
+            with results.open('a') as stream:
+                stream.write(json.dumps(result) + '\n')
+        else:
+            result = run(command, cwd, test_env, logical_suite, name, results, expected_count=count)
         failed |= not result['passed']
         if result['cleanup_result'] != 'clean':
             break
