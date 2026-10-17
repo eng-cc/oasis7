@@ -15,6 +15,10 @@ use oasis7_distfs::controlled_authority::{
 };
 use oasis7_node::NodeExecutionCommitContext;
 
+#[path = "formal_snapshot_checkpoint_fixture.rs"]
+mod snapshot_checkpoint_fixture;
+use snapshot_checkpoint_fixture::frozen_at_snapshot_depth;
+
 // In-memory test receivers exercise the runtime handoff only. Native durable
 // endpoint and independent-provider qualification have separate storage tests.
 struct FrozenReceiver {
@@ -450,14 +454,8 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         .iter()
         .map(|action| action.payload_cbor.len())
         .sum();
-    let (body, material) = freeze_material(
-        anchor.authority(),
-        anchor.head(),
-        &original,
-        &world,
-        &ReleaseSecurityPolicy::default(),
-    )
-    .unwrap();
+    let (body, material) =
+        frozen_at_snapshot_depth(anchor.authority(), anchor.head(), &original, &world, 8);
     let input = SignedFormalFrozenV1 {
         signature_hex: fixtures::sign(frozen_signing_bytes(&body).unwrap(), 4),
         body,
@@ -506,6 +504,34 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
     .unwrap();
     assert_eq!(super::frozen_snapshot::counts(), (1, 2));
     assert_eq!(first, second);
+    let checkpoint = &first.material.roots[&ArtifactRole::Snapshot];
+    assert_eq!(checkpoint, &first.candidate.record.after_state_root);
+    assert_eq!(
+        blake3_hex(&first.material.snapshot_bytes().unwrap()),
+        first.candidate.record.after_state_root,
+    );
+    let old_prestate = &executable.material().roots[&ArtifactRole::Snapshot];
+    assert!(
+        first
+            .material
+            .objects
+            .iter()
+            .any(|object| &object.content_hash == old_prestate)
+    );
+    assert_eq!(first.frozen_material.as_ref(), Some(executable.material()));
+    let mut next_frozen_snapshot = BTreeMap::new();
+    let inherited_root = super::super::formal_snapshot::inherit(
+        &mut next_frozen_snapshot,
+        &first.material,
+        &first.material.snapshot_bytes().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(&inherited_root, checkpoint);
+    assert_eq!(
+        next_frozen_snapshot.len(),
+        1,
+        "next Frozen inherits only the new complete Snapshot"
+    );
     let journal: oasis7::runtime::Journal =
         capture::decode_role(&first.material, ArtifactRole::Journal).unwrap();
     assert!(journal.events.iter().any(|event| matches!(

@@ -436,6 +436,8 @@ attempt 回收要求原 Published envelope 与 P/R 分别完成的独立 typed �
 
 同一次 Node 执行对同一 Frozen 的恢复和候选重建，允许复用一次完整验证得到的原 Snapshot 字节，避免重复展开相同 delta 链。该证明仅绑定本次借用的精确 Frozen、authority 和 parent；等值副本也不能替代绑定对象，不可序列化、克隆或跨执行、恢复重试、RPC 复用。构造时仍验证原材料、完整依赖闭包、body digest、Snapshot 链和原前态 hash，不允许用执行后 World 补齐原材料。最多额外持有一份 64 MiB 原 Snapshot；原深度 32 与链输入 256 MiB 上限保持不变，不缓存全部中间历史。每次恢复继续检查权限、证书、manifest、当前 native 环境、树与 transition；重建后的 body 和全部 material 必须与原 Frozen 精确相等，才可复用其内容验证证明。现有公共 verify/attach 接口保持原行为，返回同一验证 pass 已展开字节的内部接口不得改变旧 schema 的原验证或分配语义；恢复专用 attachment 路径必须接收不可自行制造的证明并立即核对完整重建结果，不提供通用跳过验证开关。
 
+SnapshotDelta 的验证接受上限仍为深度 32、链输入 256 MiB；生产者不必耗尽该上限。新生成 Snapshot 默认最多连续 8 层 delta，下一次变更写完整 checkpoint，以限制逐层重组、hash 和闭包解码的重复成本；不重写已有签名历史，也不删除早期 checkpoint 或 delta。原 Snapshot 字节、状态根和业务效果保持一致，新 artifact 的身份随合法 producer 输出重新生成。完整 checkpoint 仍经过相同有界物理 CDC/压缩和完整性验证；不能预先宣称更密 checkpoint 的实际空间开销为零，须将完整长历史耗时和容量证据一起报告。验证器对已有 9–32 层合法链继续完整验证，超过上限仍拒绝，不能把 producer 策略变成历史读取上限。
+
 阶段是技术依赖顺序，可合并实施，不新增 workflow、审批次数或每阶段强制 PR。当前无运行世界时直接创建新表示；本地实现与验证不代替真实节点部署验收。
 
 S0–S3 的物理优化与生命周期治理可按已验证范围独立交付、部署。S4 完整 delta 与 S5 Merkle v2 可以分别后置，彼此也不作为物理优化的前置条件。S6 对本次实际启用的子集执行全部适用部署验收；未启用能力维持原数据/格式与必要限制，明确标为未验证，不要求等待所有逻辑演进后才能部署已通过的物理优化。

@@ -6,6 +6,10 @@ use oasis7_distfs::controlled_authority::replicated_protocol::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+// Producer policy only: old signed chains through depth 32 remain readable.
+// A changed Snapshot after depth 8 starts a fresh exact checkpoint.
+const PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH: usize = 8;
+
 pub(crate) fn bytes(material: &ClosedRecord) -> Result<Vec<u8>, String> {
     material.snapshot_bytes().map_err(|error| error.to_string())
 }
@@ -95,7 +99,7 @@ pub(super) fn append(
     if to_cbor(before)? == raw_after {
         return Ok(base_ref);
     }
-    if depth < MAX_SNAPSHOT_DELTA_DEPTH {
+    if depth < PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH {
         // A changed field schema is a checkpoint boundary, never inferred state.
         if let Ok(delta) = SnapshotDeltaV1::between(before, after) {
             let artifact = SnapshotArtifactV1::new(base_ref.clone(), depth + 1, delta)?;

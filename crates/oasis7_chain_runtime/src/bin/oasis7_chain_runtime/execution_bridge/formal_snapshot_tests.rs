@@ -38,13 +38,95 @@ fn sparse_snapshot_history_uses_bounded_checkpoints_and_exact_expanded_state_roo
                 capture::object(&frozen, hash).map(<[u8]>::to_vec)
             })
             .unwrap();
-        assert_eq!(depth, step as usize % (MAX_SNAPSHOT_DELTA_DEPTH + 1));
+        assert_eq!(
+            depth,
+            step as usize % (PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH + 1)
+        );
         if depth > 0 {
             assert_ne!(snapshot_ref, state_root);
         }
-        assert!(inherited.len() <= MAX_SNAPSHOT_DELTA_DEPTH + 2);
+        assert!(inherited.len() <= PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH + 2);
+        if depth == PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH {
+            assert_eq!(
+                append(&mut inherited, &frozen, &after, &after, raw_after).unwrap(),
+                snapshot_ref,
+                "an unchanged depth-8 Snapshot must keep its original root"
+            );
+        }
         before = after;
     }
+}
+
+#[test]
+fn historical_depths_through_thirty_two_remain_readable_and_inheritable() {
+    assert_eq!(MAX_SNAPSHOT_DELTA_DEPTH, 32);
+    let mut before = World::new().snapshot();
+    let mut objects = BTreeMap::new();
+    let mut root = insert(&mut objects, to_cbor(&before).unwrap(), vec![]);
+    for depth in 1..=32 {
+        let mut after = before.clone();
+        after.next_action_id += 1;
+        let artifact = SnapshotArtifactV1::new(
+            root.clone(),
+            depth,
+            SnapshotDeltaV1::between(&before, &after).unwrap(),
+        )
+        .unwrap();
+        root = insert(&mut objects, artifact.encode().unwrap(), vec![root]);
+        let old = material(root.clone(), &objects);
+        assert_eq!(bytes(&old).unwrap(), to_cbor(&after).unwrap());
+        let mut inherited = BTreeMap::new();
+        assert_eq!(
+            inherit(&mut inherited, &old, &to_cbor(&after).unwrap()).unwrap(),
+            root
+        );
+        assert_eq!(inherited.len(), depth + 1);
+        before = after;
+    }
+}
+
+#[test]
+fn checkpoint_transition_keeps_the_original_closed_capture_budget() {
+    let mut before = World::new().snapshot();
+    before
+        .module_artifact_bytes
+        .insert("budget-fixture".into(), vec![7; 5 * 1024 * 1024]);
+    let mut objects = BTreeMap::new();
+    let mut root = insert(&mut objects, to_cbor(&before).unwrap(), vec![]);
+    for depth in 1..=PRODUCER_MAX_SNAPSHOT_DELTA_DEPTH {
+        let mut after = before.clone();
+        after.next_action_id += 1;
+        let artifact = SnapshotArtifactV1::new(
+            root.clone(),
+            depth,
+            SnapshotDeltaV1::between(&before, &after).unwrap(),
+        )
+        .unwrap();
+        root = insert(&mut objects, artifact.encode().unwrap(), vec![root]);
+        before = after;
+    }
+    let original = material(root.clone(), &objects);
+    let mut after = before.clone();
+    after
+        .module_artifact_bytes
+        .get_mut("budget-fixture")
+        .unwrap()
+        .fill(8);
+    let raw = to_cbor(&after).unwrap();
+    let checkpoint = append(&mut objects, &original, &before, &after, raw.clone()).unwrap();
+    assert_eq!(checkpoint, blake3_hex(&raw));
+    assert!(
+        objects.contains_key(&root),
+        "checkpoint must retain the original prestate chain"
+    );
+    let transition = material(checkpoint, &objects);
+    assert_eq!(bytes(&transition).unwrap(), raw);
+    let encoded = to_cbor(&transition).unwrap();
+    assert!(encoded.len() > 8 * 1024 * 1024);
+    assert!(
+        capture::validate_package_budget(&encoded).is_err(),
+        "earlier checkpoints must not relax the existing closed capture budget"
+    );
 }
 #[test]
 fn snapshot_closure_rejects_wrong_prestate_missing_base_and_declared_edge_mismatch() {
