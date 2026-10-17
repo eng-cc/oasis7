@@ -5,7 +5,6 @@ use crate::runtime::{
 };
 use crate::world_service::projection;
 use oasis7_client_api::world_service::sign_read_request;
-use oasis7_client_api::world_service::*;
 use oasis7_proto::player_auth::sign_agent_chat_auth_proof;
 use oasis7_proto::viewer::AgentChatRequest;
 

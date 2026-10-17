@@ -8,14 +8,14 @@ use super::super::external_effect::load_execution_external_effect_materializatio
 use super::*;
 use oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope;
 use oasis7::consensus_action_payload::encode_consensus_action_payload;
-use oasis7::runtime::{
+use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
+use oasis7_proto::storage_profile::StorageProfileConfig;
+use oasis7_runtime::{
     Action as RuntimeAction, DomainEvent, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, LocalCasStore,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
     ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
     production_hardened_main_token_config,
 };
-use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
-use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_wasm_abi::ModuleCallFailure;
 use oasis7_wasm_executor::FixedSandbox;
@@ -920,7 +920,7 @@ fn committed_recipe_origin_preserves_exact_consensus_context_and_runtime_id_allo
     };
     let mut envelope = ConsensusActionPayloadEnvelope::from_runtime_action(action);
     envelope.version = 2;
-    envelope.gameplay_submission_origin = Some(oasis7::runtime::GameplaySubmissionOrigin {
+    envelope.gameplay_submission_origin = Some(oasis7_runtime::GameplaySubmissionOrigin {
         verified_player_id: "browser-player".into(),
         public_key: "a".repeat(64),
         auth_nonce: 7,

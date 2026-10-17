@@ -45,3 +45,9 @@ pub mod private_key_file;
 pub mod task_factory_quote;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod task_recipe_quote;
+
+#[cfg(test)]
+mod game_client_conformance;
+
+#[cfg(test)]
+pub(crate) mod formal_read_response_fixture;

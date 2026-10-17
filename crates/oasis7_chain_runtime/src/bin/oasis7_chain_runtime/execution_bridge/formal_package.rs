@@ -4,12 +4,12 @@ use super::{
     to_cbor,
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
-use oasis7::runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use oasis7_distfs::controlled_authority::{
     formal::{coordinator::ExecutableFormalFrozenV1, endpoint::FormalCandidateMaterialV1, *},
     replicated_protocol::{ArtifactObject, ArtifactRole, ClosedRecord},
 };
 use oasis7_node::{NodeLocalExecutionContinuation, compute_consensus_action_root};
+use oasis7_runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
@@ -490,7 +490,7 @@ pub(super) fn restore_executable(
             let reader = business_reader.ok_or("formal frozen restore lacks CAS reader")?;
             let bytes = to_cbor(&snapshot)?;
             let retained =
-                oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
+                oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
             oasis7::runtime_host::world::from_verified_formal_snapshot(
                 snapshot,
                 journal,
@@ -528,7 +528,7 @@ pub(super) fn restore_executable(
 pub(super) struct FormalRetainedExecutionOutputs {
     pub new_results: Vec<oasis7::world_service::CanonicalIntentResultV1>,
     pub event_root: String,
-    pub unpruned_journal: oasis7::runtime::Journal,
+    pub unpruned_journal: oasis7_runtime::Journal,
     pub journal_cursors: Vec<(u64, u64)>,
     pub delta:
         Option<oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexDeltaV1>,

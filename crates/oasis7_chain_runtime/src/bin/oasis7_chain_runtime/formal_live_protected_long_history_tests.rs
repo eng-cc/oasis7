@@ -314,7 +314,7 @@ fn wait_for_new_long_history_result(
 }
 
 fn fresh_long_history_result(
-    world: &oasis7::runtime::World,
+    world: &oasis7_runtime::World,
     key: &str,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> Result<Option<oasis7::world_service::CanonicalIntentResultV1>, String> {

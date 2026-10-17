@@ -1,5 +1,15 @@
 //! Shared test-only response builder, compiled with the owning verifier types.
-use super::*;
+use crate::{
+    authority,
+    formal_projection::ProjectionAudienceV1,
+    formal_read::{FormalReadHistoryV1, FormalReadVerifier},
+    formal_read_fixtures::{commit_ref, projection, public},
+    projection::WorldServiceProjection,
+};
+use oasis7_client_api::world_service::*;
+use oasis7_distfs::controlled_authority::formal::{
+    InitialActivationTrustV1, VerifiedFormalReadAnchorV1,
+};
 pub(crate) fn response(
     world: &oasis7_runtime::World,
     anchor: &VerifiedFormalReadAnchorV1,

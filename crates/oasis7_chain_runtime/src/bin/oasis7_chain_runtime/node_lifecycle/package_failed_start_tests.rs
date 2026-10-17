@@ -5,7 +5,7 @@ use crate::node_lifecycle::{
     actions, bootstrap, local_io as io,
     model::{self, ChainAnchor, NodeConfig},
 };
-use oasis7::runtime::{ChainResourceDerivationContext, Journal, Snapshot};
+use oasis7_runtime::{ChainResourceDerivationContext, Journal, Snapshot};
 use serde_json::{Value, json};
 use std::{
     fs::{self, OpenOptions},

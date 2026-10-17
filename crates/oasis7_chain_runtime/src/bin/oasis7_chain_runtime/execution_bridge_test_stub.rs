@@ -10,9 +10,9 @@ pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::{
 };
 use std::path::Path;
 
-use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
 use oasis7_proto::storage_profile::StorageProfileConfig;
+use oasis7_runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 
 pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::ExecutionCheckpointStatusEvidence;
 pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::driver_observability::{

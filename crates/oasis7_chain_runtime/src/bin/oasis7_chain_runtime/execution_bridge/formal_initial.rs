@@ -5,7 +5,6 @@ use super::{
     to_cbor,
 };
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{ReleaseSecurityPolicy, World, blake3_hex};
 use oasis7_distfs::controlled_authority::formal::{
     business_index::BusinessIndexNodeReader,
     business_material::{FORMAL_BUSINESS_ENVELOPE_DOMAIN_V1, FormalBusinessResultEnvelopeV1},
@@ -14,6 +13,7 @@ use oasis7_distfs::controlled_authority::{
     formal::{endpoint::FormalCandidateMaterialV1, *},
     replicated_protocol::{ArtifactObject, ArtifactRole, ClosedRecord},
 };
+use oasis7_runtime::{ReleaseSecurityPolicy, World, blake3_hex};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 struct EmptyBusinessIndex;

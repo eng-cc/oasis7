@@ -1,7 +1,7 @@
 //! Actual module fixture for formal runtime replay; test authorities only.
 use super::*;
 use crate::formal_live_runtime::tests::protected_process_tests::common;
-use oasis7::runtime::{
+use oasis7_runtime::{
     Manifest, ModuleAbiContract, ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits,
     ModuleManifest, ModuleRole, ModuleSubscription, ModuleSubscriptionStage, PolicySet,
     ProposalDecision,
@@ -145,7 +145,7 @@ fn prepared_wasm_world(identity: &FormalWorldIdentityV1, initialize_formal_histo
         .bind_cognition_runtime(&identity.world_id, "main", 0, None, "pending", 0)
         .unwrap();
     let snapshot = world.snapshot_with_chain_resource_context(
-        oasis7::runtime::ChainResourceDerivationContext {
+        oasis7_runtime::ChainResourceDerivationContext {
             world_id: &identity.world_id,
             chain_id: &identity.chain_id,
             genesis_ref: Some(&identity.genesis_digest),

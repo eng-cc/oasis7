@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use oasis7::runtime::{
+use oasis7_runtime::{
     ChainResourceDerivationContext, MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy,
     World as RuntimeWorld, production_hardened_main_token_config,
 };

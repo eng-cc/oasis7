@@ -3,7 +3,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use oasis7::runtime::{
+use oasis7_runtime::{
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
     MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
 };
@@ -176,12 +176,12 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
         (
             ROLLBACK_ON_CALL_SLOT_ID,
             "on_call",
-            oasis7::runtime::RollbackAuthorityRole::OnCall,
+            oasis7_runtime::RollbackAuthorityRole::OnCall,
         ),
         (
             ROLLBACK_GOVERNANCE_SLOT_ID,
             "governance",
-            oasis7::runtime::RollbackAuthorityRole::Governance,
+            oasis7_runtime::RollbackAuthorityRole::Governance,
         ),
     ]
     .into_iter()
@@ -259,11 +259,11 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
             [
                 (
                     ROLLBACK_ON_CALL_SLOT_ID,
-                    oasis7::runtime::RollbackAuthorityRole::OnCall,
+                    oasis7_runtime::RollbackAuthorityRole::OnCall,
                 ),
                 (
                     ROLLBACK_GOVERNANCE_SLOT_ID,
-                    oasis7::runtime::RollbackAuthorityRole::Governance,
+                    oasis7_runtime::RollbackAuthorityRole::Governance,
                 ),
             ]
             .into_iter()
@@ -496,7 +496,7 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::{CliOptions, build_audit_report, parse_options, validate_audit_report};
-    use oasis7::runtime::{
+    use oasis7_runtime::{
         Action, GovernanceExecutionPolicy, GovernanceFinalitySignerRegistry,
         GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
         RollbackAuthorityRecord, RollbackAuthorityRegistry, RollbackAuthorityRole,

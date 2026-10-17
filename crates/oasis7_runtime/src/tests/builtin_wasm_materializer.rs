@@ -32,7 +32,7 @@ fn materializer_fetch_miss_falls_back_to_compile_and_caches_blob() {
     write_compiler_script(&compiler, compiled_bytes.as_slice());
 
     let module_id = "m9.test.fallback";
-    let expected_hashes = vec![compiled_hash.clone()];
+    let expected_hashes = [compiled_hash.clone()];
     let expected_hash_refs: Vec<&str> = expected_hashes.iter().map(String::as_str).collect();
 
     let _fetcher_guard = EnvVarGuard::capture(FETCHER_ENV);
@@ -116,7 +116,7 @@ fn materializer_reuses_cached_module_hash_when_manifest_hashes_do_not_match() {
     )
     .expect("write module hash index");
 
-    let expected_hashes = vec![stale_manifest_hash];
+    let expected_hashes = [stale_manifest_hash];
     let expected_hash_refs: Vec<&str> = expected_hashes.iter().map(String::as_str).collect();
     let loaded =
         load_builtin_wasm_with_fetch_fallback(module_id, &expected_hash_refs, &distfs_root)

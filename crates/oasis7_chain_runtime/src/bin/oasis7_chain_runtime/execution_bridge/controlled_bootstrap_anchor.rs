@@ -2,12 +2,12 @@
 
 use super::execution_hash::ExecutionHashPayload;
 use super::{ExecutionBridgeRecord, controlled_capture as capture, to_cbor};
-use oasis7::runtime::{
-    ChainResourceDerivationContext, Journal, ReleaseSecurityPolicy, Snapshot, blake3_hex,
-};
 use oasis7_distfs::controlled_authority::{
     activation::VerifiedInitialActivation,
     replicated_protocol::{ArtifactObject, ArtifactRole, ClosedRecord},
+};
+use oasis7_runtime::{
+    ChainResourceDerivationContext, Journal, ReleaseSecurityPolicy, Snapshot, blake3_hex,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

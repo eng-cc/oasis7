@@ -1,6 +1,6 @@
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
-use oasis7::runtime::{GovernanceFinalitySignerRegistry, World as RuntimeWorld};
 use oasis7_node::NodeRole;
+use oasis7_runtime::{GovernanceFinalitySignerRegistry, World as RuntimeWorld};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;

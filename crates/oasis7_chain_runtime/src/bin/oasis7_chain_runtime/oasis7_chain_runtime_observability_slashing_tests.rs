@@ -1,10 +1,10 @@
 use oasis7::geometry::GeoPos;
-use oasis7::runtime::{Action, GovernanceIdentityStatus, World};
 use oasis7_node::{
     NodeConsensusMisbehaviorEvidenceSnapshot, NodeConsensusSlashingIntentSnapshot,
     NodeConsensusSlashingReceiptSnapshot, NodeConsensusSnapshot, NodeRole, NodeSnapshot,
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_runtime::{Action, GovernanceIdentityStatus, World};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

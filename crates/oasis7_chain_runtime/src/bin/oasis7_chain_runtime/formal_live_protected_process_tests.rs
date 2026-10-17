@@ -229,7 +229,7 @@ fn run_protected_runtime_fixture(
     } else {
         None
     };
-    let release = oasis7::runtime::ReleaseSecurityPolicy::production_hardened();
+    let release = oasis7_runtime::ReleaseSecurityPolicy::production_hardened();
     let (_policy_material, executable_digest, execution_policy_digest) = match &shipping_executable {
         Some(path) => crate::execution_bridge_real_tests::real_execution_bridge::formal_initial::test_execution_policy_material(path, &release)?,
         None => formal_package::execution_policy_material(&release)?,
@@ -252,7 +252,7 @@ fn run_protected_runtime_fixture(
     if !genesis_mode {
         world.submit_action(Action::RegisterAgent {
             agent_id: "agent".into(),
-            pos: oasis7::GeoPos::new(0, 0, 0),
+            pos: oasis7_agent_api::world_action::GeoPos::new(0, 0, 0),
         });
         world
             .step()
@@ -280,7 +280,7 @@ fn run_protected_runtime_fixture(
             })?;
     }
     let snapshot = world.snapshot_with_chain_resource_context(
-        oasis7::runtime::ChainResourceDerivationContext {
+        oasis7_runtime::ChainResourceDerivationContext {
             world_id: &identity.world_id,
             chain_id: &identity.chain_id,
             genesis_ref: Some(&identity.genesis_digest),
@@ -292,7 +292,7 @@ fn run_protected_runtime_fixture(
         fixtures::h(10),
         fixtures::h(11),
     );
-    let world = oasis7::runtime::World::from_snapshot(snapshot, world.journal().clone())
+    let world = oasis7_runtime::World::from_snapshot(snapshot, world.journal().clone())
         .map_err(|error| format!("restore fixture World identity: {error:?}"))?;
     if (genesis_mode && world.state().time != 0) || (!genesis_mode && world.state().time == 0) {
         return Err(format!(

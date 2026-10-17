@@ -7,14 +7,14 @@ use super::execution_hash::{
     execution_resource_created_at_height,
 };
 use super::{ExecutionExternalEffectMaterialization, to_cbor};
-use oasis7::runtime::{
-    ChainResourceDerivationContext, Journal, RuntimeCommittedTickContext, Snapshot, blake3_hex,
-};
 use oasis7_distfs::controlled_authority::{
     LocalRequestIdentity,
     replicated_protocol::{
         ArtifactRole, ClosedRecord, DurabilityEvidence, FixedTrust, HeadAnchor, verify_evidence,
     },
+};
+use oasis7_runtime::{
+    ChainResourceDerivationContext, Journal, RuntimeCommittedTickContext, Snapshot, blake3_hex,
 };
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct TrustedHistoryConfiguration {
     pub trust: FixedTrust,
     pub minimum_head: HeadAnchor,
-    pub release_security_policy: oasis7::runtime::ReleaseSecurityPolicy,
+    pub release_security_policy: oasis7_runtime::ReleaseSecurityPolicy,
     pub initial_execution_height: u64,
     pub initial_execution_state_root: String,
     pub initial_execution_block_hash: String,
@@ -65,7 +65,7 @@ pub(crate) struct HistoryVerification {
 }
 
 pub(super) fn request_identity(
-    origin: &oasis7::runtime::GameplaySubmissionOrigin,
+    origin: &oasis7_runtime::GameplaySubmissionOrigin,
 ) -> Result<LocalRequestIdentity, String> {
     // Full identity tuple is unambiguous and preserves the existing session distinction.
     Ok(LocalRequestIdentity {

@@ -363,7 +363,7 @@ fn world_with_owner() -> (World, SigningKey) {
         .unwrap();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent".into(),
-        pos: oasis7::GeoPos::new(0, 0, 0),
+        pos: oasis7_agent_api::world_action::GeoPos::new(0, 0, 0),
     });
     world.step().unwrap();
     world.submit_action(Action::ClaimStarterOc {

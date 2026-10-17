@@ -97,7 +97,7 @@ fn execute_with_business_reader(
         let reader = business_reader.ok_or("formal retention CAS reader unavailable")?;
         let bytes = super::to_cbor(world.snapshot())?;
         let retained =
-            oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
+            oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
         world.attach_verified_formal_history(retained, reader.0.clone())?;
     }
     // Create a new private attempt. Existing partial attempts are evidence,
@@ -201,8 +201,8 @@ fn execute_with_business_reader(
                 .ok_or("formal output effect missing")?,
         )
         .map_err(|e| format!("{e:?}"))?;
-    let output_snapshot: oasis7::runtime::Snapshot = capture::decode_snapshot(&snapshot)?;
-    let output_journal: oasis7::runtime::Journal = capture::decode_generic(&journal)?;
+    let output_snapshot: oasis7_runtime::Snapshot = capture::decode_snapshot(&snapshot)?;
+    let output_journal: oasis7_runtime::Journal = capture::decode_generic(&journal)?;
     let after = if formal_retention {
         executor
             .execution_world

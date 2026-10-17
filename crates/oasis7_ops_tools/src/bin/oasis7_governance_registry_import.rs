@@ -3,14 +3,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use oasis7::runtime::{
+use oasis7::viewer::ExclusiveDirectoryProcessLock;
+use oasis7_runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
     GovernanceThresholdSignerPolicy, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
     ReleaseSecurityPolicy, RollbackAuthorityRecord, RollbackAuthorityRegistry,
     RollbackAuthorityRole, World, WorldState,
 };
-use oasis7::viewer::ExclusiveDirectoryProcessLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

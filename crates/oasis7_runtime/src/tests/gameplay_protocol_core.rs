@@ -1,11 +1,6 @@
 use super::super::*;
 use super::pos;
 use oasis7_agent_api::world_action::ResourceKind;
-#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-use oasis7_wasm_abi::{
-    ModuleCallFailure, ModuleCallRequest, ModuleEmit, ModuleOutput, ModuleSandbox,
-    ModuleTickLifecycleDirective,
-};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,49 +9,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod policy_tests;
 
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-struct GameplayDirectiveSandbox {
-    governance_directives: Vec<serde_json::Value>,
-}
-
+#[path = "gameplay_protocol_sandbox.rs"]
+mod sandbox;
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-impl GameplayDirectiveSandbox {
-    fn empty() -> Self {
-        Self {
-            governance_directives: Vec::new(),
-        }
-    }
-
-    fn with_governance_directive(payload: serde_json::Value) -> Self {
-        Self {
-            governance_directives: vec![payload],
-        }
-    }
-}
-
-#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-impl ModuleSandbox for GameplayDirectiveSandbox {
-    fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
-        let mut emits = Vec::new();
-        if request.module_id == M5_GAMEPLAY_GOVERNANCE_MODULE_ID
-            && (request.trace_id.starts_with("tick-")
-                || request.trace_id.starts_with("infra-tick-"))
-        {
-            if let Some(payload) = self.governance_directives.pop() {
-                emits.push(ModuleEmit {
-                    kind: "gameplay.lifecycle.directives".to_string(),
-                    payload,
-                });
-            }
-        }
-        Ok(ModuleOutput {
-            new_state: None,
-            effects: Vec::new(),
-            emits,
-            tick_lifecycle: Some(ModuleTickLifecycleDirective::WakeAfterTicks { ticks: 1 }),
-            output_bytes: 512,
-        })
-    }
-}
+use sandbox::GameplayDirectiveSandbox;
 
 fn register_agents(world: &mut World, agent_ids: &[&str]) {
     for (index, agent_id) in agent_ids.iter().enumerate() {
@@ -542,9 +498,11 @@ fn declare_war_rejects_initiator_outside_aggressor_alliance() {
             reason: RejectReason::RuleDenied { notes },
             ..
         } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("is not a member of aggressor alliance")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("is not a member of aggressor alliance"))
+            );
         }
         other => panic!("unexpected event: {other:?}"),
     }
@@ -602,9 +560,11 @@ fn governance_vote_rejects_weight_above_cap() {
             reason: RejectReason::RuleDenied { notes },
             ..
         } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("vote weight must be <= 100")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("vote weight must be <= 100"))
+            );
         }
         other => panic!("unexpected event: {other:?}"),
     }
@@ -681,9 +641,11 @@ fn governance_proposal_finalizes_and_rejects_late_votes() {
             reason: RejectReason::RuleDenied { notes },
             ..
         } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("proposal is not open")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("proposal is not open"))
+            );
         }
         other => panic!("unexpected event: {other:?}"),
     }
@@ -941,11 +903,12 @@ fn war_auto_concludes_after_duration() {
     assert_eq!(war.loser_alliance_id.as_deref(), Some("alliance.blue"));
     assert!(!war.participant_outcomes.is_empty());
     assert!(war.concluded_at.is_some());
-    assert!(war
-        .settlement_summary
-        .as_deref()
-        .unwrap_or_default()
-        .contains("auto settlement"));
+    assert!(
+        war.settlement_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("auto settlement")
+    );
 }
 
 #[test]
@@ -1095,9 +1058,11 @@ fn war_declaration_requires_mobilization_resources_and_conclusion_applies_outcom
             reason: RejectReason::RuleDenied { notes },
             ..
         } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("cannot change members")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("cannot change members"))
+            );
         }
         other => panic!("unexpected event: {other:?}"),
     }
@@ -1111,18 +1076,21 @@ fn war_declaration_requires_mobilization_resources_and_conclusion_applies_outcom
         .get("war.outcome")
         .expect("war after conclude");
     assert!(!war.active);
-    assert!(war
-        .participant_outcomes
-        .iter()
-        .any(|item| item.electricity_delta < 0));
-    assert!(war
-        .participant_outcomes
-        .iter()
-        .any(|item| item.electricity_delta > 0));
-    assert!(war
-        .participant_outcomes
-        .iter()
-        .any(|item| item.reputation_delta != 0));
+    assert!(
+        war.participant_outcomes
+            .iter()
+            .any(|item| item.electricity_delta < 0)
+    );
+    assert!(
+        war.participant_outcomes
+            .iter()
+            .any(|item| item.electricity_delta > 0)
+    );
+    assert!(
+        war.participant_outcomes
+            .iter()
+            .any(|item| item.reputation_delta != 0)
+    );
     let total_electricity_delta: i64 = war
         .participant_outcomes
         .iter()
@@ -1178,16 +1146,22 @@ fn meta_progress_unlocks_track_tiers() {
     assert!(tiers.iter().any(|tier| tier == "bronze"));
     assert!(tiers.iter().any(|tier| tier == "silver"));
     assert!(tiers.iter().any(|tier| tier == "gold"));
-    assert!(progress
-        .achievements
-        .iter()
-        .any(|value| value == "tier.campaign.bronze"));
-    assert!(progress
-        .achievements
-        .iter()
-        .any(|value| value == "tier.campaign.silver"));
-    assert!(progress
-        .achievements
-        .iter()
-        .any(|value| value == "tier.campaign.gold"));
+    assert!(
+        progress
+            .achievements
+            .iter()
+            .any(|value| value == "tier.campaign.bronze")
+    );
+    assert!(
+        progress
+            .achievements
+            .iter()
+            .any(|value| value == "tier.campaign.silver")
+    );
+    assert!(
+        progress
+            .achievements
+            .iter()
+            .any(|value| value == "tier.campaign.gold")
+    );
 }

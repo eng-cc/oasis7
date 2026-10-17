@@ -1,12 +1,12 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use oasis7::runtime::{
-    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal,
-    Snapshot as RuntimeSnapshot, blake3_hex,
-};
 use oasis7::simulator::{
     WorldJournal as SimulatorJournal, WorldKernel, WorldSnapshot as SimulatorSnapshot,
+};
+use oasis7_runtime::{
+    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal,
+    Snapshot as RuntimeSnapshot, blake3_hex,
 };
 
 use super::checkpoint::{

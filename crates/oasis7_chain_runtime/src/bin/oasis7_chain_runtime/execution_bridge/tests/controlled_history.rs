@@ -6,14 +6,14 @@ use super::*;
 use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
-use oasis7::runtime::{
-    Action, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage,
-};
 use oasis7_distfs::controlled_authority::replicated_protocol::{
     EndpointRole, FileEndpoint, FixedTrust, ProtocolOutcome, ReplicatedCoordinator,
 };
 use oasis7_node::NodeExecutionHook;
+use oasis7_runtime::{
+    Action, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
+    ModuleSubscriptionStage,
+};
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 
 fn key(n: u8) -> SigningKey {
@@ -41,7 +41,7 @@ fn context(height: u64, nonce: u64) -> NodeExecutionCommitContext {
         logistics_route_ids: vec![],
         logistics_path_ids: vec![],
     };
-    let origin = oasis7::runtime::GameplaySubmissionOrigin {
+    let origin = oasis7_runtime::GameplaySubmissionOrigin {
         verified_player_id: "player".into(),
         public_key: "b".repeat(64),
         auth_nonce: nonce,
@@ -84,7 +84,7 @@ fn controlled_history_rejects_decodable_service_envelopes_without_dropping_them(
             agent_id: "agent-0".into(),
             request_id: "service-history-boundary".into(),
             delegation_generation: 0,
-            captured_base_binding: oasis7::runtime::RuntimeCognitionBaseBindingV1 {
+            captured_base_binding: oasis7_runtime::RuntimeCognitionBaseBindingV1 {
                 world_id: "w1".into(),
                 branch_id: "main".into(),
                 finality_epoch: 0,
@@ -306,7 +306,7 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
     let dir = temp_dir("controlled-history-real-wasm");
     let original_world = module_world();
     let cached_snapshot = original_world.snapshot_with_chain_resource_context(
-        oasis7::runtime::ChainResourceDerivationContext {
+        oasis7_runtime::ChainResourceDerivationContext {
             world_id: "w1",
             chain_id: "c1",
             genesis_ref: None,
@@ -442,7 +442,7 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
         capture::materialize_preparation(&history[0].proposal.body.record, &first_manifest)
             .unwrap();
     let pre_snapshot = capture::decode_snapshot(&first_preparation.before_snapshot).unwrap();
-    let pre_journal: oasis7::runtime::Journal =
+    let pre_journal: oasis7_runtime::Journal =
         capture::decode_generic(&first_preparation.before_journal).unwrap();
     let pre_world =
         oasis7::runtime_host::world::from_snapshot(pre_snapshot, pre_journal.clone()).unwrap();
@@ -450,7 +450,7 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
         super::super::execution_hash::execution_resource_commit_hash("w1", initial_height);
     let resource_hash = super::super::execution_hash::execution_resource_context_hash("w1");
     let published_snapshot = to_cbor(pre_world.snapshot_with_chain_resource_context(
-        oasis7::runtime::ChainResourceDerivationContext {
+        oasis7_runtime::ChainResourceDerivationContext {
             world_id: "w1",
             chain_id: "w1",
             genesis_ref: None,

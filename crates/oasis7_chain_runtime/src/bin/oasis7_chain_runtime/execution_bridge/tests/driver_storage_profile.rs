@@ -1,9 +1,9 @@
 use super::super::checkpoint::load_execution_bridge_record;
 use super::super::driver::{NodeRuntimeExecutionDriver, persist_execution_world};
 use super::temp_dir;
-use oasis7::runtime::{ReleaseSecurityPolicy, production_hardened_main_token_config};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_runtime::{ReleaseSecurityPolicy, production_hardened_main_token_config};
 use std::fs;
 
 #[test]

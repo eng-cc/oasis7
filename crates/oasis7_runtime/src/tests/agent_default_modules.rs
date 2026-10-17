@@ -154,7 +154,7 @@ fn last_module_state(world: &World, module_id: &str) -> Option<Vec<u8>> {
         })
 }
 
-fn last_domain_event<'a>(world: &'a World) -> Option<&'a DomainEvent> {
+fn last_domain_event(world: &World) -> Option<&DomainEvent> {
     world
         .journal()
         .events

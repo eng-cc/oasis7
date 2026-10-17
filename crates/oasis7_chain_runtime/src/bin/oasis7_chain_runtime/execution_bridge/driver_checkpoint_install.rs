@@ -3,12 +3,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use oasis7::runtime::{
-    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal,
-    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
-};
 use oasis7_node::{
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext, NodeExecutionCommitResult,
+};
+use oasis7_runtime::{
+    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal,
+    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
 };
 use serde::{Deserialize, Serialize};
 

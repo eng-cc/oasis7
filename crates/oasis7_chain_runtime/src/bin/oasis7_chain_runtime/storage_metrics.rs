@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
-use oasis7::runtime::LocalCasStore;
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_runtime::LocalCasStore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -1,4 +1,4 @@
-use oasis7::runtime::{
+use oasis7_runtime::{
     Action, CausedBy, DomainEvent, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL, RejectReason,
     RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus, World, WorldEvent,
@@ -780,7 +780,7 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oasis7::runtime::{
+    use oasis7_runtime::{
         GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
         MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
         MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL, MainTokenSupplyState,

@@ -11,10 +11,10 @@ use super::super::{bridge_committed_heights, driver::NodeRuntimeExecutionDriver}
 use super::*;
 use std::collections::BTreeSet;
 
-use oasis7::runtime::BlobStore;
-use oasis7::runtime::LocalCasStore;
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_runtime::BlobStore;
+use oasis7_runtime::LocalCasStore;
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 

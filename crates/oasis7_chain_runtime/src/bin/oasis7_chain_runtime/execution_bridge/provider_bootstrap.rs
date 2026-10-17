@@ -3,10 +3,10 @@ use std::fs;
 #[cfg(any(not(test), feature = "test_tier_required"))]
 use std::path::{Path, PathBuf};
 
-use oasis7::runtime::{ProviderBackedBootstrapAuthorityV1, World as RuntimeWorld};
 #[cfg(any(not(test), feature = "test_tier_required"))]
 use oasis7_node::NodeRuntime;
 use oasis7_node::{NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND};
+use oasis7_runtime::{ProviderBackedBootstrapAuthorityV1, World as RuntimeWorld};
 
 use super::driver::NodeRuntimeExecutionDriver;
 

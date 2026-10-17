@@ -1,11 +1,11 @@
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
-use oasis7::runtime::{
+use oasis7::simulator::WorldSnapshot as SimulatorSnapshot;
+use oasis7_node::NodeSnapshot;
+use oasis7_runtime::{
     CHAIN_RESOURCE_DELTA_SCHEMA_V1, CHAIN_RESOURCE_MANIFEST_SCHEMA_V1, CHUNK_GENERATION_SCHEMA_V1,
     ChainChunkResourceStatus, ChainResourceDelta, ChainResourceDeltaEntry, ChainResourceManifest,
 };
-use oasis7::runtime::{LocalCasStore, Snapshot as RuntimeSnapshot};
-use oasis7::simulator::WorldSnapshot as SimulatorSnapshot;
-use oasis7_node::NodeSnapshot;
+use oasis7_runtime::{LocalCasStore, Snapshot as RuntimeSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -463,9 +463,9 @@ fn delta_has_nonzero_resource_effect(delta: &ChainResourceDelta) -> bool {
 mod tests {
     use super::*;
     use oasis7::geometry::GeoPos;
-    use oasis7::runtime::{Action, BlobStore, ChainResourceDerivationContext, LocalCasStore};
     use oasis7::simulator::WorldKernel;
     use oasis7_node::{NodeConsensusSnapshot, NodeRole};
+    use oasis7_runtime::{Action, BlobStore, ChainResourceDerivationContext, LocalCasStore};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};

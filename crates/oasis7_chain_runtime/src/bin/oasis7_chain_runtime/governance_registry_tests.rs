@@ -6,12 +6,12 @@ use oasis7::network_tier_manifest::{
     NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,
     NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
 };
-use oasis7::runtime::{
+use oasis7_node::{NodeConfig, NodeRole};
+use oasis7_runtime::{
     Action, GovernanceExecutionPolicy, GovernanceFinalitySignerRegistry,
     GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
     RollbackAuthorityRecord, RollbackAuthorityRegistry, RollbackAuthorityRole,
 };
-use oasis7_node::{NodeConfig, NodeRole};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};

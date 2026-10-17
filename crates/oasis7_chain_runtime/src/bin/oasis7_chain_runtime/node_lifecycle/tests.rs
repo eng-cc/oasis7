@@ -727,7 +727,7 @@ pub(crate) fn operation_stubborn_fixture() -> (
 }
 
 fn export_bound_fixture_world(destination: &Path, world_id: &str, genesis_sha: &str) {
-    use oasis7::runtime::{ChainResourceDerivationContext, Journal, Snapshot};
+    use oasis7_runtime::{ChainResourceDerivationContext, Journal, Snapshot};
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join(
         "../../doc/testing/evidence/public-testnet-governed-bootstrap-world-2026-06-06/world",
     );

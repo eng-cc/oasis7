@@ -4,7 +4,7 @@ use oasis7::network_tier_manifest::{
     NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,
     NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
 };
-use oasis7::runtime::{
+use oasis7_runtime::{
     ChainResourceDerivationContext, GovernanceFinalitySignerRegistry, World as RuntimeWorld,
 };
 use std::collections::BTreeMap;

@@ -3,7 +3,7 @@ use std::hint::black_box;
 use std::process;
 use std::time::Instant;
 
-use oasis7::runtime::{
+use oasis7_runtime::{
     Action, ActionEnvelope, DomainEvent, Journal, ModuleAbiContract, ModuleArtifactIdentity,
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry, ModuleRole,
     ModuleSubscription, ModuleSubscriptionStage, PolicySet, World, WorldEvent, WorldEventBody,
@@ -219,8 +219,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn pos(x: i64, y: i64) -> oasis7::GeoPos {
-    oasis7::GeoPos {
+fn pos(x: i64, y: i64) -> oasis7_agent_api::world_action::GeoPos {
+    oasis7_agent_api::world_action::GeoPos {
         x_cm: x,
         y_cm: y,
         z_cm: 0,

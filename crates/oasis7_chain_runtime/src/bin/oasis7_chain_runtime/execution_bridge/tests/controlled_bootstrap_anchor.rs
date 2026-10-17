@@ -1,6 +1,5 @@
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::ChainResourceDerivationContext;
 use oasis7_distfs::controlled_authority::{
     LocalRequestIdentity,
     activation::{
@@ -12,6 +11,7 @@ use oasis7_distfs::controlled_authority::{
         ReplicatedCoordinator,
     },
 };
+use oasis7_runtime::ChainResourceDerivationContext;
 use std::sync::atomic::{AtomicU64, Ordering};
 fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
@@ -30,7 +30,7 @@ fn trust() -> FixedTrust {
     }
 }
 fn snapshot() -> (Snapshot, Journal) {
-    let state = oasis7::runtime::WorldState {
+    let state = oasis7_runtime::WorldState {
         time: 7,
         ..Default::default()
     };

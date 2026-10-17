@@ -5,17 +5,17 @@ use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
 use oasis7::geometry::GeoPos;
-use oasis7::runtime::{Action, ChainResourceDerivationContext};
 use oasis7_node::{
     NodeConfig, NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
     NodeReplicatedExecutionInputV1, NodeRole, NodeRuntime,
     PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND, REPLICATED_EXECUTION_INPUT_ACTION_ID,
     REPLICATED_EXECUTION_INPUT_SUBMITTER, compute_consensus_action_root,
 };
+use oasis7_runtime::{Action, ChainResourceDerivationContext};
 
 fn provider_bootstrap_fixture(
     world_dir: &std::path::Path,
-) -> oasis7::runtime::ProviderBackedBootstrapAuthorityV1 {
+) -> oasis7_runtime::ProviderBackedBootstrapAuthorityV1 {
     let mut world = oasis7::runtime_host::world::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-a".to_string(),
@@ -84,7 +84,7 @@ fn commit_context(height: u64) -> NodeExecutionCommitContext {
 
 fn provider_bootstrap_action(
     target_height: u64,
-    input: oasis7::runtime::ProviderBackedBootstrapAuthorityV1,
+    input: oasis7_runtime::ProviderBackedBootstrapAuthorityV1,
 ) -> NodeConsensusAction {
     let authorities = serde_cbor::to_vec(&vec![input]).expect("encode provider authorities");
     let input = NodeReplicatedExecutionInputV1::new(

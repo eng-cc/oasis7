@@ -173,7 +173,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                 "retained initial Node boundary differs from externally committed genesis".into(),
             );
         }
-        let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(
+        let parent = oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(
             &anchor,
             &snapshot_bytes,
         )?;

@@ -25,11 +25,11 @@ use super::product_validation_intent::{
 };
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld};
 use oasis7_node::{
     NodeConsensusSnapshot, NodeExecutionCommitContext, NodeRole, NodeSnapshot,
     compute_consensus_action_root,
 };
+use oasis7_runtime::{BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 use sha2::{Digest, Sha256};

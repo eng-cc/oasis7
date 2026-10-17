@@ -8,14 +8,14 @@ use std::thread;
 use std::time::Duration;
 
 use oasis7::observability::emit_stderr_or_event;
-use oasis7::runtime::{
+use oasis7_distfs::StorageChallengeProbeCursorState;
+use oasis7_node::{NodeRole, NodeRuntime, PosConsensusStatus};
+use oasis7_runtime::{
     Action as RuntimeAction, BlobStore, LocalCasStore, NodePointsConfig,
     NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeHeuristics,
     ProtocolPowerReserve, RewardAssetConfig, RewardSignatureGovernancePolicy,
     World as RuntimeWorld,
 };
-use oasis7_distfs::StorageChallengeProbeCursorState;
-use oasis7_node::{NodeRole, NodeRuntime, PosConsensusStatus};
 use serde::Serialize;
 use tracing::Level;
 
@@ -593,7 +593,7 @@ fn ensure_distfs_probe_seed_blob(
 #[cfg(test)]
 mod tests {
     use super::ensure_distfs_probe_seed_blob;
-    use oasis7::runtime::LocalCasStore;
+    use oasis7_runtime::LocalCasStore;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 

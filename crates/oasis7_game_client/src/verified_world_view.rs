@@ -316,8 +316,10 @@ mod tests {
             fixed_commit: None,
             deadline_unix_ms: None,
         };
-        let mut projection = TestProjection::default();
-        projection.runtime_binding = None;
+        let projection = TestProjection {
+            runtime_binding: None,
+            ..Default::default()
+        };
         let response = ReadWorldViewResponse {
             formal_profile: None,
             formal_proof: None,

@@ -14,7 +14,7 @@ fn persisted_module_tick_status_is_isolated_from_parallel_test_live_metrics() {
     // live publication must remain visible to its owning test but not its peers.
     let (persisted_payload, live_payload) = std::thread::scope(|scope| {
         let publisher = scope.spawn(|| {
-            let mut metrics = oasis7::runtime::ModuleTickRoutingMetricsSnapshot {
+            let mut metrics = oasis7_runtime::ModuleTickRoutingMetricsSnapshot {
                 routing_count: 4,
                 ..Default::default()
             };

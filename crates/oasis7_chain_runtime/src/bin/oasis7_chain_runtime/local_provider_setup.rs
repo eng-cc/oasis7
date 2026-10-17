@@ -2,13 +2,13 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use oasis7::runtime::{
+use oasis7::viewer::viewer_bootstrap_formal_release_runtime_world;
+use oasis7_runtime::{
     ChainResourceDerivationContext, LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS,
     LocalTestProviderAuthorityConfig, LocalTestProviderGrantStatus,
     LocalTestProviderModuleArtifact, LocalTestProviderSessionMode,
     ProviderBackedBootstrapAuthorityV1, ReleaseSecurityPolicy, World as RuntimeWorld,
 };
-use oasis7::viewer::viewer_bootstrap_formal_release_runtime_world;
 use serde::Deserialize;
 
 use super::cli::CliOptions;
@@ -316,7 +316,7 @@ fn temporary_authority_path(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::cli::CliOptions;
-    use oasis7::runtime::{Action, DomainEvent, WorldEventBody};
+    use oasis7_runtime::{Action, DomainEvent, WorldEventBody};
 
     #[test]
     #[expect(

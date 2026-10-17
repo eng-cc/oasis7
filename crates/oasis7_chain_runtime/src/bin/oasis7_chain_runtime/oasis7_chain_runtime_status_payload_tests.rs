@@ -1,11 +1,6 @@
 use super::cli::TrafficProfile;
 use super::{build_chain_status_payload, release_security_policy_for_storage_profile};
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{
-    Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
-    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
-    ModuleSubscriptionStage, PolicySet, ProposalDecision, ReleaseSecurityPolicy, World,
-};
 use oasis7::simulator::RuntimePerfSnapshot;
 use oasis7_node::{
     GossipTrafficMetricsSnapshot, Libp2pReachabilitySnapshot, NodeConsensusSnapshot,
@@ -14,6 +9,11 @@ use oasis7_node::{
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_runtime::{
+    Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
+    ModuleSubscriptionStage, PolicySet, ProposalDecision, ReleaseSecurityPolicy, World,
+};
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox, ModuleTickLifecycleDirective,
 };
