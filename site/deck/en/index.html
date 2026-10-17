@@ -169,8 +169,8 @@
               </article>
               <article class="value-card">
                 <p class="value-label">Persistent</p>
-                <strong>The world keeps running and history does not reset on logout</strong>
-                <span>Organizations, production lines, cooperation, and governance choices all stay on the same timeline.</span>
+                <strong>Design goal: a persistent world whose history survives logout</strong>
+                <span>A shared timeline for organizations, production, cooperation, and governance is the goal. Current evidence covers bounded controlled runs, not continuous hosted uptime.</span>
               </article>
               <article class="value-card">
                 <p class="value-label">Player Leverage</p>
@@ -277,14 +277,14 @@
         <section class="slide proof-slide">
           <div class="slide-shell">
             <p class="slide-kicker">08 / What Exists Today</p>
-            <h2>What has already been de-risked is not the narrative. It is the fact that consequence chains can now be tested.</h2>
+            <h2>Current validation scope: consequence chains in controlled scenarios.</h2>
             <div class="proof-columns">
               <article class="proof-column is-done">
-                <p class="proof-head">Already shown</p>
+                <p class="proof-head">Scope to verify in controlled-run reports</p>
                 <ul>
-                  <li>World state progresses instead of collapsing back into a hand-held demo script</li>
-                  <li>In controlled validation scenarios, player input can bend prices, logistics, cooperation posture, or governance outcomes</li>
-                  <li>Those outcomes can already be replayed, observed live, and traced through auditable state</li>
+                  <li>Check state progression against each report's build, scenario, and run window; do not infer continuous hosted operation</li>
+                  <li>Price, logistics, cooperation, and governance demonstrations apply to their respective controlled scenarios, not arbitrary inputs or long-running operation</li>
+                  <li>Replay, live runtime, and audit traces each support only the objects and windows covered by their source reports; none substitutes for the others</li>
                   <li>The public preview surface, docs, and validation path are coherent enough to support explanation and inspection</li>
                 </ul>
               </article>
@@ -297,7 +297,7 @@
                 </ul>
               </article>
             </div>
-            <p class="footer-note">The `minimal / twin_region / triad_region` slices are excerpts from controlled validation scenario replays, not named public game modes.</p>
+            <p class="footer-note">The `minimal / twin_region / triad_region` slices are controlled-validation replay excerpts. Before reusing a conclusion, check its original report's source/build, environment, and window through the documentation center and testing manual. This page is not evidence of continuous uptime.</p>
             <div class="footer-note">Public claim stays the same: `limited playable technical preview`, not closed beta or public launch.</div>
           </div>
         </section>

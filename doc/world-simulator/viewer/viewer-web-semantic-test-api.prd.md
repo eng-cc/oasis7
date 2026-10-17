@@ -23,10 +23,14 @@
 ### 当前实现合同（Batch 22 回填）
 
 - `window.__AW_TEST__` 仅在测试模式启用。当前 control-action surface 是 `sendControl("play"|"pause"|"step", payload?)`、`runSteps(payload?)` 与 `getState()`；其他测试 helper 不扩大 live 控制集合，`seek`/`seek_event` 不得在 live profile 作为可提交动作出现。
-- `sendControl("step", payload?)` 的 count grammar 为：缺省/`null` 为 1；有限 number `>= 1` 取 `Math.floor`；string 为空、`step`、有限数字或 `step:<n>`/`step=<n>`；object 读取有限 `count >= 1` 并取整。其余 payload 返回 rejected feedback，不抛出浏览器异常，也不发送控制请求。
+- `sendControl("step", payload?)` 的 count grammar 为：缺省/`null` 为 1；有限 number `>= 1` 取 `Math.floor`；string 为空、`step`、有限数字或 `step:<n>`/`step=<n>`；object 读取有限 `count >= 1` 并取整。目标合同要求其余 payload 返回 rejected feedback，不抛出浏览器异常，也不发送控制请求；当前 parser 差距见下段。
 - `runSteps(payload?)` 使用同一 count grammar 并委派为一次 step；它不再是历史 panel/layout/timeline DSL 的通用执行器。历史 DSL、Bevy command queue、2D/3D camera automation 和 EGUI module actions 已退役，不得据此编写当前 Web 回归。
 - `getState()` 至少用于读取 `connectionStatus`、`logicalTime`、`eventSeq`、兼容 `tick`、`controlProfile`、`lastError` 和 `lastControlFeedback`。`tick === logicalTime` 是兼容 alias；时间和事件序号仅来自 runtime 消息，空结果不得被客户端合成为进展。
 - control feedback 必须区分 rejected、blocked、queued、发送失败以及后续观察到的 completed/no-progress；queued 不是 completion。live seek 的 unsupported-action、WebSocket 断链和 runtime 无增量均必须保留为不同可诊断状态。
+
+### 当前 step parser 的实现差距
+
+`legacy_core.js::parseStepCount` 当前的 `step` 正则为未锚定的 `/step\s*[:=]\s*(\d+)/i`，可从带前后缀的字符串中提取数字，也可能从小数形式截取整数部分；匹配分支没有再次检查有限性。object 路径直接读取 `payload.count` 并执行 `Number` 转换，getter、Symbol 或自定义转换可以抛错。`sendControl`/`runSteps` 调用 parser 时没有把这些异常统一转为 rejected feedback。因此上面的完整 grammar/no-throw/非法输入不发包仍是目标合同，不能由当前源码或普通有效输入用例推定已实现；需要覆盖前后缀、非有限值与抛错转换的独立负例。这里只澄清现状，不放宽拒绝目标，也不改变 live 控制或测试构建边界。
 
 ### Chat 输入验证边界
 

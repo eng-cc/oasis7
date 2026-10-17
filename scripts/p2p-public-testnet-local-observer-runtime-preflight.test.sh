@@ -290,7 +290,7 @@ runtime_bin="${OASIS7_CHAIN_RUNTIME_BIN:-}"
 if [[ -z "$runtime_bin" ]]; then
   target_dir=$(cargo metadata --no-deps --format-version 1 | jq -r '.target_directory')
   runtime_bin="$target_dir/debug/oasis7_chain_runtime"
-  env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime --quiet
+  env -u RUSTC_WRAPPER cargo build -p oasis7_chain_runtime --bin oasis7_chain_runtime --quiet
 fi
 [[ -x "$runtime_bin" ]] || { echo "missing isolated runtime binary: $runtime_bin" >&2; exit 1; }
 runtime_sha=$(shasum -a 256 "$runtime_bin" | awk '{print $1}')

@@ -280,7 +280,7 @@ jobs:
           shared-key: release-packages-release-gate-soak-trusted-v2
           cache-on-failure: true
       - name: Prewarm soak runtime binary
-        run: env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime
+        run: env -u RUSTC_WRAPPER cargo build -p oasis7_chain_runtime --bin oasis7_chain_runtime
       - name: Run soak release gate
         run: |
           ./scripts/release-gate.sh \

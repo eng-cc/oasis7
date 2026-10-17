@@ -64,7 +64,7 @@
 
 若需要判断当前需求、执行状态或专题配对关系，分别以 `doc/world-simulator/prd.md`、GitHub task issue / Project 与本索引的活跃专题清单为准。
 
-删除候选边界：仍保留的 completed closure 专题若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 GitHub provenance，可在独立治理切片中删除文件并保留 Git history / PR 与实际验证记录 追溯。
+删除候选边界：focused `rg` 只核对其检索范围内的引用，不能单独证明 completed closure 专题可删。按[有界语义审读与知识保全](../engineering/doc-governance/documentation-governance.manual.md#bounded-semantic-review)先核实稳定 authority 已完整承接有效要求、已采纳决定及理由、兼容与未决边界，核对路径/锚点及动态消费者；原候选、失败、oracle、预算与隔离条件等独有历史证据须保全且可取回。完成适用迁移、引用修复、证据生命周期核验及授权后，才可在独立治理切片删除并保留准确 Git history / PR 来源；接收方或原件未核实则保留，不把无引用、旧日期或较新成功当作删除依据。
 
 ## 完整活跃专题清单（按文件名精确检索）
 

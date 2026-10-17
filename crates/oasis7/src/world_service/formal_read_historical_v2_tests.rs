@@ -298,7 +298,7 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
     record.action_root = h(64);
     record.event_root = h(65);
     record.result_root = h(66);
-    record.projection_root = ProjectionCommitmentsV1::for_world(&world)
+    record.projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -448,7 +448,7 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
             imported.current.head(),
             position as u8,
             result_root.clone(),
-            &ProjectionCommitmentsV1::for_world(&world)
+            &crate::world_service::formal_projection::commitments_for_world(&world)
                 .unwrap()
                 .root()
                 .unwrap(),
@@ -493,7 +493,7 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
 fn e2_normal_result_remains_readable_from_e3_current_root() {
     let (world, trust, anchor, _) = profile2_initial_fixture();
     let original = anchor.authority();
-    let projection_root = ProjectionCommitmentsV1::for_world(&world)
+    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -621,7 +621,7 @@ fn e2_normal_result_remains_readable_from_e3_current_root() {
 fn e2_recovery_result_remains_readable_after_e2_and_e3_normal_commits() {
     let (world, trust, anchor, _) = profile2_initial_fixture();
     let original = anchor.authority();
-    let projection_root = ProjectionCommitmentsV1::for_world(&world)
+    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -845,7 +845,7 @@ fn e2_recovery_result_remains_readable_after_e2_and_e3_normal_commits() {
 #[test]
 fn historical_normal_lookup_survives_qualification_cache_eviction() {
     let (world, trust, anchor, _initial_proof) = profile2_initial_fixture();
-    let projection_root = ProjectionCommitmentsV1::for_world(&world)
+    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();

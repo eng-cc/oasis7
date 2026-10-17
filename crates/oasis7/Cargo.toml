@@ -7,11 +7,6 @@ license = "MIT"
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "oasis7_chain_runtime"
-path = "src/bin/oasis7_chain_runtime.rs"
-required-features = ["node-libp2p"]
-
 [dependencies]
 oasis7_agent_harness = { version = "0.1.0", path = "../oasis7_agent_harness" }
 oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }

@@ -376,7 +376,7 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 if [[ "$prewarm" -eq 1 ]] && [[ "$dry_run" -eq 0 ]]; then
-  run oasis7_cargo_dev build -p oasis7 --bin oasis7_chain_runtime
+  run oasis7_cargo_dev build -p oasis7_chain_runtime --bin oasis7_chain_runtime
 fi
 
 chain_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_chain_runtime"
