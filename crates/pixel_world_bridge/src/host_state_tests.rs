@@ -132,7 +132,7 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(state["visual_hotspots"].as_array().unwrap().len(), 4);
 
     let surface = &state["commercial_surface"];
-    assert_eq!(surface["active_agent_id"], "agent-0");
+    assert!(surface["active_agent_id"].is_null());
     assert_eq!(
         surface["objective"]["title"],
         "Recover sustainable capability"
@@ -874,6 +874,7 @@ fn rust_host_state_shows_pending_claim_receipt_for_empty_world_onboarding() {
         "executionStateLabel": "Accepted",
         "executionCauseKind": "queued_for_execution",
         "executionCauseDetail": "Waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
+        "receiptTargetAgentId": "starter-agent-0",
         "acceptedIntentSummary": "submitted gameplay action claim_first_agent for starter-agent-0 to chain runtime as consensus action 1",
         "availableActions": [
             {

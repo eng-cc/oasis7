@@ -864,7 +864,7 @@ P0 放量必须同时满足全部 P0 AC、NFR 安全不变量、真实支持矩�
 表中“现有”路径已在基线或本次输入中核对；“建议新增”是待实施结构，不是仓库现存文件的声明。
 | 位置 | 类型 | 改造 |
 | --- | --- | --- |
-| `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs` | 现有 | legacy email façade 仅在 v2 未开启且满足 §13.4 时保留；v2 使用 §11.2 的 EmailAdapter / AccountSession 路由，拒绝旧登录和 player-session 发行/续期/释放入口 |
+| `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_identity.rs` | 现有 | legacy email façade 仅在 v2 未开启且满足 §13.4 时保留；v2 使用 §11.2 的 EmailAdapter / AccountSession 路由，拒绝旧登录和 player-session 发行/续期/释放入口 |
 | `.../hosted_account_store_backend.rs` | 现有 | 分离旧格式 reader / v2 store adapter；不再 login touch 解冻；事务先于内存可见 |
 | `.../hosted_player_session.rs` | 现有 | 账号 session 与控制 lease 关联，重排接管顺序，旧 release 绑定 epoch |
 | `crates/oasis7/src/viewer/runtime_live/session_policy.rs` | 现有 | 保留单控制 key/epoch；增加身份上下文版本和短期新鲜度校验 |
@@ -934,9 +934,9 @@ P0 代码候选已有 SQLite 事务、标准 WebAuthn、可选邮箱与恢复、
 | W8 | OWASP CSRF Prevention Cheat Sheet | Origin、CSRF token 与跨站请求约束 |
 | W9 | RFC 9106 | Argon2id 密码派生背景；本文参数为设计建议 |
 | W10 | libsodium XChaCha20-Poly1305 文档 | 认证加密与附加数据机制 |
-[R1]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs
-[R2]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs
-[R3]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs
+[R1]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_identity.rs
+[R2]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs
+[R3]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_player_session.rs
 [R4]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/viewer/runtime_live/session_policy.rs
 [R5]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_viewer/software_safe_src/viewer_hosted_auth_state_module.js
 [R6]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/doc/product/player-entry-distribution/prd.md

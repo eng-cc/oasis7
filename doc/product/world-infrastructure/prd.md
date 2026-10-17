@@ -205,7 +205,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[P2P 信任链](../../p2p/design.md#des-p2p-target-recovery)与 [runtime 恢复](../../world-runtime/design.md#runtime-recovery-design)已逐环接收身份、激活、checkpoint、snapshot、replay、root 及失败隔离；QA V-RECOVERY 保留不同恢复入口。
 - 实现状态：部分实现
-- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计：bootstrap/state-sync/pruning/archive/灾备所有入口的具体材料与恢复编排尚未全核清；现有局部恢复不能替代 BFT/灾备证明及停止 serving/voting 的全组合。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
 
@@ -225,7 +225,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[确定性与证明绑定](../../world-runtime/design.md#runtime-deterministic-design)、[版本激活与历史重放](../../world-runtime/design.md#runtime-version-design)及 [P2P 重执行](../../p2p/design.md#des-p2p-receipt-finality)分别承接相同输入、全活动验证者和版本拒绝边界。
 - 实现状态：部分实现
-- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：execution driver 以 committed context 执行并校验/保存 execution state root；determinism 回归比较不同node provenance的两driver根和执行hash。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/determinism.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计：完整 activation ledger、工件/readiness/rollback 及两 profile 的跨验证者组合仍未闭合；已有本地 release lane 不能代替治理激活历史。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
 
@@ -263,7 +263,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[runtime 同世界恢复](../../world-runtime/design.md#runtime-recovery-design)和 [P2P 恢复信任链](../../p2p/design.md#des-p2p-target-recovery)明确错误/缺失/冲突世界隔离、保留历史、不以替代 endpoint 或本地世界冒充恢复。
 - 实现状态：部分实现
-- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：driver_startup_recovery 与V3 record/CAS恢复实现已存在；回归定义覆盖metadata丢失、缓存删除、CAS缺失、冲突同高record、stale pointer及错误world。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver_startup_recovery.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计：全部恢复入口与消费者的 unavailable/isolation 表达、pending/receipt 连续性 DTO 仍未全闭合；Viewer 的恢复表述及完整同世界组合仍需各自运行证据。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
 
@@ -302,7 +302,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-design)；工业因果、pre-sink校验、有界hold/背压及一次处置已有runtime条款与同Trace五/六列表；通用root/join/window/bundle字段及全消费者义务未闭合。
 - 实现状态：部分实现
-- 实现与验证依据：world_service_execution保留已认证配方提交的consensus/action/payload/主体来源；回归定义验证来源关联、重复输入与保存恢复。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/world_service_execution.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：world_service_execution保留已认证配方提交的consensus/action/payload/主体来源；回归定义验证来源关联、重复输入与保存恢复。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/world_service_execution.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/world_service.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，此为配方来源与重复请求子范围，非整条工业流水线；root/revision/parent、全边容量/hold、fan-in/out、终端、消费者数量和完整同候选full证据仍缺。
 
@@ -342,7 +342,7 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-world-scope-design)；runtime-world-scope-design和同Trace承接行覆盖target identity、跨world拒绝及receipt/replay边界；全部消费者scope表达仍须逐项核对。
 - 实现状态：部分实现
-- 实现与验证依据：driver按context/record world_id拒绝跨world恢复；other-world restore回归给出具体负例。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
+- 实现与验证依据：driver按context/record world_id拒绝跨world恢复；other-world restore回归给出具体负例。 [源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs)、[源码/回归定义](https://github.com/eng-cc/oasis7/blob/ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad/crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。本轮为固定源码审读，回归定义不等于实际通过。
 - 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
 - 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，仅执行桥恢复入口；全部Agent/Viewer/API提交前global/local区分、缺身份、receipt reuse、replay及可见表达未完整核清。
 

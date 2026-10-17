@@ -29,7 +29,7 @@
 - 玩家访问模式 / execution lane / provider 身份与 mock/real 分类：
 - 本次 harness/producer 的入口与 session（脱敏，不写 token/密钥）：
 - 启动命令：
-  - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- ...`
+  - `env -u RUSTC_WRAPPER cargo run -p oasis7_launcher_backend --bin oasis7_game_launcher -- ...`
 - 闭环命令：
   - `agent-browser --headed open "$URL"`
   - `agent-browser wait --load networkidle`

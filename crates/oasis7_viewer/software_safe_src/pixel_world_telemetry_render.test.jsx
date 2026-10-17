@@ -17,9 +17,7 @@ it("refreshes telemetry without deriving or updating the map, while world and de
   vi.stubGlobal("WebSocket", MockWebSocket);
   useTestRustRenderState();
   const derive = runtimeMock.deriveRenderState = vi.fn(runtimeMock.deriveRenderState);
-  const { core } = await renderPixelWorldHost(sampleSnapshot());
-  window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=1&locale=en");
-  await core.initializeSoftwareSafeCore();
+  const { core } = await renderPixelWorldHost(sampleSnapshot(), "?test_api=1&connect=1&locale=en", "en", {initializeCore:true});
   await waitFor(() => expect(runtimeMock.mountCalls).toBe(1));
   await waitFor(() => expect(document.querySelector('[data-world-tick]')).toBeInTheDocument());
   const notify = vi.fn();
@@ -55,9 +53,11 @@ it("refreshes telemetry without deriving or updating the map, while world and de
   lastUpdate = runtimeMock.updateCalls;
   core.state.auth.boundAgentId = null;
   core.requestRender();
-  expect(runtimeMock.updateCalls).toBeGreaterThan(lastUpdate);
+  // A changed authorization scope clears the old map instead of deriving it.
+  expect(document.querySelector('[data-world-tick]')).not.toBeInTheDocument();
   lastUpdate = runtimeMock.updateCalls;
   socket.receive({ type: "snapshot", snapshot: { ...sampleSnapshot(), time: 72 } });
-  expect(runtimeMock.updateCalls).toBeGreaterThan(lastUpdate);
+  expect(runtimeMock.updateCalls).toBe(lastUpdate);
+  expect(document.querySelector('[data-world-tick="72"]')).not.toBeInTheDocument();
   unsubscribe();
 });

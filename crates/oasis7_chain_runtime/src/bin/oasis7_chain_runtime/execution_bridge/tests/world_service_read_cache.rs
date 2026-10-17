@@ -259,3 +259,100 @@ fn alternate_hash_valid_proof_and_invalid_snapshot_fail_after_warm_restore() {
     .unwrap();
     assert!(fixture.pin(1).is_err());
 }
+
+#[test]
+fn compacted_historical_record_is_unavailable_while_partial_or_corrupt_fails_closed() {
+    let fixture = Fixture::new();
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &fixture.identity,
+            1
+        )
+        .unwrap()
+        .is_some()
+    );
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &fixture.identity,
+            2
+        )
+        .unwrap()
+        .is_none()
+    );
+    let mut record = fixture.record(1);
+    record.snapshot_ref = None;
+    record.latest_state_ref = None;
+    record.journal_ref = None;
+    checkpoint::persist_execution_bridge_record_only(&fixture.root.join("records"), &record)
+        .unwrap();
+    let result = pin_retained_at_height(
+        &fixture.root.join("records"),
+        &fixture.root.join("store"),
+        &fixture.identity,
+        1,
+    );
+    assert!(
+        matches!(result, Ok(None)),
+        "compacted record header is not a transient service error"
+    );
+    let wrong_world = WorldIdentity {
+        world_id: "other".into(),
+        genesis_digest: fixture.identity.genesis_digest.clone(),
+    };
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &wrong_world,
+            1
+        )
+        .is_err()
+    );
+    record.snapshot_ref = Some(record.execution_state_root.clone());
+    checkpoint::persist_execution_bridge_record_only(&fixture.root.join("records"), &record)
+        .unwrap();
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &fixture.identity,
+            1
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn retained_history_material_rejects_malformed_record_and_missing_cas() {
+    let fixture = Fixture::new();
+    let path = fixture.record_path(1);
+    let original = fs::read(&path).unwrap();
+    fs::write(&path, b"{").unwrap();
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &fixture.identity,
+            1
+        )
+        .is_err()
+    );
+    fs::write(&path, original).unwrap();
+    let mut record = fixture.record(1);
+    record.journal_ref = Some("0".repeat(64));
+    checkpoint::persist_execution_bridge_record_only(&fixture.root.join("records"), &record)
+        .unwrap();
+    assert!(
+        pin_retained_at_height(
+            &fixture.root.join("records"),
+            &fixture.root.join("store"),
+            &fixture.identity,
+            1
+        )
+        .is_err()
+    );
+}

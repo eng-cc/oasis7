@@ -27,9 +27,9 @@
 
 ```bash
 ./scripts/cargo-dev.sh --prepare-target
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher --no-default-features hosted_identity:: -- --test-threads=1
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher --no-default-features hosted_identity:: -- --test-threads=1
 env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --no-default-features hosted_authorization -- --test-threads=1
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher --no-default-features identity_request_security_tests
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher --no-default-features identity_request_security_tests
 ```
 
 对应源码：身份 `hosted_identity/{store/tests.rs,session_tests.rs,credential_contract_tests.rs,email.rs,recovery.rs,webauthn.rs,world_tests.rs}`、签名授权 `viewer/auth/hosted_authorization_tests.rs`。型别化领域 fixture 只证明事务和权限状态机，不证明未调用的认证器或云服务。
@@ -44,7 +44,7 @@ Tablestore loopback 测试证明签名请求、事务 ID、回滚、未知 commi
 本地 disposable HTTPS fixture 使用 RP `localhost`、origin `https://localhost:8449`，只监听 loopback。测试使用临时证书和隔离数据库。测试信任临时证书仅限本地 fixture，公开站点必须通过正常 TLS 校验。
 
 ```bash
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher --no-default-features hosted_passkey_virtual_authenticator_fixture -- --ignored --nocapture
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher --no-default-features hosted_passkey_virtual_authenticator_fixture -- --ignored --nocapture
 node scripts/hosted-passkey-virtual-authenticator-smoke.mjs --url https://localhost:8449/
 ```
 

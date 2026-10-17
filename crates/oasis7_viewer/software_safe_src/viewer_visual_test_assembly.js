@@ -400,21 +400,21 @@ function installViewerVisualFixture() {
   }
   const fixtures = Object.assign(Object.create(null), {
     shell_selected_blocker() {
+      setFixturePlayerAuth();
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
       core.applySelection({ kind: "agent", id: "agent-0" });
-      setFixturePlayerAuth();
     },
     agent_chat_history() {
+      setFixturePlayerAuth();
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
       core.applySelection({ kind: "agent", id: "agent-0" });
-      setFixturePlayerAuth();
       setFixtureChatHistory();
       core.setPromptOverridesVisible(false);
     },
     gameplay_diagnostics_expanded() {
+      setFixturePlayerAuth();
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
       core.applySelection({ kind: "agent", id: "agent-0" });
-      setFixturePlayerAuth();
       setFixtureChatHistory();
       setFixtureDiagnostics();
     },

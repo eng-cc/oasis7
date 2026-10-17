@@ -30,13 +30,19 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::mapping -- --noc
 
 覆盖缺口：旧 Rust Viewer package 已退役，原 `ui_text_industrial`、`feedback_tone_for_event_maps_warning_positive_and_info`、`push_feedback_toast_uses_runtime_industry_friendly_detail`、`sync_agent_chatter_bubbles_formats_runtime_industry_feedback` 四项断言尚未找到逐项等价承接测试，不能作为当前可重复执行命令或通过证据。当前 Web UI 可执行 `npm --prefix crates/oasis7_viewer run test:ui` 与 `test:feedback-contract`，但它们不证明这四项工业文案、反馈 tone、toast 与 chatter 断言已恢复；本卡片仍需按下方操作链路采集实际产品证据。Bevy bridge 和后端协议的验证边界另见 `testing-manual.md`，不得用任意新测试替代原断言。
 
+## 当前表面映射缺口
+
+下方 A/B/C 的首产物、停机恢复、首座工厂及可读反馈目标继续有效；“右侧工业摘要”、`Factory Runtime Status:`、`Blocked Factories:`、toast/chatter 与对应事件名是原执行表面的定位/oracle 参考，不是已核实的当前 canonical Viewer 入口或逐项等价映射，也不据此断言当前 UI 不存在。执行前须在同一候选明确合法玩家入口、当前可见反馈、权威世界结果及旧信号的对应关系；无法核定的条目标 `blocked/unverified`，保留具体缺口，不用任意页面 smoke、通用 UI 测试或仅 `connected` 代签本卡通过。下列旧定位说明只在该候选映射已核实后使用。
+
+正式 release UI 通过真实可见玩家输入取证，不以 `window.__AW_TEST__` 存在为前提，也不调用 helper 代替玩家动作；只有显式隔离 visual-test 构建及获准范围可用测试 API，状态采样仅作只读辅助。未执行或未映射的 A/B/C 不能汇总为当前玩法通过；当前操作和证据边界沿 `testing-manual.md` S6 与 Viewer 手册。
+
 ## 启动与取证
 1. 启动产品链路：`./scripts/worktree-harness.sh up`
 2. 记录脚本输出的 Viewer URL，并用 `agent-browser` 打开。
 3. 至少采集以下证据之一：
    - `agent-browser` 截图
    - 短录屏
-   - `window.__AW_TEST__` 状态采样
+   - 显式隔离 visual-test 构建中的只读 `window.__AW_TEST__` 状态采样（不能代替 release UI 操作或截图）
    - 启动日志 / console
 4. 正式填写卡片时，`测试场景` 必须使用本卡组中的场景名之一。
 

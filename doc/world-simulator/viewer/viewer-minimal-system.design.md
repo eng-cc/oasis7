@@ -34,7 +34,7 @@
 
 Owner：viewer_engineer；消费者为 demo CLI、离线 Viewer server 与运行手册。本文解决开发者获取可重复回放输入的问题，不承接正式玩家 live、原生客户端或发布验收。原第 5 节是历史演进顺序，不表示当前实现完成状态。
 
-当前代码入口为 `crates/oasis7/src/viewer/demo.rs::generate_viewer_demo`：初始化场景、计划动作、执行队列、调用 `save_to_dir`，再返回 actions/events 摘要。CLI 由 `crates/oasis7/src/bin/oasis7_viewer_demo.rs` 消费；参数缺值、未知场景及生成错误以非零退出反馈。源码存在不是端到端运行通过证据。
+当前代码入口为 `crates/oasis7/src/viewer/demo.rs::generate_viewer_demo`：初始化场景、计划动作、执行队列、调用 `save_to_dir`，再返回 actions/events 摘要。CLI 由 `crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_demo.rs` 消费；参数缺值、未知场景及生成错误以非零退出反馈。源码存在不是端到端运行通过证据。
 
 ### 2.1 需求承接与分配表
 

@@ -401,7 +401,7 @@ function bindFirstSnapshotAgentForTest(core, snapshot) {
     boundAgentId: agentId,
   };
 }
-async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en", locale = "en", { injectionSearch = search } = {}) {
+async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en", locale = "en", { injectionSearch = search, initializeCore = false, setupCore = null } = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
@@ -410,9 +410,11 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
   document.body.innerHTML = "";
   const core = await import("./legacy_core.js");
   const { PixelWorldHost } = await import("./pixel_world_host.jsx");
+  if (initializeCore) await core.initializeSoftwareSafeCore();
   core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
   bindFirstSnapshotAgentForTest(core, snapshot);
+  setupCore?.(core);
   window.history.replaceState({}, "", `/software_safe.html${search}`);
   const view = render(() => <PixelWorldHost locale={locale} />);
   activeCleanup = view.unmount;

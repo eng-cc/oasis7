@@ -31,6 +31,32 @@ fn state(response: &IntentResponse<Value>) -> NativeTaskRecovery {
         _ => NativeTaskRecovery::Pending,
     }
 }
+fn outcome_state(reason: &str, response: &IntentResponse<Value>) -> NativeTaskRecovery {
+    recovered_outcome(reason, state(response))
+}
+fn recovered_outcome(reason: &str, recovered: NativeTaskRecovery) -> NativeTaskRecovery {
+    match recovered {
+        NativeTaskRecovery::Settled if reason == "context_expired" => {
+            NativeTaskRecovery::ContextRetired
+        }
+        NativeTaskRecovery::Settled => NativeTaskRecovery::Aborted,
+        other => other,
+    }
+}
+fn original_outcome_reason(
+    request: &oasis7_client_api::world_service::SubmitIntentRequest<
+        oasis7_client_api::world_service_wire::WorldServicePayloadV1,
+    >,
+) -> Result<&str, String> {
+    use oasis7_client_api::world_service_wire::{SchedulerOperationV1, WorldServicePayloadV1};
+    let WorldServicePayloadV1::Scheduler(signed) = &request.signed_payload else {
+        return Err("invalid original context outcome".into());
+    };
+    let SchedulerOperationV1::TaskProviderFailure { reason, .. } = &signed.request.operation else {
+        return Err("invalid original context outcome".into());
+    };
+    Ok(reason)
+}
 impl NativeTaskHost for SdkNativeTaskHost {
     fn initialize_run(&self, config: &NativeTaskRunConfig) -> Result<u32, String> {
         let control = self.current_control()?;
@@ -84,12 +110,10 @@ impl NativeTaskHost for SdkNativeTaskHost {
             return Ok(state(&self.client.poll_original(&original)?));
         }
         if let Some(original) = outcome {
-            let result = state(&self.client.poll_original(&original)?);
-            return Ok(if result == NativeTaskRecovery::Settled {
-                NativeTaskRecovery::Aborted
-            } else {
-                result
-            });
+            return Ok(outcome_state(
+                original_outcome_reason(&original)?,
+                &self.client.poll_original(&original)?,
+            ));
         }
         if let Some(original) = prefix {
             let result = state(&self.client.poll_original(&original)?);
@@ -150,6 +174,60 @@ impl NativeTaskHost for SdkNativeTaskHost {
         Ok(state(
             &self.client.outcome(operation, "transport_exhausted")?,
         ))
+    }
+    fn retire_expired_context(
+        &self,
+        operation: &str,
+    ) -> Result<Option<NativeTaskRecovery>, String> {
+        // Recheck immutable terminal lanes after the complete recovery scan.
+        // No competing cleanup may replace an action or another original outcome.
+        if self
+            .client
+            .cached_intent(ClientStateKind::Action, operation)?
+            .is_some()
+        {
+            return Err("context has an original action; recover that result instead".into());
+        }
+        if let Some(original) = self
+            .client
+            .cached_intent(ClientStateKind::Outcome, operation)?
+        {
+            return Ok(Some(outcome_state(
+                original_outcome_reason(&original)?,
+                &self.client.poll_original(&original)?,
+            )));
+        }
+        let prefix = self
+            .client
+            .cached_intent(ClientStateKind::Prefix, operation)?
+            .ok_or("original context prefix unavailable")?;
+        let result = state(&self.client.poll_original(&prefix)?);
+        if result != NativeTaskRecovery::Settled {
+            return Ok(Some(result));
+        }
+        use oasis7_client_api::world_service_wire::{SchedulerOperationV1, WorldServicePayloadV1};
+        let WorldServicePayloadV1::Scheduler(signed) = prefix.signed_payload else {
+            return Err("invalid original context prefix".into());
+        };
+        let SchedulerOperationV1::TaskProviderPrefix { context } = signed.request.operation else {
+            return Err("invalid original context prefix".into());
+        };
+        let current = self.current_control()?;
+        if current.fence != self.initial_fence()?
+            || current.fence != context.fence
+            || current.fence.task_status != GameTaskStatusV1::Active
+        {
+            return Err("task control changed before expired context retirement".into());
+        }
+        if current.logical_tick <= context.valid_until_tick.0 {
+            return Ok(None);
+        }
+        // Client signs from the original public prefix and current public base;
+        // this path never decrypts/reads the expired private context body.
+        Ok(Some(outcome_state(
+            "context_expired",
+            &self.client.outcome(operation, "context_expired")?,
+        )))
     }
     fn prepare(&self, operation: &str) -> Result<NativeTaskContext, String> {
         if self.current_control()?.fence != self.initial_fence()? {
@@ -377,5 +455,35 @@ impl NativeTaskHost for SdkNativeTaskHost {
             effect,
             decision_required,
         })
+    }
+}
+
+#[cfg(test)]
+mod expiry_tests {
+    use super::*;
+    #[test]
+    fn only_committed_fixed_expiry_outcome_is_skippable_on_restart() {
+        assert_eq!(
+            recovered_outcome("context_expired", NativeTaskRecovery::Settled),
+            NativeTaskRecovery::ContextRetired
+        );
+        for reason in [
+            "executor_aborted",
+            "provider_failed",
+            "transport_exhausted",
+            "unknown",
+        ] {
+            assert_eq!(
+                recovered_outcome(reason, NativeTaskRecovery::Settled),
+                NativeTaskRecovery::Aborted
+            );
+        }
+        for state in [
+            NativeTaskRecovery::Pending,
+            NativeTaskRecovery::Rejected,
+            NativeTaskRecovery::Expired,
+        ] {
+            assert_eq!(recovered_outcome("context_expired", state), state);
+        }
     }
 }

@@ -8,6 +8,8 @@ pub mod collect_data_auth;
 pub mod consensus_action_payload;
 pub mod env_mut;
 pub mod geometry;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod governance_audit_report;
 pub mod industry_types;
 pub mod launcher_bootstrap_peers;
 pub mod models;

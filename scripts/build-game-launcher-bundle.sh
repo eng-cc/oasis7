@@ -285,7 +285,8 @@ fi
 # 1) Build native binaries for launcher/live/client launcher.
 BUNDLE_NATIVE_BUILD_ARGS=(
   -p oasis7_chain_runtime
-  -p oasis7
+  -p oasis7_launcher_backend
+  -p oasis7_viewer_runtime
   -p oasis7_client_launcher
   --bin oasis7_game_launcher
   --bin oasis7_web_launcher
@@ -294,7 +295,7 @@ BUNDLE_NATIVE_BUILD_ARGS=(
   --bin oasis7_client_launcher
 )
 if [[ -n "$OPS_OUT_DIR" ]]; then
-  BUNDLE_NATIVE_BUILD_ARGS+=(--bin oasis7_world_repair_rebuild
+  BUNDLE_NATIVE_BUILD_ARGS+=(-p oasis7_ops_tools --bin oasis7_world_repair_rebuild
     --bin oasis7_governance_registry_import --bin oasis7_governance_registry_audit)
 fi
 if (( ${#CARGO_TARGET_ARGS[@]} > 0 )); then

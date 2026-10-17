@@ -184,6 +184,16 @@ class Selection(unittest.TestCase):
         self.write('crates/oasis7_chain_runtime/src/main.rs', '// runtime changed')
         self.assertIn('formal_process', self.plan()['groups'])
 
+    def test_independent_bin_callers_are_registered(self):
+        self.config = json.loads((HERE / "ci-required-scope.json").read_text())
+        for path in ['scripts/oasis7-pure-api-parity-smoke.sh', 'scripts/governance-registry-drill.sh', 'scripts/governed-rollback-v2-drill.sh', 'scripts/hosted-account-staging-smoke.sh', 'scripts/llm-baseline-fixture-smoke.sh', 'scripts/llm-longrun-stress.sh', 'scripts/public-testnet-faucet/package-public-testnet-faucet.sh', 'scripts/check-active-llm-provider.sh', 'scripts/governance-registry-live-drill.sh', 'scripts/run-local-letai-provider-bridge.sh', 'scripts/provider-parity-p0.sh', 'scripts/oasis7-liveops-grant.sh', 'scripts/newapi-bridge-service/package-newapi-bridge-service.sh', 'scripts/run-local-public-testnet-letai-test-environment.sh', 'scripts/runtime-module-routing-perf-harness.sh']:
+            with self.subTest(path=path):
+                self.write(path, "changed existing bin caller")
+                plan = self.plan()
+                self.assertEqual(plan["scope"], "targeted")
+                self.assertTrue({"oasis7_required", "operational_contracts"}.issubset(plan["groups"]))
+                self.base = self.git("rev-parse", "HEAD")
+
     def test_command_center_pr4790_paths_are_targeted(self):
         # Exact paths from 4f12acc; fixture stays usable without its Git object.
         self.config = json.loads((HERE / 'ci-required-scope.json').read_text())

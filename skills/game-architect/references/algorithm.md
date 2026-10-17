@@ -88,7 +88,7 @@ Algorithms for detecting interactions in virtual space.
 ### Collision Detection Pipeline
 *   **Broad Phase (Space Culling):** Quickly discard pairs of objects that are definitely *not* colliding.
     *   **Sweep and Prune:** Sorts objects along an axis to find overlaps.
-    *   **Grid and Spatial Hashing:** Divides space into cells and checks only objects in the same cell.
+    *   **Grid and Spatial Hashing:** Divides space into cells while preserving every potentially colliding pair. Register each object's bounds in every overlapped cell and deduplicate candidate pairs, or search neighboring cells far enough to cover the objects' bounds. Checking only objects assigned by center to the same cell misses collisions across cell boundaries.
     *   **BVH (Bounding Volume Hierarchies):** Dynamic trees of bounding boxes.
 *   **Narrow Phase:** Detailed intersection tests.
     *   **Bounding:** Check simple shapes (AABB, Sphere, Capsule) before checking complex meshes.

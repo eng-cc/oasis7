@@ -39,7 +39,8 @@ Runtime拥有世界、控制版本、观察资格、admission及持久结果；A
 | viewer.html/viewer.js及oasis7_viewer_live，software_safe仅alias。 | 共用同一Viewer build与应用状态。 | 不建立第二入口。 |
 | host_state.rs::build_render_state从有界snapshot派生DTO；JS消费Rust。 | 数据客户端先组装明确授权范围/版本，再交Rust和renderer。 | 分页WorldView不是完整snapshot的直接替身。 |
 | 按类型reconcile、位置来源、地形LOD和宿主选择事件。 | 保留ABI，补partial/裁剪/来源侧带状态。 | 不把旧每帧全量重建当当前事实。 |
-| HUD active-agent fallback可流入next-action/receipt target。 | 分离焦点、原提交、原回执主体。 | 待代码整改与负例，文档不宣称已修复/越权已发生。 |
+| 显示焦点仅取明确选中；下一动作与原回执各取其原绑定。 | 保持原操作关联，不从列表补主体。 | 缺原绑定保留null；真实Runtime组合仍须验收。 |
+| Viewer WS `request_world_view`提供当前连接可见Agent/Location的有界查询、搜索和同cut分页。 | HTTP WorldView、远端独立观察binding、完整产业/事件空间投影。 | 新协议能力协商；来源不足标unknown，冻结续页标last-known；不证明完整大世界容量。 |
 | Launcher控制面不证明内嵌世界。 | 同build的受限WebView世界窗口。 | 平台支持/运行证据待独立验证。 |
 
 ## 4. 边界与结构
@@ -116,14 +117,40 @@ Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[AC-AGENT-STAGE-
 | --- | --- | --- |
 | 当前授权只读 | 展示/定位/检查。 | 读取授权和cut，不授予写权。 |
 | 最近已知/冲突/未知 | 获准内容可只读，纯建议/草稿标待核验。 | View DTO不能铸造Context/grant/成功，预览不生效。 |
-| 激活目标/批准/高后果操作 | 固定主体/方案/expected revision，披露旧观察。 | 原Game API Context/action合同重验主体、权限、控制/目标版本、fence及适用世界条件；Runtime最终裁决资源/规则。 |
+| owner目标保存/激活 | 固定主体/目标/expected revision，区分active与awaiting_executor。 | 原owner API重验owner权限、task/goal版本及控制提交；可在executor未绑定或离线时激活，不以executor Context为前置。 |
+| owner审批/高后果授权 | 固定主体/精确方案/expected revision，披露旧观察。 | 沿适用审批合同重验当前身份、scope、版本及所需条件；离线目标激活不意味着任意审批都可离线通过，也不直接产生世界效果。 |
+| executor实际世界动作 | guidance状态与执行/原回执分开。 | 原Game API Context/action合同重验执行主体、权限、控制/目标版本、fence及适用世界条件；Runtime最终裁决资源/规则。 |
 | 预览后条件变化 | stale/conflict/重新授权；改方案必须重新确认。 | 校验与实际接受/生效权威事务关联，不是Viewer独立GET即获许可。 |
 | stop/撤销/原结果查询 | 不因图形失败或观察陈旧统一置灰。 | 各自owner授权和控制合同，不能绕过撤权。 |
 | 丢reply/结果unknown | 保留原operation，显示recovery_required并回查。 | 不新键/换Agent/重新报价替代已提交请求，按原幂等恢复。 |
 
-顺序为固定主体与方案→读取既有权威Context/能力→纯预览→明确确认→原API版本约束提交→pending/拒绝/待确认→原结果回读。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
+owner指导沿固定主体与方案→核验owner权限及适用控制/审批条件→纯预览→明确确认→原owner API版本约束提交→pending/拒绝/待确认→原结果回读；目标激活与executor接入、Context取得和行动admission分开。实际executor动作另按读取既有权威Context/能力→提案→Runtime重验→原结果回读执行。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
 
 记录可脱敏关联的原操作、显示cut/分类、expected/实际控制版本及权威原因供对账，不公开token、观察正文或私有推理。
+
+### 5.5 初始实现范围
+
+#### 绑定来源与空间查询扩展
+
+远端空间观察复用服务端已验证的 WorldService 投影，不接受客户端自报 current。当前性须同时匹配读取配置、world/branch/权限/投影版本、普通证据策略、Runtime 的空间依赖字段与兼容 snapshot；未知、observer、回放或不匹配时降级。出站仅含非秘密来源绑定，不发布 read key 或其身份摘要。分页保留同一切点；仍能验证为当前同一来源切点时保留当前，来源推进或无法比较时冻结并降为最近已知；权限、来源范围或 epoch 改变立即使旧 cursor 失效。
+
+设施从获准 snapshot 的 factories 投影，路线从同源 runtime_snapshot 的 logistics_routes 投影。路线端点只引用同一可见投影中的 Agent、设施或地点，不从邻近或 Agent 所在位置推断设施位置、归属或路线。设施明确绝对空间锚点可保留权威位置；只有地点身份或来源不足的派生坐标保持未知，可搜索和只读检查，不能伪装为可定位实体。路线 unavailable 与 active 分开，只有同切点、当前且端点可信的 active 路线绘制连线。
+
+客户端和服务端仅在共同协商 `world_view_pins_v1` 后使用新增请求字段；旧 `world_view` 服务端继续使用原 bounds/search/cursor，不发送其不认识的字段。
+
+`request_world_view.query.pinned_entities` 可携带最多三个 `{kind,id}`，仅在原授权可见集合内合并选择、目标和跟随对象并优先分页；不存在或越权 ID 不增加存在性信息。实体与关系共同消耗每页 200 项、累计 1000 项和字节上限；客户端达到累计上限即保留 partial 和现有可信对象，提示缩小范围，不伪装读取失败或完整结果。关系的两端点可跨页到达，未齐不绘制。范围外对象和聚合淘汰仍不表示世界删除。
+
+相机事件增加十进制字符串 `viewport_bounds` 与逻辑像素尺寸，使用 Rust 绘制转换的逆变换，向外取整并裁至世界边界；宿主不重算另一套坐标。连续平移/缩放立即使旧查询代际失效，尾部防抖发出最新 bounds；应用查询结果不触发自动总览或查询循环。服务端在完整授权投影建立有界二维包围盒索引，查询索引后再筛选文本、稳定分页并合并获准 pin/路线端点；索引和来源切点一起重建，不能跨权限复用。
+
+该扩展不包含原生容器、事件增量流或工业语义多尺度聚合。索引正确性与候选裁剪可用确定性测试证明，50k 世界、P95 与长期驻留内存仍须按质量条款独立实测。
+
+当前空间读模型使用已协商 `world_view` 的 Viewer WebSocket：`request_world_view` 请求带 `request_generation`、可选 `search`/`bounds`/`cursor` 和 `page_size`，响应为 `world_view`。它只裁剪同一连接本来可读的兼容 snapshot，不新增 Agent 私有观察权限。展示字段经 allowlist；world、reorg、audience 和查询范围隔离分页。每会话只保留一份有界短期只读投影，不能用旧 audience 的 cursor读取。
+
+初次查询只在匹配本地权威 Runtime 或已验证远端来源的 Agent/显式设施位置上声明current；回放、observer、来源不匹配和缺几何证明的地点/设施位置保留unknown。仍能证明来源切点未变的续页保留current；冻结历史续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；当前不提供权威 tombstone 流。请求代际、输入导航、world/task流分别处理。
+
+图形context loss停止原会话和命中，保留仍获准的文本/原回执并提供显式重试；授权身份或world变化先清显示，旧异步挂载和事件不再生效，新scope通过带请求身份、socket和作用域代际校验的 `request_scope_snapshot` 定向重读后才可解锁；普通迟到snapshot不能解除锁定。旧本地反馈按提交scope隐藏，但原pending操作身份保留，不重新提交。导航明确区分选择、定位、跟随、停止和总览；手动平移/缩放退出跟随，失去可信位置后不会自动恢复。
+
+本切片不交付HTTP目标路由、空间索引、完整实体/关系/事件投影或native窗口，不声明§9数值预算和端到端验收已经通过。
 
 ## 6. 接口与数据合同
 

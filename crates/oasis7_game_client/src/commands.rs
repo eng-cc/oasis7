@@ -3,7 +3,7 @@ use crate::operation_store::ClientStateKind;
 use oasis7_client_api::world_service::*;
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
-const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
+const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted|context_expired>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
 
 pub fn run(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] {
@@ -125,9 +125,7 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
         "outcome" => {
             let operation = required("--context")?;
             let reason = required("--reason")?;
-            if !["executor_aborted", "provider_failed", "transport_exhausted"].contains(&reason) {
-                return Err("unsupported outcome; expired contexts require a fresh context and original result queries".into());
-            }
+            validate_outcome_reason(reason)?;
             print(&client.outcome(operation, reason)?)
         }
         "lookup" => {
@@ -145,6 +143,20 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
         }
         _ => unreachable!(),
     }
+}
+
+fn validate_outcome_reason(reason: &str) -> Result<(), String> {
+    if ![
+        "executor_aborted",
+        "provider_failed",
+        "transport_exhausted",
+        "context_expired",
+    ]
+    .contains(&reason)
+    {
+        return Err("unsupported context outcome".into());
+    }
+    Ok(())
 }
 
 fn build_selection<'a>(
@@ -270,6 +282,12 @@ fn bounded_id(value: &str) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn expired_context_terminal_reason_is_available_to_cli() {
+        assert!(validate_outcome_reason("context_expired").is_ok());
+        assert!(validate_outcome_reason("pretend_expired").is_err());
+    }
+
     #[test]
     fn factory_commands_reject_injected_authority_and_costs_before_configuration() {
         for command in ["quote-build", "build"] {

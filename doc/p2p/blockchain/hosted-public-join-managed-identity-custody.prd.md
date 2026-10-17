@@ -33,7 +33,7 @@
 账号接入的推荐方式、多凭证管理和邮箱受限恢复已由[免邮箱多凭证 PRD](hosted-public-join-key-based-onboarding.prd.md)承接；本专题继续拥有资产 signer / custody / step-up 与自托管升级合同。多凭证实现候选不升级当前技术预览或生产 custody 口径。
 
 ## 1. Executive Summary
-- Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker、`device_session + in-memory session key` 恢复链路，以及 env-configured SMTP 邮件投递；普通玩家不再需要手抄浏览器本地私钥，也不必继续依赖 repo-owned preview code 才能回到同一 `player_id`。但这套实现整体仍停留在 `limited playable technical preview` 边界：`crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；`signer_ref`、managed custody sign API、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
+- Problem Statement: `hosted_public_join` 现在已经补上了 hosted account 邮箱登录 broker、`device_session + in-memory session key` 恢复链路，以及 env-configured SMTP 邮件投递；普通玩家不再需要手抄浏览器本地私钥，也不必继续依赖 repo-owned preview code 才能回到同一 `player_id`。但这套实现整体仍停留在 `limited playable technical preview` 边界：`crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_strong_auth.rs` 依然依赖 `OASIS7_HOSTED_STRONG_AUTH_*` + `approval_code`；`signer_ref`、managed custody sign API、冻结/恢复策略和 self-custody upgrade 还没有进入正式后端 contract。如果不把这些缺口继续收完，`public join` 仍然不能被宣称为生产级 hosted wallet / custody 方案。
 - Proposed Solution: 为 `hosted_public_join` 正式冻结一套 producer-owned 的“托管身份 + 托管密钥 + 自托管升级”目标态。默认玩家路径改为 `guest -> hosted account -> managed player signer -> optional self-custody bind/transfer-out`：用户通过通行密钥或已登记邮箱证明登录，浏览器只拿 `player_session` 与设备级短期密钥；长期玩家 signer 留在服务端 custody plane，由 KMS/HSM 或 KMS-wrapped sealed-key backend 保护，并通过 step-up auth + policy engine 出签。
 - Success Criteria:
   - SC-1: `hosted_public_join` 必须提供“不输入原始公钥私钥也能开始玩”的正式登录路径，默认推荐通行密钥，邮箱为可选兼容因子；账号与凭证生命周期由[免邮箱多凭证合同](hosted-public-join-key-based-onboarding.prd.md)承接。
@@ -110,10 +110,10 @@
   - `sign_authorization`: `authz_id`, `signer_ref`, `action_id`, `step_up_method`, `approved_at`, `expires_at`, `audit_id`
   - `custody_audit_log`: `audit_id`, `account_id`, `event_type`, `actor`, `reason`, `evidence_ref`, `created_at`
 - Integration Points:
-  - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs`
-  - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
-  - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
-  - `crates/oasis7/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_player_session.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs`
   - `crates/oasis7_viewer/software_safe_src/viewer_hosted_auth_state_module.js`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`

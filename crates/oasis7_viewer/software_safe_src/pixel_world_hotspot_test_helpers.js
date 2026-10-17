@@ -17,7 +17,7 @@ export async function verifyHotspotCameraAndFocus(marker, onCameraEvent) {
   expect(screen.queryByRole("button", { name: "关闭热点说明" })).not.toBeInTheDocument();
   for (const method of ["click", "Escape"]) {
     fireEvent.click(marker);
-    expect(screen.getByRole("status")).toHaveTextContent("阻塞: 缺料阻塞");
+    expect(document.querySelector("[data-hotspot-tooltip][role=status]")).toHaveTextContent("阻塞: 缺料阻塞");
     const close = screen.getByRole("button", { name: "关闭热点说明" });
     marker.focus();
     fireEvent.keyDown(marker, { key: "Tab" });
@@ -31,5 +31,5 @@ export async function verifyHotspotCameraAndFocus(marker, onCameraEvent) {
     expect(screen.queryByRole("button", { name: "关闭热点说明" })).not.toBeInTheDocument();
   }
   fireEvent.mouseMove(screen.getByRole("button", { name: /目标热点：稳定生产/ }));
-  expect(screen.getByRole("status")).toHaveTextContent("目标: 稳定生产");
+  expect(document.querySelector("[data-hotspot-tooltip][role=status]")).toHaveTextContent("目标: 稳定生产");
 }

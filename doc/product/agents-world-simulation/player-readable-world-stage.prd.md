@@ -7,7 +7,7 @@
 - 配对产品设计：[玩家可读的世界舞台产品设计](player-readable-world-stage.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-16
+- Last reviewed：2026-10-17
 - 专业域权威：[语义定位](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md)、[Fragment LOD](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md)、[玩家可读渲染](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md)、[大世界可视化系统设计](../../world-simulator/viewer/external-agent-world-view.design.md)。
 
 本文定义玩家观察世界时应读懂什么、怎样保持上下文与因果，以及哪些能力必须分别验收。具体DTO、空间算法、渲染管线、平台依赖、容量数值及测试工具属于专业文档；本文不是当前发布报告。
@@ -150,10 +150,10 @@ Trace ID: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616
 - 功能点：目标、相关对象、blocker、下一步及原行动结果优先；观察焦点不补行动/回执归属。
 - 系统设计状态：已覆盖
 - 系统设计依据：[共享舞台与主体边界](../../world-simulator/viewer/external-agent-world-view.design.md#view-scene)承接目标架构、原操作和显示分层，专业渲染及质量条款共同细化；不代表实现通过。
-- 实现状态：未核实
-- 实现与验证依据：本轮仅文档及既有Rust/host静态审读；[主体与首读验证](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)是方法，不是已运行记录。
-- 核对日期与基线：2026-10-16；`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`；未执行真实Runtime/GPU/真人验收。
-- 剩余范围：fallback业务主体链整改、独立评审及同候选端到端因果/理解验收。
+- 实现状态：已实现待验证
+- 实现与验证依据：本轮主体绑定隔离已实现，待完整测试；焦点、推荐对象、原回执及显式空主体分离。实现与局部测试见 [PR #4825](https://github.com/nil-studio/oasis7/pull/4825) 和[本轮摘要](#stage-implementation-status)。
+- 核对日期与基线：2026-10-17；实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`；局部测试不代签完整验收。
+- 剩余范围：同候选端到端因果/理解、双主体延迟结果及正式独立试玩。
 - 验收：[AC-AGENT-STAGE-001](#ac-agent-stage-001)。
 
 <a id="ac-agent-stage-001"></a>
@@ -173,9 +173,9 @@ Trace ID: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3
 - 功能点：当前/最近已知/未知/冲突、来源范围、提交时重新确认与恢复。
 - 系统设计状态：已覆盖
 - 系统设计依据：[观察到生效的权威重验](../../world-simulator/viewer/external-agent-world-view.design.md#view-admission)承接只读/预览/高后果生效和安全控制，查询/适配保留来源与竞态语义。
-- 实现状态：未核实
-- 实现与验证依据：[时效与提交场景](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-freshness)为验证计划，未取得真实API/Runtime接线和竞争运行结果。
-- 核对日期与基线：2026-10-16；`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`；文档/静态审读，未运行组合验收。
+- 实现状态：部分实现
+- 实现与验证依据：本轮适用 Web 子集已实现，待完整测试；范围、实现 PR、局部测试及未实现边界见[本轮摘要](#stage-implementation-status)。
+- 核对日期与基线：2026-10-17；实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`；局部测试不代签完整验收。
 - 剩余范围：真实Context/fence/控制版本接线、原结果恢复、权限/提交竞态与客户端验收。
 - 验收：[AC-AGENT-STAGE-002](#ac-agent-stage-002)。
 
@@ -196,9 +196,9 @@ Trace ID: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf
 - 功能点：授权总览/区域/Fragment/对象浏览、平移/缩放、搜索、选择/跟随、返回目标和高密度可用性。
 - 系统设计状态：已覆盖
 - 系统设计依据：[空间查询与探索](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)组合适配/partial/容量合同；Fragment LOD仅承接背景细节，不替代完整探索。
-- 实现状态：未核实
-- 实现与验证依据：[探索场景](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-exploration)及专项容量方法未在本轮执行，设计数值不是实测。
-- 核对日期与基线：2026-10-16；`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`；未执行空间API/真实浏览器/负载验收。
+- 实现状态：部分实现
+- 实现与验证依据：本轮适用 Web 子集已实现，待完整测试；范围、实现 PR、局部测试及未实现边界见[本轮摘要](#stage-implementation-status)。
+- 核对日期与基线：2026-10-17；实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`；局部测试不代签完整验收。
 - 剩余范围：授权空间投影、分页/聚合、可靠交互、密集质量与真实浏览器证据。
 - 验收：[AC-AGENT-STAGE-003](#ac-agent-stage-003)。
 
@@ -220,9 +220,9 @@ Trace ID: O7-REQ-ecbc5765-ec25-4bfe-9aaa-4bbdd0a3064a
 - 功能点：声明支持的Web/原生端各自在界面内浏览、定位、检查、重连与图形恢复。
 - 系统设计状态：已覆盖
 - 系统设计依据：[原生容器与支持边界](../../world-simulator/viewer/external-agent-world-view.design.md#view-native)组合共享Viewer和恢复合同；目标平台表不是当前支持声明。
-- 实现状态：未核实
-- 实现与验证依据：[逐端验收](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-platform)仅为方法，未取得本候选原生发行/图形/回访结果。
-- 核对日期与基线：2026-10-16；`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`；未运行Web/native真实验收。
+- 实现状态：部分实现
+- 实现与验证依据：本轮适用 Web 子集已实现，待完整测试；范围、实现 PR、局部测试及未实现边界见[本轮摘要](#stage-implementation-status)。
+- 核对日期与基线：2026-10-17；实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`；局部测试不代签完整验收。
 - 剩余范围：实际WebView依赖/最低版本锁定、OS/架构发行资产、安全/恢复与质量验证。
 - 验收：[AC-AGENT-STAGE-004](#ac-agent-stage-004)。
 
@@ -244,9 +244,9 @@ Trace ID: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096
 - 功能点：有权Agent的目标/Prompt/委托与原回执衔接；观察无世界副作用。
 - 系统设计状态：已覆盖
 - 系统设计依据：[合法高层指导](../../world-simulator/viewer/external-agent-world-view.design.md#view-guidance)组合主体固定、服务器重验和原操作恢复，不建立地图直接行动。
-- 实现状态：未核实
-- 实现与验证依据：[权限与归属场景](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)未在真实候选执行；静态target字段不证明权限校验或真实结果。
-- 核对日期与基线：2026-10-16；`a2389f437e6cedc3b870a91d33a1cdf40a00a8da`；未运行双主体/Runtime组合验收。
+- 实现状态：部分实现
+- 实现与验证依据：本轮适用 Web 子集已实现，待完整测试；范围、实现 PR、局部测试及未实现边界见[本轮摘要](#stage-implementation-status)。
+- 核对日期与基线：2026-10-17；实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`；局部测试不代签完整验收。
 - 剩余范围：服务器接线、原操作幂等恢复、无权/转让/主体切换负例与真实世界结果。
 - 验收：[AC-AGENT-STAGE-005](#ac-agent-stage-005)。
 
@@ -259,6 +259,21 @@ Trace refs: O7-REQ-9cb09cbd-3c98-4742-a290-ea98a64ab096
 - 给定：自己的Agent、可见但无权Agent、地形和pending/committed操作。
 - 当：浏览/过滤/选择，再对合法Agent提交高层指导，并注入转让/撤权/旧草稿/断连。
 - 则：观察不提交世界action；保存、接受、生效和后续结果分开；主体不变且无第二次效果。
+
+<a id="stage-implementation-status"></a>
+### 本轮实现状态：已实现，待完整测试
+
+本轮主体绑定、显示恢复与 Agent/Location 探索切片的实现状态为 **已实现待验证**（已实现，待完整测试）。实现与逐项验证见 [PR #4825](https://github.com/nil-studio/oasis7/pull/4825)，实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`。本摘要不将下列完整要求或尚未实现的范围改判为已完成。
+
+| 本轮范围 | 已实现内容 | 待完整测试与剩余边界 |
+| --- | --- | --- |
+| 主体绑定（001/005） | 观察焦点、推荐行动对象和原回执主体独立；玩家级空主体保留；选择变化不补写原回执。 | 双主体真实指导、延迟结果、权限变化及世界结果组合验收。 |
+| 来源与恢复（002/004 Web 子集） | 已实现，待完整测试。远端获准投影校验来源/切点与实际 Runtime 一致性；授权投影保留来源/时效；冻结续页整体降为最近已知；作用域切换关联快照恢复，旧异步会话隔离；图形失败保留获准文本并显式重试。 | 私有账号切换、真实图形上下文失效恢复、独立正式游戏 Skill 试玩。 |
+| 空间探索（003 Web 子集） | 已实现，待完整测试。同 Viewer 连接有界分页、搜索、Agent/Location/设施只读检查、显式路线投影、Rust 视口查询与空间索引、定位/跟随/停止及返回总览/目标。 | 真实远端与复杂路线场景、完整事件、高密度与长期容量证据；原生容器与工业多尺度聚合仍未实现。 |
+
+当前后续实现继续补齐远端来源绑定、设施/路线投影与视口查询/空间索引：只消费现有获准投影；稳定切点分页保留来源时效，来源推进则冻结降级；无权威位置的设施只提供文本检查；高密度达到本地上限保留不完整视图并提示缩小范围。实现状态为已实现，待完整测试，真实远端、正式试玩和完整容量结果按当前 PR 记录，不能由索引存在推为达标。原生容器、完整事件流与工业多尺度聚合仍不属于已实现范围。
+
+局部测试、WebGL/WASM 构建和桌面/窄屏本地无 LLM 浏览器检查结果见对应 PR；这些结果不代签完整产品验收。缺私有测试世界和 GameClient 设备配置，正式独立试玩保持 blocked/not run；用户已明确要求保留缺口并推进合入。完整 REQ 的状态仍按各卡实际范围判断，不将未实现范围写成仅待测试。
 
 ## 5.1 叶级 owner、authority、evidence 与 test tier 追踪
 

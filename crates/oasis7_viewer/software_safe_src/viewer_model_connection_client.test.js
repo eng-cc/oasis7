@@ -67,9 +67,20 @@ describe("model connection client", () => {
 
  it("keeps only bounded native execution status and hides unsolicited fields", () => {
   const result = modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "completed", successful_effects: 4, model_calls_spent: 6, raw_key: "private-canary", goal_completion_verified: true } });
-  expect(result.execution).toEqual({ phase: "finished", reason: "completed", successful_effects: 4, model_calls_spent: 6 });
+  expect(result.execution).toEqual({ phase: "finished", reason: "completed", successful_effects: 4, model_calls_spent: 6, model_failure: null });
   expect(JSON.stringify(result)).not.toContain("private-canary");
   expect(modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "private-canary", successful_effects: -1 } }).execution.reason).toBeNull();
  });
 
+});
+
+it("allowlists model diagnostics and preserves legacy snapshots without raw details", () => {
+ for (const code of ["input_limit", "output_limit", "model_identity_mismatch", "unexpected_streaming", "unsupported_finish_reason", "unsupported_tool", "invalid_tool_identity", "unsupported_content", "capability_unsupported", "other"]) {
+  expect(modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "input_limit", model_failure: code, response: "private-canary" } }).execution).toMatchObject({ reason: "input_limit", model_failure: code });
+ }
+ for (const code of [undefined, "private-canary", { code: "output_limit", raw: "private-canary" }]) {
+  const result = modelConnectionSnapshot({ ...snapshot, execution: { phase: "finished", reason: "model_failed", model_failure: code, response: "private-canary" } });
+  expect(result.execution.model_failure).toBeNull();
+  expect(JSON.stringify(result)).not.toContain("private-canary");
+ }
 });

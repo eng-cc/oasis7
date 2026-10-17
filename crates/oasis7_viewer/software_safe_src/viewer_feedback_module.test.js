@@ -14,6 +14,13 @@ function createFeedbackModule(state) {
 }
 
 describe("viewer feedback module", () => {
+  it.each(["agent-A", null])("keeps local receipt subject %s independent from a newer runtime intent", (agentId) => {
+    const state = {uiLocale:"en",snapshot:{model:{agents:{"agent-A":{id:"agent-A"},"agent-B":{id:"agent-B"}},locations:{base:{id:"base"}}},player_gameplay:{intent_target:"agent-B",recent_feedback:{action:"build",stage:"completed"}}},lastGameplayActionFeedback:{kind:"gameplay_action",action:"build",stage:"completed",agentId}};
+    const summary = createFeedbackModule(state).buildGameplaySummary();
+    expect(summary.receiptTargetAgentId).toBe(agentId);
+    expect(summary.recentFeedback.agentId).toBe(agentId);
+    expect(summary.acceptedIntentTarget).toBe("agent-B");
+  });
   it("projects agency only from a visible canonical primary intent", () => {
     const agency = { causal_receipt: { receipt_id: "canonical-receipt" }, memory_corrections: [] };
     const state = { uiLocale: "en", snapshot: {

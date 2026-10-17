@@ -306,7 +306,7 @@ A 成功提交 Reconciled 后 B 的延迟失败只能成为该过期尝试的诊
 | [PRD-P2P-TBRIDGE-002：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#tbridge-002) | [有效处理权](#bridge-reconcile-ownership) | §10 的 barrier 固定双尝试、延迟失败、双成功与处理者退出 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的并发故障用例 | source、受控时序、内存/文件/重载终态、计数和退出码 | planned；部署支持的并发范围单独说明 |
 | [PRD-P2P-TBRIDGE-004：异常与验证快照](mainchain-token-newapi-quota-bridge.prd.md#tbridge-004) | [持久业务阶段](#bridge-recovery-state) | §10 的 Credited 后查询失败、重启与再次保存失败；保留真正未入账正例 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的持久阶段故障用例 | source、receipt/order、重载阶段、topup 调用数和退出码 | planned；并发回归不能代签跨重启恢复 |
 
-现有测试入口为 `crates/oasis7/src/bin/oasis7_newapi_bridge_service/tests.rs`，分页替身在同目录 `tests_support.rs`；在这些已有入口补充 §10 的故障语义，按 `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service` 执行并记录实际结果。手册/测试入口存在不表示新增场景已实现或执行；本次文档不运行真实 topup、模型调用或 operator 部署，也不以测试计划代替四项独立验收。
+现有测试入口为 `crates/oasis7_newapi_bridge_service/src/bin/oasis7_newapi_bridge_service/tests.rs`，分页替身在同目录 `tests_support.rs`；在这些已有入口补充 §10 的故障语义，按 `env -u RUSTC_WRAPPER cargo test -p oasis7_newapi_bridge_service --bin oasis7_newapi_bridge_service` 执行并记录实际结果。手册/测试入口存在不表示新增场景已实现或执行；本次文档不运行真实 topup、模型调用或 operator 部署，也不以测试计划代替四项独立验收。
 
 ### 11.2 当前源码差距（静态核对）
 

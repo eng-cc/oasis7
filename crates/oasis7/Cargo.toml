@@ -1,5 +1,6 @@
 [package]
 name = "oasis7"
+autobins = false
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -27,16 +28,8 @@ rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rusqlite = { version = "0.40.2", features = ["bundled", "backup"] }
-prost = "0.13"
-hmac_legacy = { package = "hmac", version = "0.12" }
-sha1 = "0.10"
-md5 = "0.7"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
-webauthn-rs-core = "=0.5.5"
-url = "2"
-uuid = { version = "1", features = ["serde", "v4"] }
-base64 = "0.22"
+oasis7_observability = { path = "../oasis7_observability" }
+oasis7_hosted_access = { path = "../oasis7_hosted_access" }
 oasis7_game_client = { path = "../oasis7_game_client" }
 oasis7_model_provider = { path = "../oasis7_model_provider" }
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
@@ -44,25 +37,19 @@ zeroize = "1"
 cap-std = "4"
 cap-fs-ext = "4"
 libc = "0.2"
-aliyun-tablestore-rs = { version = "0.1.2", default-features = false, features = ["rust-tls"] }
 oasis7_distfs = { version = "0.1.0", path = "../oasis7_distfs" }
-oasis7_launcher_ui = { version = "0.1.0", path = "../oasis7_launcher_ui" }
 oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = false }
 oasis7_wasm_executor = { version = "0.1.0", path = "../oasis7_wasm_executor", default-features = false }
 oasis7_wasm_router = { version = "0.1.0", path = "../oasis7_wasm_router" }
 oasis7_wasm_store = { version = "0.1.0", path = "../oasis7_wasm_store" }
 async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }
-eventsource-stream = "0.2.3"
 ctrlc = { version = "3.4", features = ["termination"] }
-futures-util = "0.3"
 hmac = "0.13"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "rustls"], default-features = false }
-tokio = { version = "1", features = ["rt", "time"] }
 toml = "0.9.12"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "tracing-log"] }
 tungstenite = "0.30.0"
-lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
@@ -80,3 +67,4 @@ test_tier_full = ["test_tier_required"]
 
 [dev-dependencies]
 oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = false, features = ["test-hooks"] }
+oasis7_hosted_access = { path = "../oasis7_hosted_access", features = ["test-support"] }

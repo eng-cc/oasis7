@@ -38,7 +38,7 @@ Run the supplied executable with `--help`, then:
 
 Choose a unique operation ID once per decision context. Retain it across transport errors and restarts. The client durably records the original signed preparation and public prefix before sending. Do not substitute another nonce or operation after an unknown result.
 
-If context returns `usable_context=false`, inspect its original canonical outcome. Pending or unknown outcomes require original lookup/retry. A settled rejection or expiry cannot become a usable context by repeating it: preserve that result, reread the task, and capture a new decision context with a new operation ID while still authorized. A changing world may invalidate a captured base between preparation and submission.
+If context returns `usable_context=false`, inspect its original canonical outcome. Pending or unknown outcomes require original lookup/retry. A settled rejection or expiry cannot become a usable context by repeating it: preserve that result and reread the task. A committed prefix can still occupy the active turn after its private context expires; use the explicit expired-context recovery below before creating a new decision context. A changing world may invalidate a captured base between preparation and submission.
 
 A context is usable only after its prefix is canonically committed. Read the returned complete goal, soft constraints, current task/executor fence, observation schema and actual capability catalog. `world-agent-state/v1` is raw Agent state, not the legacy ProviderObservation format. Derive your decision from this goal and observation. Contexts have a bounded tick lease, at most 16 ticks and never beyond the capability grant expiry; refresh promptly before making a new decision.
 
@@ -78,6 +78,8 @@ An opaque HTTP 403, failed signature/binding validation, changed task/executor f
 
 If the built-in executor reports `input_limit`, the complete required model input cannot fit its configured capacity. This is not a rejected world action or permission to replace an operation. Stop new inference, retain the original context/action and inspect its original result before resuming. Do not repeatedly Start, change the operation ID to evade the limit, raise the same run's budget, or discard required goal, observation, tool-result or protocol history. Capacity and history configuration must be corrected by the execution host; a resumed executor must recheck the current task, fence and original results with its remaining budget.
 
+A built-in `model_failed` report may include a fixed `model_failure` classification. `output_limit` means the generated response was truncated: no part of that response is a valid action, even if a partial tool call looks complete. Preserve original operations, stop new inference and have the execution host review the configured output capacity within explicit limits. Model-identity, unsupported-tool, invalid-tool-identity and unsupported-protocol failures require diagnosis; do not guess actions from text, change models/protocols, raise the run budget or blindly restart. The classification describes a model failure, not a world action receipt.
+
 
 Both build commands recover a cached original Action before any fresh context or quote: the same site, factory ID and canonical kind must match. Unknown/pending results freeze that exact signed operation, including after a process restart. Recover with `lookup --context <context-id> --kind action`; do not replace it with a new build or recipe. This profile assumes an already claimed and configured Agent with an authorized site. Factory construction does not establish cold entry, claiming, token pairing, bootstrap or full AC-EXT-010 coverage.
 
@@ -95,7 +97,7 @@ If `schedule` or `quote-schedule` finds an original cached action, it checks the
 
 Each context has one original action shared by movement, transfer, construction and production. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
 
-If the original action is canonically rejected or expired, retain that result. Rejection does not necessarily release its active context: obtain a committed terminal outcome or wait for the context's bounded lease to expire before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
+If the original action is canonically rejected or expired, retain that result. Rejection or lease expiry does not necessarily release its active context: recover the original terminal result and explicitly settle an expired active turn when allowed below before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 
 ## Recover and finish
 
@@ -105,8 +107,23 @@ For a lost response, use `lookup --kind prefix|action|outcome` with the original
 <client> --config <device.json> outcome --context <context-id> --reason executor_aborted
 ```
 
-The other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. An outcome can itself be rejected when the world advances beyond its captured base. This CLI preserves that immutable original outcome; it does not automatically re-sign it with a fresh base. Query its original result and, after confirmed rejection, wait for the context lease to expire if it remains active. Expired contexts cannot be decrypted through this CLI; a fresh context retires expired pending work when current grants permit it. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
+For a usable context, the other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. An outcome can itself be rejected when the world advances beyond its captured base. This CLI preserves that immutable original outcome; it does not automatically re-sign it with a fresh base. Query its original result; do not create a competing outcome with another reason or base. Expired contexts cannot be decrypted through this CLI. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
+
+For an expired context whose original prefix committed but no action or outcome was created, first recover its original results:
+
+```sh
+<client> --config <device.json> lookup --context <context-id> --kind prefix
+<client> --config <device.json> lookup --context <context-id> --kind action
+<client> --config <device.json> lookup --context <context-id> --kind outcome
+<client> --config <device.json> task
+<client> --config <device.json> outcome --context <context-id> --reason context_expired
+<client> --config <device.json> lookup --context <context-id> --kind outcome
+```
+
+A lookup reporting “original operation is not in this device cache” means no local original of that kind; it does not prove an unknown remote request had no effect. Do not use a missing or replaced cache to bypass recovery. If an action or outcome exists, recover that exact original instead of creating a competing terminal outcome. Unknown or pending results block new decisions. The SDK checks the original prefix is committed, the currently signed task is Active with the same complete fence, and the current signed tick strictly exceeds the original expiry before first creating `context_expired`. It uses the cached public prefix identity and fresh signed base without reading expired private content. Repeating this outcome preserves its first signed request; it does not update the base, nonce or reason. Only after the outcome is **committed**, reread `task` and capture a new context while still authorized. A rejected termination, Stop, changed fence or revoked read authority requires stopping/recovery, not another context.
 
 After goal publication, executor replacement, Stop or delegation revocation, old contexts cannot authorize new effects. Query original settled results, reread `task`, and capture a fresh context only while still authorized. On Stop or revoked authority, stop acting and report the boundary. Do not rebind yourself or alter the owner goal.
 
 Report the goal revision, chosen action, canonical result and observed effect concisely. Distinguish a prepared-world attached-agent run from cold entry or an OpenClaw integration test. If independent isolation is instruction-only, say so.
+
+原 operation 回读若为 `HistoryUnavailable`，保留原 request/correlation、run 与持久预算并停止新副作用；交由宿主恢复历史材料，不能把记录头仍存在当作回执可用，也不能换世界或新建操作来代替恢复。

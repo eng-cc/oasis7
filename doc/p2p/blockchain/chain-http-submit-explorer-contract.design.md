@@ -4,7 +4,7 @@
 - Owner role：`runtime_engineer`；验证联审：`qa_engineer`；客户端合同联审：`viewer_engineer`。
 - 配对专业需求：[链 HTTP 提交与 Explorer P0 后端合同](chain-http-submit-explorer-contract.prd.md)。
 - 固定源码审读基线：`e01e29064517f4bf375767a19a09802335828249`，2026-10-12。
-- 本文规定目标设计；本次文档变更不修改运行行为。实现、测试及交付事实由 [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450)、PR 与真实验证记录维护。
+- 本文规定目标设计；本次文档变更不修改运行行为。[#4450 的文档承接关闭决定](https://github.com/nil-studio/oasis7/issues/4450#issuecomment-6126251006) 已停止该 Issue 跟踪；它仅为历史来源。H1–H4 目标合同仍有效，实际实现、测试及交付事实由承接工作的 PR 与真实验证记录维护，不能从关闭推断实现或验收完成。
 
 ## 1. 问题、目标与非目标
 
@@ -227,16 +227,16 @@ H2/H3/H4 可独立验证；H1 身份与可靠处置分别验收，不能因为�
 本次选择不改变共识算法、签名域或权限，采用本节决策表即可；若后续需要新持久协议、跨进程身份或难回滚 schema，按系统设计规范另补相应 ADR。
 文档通过检查或合入不关闭四项行为义务；实现和验证仍分别回链 #4450，不能以未来任务占位宣称完成。
 
-[src-transfer-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L53
-[src-main-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/main_token_submit_api.rs#L21
-[src-gameplay-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/gameplay_submit_api.rs#L23
+[src-transfer-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L53
+[src-main-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/main_token_submit_api.rs#L21
+[src-gameplay-id]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/gameplay_submit_api.rs#L23
 [src-node-submit]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_node/src/node_runtime_core.rs#L321-L397
 [src-merge]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_node/src/consensus_support.rs#L36-L88
 [src-dequeue]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_node/src/consensus_support.rs#L242-L253
-[src-tracker]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L150-L181
-[src-explorer-accepted]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/explorer_p0_store.rs#L148-L216
-[src-p0-route]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L476-L483
-[src-sync]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L905-L1003
-[src-query]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/explorer_p0_store.rs#L465-L528
+[src-tracker]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L150-L181
+[src-explorer-accepted]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/explorer_p0_store.rs#L148-L216
+[src-p0-route]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L476-L483
+[src-sync]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs#L905-L1003
+[src-query]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7/src/bin/oasis7_chain_runtime/explorer_p0_store.rs#L465-L528
 [src-drain]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_node/src/node_runtime_core.rs#L436-L441
 [src-retention]: https://github.com/eng-cc/oasis7/blob/e01e29064517f4bf375767a19a09802335828249/crates/oasis7_node/src/node_runtime_batch_retention.rs#L13-L56

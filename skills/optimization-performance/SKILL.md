@@ -30,6 +30,10 @@ observability:
 
 # Optimization & Performance
 
+## Scheduling expensive work
+
+Use `FixedUpdate` for physics work that requires the fixed simulation step, not as a general performance fix: a rendered frame can contain multiple fixed steps. Coroutines still execute synchronous work on the main thread until they yield; split work with an explicit per-frame budget if latency and ordering allow it. Choose lower update frequency, caching, or independent jobs from profiling, and verify behavior, ordering, responsiveness, and frame time on target hardware after the change.
+
 ## When to Use
 
 Use this skill when:
@@ -193,7 +197,7 @@ VR OPTIMIZATION:
 │ → Look for expensive operations in Update()               │
 ├─────────────────────────────────────────────────────────────┤
 │ SOLUTIONS:                                                   │
-│ → Move logic to FixedUpdate or coroutines                   │
+│ → Profile cost and update frequency before rescheduling    │
 │ → Implement object pooling                                  │
 │ → Add LOD for distant objects                               │
 │ → Reduce draw calls with batching                           │

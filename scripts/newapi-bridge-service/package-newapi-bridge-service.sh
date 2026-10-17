@@ -160,7 +160,7 @@ CARGO_CMD=(env -u RUSTC_WRAPPER cargo build)
 if [[ "$PROFILE" == "release" ]]; then
   CARGO_CMD+=(--release)
 fi
-CARGO_CMD+=(-p oasis7 --bin oasis7_newapi_bridge_service)
+CARGO_CMD+=(-p oasis7_newapi_bridge_service --bin oasis7_newapi_bridge_service)
 "${CARGO_CMD[@]}"
 
 if [[ ! -x "$BINARY_PATH" ]]; then

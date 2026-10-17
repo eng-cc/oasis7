@@ -153,7 +153,8 @@ impl Client {
                 "native_delegation_authorizations":grants,
                 "native_authorization_count":projection.native_delegation_authorizations.len(),
                 "native_authorizations_truncated":projection.native_delegation_authorizations.len()>128,
-                "outcomes":["executor_aborted","provider_failed","transport_exhausted"],
+                "outcomes":["executor_aborted","provider_failed","transport_exhausted","context_expired"],
+                "context_expired_requires":"first creation requires committed original prefix, no competing action/outcome, current Active complete task fence and strictly expired lease; existing outcome recovers its exact original; wait for committed outcome before new context",
                 "scope":"local native proposal forms are distinct from module commands and native action/object electricity grants; current grants do not guarantee admission"
             }),
         )

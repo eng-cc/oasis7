@@ -141,6 +141,8 @@
 
 注：本表只给建议档位，不公开固定 token 数额，也不形成固定 token/point 汇率。
 
+**未决计分边界**：当前基础分最高为 `40`，质量修正列有 `+20` 与 `+10`，但未定义多项累计或例外计分路径来达到 `eligible-large >=90`。不得自行累加贡献项/质量分，也不得将下节的金额例外当作分数规则；须由 producer 明确该路径后才能据此判断 `eligible-large`。此处仅披露规则缺口，不改变原有分值、阈值或金额护栏。
+
 ### 7.4 Producer 审批金额护栏
 - `eligible-small / medium / large` 只是审阅档位，不等于公开 bounty 表。
 - 对于 `Source Type=PR` 且 `Contribution Type=C-03` 的普通 merged PR，producer 审批的默认真实发放 ceiling 为 `150 OC`。

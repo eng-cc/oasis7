@@ -71,7 +71,7 @@
 
 ## 4. Technical Specifications
 - Architecture Overview:
-  - 玩家提交 wasm 工件或源码编译 -> module artifact 写入 store -> ModuleReleaseSubmit(包含 profile_changes) -> Shadow 校验(artifact/ABI/limits/profile冲突与覆盖提交) -> 多角色审批 -> Apply 二次复核冲突后落账 ModuleEvent + ProfileGoverned 事件 -> world state 更新 module registry + profile maps -> 经济系统路由新制成品。
+  - 玩家提交合法 wasm binary 工件（生产源码构建由外部受控的同一 Docker builder 完成；runtime 宿主直编只允许显式 gated 的 dev/test 路径，见 [SC-5](../wasm/wasm-deterministic-build-pipeline.prd.md#sr2-obligation-sc-5)、[SC-7](../wasm/wasm-deterministic-build-pipeline.prd.md#sr2-obligation-sc-7) 与 [AC-8](../wasm/wasm-deterministic-build-pipeline.prd.md#sr2-obligation-ac-8)）-> module artifact 写入 store -> ModuleReleaseSubmit(包含 profile_changes) -> Shadow 校验(artifact/ABI/limits/profile冲突与覆盖提交) -> 多角色审批 -> Apply 二次复核冲突后落账 ModuleEvent + ProfileGoverned 事件 -> world state 更新 module registry + profile maps -> 经济系统路由新制成品。
 - Integration Points:
   - `doc/world-runtime/wasm/wasm-interface.md`（WASM ABI）
   - `doc/world-runtime/module/module-lifecycle.md`（发布/治理事件）
@@ -93,7 +93,7 @@
   - NFR-5: 发布与 profile 落账事件回放一致率 100%。
 - Security & Privacy:
   - 仅 artifact owner 可提交发布单；所有发布动作写入审计事件。
-  - `artifact_identity` 必须可验证签名或 identity_hash 方案。
+  - `artifact_identity` 的生产校验遵守[线上发布 AC-3](online-module-release-legality-closure-2026-03-08.prd.md#ac-3)：禁用 `identity_hash_v1` 宽松回退，仅允许 `ed25519` 或后续明确版本的签名方案；identity_hash 兼容只在[SC-7](../wasm/wasm-deterministic-build-pipeline.prd.md#sr2-obligation-sc-7)及其 release policy 明确允许的 dev/test 配置中适用。此处只澄清既有环境边界，不定义 canonical hash，也不宣称所有实现入口已落实。
   - 多角色审批必须满足 `required_roles`（默认 `security/economy/runtime`）。
   - 受限准入资格不等于发布成功；只有权威提交的 release + profile governed 事件确认世界效果，技术构建、请求送达、Approved 或本地缓存不能替代 receipt。
   - 回滚采用产品允许的“仅停止新的发布/激活”结果；既有能力及已结算世界事实保持原有因果，后续动作仍须满足各自当前专业合同。

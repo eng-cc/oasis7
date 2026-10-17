@@ -4,7 +4,7 @@
 - Owner：`viewer_engineer`；视觉/QA协作。
 - 审读：2026-10-16；基线 `a2389f437e6cedc3b870a91d33a1cdf40a00a8da`。
 - 历史任务：`task_b399bf37eff94c44a300c55f5db739d3` / #1294，原证据从Git/Task追溯。
-- 本修订定义待实施的主体隔离和降级合同，保留已有HUD/Feed，不宣称代码已修复或验收通过。
+- 本文定义主体隔离和降级合同，保留已有HUD/Feed；主体隔离的当前实现见§3，其余目标与完整运行验收仍须分别核验，不宣称整体验收通过。
 
 ## 1. 问题、目标与非目标
 
@@ -32,7 +32,7 @@
 
 pixel_world_host.jsx将bounded snapshot交Rust host_state.rs::build_render_state，消费world_bounds、locations、fragment_terrain、agents、links、hotspots、selection与commercial_surface；WASM绘制世界。focus/right-panel兼容hooks、Targets的entity-search仍存在；world_feed/v1来自独立Runtime journal。
 
-当前build_commercial_surface沿recommended target、accepted target、selection、first visible agent解析active_agent_id，并用于next_action fallback；build_action_receipt也接收它补target。此为静态源码风险，不再作为正确主体要求，也不据此断言已发生越权执行。
+当前active_agent_id只取可见集合中的明确selection；next_action只取推荐动作自己的target。回执消费独立receiptTargetAgentId（包括显式null），本地反馈固定其提交主体，Runtime兼容绑定来自原player-facing feedback；不再借推荐/选择/首项补主体。缺绑定保留未知或玩家级范围，不推断控制资格。
 
 <a id="design-decision"></a>
 ## 4. 边界与设计决策
@@ -61,7 +61,7 @@ active_agent_id只表达关注对象，缺明确来源可null，构图不说明�
 
 回执先关联原operation和受权feedback，再取明确主体；新的acceptedIntentTarget、recommendedAction、selection不足以给旧回执归属。合法玩家级结果可target=null且明确玩家级；无法确认属当前玩家/操作则不进成功展示。
 
-A在途切B时原结果仍归A，B详情只读自己的结果；重复引用不是重复效果。建议拆Rust解析helper，使build_action_receipt不再接收display active_agent_id作为fallback。上游缺原操作关联则fail closed并跟踪缺口，不伪造Runtime字段；真正新增上游字段须同步其authority与版本。
+A在途切B时原结果仍归A，B详情只读自己的结果；重复引用不是重复效果。当前Rust已拆分回执主体解析，build_action_receipt不再接收display active_agent_id作为fallback；后续必须保持此隔离。上游缺原操作关联则fail closed并跟踪缺口，不伪造Runtime字段；真正新增上游字段须同步其authority与版本。
 
 <a id="host-algorithm"></a>
 ## 5. 关键运行流程

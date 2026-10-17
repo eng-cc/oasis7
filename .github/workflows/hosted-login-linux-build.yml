@@ -79,7 +79,7 @@ jobs:
         run: |
           env -u RUSTC_WRAPPER cargo build \
             ${{ steps.profile.outputs.cargo_args }} \
-            -p oasis7 \
+            -p oasis7_launcher_backend -p oasis7_viewer_runtime \
             --bin oasis7_game_launcher \
             --bin oasis7_viewer_live
 

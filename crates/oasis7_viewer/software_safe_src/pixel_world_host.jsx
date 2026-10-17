@@ -1,4 +1,8 @@
-import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount } from "solid-js";
+import { createPixelWorldSpatialController } from "./pixel_world_spatial_controller.js";
+import { PixelWorldSpatialExplorer } from "./pixel_world_spatial_explorer.jsx";
+import { createPixelWorldScopeGuard } from "./pixel_world_scope.js";
+import { createPixelWorldHostAdapter } from "./pixel_world_host_adapter.js";
+import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount, untrack } from "solid-js";
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge, probePixelWorldWebgl2Surface } from "./pixel_world_runtime_loader.js";
 import { installPixelWorldHotspotPointerProbe } from "./pixel_world_hotspot_probe.js"; import { createPixelWorldFocusController } from "./pixel_world_focus_controller.js";
@@ -25,13 +29,6 @@ async function waitForRuntimeCanvasAttachment(canvas) {
   }
   return false;
 }
-function snapshotTick(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") {
-    return null;
-  }
-  const tick = Number(fieldValue(snapshot, "time", "time", null));
-  return Number.isFinite(tick) ? Math.max(0, Math.floor(tick)) : null;
-}
 function pixelWorldAgentIdentity(agent, fallbackId = "", isLocaleZh = false) {
   return pixelWorldReadableAgentLabel(agent, fallbackId, isLocaleZh) || "Agent";
 }
@@ -54,176 +51,6 @@ function PixelWorldHostHotspotLayer(props) {
       onHotspotHoverIntent={props.onHotspotHoverIntent}
       onHotspotTrigger={props.onHotspotTrigger} onHotspotRestoreFocus={props.onHotspotRestoreFocus} />
   )}</Index>;
-}
-function createPixelWorldHostAdapter({ onSelectEntity, onHoverEntity, onFatal }) {
-  let bridge = null;
-  let runtimeSource = "detached";
-  let runtimeModuleUrl = null;
-  let deriveRenderState = null;
-  function withWorldTickReadout(renderState, renderInput) {
-    if (!renderState || !renderInput) {
-      return renderState;
-    }
-    const worldTick = snapshotTick(renderInput.snapshot);
-    if (worldTick === null) {
-      return renderState;
-    }
-    return {
-      ...renderState,
-      world_tick: renderState.world_tick ?? worldTick,
-      commercial_surface: renderState.commercial_surface
-        ? {
-          ...renderState.commercial_surface,
-          world_read: {
-            ...(renderState.commercial_surface.world_read || {}),
-            tick: renderState.commercial_surface.world_read?.tick ?? worldTick,
-          },
-        }
-        : renderState.commercial_surface,
-    };
-  }
-  function deriveRenderStateOrUnavailable(renderInput) {
-    if (!deriveRenderState || !renderInput) {
-      return {
-        renderState: null,
-        fatal: {
-          code: "pixel_world_render_state_unavailable",
-          message: "pixel world Rust render-state derivation is unavailable",
-        },
-      };
-    }
-    try {
-      const nextRenderState = deriveRenderState(renderInput);
-      if (nextRenderState?.fatal) {
-        onFatal?.(nextRenderState.fatal);
-        return {
-          renderState: null,
-          fatal: nextRenderState.fatal,
-        };
-      }
-      return {
-        renderState: withWorldTickReadout(nextRenderState, renderInput) || null,
-        fatal: null,
-      };
-    } catch (error) {
-      const fatal = {
-        code: "pixel_world_rust_render_state_failed",
-        message: error instanceof Error ? error.message : String(error || "Rust render state derivation failed"),
-      };
-      onFatal?.(fatal);
-      return {
-        renderState: null,
-        fatal,
-      };
-    }
-  }
-  return {
-    async mount(canvas, renderInput) {
-      const runtime = await createPixelWorldRuntimeBridge({
-        onEvent(event) {
-          if (event?.type === "canvas_ready") {
-            return;
-          }
-          if (event?.type === "select_entity") {
-            onSelectEntity?.(event.selection);
-            return;
-          }
-          if (event?.type === "hover_entity") {
-            onHoverEntity?.(event.selection || null);
-            return;
-          }
-          if (event?.type === "camera_state_changed") {
-            onFatal?.(null, event.camera || null);
-          }
-        },
-        onFatal,
-      });
-      bridge = runtime.bridge;
-      deriveRenderState = runtime.deriveRenderState || null;
-      runtimeSource = runtime.source;
-      runtimeModuleUrl = runtime.moduleUrl || null;
-      const derived = deriveRenderStateOrUnavailable(renderInput);
-      if (!derived.renderState) {
-        const fatal = derived.fatal || runtime.fatal || {
-          code: "pixel_world_render_state_unavailable",
-          message: "pixel world Rust render-state derivation is unavailable",
-        };
-        onFatal?.(fatal);
-        return {
-          status: "unavailable",
-          selection: null,
-          fatal,
-          renderState: null,
-          runtimeSource,
-          runtimeModuleUrl,
-        };
-      }
-      const mountedRenderState = derived.renderState;
-      try {
-        const result = await bridge.mount(canvas, mountedRenderState);
-        return { status: result?.status || "ready", selection: mountedRenderState.selection, fatal: result?.fatal || null, renderState: mountedRenderState, runtimeSource, runtimeModuleUrl };
-      } catch (error) {
-        const fatal = { code: "pixel_world_webgl2_unavailable", message: error instanceof Error ? error.message : String(error || "embedded WebGL2 renderer mount failed") };
-        onFatal?.(fatal);
-        return { status: "unavailable", selection: null, fatal, renderState: null, runtimeSource, runtimeModuleUrl };
-      }
-    },
-    update(renderInput) {
-      const derived = deriveRenderStateOrUnavailable(renderInput);
-      if (!derived.renderState) {
-        const result = bridge?.update(null) || { status: "unavailable", fatal: derived.fatal };
-        return {
-          status: result?.status || "unavailable",
-          selection: null,
-          fatal: result?.fatal || derived.fatal,
-          renderState: null,
-          runtimeSource,
-          runtimeModuleUrl,
-        };
-      }
-      const nextRenderState = derived.renderState;
-      const result = bridge?.update(nextRenderState) || { status: "detached" };
-      return {
-        status: result?.status || "ready",
-        selection: nextRenderState.selection,
-        fatal: result?.fatal || null,
-        renderState: nextRenderState,
-        runtimeSource,
-        runtimeModuleUrl,
-      };
-    },
-    unmount() {
-      const result = bridge?.unmount() || { status: "detached" };
-      bridge = null;
-      deriveRenderState = null;
-      runtimeSource = "detached";
-      runtimeModuleUrl = null;
-      return result;
-    },
-    simulateSelect(selection) {
-      if (!selection?.kind || !selection?.id) {
-        return;
-      }
-      onSelectEntity?.(selection);
-    },
-    simulateHover(selection) {
-      onHoverEntity?.(selection || null);
-    },
-    simulateFatal(message) { onFatal?.(typeof message === "object" ? message : { code: "pixel_world_renderer_fatal", message: String(message || "renderer fatal") }); },
-    runtimeSource() {
-      return runtimeSource;
-    },
-    runtimeModuleUrl() {
-      return runtimeModuleUrl;
-    },
-    hotspotTestHitTargets() {
-      return bridge?.hotspotTestHitTargets?.() || [];
-    },
-    locationTestHitTargets() { return bridge?.locationTestHitTargets?.() || []; },
-    deriveRenderState(renderInput) {
-      return deriveRenderStateOrUnavailable(renderInput).renderState;
-    },
-  };
 }
 export function buildPixelWorldRenderInput(locale = core.state.uiLocale) {
   const worldScaleSurface = core.buildWorldScaleSurface(locale);
@@ -471,16 +298,18 @@ function pixelWorldNextMoveDisabledReason(action, gameplay, locale) {
   return null;
 }
 function pixelWorldNextMovePending(action, gameplay) { if (!action) return false; const feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback) || gameplay?.recentFeedback; const feedbackStage = String(feedback?.stage || "").trim().toLowerCase(); const key = pixelWorldGameplayActionKey(action); return Boolean((key && core.state.gameplayActionPending?.actionKey === key) || (pixelWorldGameplayActionMatches(action, feedback) && PIXEL_WORLD_BUSY_GAMEPLAY_STAGES.has(feedbackStage))); }
-export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind) {
+export function resolvePixelWorldDirectNextMoveAction(gameplay, executeKind, targetAgentId = gameplay?.recommendedAction?.targetAgentId ?? null) {
   if (!DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS.has(executeKind)) {
     return null;
   }
   const actions = Array.isArray(gameplay?.availableActions) ? gameplay.availableActions : [];
   return actions.find((action) => (
     action?.executeKind === executeKind
+    && (action.targetAgentId ?? action.target_agent_id ?? null) === targetAgentId
     && !action?.disabledReason
   )) || actions.find((action) => (
     String(action?.actionId || action?.action_id || "") === executeKind
+    && (action.targetAgentId ?? action.target_agent_id ?? null) === targetAgentId
     && !action?.disabledReason
   )) || null;
 }
@@ -510,9 +339,11 @@ function PixelWorldCommercialHud(props) {
   const directNextMoveAction = () => resolvePixelWorldDirectNextMoveAction(
     core.buildGameplaySummary(props.locale()),
     surface().next_action.execute_kind,
+    surface().next_action.target_agent_id ?? null,
   ) || (surface().next_action.execute_kind === "gameplay_action"
     ? core.buildGameplaySummary(props.locale()).availableActions.find((action) => (
       DIRECT_PIXEL_WORLD_NEXT_MOVE_KINDS.has(action?.actionId)
+      && (action.targetAgentId ?? action.target_agent_id ?? null) === (surface().next_action.target_agent_id ?? null)
       && action?.label === surface().next_action.label
       && !action?.disabledReason
     ))
@@ -1018,14 +849,25 @@ export function PixelWorldHost(props) {
   const [worldRevision, setWorldRevision] = createSignal(0);
   const selectedEntity = () => {
     coreRevision();
-    return core.state.selectedKind && core.state.selectedId
-      ? { kind: core.state.selectedKind, id: core.state.selectedId }
-      : null;
+    return spatial.selection();
+  };
+  const spatial = createPixelWorldSpatialController({core,enabled:()=>core.state.viewerProtocol?.capabilities?.includes("world_view"),
+    getLocale:locale,getRenderState:()=>rustRenderState()});
+  const worldViewState = spatial.state, navigation = spatial.navigation;
+  const spatialSupported = () => {
+    coreRevision();
+    return core.state.viewerProtocol?.capabilities?.includes("world_view");
   };
   const renderInput = createMemo(() => {
     worldRevision();
-    return buildPixelWorldRenderInput(locale());
+    const spatialState = worldViewState();
+    return {...buildPixelWorldRenderInput(locale()),
+      ...(spatialState.view ? {worldView:spatialState.view,worldViewStale:spatialState.stale} : {}),
+      ...(spatial.selection() ? {selectedKind:spatial.selection().kind,selectedId:spatial.selection().id} : {}),
+      navigation:navigation()};
   });
+  const scopeGuard = createPixelWorldScopeGuard(core.state);
+  const [retainedSurface, setRetainedSurface] = createSignal(null);
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState();
   const visualState = () => pixelWorldVisualState(renderState());
@@ -1079,7 +921,7 @@ export function PixelWorldHost(props) {
   });
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
-      const applied = core.applySelection(selection);
+      const applied = spatial.select(selection);
       if (applied?.kind === "module_visual") {
         focusViewerPanel("viewer-details-panel");
       }
@@ -1090,6 +932,7 @@ export function PixelWorldHost(props) {
     onFatal(fatal, nextCameraState) {
       if (nextCameraState) {
         setCameraState(nextCameraState);
+        spatial.cameraChanged(nextCameraState);
         core.updatePixelWorldRuntimeMeta({
           runtimeStatus: rendererStatus(),
           runtimeSource: runtimeSource(),
@@ -1099,6 +942,10 @@ export function PixelWorldHost(props) {
         });
         return;
       }
+      setRetainedSurface(previous => untrack(renderState)?.commercial_surface || previous);
+      rendererAttemptGeneration += 1;
+      adapter().unmount();
+      setHoverSelection(null);
       setRendererFatal(fatal);
       setRendererStatus("unavailable");
       setRuntimeSource(fatal?.code === "pixel_world_webgl2_unavailable" ? "surface_unavailable" : runtimeSource());
@@ -1114,6 +961,29 @@ export function PixelWorldHost(props) {
     },
   }));
   let mountedCanvas = null;
+  let removeContextListener = () => {};
+  let scopeReadPending = null;
+  let hostActive = true;
+  function attachContextListener(canvas) {
+    removeContextListener();
+    const lost = (event) => {
+      event.preventDefault();
+      // Stop the old session and its hit regions before exposing recovery.
+      adapter().simulateFatal({ code: "pixel_world_context_lost", message: "World graphics interrupted. Retry to restore the authorized view." });
+    };
+    let start = null;
+    const stopFollow = spatial.pauseFollow;
+    const down = event => { start = {id:event.pointerId,x:event.clientX,y:event.clientY}; };
+    const move = event => {
+      if (start && start.id === event.pointerId && Math.hypot(event.clientX-start.x,event.clientY-start.y)>4) {
+        start=null; stopFollow();
+      }
+    };
+    const up = () => { start=null; };
+    const events = [["webglcontextlost",lost],["pointerdown",down],["pointermove",move],["pointerup",up],["pointercancel",up],["wheel",stopFollow]];
+    for (const [type,listener] of events) canvas.addEventListener(type,listener);
+    removeContextListener = () => { for (const [type,listener] of events) canvas.removeEventListener(type,listener); };
+  }
   let rendererAttemptGeneration = 0;
   let rendererUpdatePending = false;
   const rendererAttemptIsCurrent = (canvas, generation) => generation === rendererAttemptGeneration && mountedCanvas === canvas;
@@ -1121,10 +991,13 @@ export function PixelWorldHost(props) {
     if (rendererStatus() === "unavailable") {
       return;
     }
+    const generation = rendererAttemptGeneration;
     const result = adapter().update(renderInput());
+    if (generation !== rendererAttemptGeneration) return;
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
+    if (result?.renderState) setRetainedSurface(null);
     setRustRenderState(result?.renderState || null);
     setRendererStatus(result?.status || "ready");
     setRuntimeSource(result?.runtimeSource || adapter().runtimeSource());
@@ -1137,6 +1010,7 @@ export function PixelWorldHost(props) {
     });
   }
   async function setReadyMode(canvas = mountedCanvas, generation = rendererAttemptGeneration) {
+    if (scopeGuard.check().blocked) return;
     if (!rendererAttemptIsCurrent(canvas, generation)) {
       return;
     }
@@ -1195,6 +1069,7 @@ export function PixelWorldHost(props) {
     if (result?.fatal) {
       setRendererFatal(result.fatal);
     }
+    if (result?.renderState) setRetainedSurface(null);
     setRustRenderState(result?.renderState || null);
     setRendererStatus(result?.status || "ready");
     setRuntimeSource(result?.runtimeSource || adapter().runtimeSource());
@@ -1211,6 +1086,7 @@ export function PixelWorldHost(props) {
     }
   }
   function requestReadyMode() {
+    if (scopeGuard.check().blocked) { scopeReadPending = null; core.requestRender(); return; }
     const canvas = mountedCanvas?.isConnected ? mountedCanvas : null;
     mountedCanvas = canvas;
     const generation = ++rendererAttemptGeneration;
@@ -1232,7 +1108,36 @@ export function PixelWorldHost(props) {
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
     const unsubscribeRenderHook = core.subscribeRenderHook?.((invalidation) => {
+      const scope = scopeGuard.check();
+      if (scope.scope !== spatial.scope()) {
+        if (scope.changed) { setRendererStatus("unavailable"); setRustRenderState(null); }
+        spatial.resetScope();
+      }
+      if (scope.changed) {
+        // Selection is display state. Feedback projection is scope-masked without
+        // deleting pending operation identity or replaying the operation.
+        core.state.selectedKind = null;
+        core.state.selectedId = null;
+        core.state.selectedObject = null;
+        adapter().simulateFatal({code:"pixel_world_scope_changed",message:"Display authorization changed. Waiting for a new authorized snapshot."});
+        setRetainedSurface(null);
+        setCameraState(null);
+      }
       setCoreRevision((revision) => revision + 1);
+      if (scope.blocked) {
+        if (core.state.viewerProtocol?.capabilities?.includes("world_view") && scopeReadPending !== scope.scope) {
+          scopeReadPending = scope.scope;
+          const expected = scope.scope;
+          void core.requestScopeSnapshot().then(snapshot => {
+            if (!hostActive || !scopeGuard.authorize(expected, scope.generation)) return;
+            scopeReadPending = null;
+            core.acceptScopeSnapshot(snapshot);
+            requestReadyMode();
+          }).catch(() => { /* Keep the view locked; retry is explicit. */ });
+        }
+        return;
+      }
+      spatial.refresh(core.state.snapshot);
       // An absent hint remains conservatively dirty, including mutable state.
       if (invalidation?.pixelWorldChanged === false) return;
       setWorldRevision((revision) => revision + 1);
@@ -1254,6 +1159,9 @@ export function PixelWorldHost(props) {
   onCleanup(() => {
     document.body.classList.remove("pixel-world-focus-active");
     document.body.classList.remove("pixel-world-focus-maximized");
+    hostActive = false;
+    rendererAttemptGeneration += 1;
+    removeContextListener();
     adapter().unmount();
     core.updatePixelWorldRuntimeMeta({
       runtimeStatus: "detached",
@@ -1262,6 +1170,10 @@ export function PixelWorldHost(props) {
       camera: null,
       fatal: null,
     });
+  });
+  createEffect(() => {
+    worldViewState(); navigation(); spatial.selection();
+    untrack(() => { if (mountedCanvas && rendererStatus() === "ready") applyRendererUpdate(); });
   });
   return (
     <div
@@ -1285,6 +1197,9 @@ export function PixelWorldHost(props) {
           </div>
         </div>
       </Show>
+      <Show when={spatialSupported()}><details class="pixel-world-exploration-disclosure">
+        <summary>{tr(locale(), "探索世界", "Explore world")}</summary>
+        <PixelWorldSpatialExplorer controller={spatial} locale={locale()} /></details></Show>
       <div
         class="pixel-world-focus-entry"
         data-viewer-overlay="cinematic-entry"
@@ -1353,9 +1268,11 @@ export function PixelWorldHost(props) {
           hoveredHotspot={hoveredHotspot}
           onFatal={(message) => adapter().simulateFatal(message)}
           onCanvasMount={(canvas) => {
+            if (mountedCanvas === canvas) return;
             mountedCanvas = canvas;
+            attachContextListener(canvas);
             const generation = ++rendererAttemptGeneration;
-            if (rendererStatus() !== "ready") {
+            if (untrack(rendererStatus) !== "ready") {
               void setReadyMode(canvas, generation);
             }
           }}
@@ -1368,7 +1285,11 @@ export function PixelWorldHost(props) {
           data-viewer-overlay="renderer-unavailable"
           data-renderer-state={rendererStatus()}
         >
-          {rendererStatus() === "unavailable" ? <><div>{tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")}</div><button type="button" class="pixel-world-render-unavailable__retry" onClick={requestReadyMode}>{tr(locale(), "重试 Renderer", "Retry Renderer")}</button></> : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
+          <Show when={retainedSurface()}>{(surface) => <>
+            <p>{surface().objective?.title}</p><p>{surface().objective?.detail}</p>
+            <PixelWorldActionReceipt locale={locale} surface={surface} />
+          </>}</Show>
+          {rendererStatus() === "unavailable" ? <><div>{rendererFatal()?.code === "pixel_world_scope_changed" ? tr(locale(), "正在重新确认可见范围；旧内容已清除。", "Reconfirming visible scope; previous content cleared.") : tr(locale(), "此浏览器中的图形不可用", "Graphics unavailable in this browser")}</div><button type="button" class="pixel-world-render-unavailable__retry" onClick={requestReadyMode}>{tr(locale(), "重试 Renderer", "Retry Renderer")}</button></> : tr(locale(), "Rust bridge 正在生成世界显示状态。", "Rust bridge is deriving the world display state.")}
         </div>
       </Show>
       <Show when={focusMode() && renderState()?.commercial_surface}>
