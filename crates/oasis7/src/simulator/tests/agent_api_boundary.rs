@@ -206,7 +206,7 @@ fn receipt_api_projection_is_lossless_correlation_not_runtime_readback_proof() {
         feedback_id: "feedback-boundary".into(),
     };
     runtime.validate().expect("valid Runtime lineage fixture");
-    let api = runtime.agent_api_projection();
+    let api = oasis7_agent_api::RuntimeReceiptLineageV1::from(&runtime);
     api.validate()
         .expect("API projection structural validation");
     assert_eq!(

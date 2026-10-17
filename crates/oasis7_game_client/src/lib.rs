@@ -446,3 +446,17 @@ fn quote_error_category(path: &str, status: u16, reader: &mut impl Read) -> Opti
 }
 
 pub mod formal_read;
+
+pub mod verified_world_view;
+
+pub mod remote_world_service;
+
+pub mod formal_business;
+pub mod world_service_client;
+
+pub mod membership;
+
+#[cfg(test)]
+mod world_service_test_profile;
+
+pub mod read_projection;

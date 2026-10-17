@@ -43,9 +43,10 @@ fn runtime_continuation_hydration_reads_typed_active_projection() {
     continuation
         .validate_authoritative()
         .expect("typed continuation fixture is authoritative");
-    world
-        .install_cognition_continuation_for_test(continuation.clone())
-        .expect("install typed continuation fixture");
+    let mut snapshot = world.snapshot();
+    snapshot.cognition["continuations"] = serde_json::to_value([continuation.clone()]).unwrap();
+    world = crate::runtime_host::world::from_snapshot(snapshot, world.journal().clone())
+        .expect("restore typed continuation fixture through public checkpoint boundary");
     let wake: crate::runtime::SchedulerWakeV1 = serde_json::from_value(serde_json::json!({
         "schema_version": "scheduler-wake.v1",
         "wake_id": "wake-typed-readback",

@@ -290,15 +290,15 @@ fn project_module_visual_event(
         return None;
     };
 
-    match crate::runtime::parse_module_visual_emit(module_emit).ok()?? {
-        crate::runtime::ModuleVisualMutation::Upsert(entity) => {
+    match oasis7_agent_api::module_visual::parse_module_visual_emit(module_emit).ok()?? {
+        oasis7_agent_api::module_visual::ModuleVisualMutation::Upsert(entity) => {
             let entity_id = non_empty_identity(&entity.entity_id)?;
             Some(ModuleVisualEventProjection {
                 kind: MODULE_VISUAL_ENTITY_UPSERTED_KIND,
                 entity_id,
             })
         }
-        crate::runtime::ModuleVisualMutation::Remove(entity_id) => {
+        oasis7_agent_api::module_visual::ModuleVisualMutation::Remove(entity_id) => {
             Some(ModuleVisualEventProjection {
                 kind: MODULE_VISUAL_ENTITY_REMOVED_KIND,
                 entity_id: non_empty_identity(&entity_id)?,

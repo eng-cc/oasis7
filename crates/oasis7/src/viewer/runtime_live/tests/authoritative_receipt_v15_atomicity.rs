@@ -68,8 +68,9 @@ fn signed_strict_audit(
             reorg_epoch: receipt.committed_reorg_epoch,
             candidate_state_root: server
                 .world
-                .current_state_root_hash()
-                .expect("current root"),
+                .execution_state_identity()
+                .expect("current root")
+                .state_root_hash,
             audit_report_bytes,
             manifest_bytes,
             issued_at_ms: now_ms.saturating_sub(1_000),

@@ -83,8 +83,9 @@ fn signed_strict_audit_evidence(
             reorg_epoch: receipt.committed_reorg_epoch,
             candidate_state_root: server
                 .world
-                .current_state_root_hash()
-                .expect("current root"),
+                .execution_state_identity()
+                .expect("current root")
+                .state_root_hash,
             audit_report_bytes,
             manifest_bytes,
             issued_at_ms,
@@ -415,7 +416,11 @@ fn receipt_retrieval_expires_stale_readiness_and_rechecks_current_evidence() {
                 .snapshot_hash
                 .clone(),
             reorg_epoch: server.reorg_epoch,
-            candidate_state_root: server.world.current_state_root_hash().expect("root"),
+            candidate_state_root: server
+                .world
+                .execution_state_identity()
+                .expect("root")
+                .state_root_hash,
             strict_audit_evidence_digest: stale_evidence.evidence_digest.clone(),
             strict_audit_observed_at_ms: stale_evidence.issued_at_ms,
             strict_audit_evidence: Some(stale_evidence),

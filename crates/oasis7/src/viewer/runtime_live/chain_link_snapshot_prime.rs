@@ -61,9 +61,9 @@ impl ViewerRuntimeLiveServer {
                 && server.pending_world_service_gameplay.is_empty()
                 && view.version().commit.world == config.expected_world
                 && view.version().visibility_scope == config.scope_id
-                && view.read_authority_matches(
+                && view.belongs_to(
                     &config
-                        .read_authority_identity()
+                        .read_authority()
                         .map_err(ViewerRuntimeLiveServerError::Init)?,
                 )
             {

@@ -24,3 +24,5 @@ pub use distributed_checkpoint_lineage::{
 pub mod collect_data_auth;
 
 pub mod player_auth;
+
+pub mod agency_control;

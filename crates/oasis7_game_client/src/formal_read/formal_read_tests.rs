@@ -5,7 +5,7 @@ type FormalReadVerifier = super::FormalReadVerifier<WorldServiceProjection>;
 use super::*;
 #[path = "../../../oasis7/src/world_service/formal_read_fixtures.rs"]
 pub(super) mod fixtures;
-#[path = "../../../oasis7/src/world_service/formal_read_response_fixture.rs"]
+#[path = "../../../oasis7_world_service/src/formal_read_response_fixture.rs"]
 mod response_fixture;
 use ed25519_dalek::Signer;
 use fixtures::*;

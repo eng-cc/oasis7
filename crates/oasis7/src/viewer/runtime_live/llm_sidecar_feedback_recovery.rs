@@ -49,7 +49,7 @@ pub(in crate::viewer::runtime_live) fn feedback_history_blocks_dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1};
+    use crate::runtime::RuntimeFeedbackOutboxRecordV1;
     use crate::simulator::{Digest32, FeedbackEnvelopeV1};
 
     fn feedback(agent: &str, session: &str, seq: u64, id: &str) -> FeedbackEnvelopeV1 {
@@ -70,11 +70,11 @@ mod tests {
     }
 
     fn outbox_record(feedback: &FeedbackEnvelopeV1, state: &str) -> RuntimeFeedbackOutboxRecordV1 {
-        let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-            &crate::simulator::agent_api_compat::feedback_to_api(feedback),
-            RuntimeFeedbackProjectionV1::default(),
-        )
-        .expect("feedback creates a valid outbox record");
+        let mut record = crate::runtime_host::world::new()
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                feedback,
+            ))
+            .expect("feedback creates a valid outbox record");
         record.state = state.to_string();
         record.validate().expect("outbox record remains valid");
         record

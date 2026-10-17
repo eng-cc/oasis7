@@ -214,7 +214,7 @@ impl RuntimeAuthority for RuntimeWorldAuthority<'_> {
             ));
         }
         self.verify_response_identity(&actual, response_identity)?;
-        Ok(actual.agent_api_projection())
+        Ok(oasis7_agent_api::RuntimeReceiptLineageV1::from(&actual))
     }
 
     fn verify_memory_receipt(
@@ -246,7 +246,7 @@ impl RuntimeAuthority for RuntimeWorldAuthority<'_> {
                 "committed receipt does not match the provider memory intent context",
             ));
         }
-        Ok(actual.agent_api_projection())
+        Ok(oasis7_agent_api::RuntimeReceiptLineageV1::from(&actual))
     }
 
     fn validated_feedback_history(&self) -> Result<Vec<FeedbackHistoryProjection>, CognitionError> {
@@ -268,10 +268,9 @@ impl RuntimeAuthority for RuntimeWorldAuthority<'_> {
                             cognition_error("runtime_feedback_payload_invalid", error)
                         })?;
                 let receipt_lineage = if feedback.status == "committed" {
-                    Some(
-                        self.committed_feedback_lineage(&feedback)?
-                            .agent_api_projection(),
-                    )
+                    Some(oasis7_agent_api::RuntimeReceiptLineageV1::from(
+                        &self.committed_feedback_lineage(&feedback)?,
+                    ))
                 } else {
                     None
                 };
@@ -581,7 +580,7 @@ mod world_readback_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1};
+    use crate::runtime::RuntimeFeedbackOutboxRecordV1;
 
     fn rejected_feedback(agent: &str, session: &str, seq: u64) -> OasisFeedbackEnvelopeV1 {
         OasisFeedbackEnvelopeV1 {
@@ -601,11 +600,11 @@ mod tests {
     }
 
     fn record(feedback: &OasisFeedbackEnvelopeV1, state: &str) -> RuntimeFeedbackOutboxRecordV1 {
-        let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-            &crate::simulator::agent_api_compat::feedback_to_api(feedback),
-            RuntimeFeedbackProjectionV1::default(),
-        )
-        .expect("feedback creates a valid outbox record");
+        let mut record = crate::runtime_host::world::new()
+            .enqueue_runtime_feedback(crate::simulator::agent_api_compat::feedback_to_api(
+                feedback,
+            ))
+            .expect("feedback creates a valid outbox record");
         record.state = state.to_string();
         record
             .validate()

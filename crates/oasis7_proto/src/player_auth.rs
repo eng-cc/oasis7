@@ -367,3 +367,6 @@ fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], S
     fixed.copy_from_slice(bytes.as_slice());
     Ok(fixed)
 }
+
+mod agency_control;
+pub use agency_control::{sign_agency_control_auth_proof, verify_agency_control_auth_proof};

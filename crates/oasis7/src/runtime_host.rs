@@ -13,6 +13,18 @@ pub fn install_runtime_capabilities(mut world: World) -> World {
 /// Native application assembly. The returned value is the Runtime's original `World` type.
 pub mod world {
     use super::*;
+    pub fn new_production_hardened_with_initial_module_visuals(
+        entities: &std::collections::BTreeMap<
+            String,
+            oasis7_agent_api::world_entity::ModuleVisualEntity,
+        >,
+    ) -> Result<World, WorldError> {
+        World::new_with_initial_module_visuals(
+            ReleaseSecurityPolicy::production_hardened(),
+            entities,
+        )
+        .map(install_runtime_capabilities)
+    }
     pub fn new() -> World {
         install_runtime_capabilities(World::new())
     }
@@ -72,3 +84,13 @@ pub mod world {
         })
     }
 }
+
+#[cfg(test)]
+mod source_compiler_tests;
+
+#[cfg(test)]
+mod agent_chat_projection_tests;
+#[cfg(test)]
+mod game_task_projection_tests;
+
+pub(crate) mod provider_context;

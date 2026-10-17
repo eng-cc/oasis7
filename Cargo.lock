@@ -6379,12 +6379,14 @@ dependencies = [
  "oasis7_node",
  "oasis7_observability",
  "oasis7_proto",
+ "oasis7_runtime",
  "oasis7_simulator",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
  "oasis7_wasm_materializer",
  "oasis7_wasm_router",
  "oasis7_wasm_store",
+ "oasis7_world_service",
  "rand_chacha",
  "rand_core 0.10.1",
  "reqwest 0.13.5",
@@ -6873,6 +6875,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_runtime"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "cap-fs-ext",
+ "cap-std",
+ "ed25519-dalek",
+ "hex",
+ "hmac 0.13.0",
+ "libc",
+ "oasis7_agent_api",
+ "oasis7_client_api",
+ "oasis7_distfs",
+ "oasis7_proto",
+ "oasis7_wasm_abi",
+ "oasis7_wasm_executor",
+ "oasis7_wasm_materializer",
+ "oasis7_wasm_router",
+ "oasis7_wasm_store",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "sha2 0.11.0",
+ "unicode-normalization",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "oasis7_secure_envelope"
 version = "0.1.0"
 dependencies = [
@@ -6999,6 +7029,36 @@ dependencies = [
  "oasis7_wasm_abi",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oasis7_world_service"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "cap-fs-ext",
+ "cap-std",
+ "chacha20poly1305 0.11.0",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "oasis7_agent_api",
+ "oasis7_client_api",
+ "oasis7_client_storage",
+ "oasis7_distfs",
+ "oasis7_game_client",
+ "oasis7_proto",
+ "oasis7_runtime",
+ "oasis7_wasm_abi",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_cbor",
+ "serde_ignored",
+ "serde_json",
+ "sha2 0.11.0",
+ "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
