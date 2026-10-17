@@ -5,7 +5,7 @@
 - owner_role：`runtime_engineer`
 - module：`engineering`
 - 上游：[指挥客户端产品设计](command-center.prd.md)、[系统设计](command-center.design.md)
-- last_reviewed_at：2026-10-13
+- last_reviewed_at：2026-10-17
 
 ## 1. 目标和当前范围
 
@@ -37,6 +37,8 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 已有兼容 signer 的普通文件签名；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=已有兼容 signer 的普通文件签名 | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | signer caller、原 worker | 用户暂停特权初装/管理 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 未知操作、资源占位及冻结退出；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=未知操作、资源占位及冻结退出 | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | ToolJobs、原 context/signing 持久记录 | 不从进程消失推导回滚 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 显式私有输入和持久线程属性；产品适用性：N/A；reason=普通开发者本机资料与工具集成，不定义游戏授权、结算或发行能力；scope=显式私有输入和持久线程属性 | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 实验 runtime、agent_engineer | 不保证原 runtime/外部 CLI 全部转存追踪 |
+| Trace refs: O7-REQ-fd3b34c6-4fb4-4614-8d7b-744a86d29c3a；[REQ-CC-015](command-center.prd.md#REQ-CC-015) | 从工作进入工具、明确选择操作范围并核对结果；产品适用性：N/A；reason=开发者本机辅助工具体验，不定义游戏或玩家功能；scope=资料、快照、已有 signer 与 CLI 的任务入口 | [DES-CC-TOOLS-005](#DES-CC-TOOLS-005) | Solid UI、ToolJobs、原 context/signing 接口 | 不扩大已有工具权限，不把打开工具当作工作完成 |
+| Trace refs: O7-REQ-76d54ed7-4028-460a-b22b-37a9088ad245；[REQ-CC-010](command-center.prd.md#REQ-CC-010) | 工具表单就地反馈、可访问错误和诊断分层；产品适用性：N/A；reason=开发者桌面交互质量，不定义游戏或玩家功能；scope=本机工具表单与操作结果 | [DES-CC-TOOLS-005](#DES-CC-TOOLS-005) | Solid UI、原生文件选择与焦点管理 | DOM 测试不替代原生交互验收 |
 
 <a id="DES-CC-TOOLS-002"></a>
 
@@ -70,6 +72,39 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 事件写入及历史读取从独立私有来源表恢复标记，迟到 snapshot 不能清除。普通 runtime 投影只过滤属于私有线程的会话、请求及操作；无线程 ID 的普通管理操作仍保留，未知建会话回执不能误隐藏。专用运行界面保留必要批准详情。既有数据库可能包含由私有输入派生的请求内容；不能直接复制整份 SQLite 并称为普通配置备份。原运行时或外部 CLI 的转存不在本 App 完整追踪范围内。
 
+<a id="DES-CC-TOOLS-005"></a>
+
+## 6. 按任务组织工具入口与结果反馈
+
+本节是目标交互合同。`main@0ec10379419b0aaedb9d16157b81c92f4e6e3495` 的 [LocalTools](../../../tools/oasis7-command-center/ui/src/LocalTools.tsx) 已提供基础表单和操作回读；任务入口、独立口令表单、就地反馈及完整往返尚未完成。本节复用 §2–5 的接口、ToolJobs、私有隔离和退出规则，不建立第二套工具授权或操作账本。
+
+### 6.1 入口、能力与操作范围
+
+本机工具首页按“资料”“备份与恢复”“签名与验签”“CLI”提供任务入口，先说明可完成的结果、当前可用性及一个下一动作；仅打开选中任务的表单。未连接、读取失败、不兼容和用户暂停分别显示，按每项任务的真实前提开放动作：建库/连接不要求已有绑定，新机器恢复不要求旧库可读，安装同包 CLI 不要求已有 CLI，独立验签不要求安装或连接 signer。暂停能力保留原因及原合同入口，不展示可提交的配置表单；已有兼容 signer 的普通 caller 仍可使用。
+
+从统一工作详情进入时，传入原工作引用、明确执行环境及返回位置；这些只是导航上下文，不携带授权或推导签名输入。工具表单从宿主读取当前真实绑定与能力，不能以页面缓存启用动作。退出工具返回原工作和筛选；普通详情最多显示获准公开的操作类型、状态及核对入口，不复制私有库名、路径、条目、口令、完整请求或派生正文。私有资料与签名结果仍在其原受控入口阅读。
+
+| 用户任务 | 提交前可见的选择与核对 | 操作结果与下一入口 |
+| --- | --- | --- |
+| 保存资料 | 选中资料库、条目及编辑修订；冲突保留本次草稿并显示重新读取入口 | 明确“资料已保存”；Git 提交和远端同步分别核对，不跟随保存自动执行 |
+| 导出加密快照 | 明确选择“当前条目”或“整库”，显示范围、可得数量、原修订、输出位置及独立的导出口令输入 | 显示已核实输出及范围；范围变化要求重新预览，不因清空选中条目静默改成整库 |
+| 恢复快照 | 密文文件、新目录和独立的恢复口令输入；说明不会覆盖现有目录 | 由原恢复操作核对发布及绑定；失败或结果未知时进入同一操作的检查入口 |
+| 文件签名 | 显式选定源文件、job、signer、grant 和完整合法 SignContext；准备后展示原预览与授权范围 | 准备、提交、worker 已核实结果分别显示；未知状态继续核对原 Job，不新建请求绕过 |
+| 独立验签 | 显式文件、完整 context、预期公钥与签名 | 显示匹配或具体不匹配项；通过仅证明该组输入，不赋予执行授权 |
+| 安装同包 CLI | 已验证包版本、目标绝对路径及当前安装差异 | 安装完成与 PATH 可见性独立显示；原版本保留规则沿 §2 |
+
+导出与恢复口令分别绑定当前窗口、操作及用途。表单只申请自己的短时句柄，不读取另一任务的输入；取消、完成、过期或离开该口令步骤时清除对应 UI 临时值和未消费句柄，重新进入重新输入。已消费句柄与正在执行的原任务按 §2–4 处理；清除 UI 不取消、回滚或重发操作。口令不进入普通草稿、返回栈、错误样本或日志。
+
+首个导入入口只接收用户明确选择的完整 SignContext JSON，复用 [SignContext](../../../crates/oasis7_local_signer/src/protocol.rs) 的严格字段与校验，不另创请求格式。文件读取沿 [file CLI](../../../crates/oasis7_local_signer/src/file_cli.rs) 的普通文件、身份、摘要与 64 KiB 预算；预览固定读取到的原文及摘要，内容改变须重新导入。job、signer、grant 和源文件仍由用户分别明确选定；已准备请求通过原 operation/Job 的恢复入口打开，不从任意 JSON 导入成已准备或已授权状态。前端逐字段显示来源、缺失和校验结果；后端仍对完整输入、实际文件、安装和原请求重新校验。缺 job、grant、purpose/context 等输入时指出具体缺口，不生成示例授权、不从工作目标推导，也不将 JSON 解析成功等同 worker 授权。
+
+### 6.2 每次操作的反馈与恢复
+
+每个任务表单拥有自己的提交状态、字段错误、结果区域和原 operation 引用。主要按钮只描述当前可执行步骤；不可用时就地给出实际原因与修复入口。错误留在发起位置附近，定位相关字段；异步结果通过可访问状态区域通知，不抢用户正在编辑的焦点。用户显式查看结果或返回时，才定位相关操作、结果或原触发控件。成功结果先用用户可理解的结论和下一动作表达，原始 JSON、完整摘要与协议字段在诊断详情按需展开。
+
+提交前校验失败保留草稿且不声称已执行；宿主证明无副作用的失败允许修正后再次明确提交。已经运行或效果未知时显示原操作的核对入口，遵守原资源占位与冻结，不能把一般“重试”映射成新操作。迟到结果必须匹配窗口、原操作、输入版本及表单世代，不能覆盖用户新任务或新草稿；回读可更新原操作历史。独立工具的局部失败不清空其他资料或冻结无冲突任务；完整退出仍由既有统一协调入口决定。
+
+界面职责拆为工具总览、单任务表单和操作结果组件；共用 bridge/ToolJobs，不在 UI 再执行 CLI、重算签名授权或推断持久化成功。读取状态可以独立刷新；写操作返回后优先回读受影响对象，不以连续重读全部工具状态作为显示本次结果的前提。
+
 <a id="11-验收与验证"></a>
 
 ## 11. 验收、验证与剩余风险
@@ -95,3 +130,5 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | 同一请求 prepare/submit/inspect 和公钥验签 | [signer 授权反例](../../../crates/oasis7_local_signer/tests/qa_m0_negative.rs) 精确 purpose/context/hash；detached 单元测试验证 envelope；tools 输入反例和已有专用 signer 回读 | 实现 PR request/job 和真实结果 | 无测试安装时不证明 worker 实际提交；管理员用户暂停 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | 幂等、冻结、未知效果、口令句柄 | [runtime 故障回放](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 未知/退出；tools jobs 单元测试覆盖事务/冻结/查询可用性；secrets 和 native quit tests | 实现 PR 故障与退出回放 | 强退不保证后台继续 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 私有标记先于发送及后续轮次/恢复 | [runtime fault tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 登记失败不发 frame、后续普通轮次和重开过滤；PrivateContextInput UI tests | 实现 PR 原线程/来源和回放结果 | 本次不启动模型任务，不证明模型输出质量 |
+| Trace refs: O7-REQ-fd3b34c6-4fb4-4614-8d7b-744a86d29c3a；[REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-005](#DES-CC-TOOLS-005) | 明确导出范围、分离口令、签名不造授权、工具往返和私有隔离 | 扩展 [LocalTools UI tests](../../../tools/oasis7-command-center/ui/src/LocalTools.test.tsx)：切换条目不改为整库、导出不借恢复口令、取消清理、缺 grant/context 拒绝；真实同包 macOS App 从工作进入工具后返回，核对导出/恢复及原操作结果 | 实现 PR source/build、场景、实际结果 | UI fixture 不证明原生文件对话框、实际 signer 或恢复成功；签名仍需已有获准测试安装 |
+| Trace refs: O7-REQ-76d54ed7-4028-460a-b22b-37a9088ad245；[REQ-CC-010](command-center.prd.md#REQ-CC-010) | [DES-CC-TOOLS-005](#DES-CC-TOOLS-005) | 就地反馈、独立错误、键盘返回及未知操作核对 | 扩展 [LocalTools UI tests](../../../tools/oasis7-command-center/ui/src/LocalTools.test.tsx)：字段失败、后台结果、迟到响应、未知冻结与其他工具可用；真实 App 键盘/读屏及长表单错误定位 | 实现 PR 原生窗口、操作与卡点 | 源码/DOM 检查不证明实际可访问体验或耗时 |
