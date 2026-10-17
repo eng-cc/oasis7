@@ -80,9 +80,9 @@ Trace ID: O7-REQ-366c9e94-4bd6-41f8-93dd-8d87f163f21a
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-001](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-001)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：处置顺序有专业合同；game 的资产/债权/责任政策及 effect producer/schema、跨节点恢复与玩家结果面未核清。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。AllianceDissolved只校验active-war/operator，touch成员后标记alliance deletion；不是资产/债权/义务保护、estate或替代授权处置producer。组织连续性设计§6/§11/§12仍有schema和政策未决，AllianceDissolved不是组织estate/交接producer。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L140-L174)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：处置顺序有专业合同；game 的资产/债权/责任政策及 effect producer/schema、跨节点恢复与玩家结果面未核清。 专业设计仅逻辑合同，wire schema/ABI、保护期限/活动资格、接替scope与清算政策尚未定；AllianceDissolved只有active-war/operator gate及删除，不等价本条权利责任连续性处置。
 
 - 要求：组织解散或重组按风险冻结、合同/托管/债权与责任处理、Agent/设施/持续业务处置、剩余分配的顺序推进；成员独立资产、已有合同、身份来源和历史 receipt 不得被静默没收、删除或追溯改写。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
@@ -107,9 +107,9 @@ Trace ID: O7-REQ-6e6d890d-c94d-4b43-9947-bfccf2f066e3
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-002](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-002)；[organization-continuity-and-disposition.design / des-wr-oc-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：通知/保护期与有限 estate/delegation 有设计；有效活动、期限、资格政策及实际 reclaim/申诉不自动授予权限的实现未核清。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。AllianceDissolved只校验active-war/operator，touch成员后标记alliance deletion；不是资产/债权/义务保护、estate或替代授权处置producer。组织连续性设计§6/§11/§12仍有schema和政策未决，AllianceDissolved不是组织estate/交接producer。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L140-L174)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：通知/保护期与有限 estate/delegation 有设计；有效活动、期限、资格政策及实际 reclaim/申诉不自动授予权限的实现未核清。 专业设计仅逻辑合同，wire schema/ABI、保护期限/活动资格、接替scope与清算政策尚未定；AllianceDissolved只有active-war/operator gate及删除，不等价本条权利责任连续性处置。
 
 - 要求：长期不活跃必须经过可读通知和保护期；estate 或可撤销 delegation 只能在明确维护/风险隔离需要下以有限、可撤销范围生效，reclaim/申诉待决不能自动取回控制或解除全部义务。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
@@ -134,9 +134,9 @@ Trace ID: O7-REQ-b59a4fa5-9b5f-4119-abf6-7c0f2b4f4268
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[organization-continuity-and-disposition.design / des-wr-oc-003](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-003)；[organization-continuity-and-disposition.design / des-wr-oc-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。已承接：本条对应的处置顺序、阶段恢复或唯一授权及幂等读面设计。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：重叠范围唯一授权和替代原子交接有设计；外部 effect 事务、旧未确认请求不迁移及跨节点去重实际证据未核清。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。AllianceDissolved只校验active-war/operator，touch成员后标记alliance deletion；不是资产/债权/义务保护、estate或替代授权处置producer。组织连续性设计§6/§11/§12仍有schema和政策未决，AllianceDissolved不是组织estate/交接producer。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L140-L174)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：重叠范围唯一授权和替代原子交接有设计；外部 effect 事务、旧未确认请求不迁移及跨节点去重实际证据未核清。 专业设计仅逻辑合同，wire schema/ABI、保护期限/活动资格、接替scope与清算政策尚未定；AllianceDissolved只有active-war/operator gate及删除，不等价本条权利责任连续性处置。
 
 - 要求：同一时刻的重叠处置范围最多一个可执行授权；同一交接请求或权威 effect 的重复提交/恢复只返回一个权威 receipt 结果。合法多阶段处置仍逐步记录关联 receipt，跨请求 ID 也不得重复处分同一份价值；替代授权确认时旧授权在重叠范围原子终止或收缩，旧授权未确认请求不得自动迁移、继承优先级或产生第二次效果。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)

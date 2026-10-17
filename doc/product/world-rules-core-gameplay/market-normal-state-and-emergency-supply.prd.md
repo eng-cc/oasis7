@@ -91,9 +91,9 @@ Trace ID: O7-REQ-918d9050-5f73-40ad-b9d4-aba87233bdd1
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-001](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-001)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：授权包有专业设计；系统性危机证据、阈值/政策 owner 决定及 dedicated runtime effect producer 未核定，不能从常态报价推导紧急路径。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。crisis lifecycle自动生成/超时惩罚是相邻MVP危机实现，不是紧急保供授权包、冻结批次或配给producer。专业设计§9/§11明确是未来验收计划，无专用运行证据。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L438-L502)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：危机阈值、必需品范围及版本化触发政策尚未冻结；专用授权包验证与采购/分配producer未核清。普通crisis生命周期不拥有该政策，不能仅补运行证据就宣告完成。
 
 - 要求：普通价格波动、局部故障和暂时短缺维持常态市场；只有预声明的系统性必需品危机具备证据、范围、授权来源、起止时间、介入方式和复核入口的最小授权包时，才可产生紧急世界效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
@@ -117,9 +117,9 @@ Trace ID: O7-REQ-18fe18ca-4920-4fe0-aad3-69b5fc7b80a7
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-002](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-002)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：冻结批次与确定性 tie-resolution 有设计；优先政策、seed 来源和实际 snapshot/replay 代码与结果未核清。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。crisis lifecycle自动生成/超时惩罚是相邻MVP危机实现，不是紧急保供授权包、冻结批次或配给producer。专业设计§9/§11明确是未来验收计划，无专用运行证据。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L438-L502)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：优先级、同级tie resolution、权威seed来源与批次政策尚未冻结；冻结snapshot→分配向量→重复/replay结果的实际producer未定位。设计的确定性排序不等于已交付分配政策。
 
 - 要求：同一授权批次必须冻结资格、需求、范围、资源和政策快照，使用已声明的优先依据与 tie resolution；快照漂移只能原子拒绝或形成新批次，不能以隐藏到达顺序追溯重排。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
@@ -143,9 +143,9 @@ Trace ID: O7-REQ-51922b18-cc1e-4894-9c12-66c0a6def6d1
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-003](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-003)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：到期/撤销与不迁移请求有设计；实际旧批次失效、历史保留、常态替代/申诉读面和恢复测试未核清。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。crisis lifecycle自动生成/超时惩罚是相邻MVP危机实现，不是紧急保供授权包、冻结批次或配给producer。专业设计§9/§11明确是未来验收计划，无专用运行证据。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L438-L502)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：实际授权到期/撤销→待决请求失效→预留/在途合同处置→常态替代及receipt保全的专用生产链未定位；这是实现证据缺口，不只是本次运行未执行。
 
 - 要求：紧急授权到期、撤销或范围改变时，未确认的请求不能自动跨入新授权；未使用资格失效，已确认 receipt 与历史结果保留，玩家可见常态替代、补证、申诉或重新规划路径。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
@@ -169,9 +169,9 @@ Trace ID: O7-REQ-c17942de-f8ae-44fe-8525-88560dccf0a3
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-004](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-004)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
-- 实现与验证依据：本轮已核对本条产品原义、适用条件及验收边界，未完成相应生产路径、调用入口和运行结果审计。具体缺口见“剩余范围”；不以文档、文件或测试名称存在推断实现完成。 其余实现交付 PR 与适用运行记录未逐条核定；[核对任务 #4698](https://github.com/eng-cc/oasis7/issues/4698)仅记录审查。
-- 核对日期与基线：2026-10-15；需求、专业设计与静态源码基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；本轮无新运行环境或端到端验收结果。
-- 剩余范围：市场例外与退出边界有设计；补偿/公开分配政策和路线/到达/存储/合同 settlement 不可旁路的组合未核定。
+- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。crisis lifecycle自动生成/超时惩罚是相邻MVP危机实现，不是紧急保供授权包、冻结批次或配给producer。专业设计§9/§11明确是未来验收计划，无专用运行证据。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L438-L502)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
+- 剩余范围：补偿金额/资金来源/公开分配政策仍依赖未冻结专业合同，且effect kind、物理到达/存储/结算不可旁路的producer与消费者组合未核清；不能以普通crisis或market代码替代。
 
 - 要求：正常价格、供需、竞争和局部故障继续由市场、合约与物流形成；只有预声明的系统性必需品危机并具备事实证据、品类、受影响范围、授权来源、开始/到期时间、介入方式、补偿/公开分配、复核和申诉入口的最小授权包，才可产生紧急世界效果。介入不得变成常态限价、永久配给、任意没收、可转让/可叠加资格或绕过路线、到达、存储、合同结算、世界资格与 receipt 的旁路。
 - 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
