@@ -455,11 +455,11 @@ Trace refs: O7-REQ-4c622b94-22bd-4559-9595-6b134bdc00b1；声明：[REQ-FIRST-BR
 Trace ID: O7-REQ-2e82fef6-bbb5-43b6-a7d0-833905e8e8a3
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：未实现
 - 系统设计依据：[viewer-gameplay-release-experience-overhaul.design / fixture-rollback-window](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#fixture-rollback-window)。已承接：分支当前阶段投影或样例回退窗口的一致性。
-- 实现与验证依据：正式snapshot只发布当前enabled分支并在无合法分支时给出恢复提示。 [真实推荐由BranchReady及enabled action筛选；输出承诺文案，没有路线回退期限authority或回退关闭事件。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L61-L168) [真实snapshot消费分支/因果/可用fallback，工业失败disposition存在则清理旧恢复投影；不是冲突恢复或分支回退authority。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L124-L246) 本轮只读静态审读，未执行验收；实际实现交付PR映射未逐条核清，固定生产源码为交付子范围依据，不以未取得运行证据抹去已证交付。
-- 核对日期与基线：2026-10-17；需求/专业设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；本轮对比 main 仅文档变化，本条源码继续适用。无新产品运行验收。
-- 剩余范围：真实分支结构没有绑定回退截止authority/关闭事件；工业repair与模块rollback都不是本条路线回退。窗口内/刚关闭/恢复后的一致合同及已兑现价值/义务保全仍需真实路径证据。
+- 实现与验证依据：适用前提是路线自身提供明确有效回退窗口；当前推荐不存在该authority，故不因保留通用收益或有world rollback就判本卡partial。 [typed-action](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7_agent_api/src/world_action/action.rs#L355-L418)；[dispatcher](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7/src/runtime/world/event_processing.rs#L379-L478)；[branch-read](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7/src/viewer/runtime_live/branch_commitment.rs#L61-L168)；[loss-read](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L227-L290)；[world-rollback](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7/src/viewer/runtime_live/recovery.rs#L20-L125)；[restore](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7/src/runtime/world/persistence.rs#L735-L785)。仅当前默认/内置路径静态审读，未运行业务测试或正式玩家验收。
+- 核对日期与基线：2026-10-17；需求固定 PR #4844 `5d03f1fcda523b071c2d75f634165af344ca7b6b`；实现固定 main `e27f4d990bc4d481097c003ff75afc582fd8f65d`；所引源码逐 Git blob 复验，与前轮同源部分复用；无新运行验收。
+- 剩余范围：提供回退的路线在比较/下一阶段/恢复后三时点共享有效窗口：正式branch producer只对当前enabled动作作推荐，无窗口期限或关闭authority；fixture文案不是生产消费者；窗口关闭说明原因并保留真正修复/重排/重新定目标：当前fallback或失败reschedule有用，但没有回退窗口关闭因果；不能以普通恢复代签；回退/换向不抹兑现收益或义务，冲突未知不承诺：模块实例rollback与signed checkpoint rollback属于代码/世界恢复，并不是保留已兑现收益的路线选择合同。结论限当前仓库默认/内置及已审正式路径；未提供的线上自定义artifact不在本轮结论范围。
 
 - 适用条件：当前路线提供有明确有效窗口的回退选择。
 - 要求：玩家比较、进入下一阶段或完成恢复后，回退可用性、截止条件和解释必须一致。窗口关闭后说明不可回退的原因，保留真实可用的修复、重排或重新定目标路径；已兑现的收益和既有义务不因回退失效或换向而被抹去。状态不足或冲突时不能继续承诺可回退。
