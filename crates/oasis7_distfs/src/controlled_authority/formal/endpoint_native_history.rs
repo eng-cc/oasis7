@@ -285,7 +285,7 @@ pub(crate) fn restore_native_position(
         context.endpoint_public_key(),
         context.checkpoint(),
         context.provider(),
-        &target,
+        target,
         context.minimum(),
         &historical_authority.authority_id()?,
         &mut load,
