@@ -545,7 +545,7 @@ Trace refs: O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf；本条在外部 Runtim
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/external-agent-world-view.design.md#view-query)覆盖多尺度浏览、授权搜索选择和回到主目标；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
 - 实现状态：部分实现
 - 实现与验证依据：Web Agent/Location 探索切片已实现，待完整测试；[PR #4825](https://github.com/nil-studio/oasis7/pull/4825)，实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`。已完成局部自动化和本地无 LLM 浏览器检查，完整试玩与范围见[世界舞台实现摘要](player-readable-world-stage.prd.md#stage-implementation-status)。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
+- 核对日期与基线：历史审读为 2026-10-15、`ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad` 仅对应原需求/设计与静态实现审读；当前 Web 切片实现及局部浏览器证据以[世界舞台实现摘要](player-readable-world-stage.prd.md#stage-implementation-status)所列候选和范围为准。文档审读本身不作运行验收，历史运行候选依各记录独立限定。
 - 剩余范围：设施/路线/事件及完整空间投影尚未实现；真实指导与世界结果、私有账号切换、容量和完整适用入口验收尚未闭合。
 
 - 要求：用户应能从有权观看的世界总览进入区域/Fragment，平移/缩放、搜索定位 Agent/设施/路线，选中对象或事件并查看身份、来源时效及下一步；未知/权限外的世界不能伪装全图实时情报。

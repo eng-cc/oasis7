@@ -51,7 +51,7 @@ ROOT_DIR="$(pwd)"
 LOCAL_PROVIDER_DIR="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider"
 test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm"
 test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json"
-env -u RUSTC_WRAPPER cargo build -p oasis7 \
+env -u RUSTC_WRAPPER cargo build -p oasis7 -p oasis7_chain_runtime \
   --bin oasis7_llm_provider_probe \
   --bin oasis7_game_launcher \
   --bin oasis7_viewer_live \

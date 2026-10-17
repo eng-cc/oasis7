@@ -82,7 +82,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-06：局部双端持久证明不等于正式 CommitRef，若干原子发布切片不等于整个 World 的根事务；同机双目录不能证明独立故障域。
 - ARCH-07：已有 execution bridge v3、CAS、sidecar、retention/GC/replay 的实现合同；[本地恢复边界](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary)不证明分布式可得性或完整灾备。
 
-2026-10-15 候选实现增量：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。候选尚未合入，完整长历史与最终 CI 仍在核验；没有刷新真实部署或独立故障域事实。
+节点生命周期实现（2026-10-17 核对）：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。代码已合入（`da890a9125a435969b82f5a14ab3c9143cc0690e`）；具体历史验证范围以实施 PR 与 runbook 为准，当前部署与独立故障域未核验。
 
 **实际部署核验：** 未验证正式 profile 激活、实际存储同步、故障域隔离、旧写者 fencing、备份可用性或恢复后的写服务。这些结论需要各自候选与环境证据，不能由代码数量汇总为完成率。
 
@@ -112,9 +112,9 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - 2026-10-14 局部摘要（仅原生任务执行）：owner 私有目标控制、fenced executor/Context、物流、权威配方和 prepared claimed Agent 建厂到首产物的代码切片已交付。实际试玩源、失败与 targeted 范围从 [Game API 专业合同及证据入口](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)读取，逐次 CI/清理流水归原交付 PR。本摘要不证明完整 TaskSnapshot、两 Runtime 首局、GUI、稳定生产或部署；部署暂停保持，其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
-**实施候选（2026-10-15，仅客户端拆分）：** [共享 SDK PR](https://github.com/eng-cc/oasis7/pull/4734)已合入 `25b4d211a612d783172e6266307c71c62b8c00c0`；[固定工业任务执行器候选](https://github.com/eng-cc/oasis7/tree/50e128cbe369f8f6adca6556ff99784c7f7c93ad)由 [#4744](https://github.com/eng-cc/oasis7/pull/4744)承接，尚未合入。执行方复用普通签名 HTTP、原操作恢复与本地有限预算；模型连接和规划在执行方，目标、executor fence、资源、世界时间和收据仍在 Runtime。节点进程组合启动执行器，Viewer 生命周期不构成托管承诺。旧生产能力仍有明确旧入口，不能由工业切片推出全部迁移；边界与剩余范围见 [Game API 专业合同](../../../world-simulator/llm/external-agent-game-api.design.md)及 [#4726](https://github.com/eng-cc/oasis7/issues/4726)。源码拆分、世界准入、运行位置或支持能力变化时重新核对本项。
+**客户端与原生 Harness 实现（2026-10-17 核对）：** [共享 SDK PR](https://github.com/eng-cc/oasis7/pull/4734)已合入 `25b4d211a612d783172e6266307c71c62b8c00c0`；[#4744](https://github.com/eng-cc/oasis7/pull/4744)已合入 `a7555be3f4e6c7814b3660ca04e42130b244de61`，取代[原固定工业任务执行器候选](https://github.com/eng-cc/oasis7/tree/50e128cbe369f8f6adca6556ff99784c7f7c93ad)。执行方复用普通签名 HTTP、原操作恢复与本地有限预算；模型连接和规划在执行方，目标、executor fence、资源、世界时间和收据仍在 Runtime。原生 Harness 由可信 Launcher 经会话级模型连接显式启动，见[模型连接与运行边界](../../../world-simulator/llm/byok-model-consumption.runbook.md)；Viewer 生命周期不构成托管承诺。旧生产能力仍有明确旧入口，不能由工业切片推出全部迁移；边界与剩余范围见 [Game API 专业合同](../../../world-simulator/llm/external-agent-game-api.design.md)及 [#4726](https://github.com/eng-cc/oasis7/issues/4726)。源码拆分、世界准入、运行位置或支持能力变化时重新核对本项。
 
-**实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合。上述候选只执行私有测试节点的脚本协议验证与只读浏览器验证，没有付费模型或生产部署证据；其他条目的环境基线不变。
+**实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合。原候选的私有测试节点脚本协议验证与只读浏览器验证只证明各自固定范围；后续真实供应商验证须按[BYOK 实现 PR #4812](https://github.com/nil-studio/oasis7/pull/4812)记录的 source 与窗口分别理解，不能据此推出完整自主试玩或生产部署已验收；其他条目的环境基线不变。
 
 <a id="cc-architecture-release"></a>
 
