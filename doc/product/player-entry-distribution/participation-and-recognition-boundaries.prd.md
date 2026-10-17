@@ -69,10 +69,12 @@ Trace ID: O7-REQ-c980624f-bb15-4fab-bc95-d950f6d83de5
 - 适用范围：贡献信号从收到、核验到记录/关闭与批准/执行的独立状态；沿用本条原有阶段和前置条件。
 - 系统设计状态：未核实
 - 系统设计依据：已核对 [reward pack 的 intake 状态](../../readme/governance/readme-limited-preview-contributor-reward-pack.md#32-scripted-import)和 [ledger 的批准/执行分离](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#5-approval-summary)。这些是既有操作合同，不能替代所有玩家入口的状态映射、证据可用性和反馈技术设计；该完整技术范围仍未核实。
-- 实现状态：未核实
-- 实现与验证依据：按 AC 抽样 intake、核验、记录、批准及执行，逐项对账适用治理状态；待取得审核和玩家反馈记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 实现状态：部分实现
+- 实现与验证依据：PR intake导入已交付：显式请求进入ready/deferred等导入状态，ready仅生成draft，缺字段为deferred；未填批准/实际发放字段，未自动付款或授予世界权益。 [intake独立状态与draft/deferred输出](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/readme_reward_pr_intake_lib.py#L150-L232)；[ready只生成draft的回归定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/readme-reward-pr-intake-import-smoke.sh#L20-L64)；[审查/批准/实际分发列独立](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md#L20-L26)。[交付PR #56](https://github.com/nil-studio/oasis7/pull/56)；[交付PR #61](https://github.com/nil-studio/oasis7/pull/61)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。 PR #56/#61报告对应导入/round smoke检查；属于历史候选自报，未在本固定main复跑。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：贡献信号从收到、核验到记录/关闭与批准/执行的独立状态的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 剩余范围：系统设计范围与未覆盖边界沿本条原设计依据；实现与验证：其他玩家入口和跨渠道的收到/核验中/结果记录/关闭与已批准/执行完整状态映射、实际审核/玩家反馈及非自动权益的全范围验收。
+
+- 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
 <a id="ac-entry-part-001"></a>
 ### AC-ENTRY-PART-001：审核路径不会代签权益
@@ -95,9 +97,11 @@ Trace ID: O7-REQ-ff67822b-5943-4728-ad4c-795c94fca95a
 - 系统设计状态：未核实
 - 系统设计依据：已核对 [ledger 来源/去重字段](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#2-ledger)与[有界 round 导入](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#32-merged-pr-round-scan)。字段存在不证明跨渠道去重、不可变 trace、撤回/失效证据与窗口关闭的完整技术处置；该完整技术范围仍未核实。
 - 实现状态：未核实
-- 实现与验证依据：按 AC 核对跨渠道重复、撤回、失效及窗口关闭负例，检查不可变来源和处置；待取得实际去重/审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：重复、跨渠道、重试、撤回、失效及窗口关闭时的来源、去重和处置的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 实现与验证依据：PR payload → build_result → draft/deferred ledger row → round scan PR-id → 人工 approved rows → pending distribution。 按 PR 编号命名不是跨渠道去重。真实 round 的 unique 与 exclusion 是该轮操作决定，不能证明重试、撤回、窗口关闭时全局唯一认可。 [scripts/readme_reward_pr_intake_lib.py:162–214](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/scripts/readme_reward_pr_intake_lib.py#L162-L214)；[scripts/readme-reward-pr-intake-round-scan.py:104–151](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/scripts/readme-reward-pr-intake-round-scan.py#L104-L151)；[doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md:3–24](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md#L3-L24)；[doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md:3–16](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md#L3-L16)
+- 核对日期与基线：2026-10-17；源码 `0ec10379419b0aaedb9d16157b81c92f4e6e3495`，本轮固定源码/操作记录只读复核；未运行安装、浏览器、模型或业务验收。
+- 剩余范围：尚需同贡献跨渠道 immutable trace 与 supersede/revoke/reject 决定到反馈/执行的接线；不把 join_attempt 或普通 auth nonce 去重代签。
+
+- 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
 <a id="ac-entry-part-002"></a>
 ### AC-ENTRY-PART-002：失效证据回到真实补救路径

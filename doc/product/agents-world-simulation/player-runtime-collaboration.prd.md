@@ -184,9 +184,9 @@ Trace ID: O7-REQ-b100c55e-5c35-46dc-aaf6-e66c02b323d8
 - 系统设计状态：已覆盖
 - 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-content)覆盖报告来源/更新时间/证据、真实完成判定；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+- 实现与验证依据：已沿真实 native 任务入口核查：[控制DTO](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/task.rs#L48-L74)、[真实goal snapshot](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_client_api/src/world_service/task_context.rs#L44-L55)及[持久task reducer](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/game_task.rs#L266-L364)仅承载目标/控制/执行绑定；[私有入口分派](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/world_service_private_goal.rs#L380-L431)仅分派goal/context/quote，未承载目标绑定报告。专业设计§6明确该切片未闭合报告。NativeTaskRunReport和CognitionRecoveryReport分别是运行诊断与恢复报告，不能替代task/goal绑定、来源/接收时间、next_actor、证据及旧报告处理。
+- 核对日期与基线：2026-10-17；需求/设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；核查native任务、World Service、grant/catalog与scheduler切片；未执行模型、运行验收或全表面组合。
+- 剩余范围：当前native生产切片的完整TaskReport未交付已核清；产品还要求两种Runtime表面，未穷尽其全部adapter/消费者，整条保持未核实而非未实现。需直接报告写入、持久恢复、双方表面读取及旧报告冲突处理证据。
 
 - 要求：Runtime 必须可汇报任务相关计划摘要、阶段状态、阻塞及需要谁处理，并关联适用目标和证据；玩家能区分 Runtime 报告、估计、最后更新时间与世界已确认结果，不得仅凭自报完成标记游戏目标完成。
 - 理由：让玩家理解进展而不泄露模型内部思维或伪造成果。
@@ -210,11 +210,11 @@ Trace ID: O7-REQ-2f463269-c3c0-4da1-95f8-90011c35799a
 
 - 功能点：[REQ-COLLAB-004](#req-collab-004)；适用范围沿本条原条件与 [AC-COLLAB-004](#ac-collab-004)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-content)已承接问答ID、版本关联和旧回答不授权；同文件需求承接/验证表反链本条AC。剩余：接收/后续处理确认、断连可恢复的snapshot/增量组合尚需核对；不代表实现或发布。
+- 系统设计依据：[专业设计](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-content)§5.3承接问答身份与旧回答不授权，§6.1和§7.2承接同切点snapshot/after-S增量与先持久化inbox再确认；逐条后续处理确认的完整语义仍需核对，维持部分覆盖。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：接收/后续处理确认、断连可恢复的snapshot/增量组合尚需核对；实现/验证：完整适用入口与验收尚未闭合。
+- 实现与验证依据：已核对[控制DTO](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/task.rs#L48-L74)、[真实goal snapshot](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_client_api/src/world_service/task_context.rs#L44-L55)及[持久task reducer](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/game_task.rs#L266-L364)与[私有入口分派](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/world_service_private_goal.rs#L380-L431)，该生产切片无question/answer协作集合；不是以搜索零结果断言。另核对canonical AgentChat owner_view，它恢复当前intent/goal而非task/question/in_reply_to/goal revision消息。专业设计§5.3、§6.1、§7.2已明确稳定问答身份、snapshot/after-S增量、本地inbox持久化后确认及stale history；这些是未发布完整协作合同，非运行实现。
+- 核对日期与基线：2026-10-17；需求/设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；核查native任务、World Service、grant/catalog与scheduler切片；未执行模型、运行验收或全表面组合。
+- 剩余范围：当前native任务切片不提供完整问答恢复；snapshot/增量恢复设计已查清，不再笼统称未查。逐条后续处理确认的完整承接和两个Runtime表面的实际生产链仍未穷尽，保留未核实。不能以普通chat/PromptControl ack替代任务问答。
 
 - 要求：玩家与 Runtime 必须能围绕同一任务提出问题、回复并核对接收/后续处理；回答绑定原问题及适用目标，已过时问题或普通聊天不得自动改写目标、批准权限或产生世界动作。
 - 理由：异步协作不依赖玩家与模型同时在线，也不把自然语言回复当作授权凭据。
@@ -240,9 +240,9 @@ Trace ID: O7-REQ-f5341eef-d8f6-42ae-b7b6-751803abd588
 - 系统设计状态：已覆盖
 - 系统设计依据：[专业承接条款](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-approval)覆盖精确申请、明确owner决定、累计授权和执行时重验；同文件需求承接/验证表反链本条AC。此为目标设计覆盖，不代表实现或发布。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-15；需求/设计与静态实现基线 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；入口为条目所述子集；本轮未执行真实Runtime、浏览器、部署或真人验收，历史运行候选依各记录独立限定。
-- 剩余范围：设计：本条范围及主要失败边界已有专业承接；实现/验证：完整适用入口与验收尚未闭合。
+- 实现与验证依据：已核对[控制DTO](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/task.rs#L48-L74)、[真实goal snapshot](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_client_api/src/world_service/task_context.rs#L44-L55)及[持久task reducer](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/game_task.rs#L266-L364)与[私有入口分派](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/world_service_private_goal.rs#L380-L431)，当前native切片未承载ApprovalRequest/Decision。[审批目标设计](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/runtime/player-runtime-collaboration.design.md#L79-L85)已明确proposal digest/revision、明确owner决定、累计额度、有效期和执行重验；[现有grant admission](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/capability_authorization.rs#L232-L270)确实校验有效期、issuer、撤销和父授权，但这是消费既有grant，不证明审批协作申请/决定生产端交付。
+- 核对日期与基线：2026-10-17；需求/设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；核查native任务、World Service、grant/catalog与scheduler切片；未执行模型、运行验收或全表面组合。
+- 剩余范围：当前native审批协作层未交付已核清；不能把底层grant已有或完整协作缺失直接推成整项部分实现/未实现。仍需定位两种Runtime表面的申请→owner决定→grant→执行重验端到端生产与验收。
 
 - 要求：Runtime 必须能提出符合既有授权规则的申请，玩家能够批准、拒绝或调整范围；只有当前有权主体对适用目标、对象、累计额度、风险和有效期的明确决定可用于后续行动，拒绝、超时、撤销和条件漂移不能默认为继续。
 - 理由：避免逐动作遥控，同时保留重大选择与成本控制。

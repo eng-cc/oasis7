@@ -78,10 +78,10 @@ Trace ID: O7-REQ-bd548350-7fce-4026-aeec-5b26a10b86ad
 - 功能点：[REQ-AGENT-AUTH-001](#req-agent-auth-001)；适用范围沿本条原条件与 [AC-AGENT-AUTH-001](#ac-agent-auth-001)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-010)：累计授权的来源、对象、期间与 effect 前再校验；玩家额度可读性、组织 issuer、其他资源/权利/风险来源的完整承接仍须分项核对。
-- 实现状态：未核实
-- 实现与验证依据：[runtime 已记录的 native lane 边界](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#32-当前-native-lane-与目标合同的边界)保留 starter owner grant、电力额度及旧授权失效的局部事实；组织 issuer、完整转让等不能由此推为完成。本轮未核清固定实现/实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)仅是文档任务。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：玩家额度可读性、组织 issuer、其他资源/权利/风险来源的完整承接仍须分项核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[grant/source/object/period累计键](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_delegation.rs#L95-L103)、[来源与不重置额度约束](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_delegation.rs#L159-L245)及[剩余额度投影](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_delegation.rs#L640-L662)确认starter-owner native电力grant子集；organization_source_unsupported明确拒绝组织issuer。[扣账/重试及失效复核测试](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_delegation.rs#L275-L397)及同文件L548并发测试仅为定义，本轮未运行。[既有任务#4349](https://github.com/nil-studio/oasis7/issues/4349)为相关交付溯源，不据此声称本条全范围通过。
+- 核对日期与基线：2026-10-17；需求、设计与静态实现固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；历史执行候选、入口和环境分别按上列记录限定。本轮只读核查，未运行测试、模型、浏览器或部署。
+- 剩余范围：已确认starter-owner native电力grant的累计键、修订不重置及余额投影；组织issuer、其他资源/权利/风险额度、玩家可读来源/有效期/余额与全部拆分并发重连切换组合仍未闭合。
 
 - 要求：当玩家或组织提前授权会消耗资源、占用容量、转移权利或累积风险的行动时，产品必须让玩家知道授权的对象范围、来源、有效期和剩余额度；拆分、并发、重试、重连或控制权切换不得扩大同一授权。
 - 验收：AC-AGENT-AUTH-001
@@ -104,9 +104,9 @@ Trace ID: O7-REQ-be254f99-9b66-47b1-ad7f-4a356d296b2a
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-011)：转让生效、旧授权失效与历史因果保留；完整经济转让、退休/报废与跨入口历史呈现仍须组合核对。
 - 实现状态：未核实
-- 实现与验证依据：[runtime 已记录的 native lane 边界](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#32-当前-native-lane-与目标合同的边界)保留 starter owner grant、电力额度及旧授权失效的局部事实；组织 issuer、完整转让等不能由此推为完成。本轮未核清固定实现/实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)仅是文档任务。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：完整经济转让、退休/报废与跨入口历史呈现仍须组合核对。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现与验证依据：[实际重配置处理](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L590-L635)区分版本、更新主体/时点与runtime-instance apply，且明确 persistence_scope/sync_scope=None；[持久意图与原回执身份](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/agent_cell.rs#L31-L108)保存intent/actor/replaced_by/receipt，但不是转让、退休或报废历史投影。旧owner grant失效仍只证明授权重验，不证明本卡要求的处置后历史可读。
+- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，源码逐文件 Git blob 校验；本轮未运行模型、Runtime、浏览器或产品验收。既有PR运行记录仅按各自候选/范围引用。
+- 剩余范围：继续核对转让/退休/报废的真实事件入口、处置状态及跨入口历史读取，特别新owner生效点、旧配置/来源、责任和既有结果。当前重配置ack的runtime-instance范围不能代签完整持久历史；本轮未执行验收。
 
 - 要求：Agent 转让、重配置、退休或报废后，产品必须把新 owner 的生效点与既有身份、来源、审计历史和已生效世界结果区分呈现，不得以处置抹除责任或历史。
 - 验收：AC-AGENT-AUTH-002
