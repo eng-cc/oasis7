@@ -116,12 +116,14 @@ Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；承接[AC-AGENT-STAGE-
 | --- | --- | --- |
 | 当前授权只读 | 展示/定位/检查。 | 读取授权和cut，不授予写权。 |
 | 最近已知/冲突/未知 | 获准内容可只读，纯建议/草稿标待核验。 | View DTO不能铸造Context/grant/成功，预览不生效。 |
-| 激活目标/批准/高后果操作 | 固定主体/方案/expected revision，披露旧观察。 | 原Game API Context/action合同重验主体、权限、控制/目标版本、fence及适用世界条件；Runtime最终裁决资源/规则。 |
+| owner目标保存/激活 | 固定主体/目标/expected revision，区分active与awaiting_executor。 | 原owner API重验owner权限、task/goal版本及控制提交；可在executor未绑定或离线时激活，不以executor Context为前置。 |
+| owner审批/高后果授权 | 固定主体/精确方案/expected revision，披露旧观察。 | 沿适用审批合同重验当前身份、scope、版本及所需条件；离线目标激活不意味着任意审批都可离线通过，也不直接产生世界效果。 |
+| executor实际世界动作 | guidance状态与执行/原回执分开。 | 原Game API Context/action合同重验执行主体、权限、控制/目标版本、fence及适用世界条件；Runtime最终裁决资源/规则。 |
 | 预览后条件变化 | stale/conflict/重新授权；改方案必须重新确认。 | 校验与实际接受/生效权威事务关联，不是Viewer独立GET即获许可。 |
 | stop/撤销/原结果查询 | 不因图形失败或观察陈旧统一置灰。 | 各自owner授权和控制合同，不能绕过撤权。 |
 | 丢reply/结果unknown | 保留原operation，显示recovery_required并回查。 | 不新键/换Agent/重新报价替代已提交请求，按原幂等恢复。 |
 
-顺序为固定主体与方案→读取既有权威Context/能力→纯预览→明确确认→原API版本约束提交→pending/拒绝/待确认→原结果回读。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
+owner指导沿固定主体与方案→核验owner权限及适用控制/审批条件→纯预览→明确确认→原owner API版本约束提交→pending/拒绝/待确认→原结果回读；目标激活与executor接入、Context取得和行动admission分开。实际executor动作另按读取既有权威Context/能力→提案→Runtime重验→原结果回读执行。消费[Game API Context](../llm/external-agent-game-api.design.md#api-context)与[原操作合同](../llm/external-agent-game-api.design.md#api-actions)，不发明新的UI许可字段；observed_at_tick、badge和WorldView cursor都不是admission许可。执行世界动作的Agent仍须自己的Context/fence通过Runtime，owner guidance不绕过。
 
 记录可脱敏关联的原操作、显示cut/分类、expected/实际控制版本及权威原因供对账，不公开token、观察正文或私有推理。
 

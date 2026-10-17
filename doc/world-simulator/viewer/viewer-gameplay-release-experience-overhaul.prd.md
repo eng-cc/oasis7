@@ -126,10 +126,12 @@ Facility、Territory、Organization、Depot、Module 选择不会泄漏 Agent �
 不会被计作 Receipt；正常与 Cinematic presentation 各只有一个正式可见 Receipt；并补齐
 headed desktop/mobile、`1024x768`、`768x1024` tablet、键盘、CJK、长文本、空/不可用态的
 S6 证据。状态覆盖 current、last-known/stale、reconnecting、unknown、conflict、replay、
-gap、reorg、unavailable 和 control/permission lost。当前源码与聚焦自动化已覆盖这些语义边界；
-headed 证据只覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。
-`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
-因此本切片保持 technical preview，不构成完整 headed 验收或发行放行结论。
+gap、reorg、unavailable 和 control/permission lost。早期 P1-A 窗口的源码与聚焦自动化覆盖
+上述语义边界，当时 headed 证据仅覆盖外部 Chrome 的 GPU-unavailable fallback
+（`1440x1000`、`390x844`）；当时未覆盖 `ready=true` WebGL2/Cinematic 正常路径、
+probe 后异步 GPU 失败和 tablet `641–1240` 宽度。该历史缺口不能覆盖或否定后续
+#3624/#3638/#3668 在各自候选与窗口取得的证据；复用须按原范围逐项核对。
+当前完整验收仍未由这些局部证据证明，本切片保持 technical preview，不构成发行放行结论。
 
 #### P1-A → canonical acceptance crosswalk
 
