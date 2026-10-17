@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub struct WorldKernel {
     kernel: NativeKernel,
     journal: Vec<WorldEvent>,
-    archive_origin: Option<(KernelSnapshot, WorldSnapshotExtensions)>,
+    archive_origin: Option<Box<(KernelSnapshot, WorldSnapshotExtensions)>>,
 }
 impl PartialEq for WorldKernel {
     fn eq(&self, other: &Self) -> bool {
@@ -121,7 +121,7 @@ impl WorldKernel {
         }
     }
     pub fn snapshot(&self) -> WorldSnapshot {
-        if let Some((native, extensions)) = &self.archive_origin
+        if let Some((native, extensions)) = self.archive_origin.as_deref()
             && *native == self.kernel_snapshot()
         {
             return WorldSnapshot::from_kernel_parts(native.clone(), extensions.clone());
@@ -129,7 +129,7 @@ impl WorldKernel {
         let mut snapshot = self.snapshot_with_chain_resource_context(
             ChainResourceDerivationContext::simulator_default(self.time()),
         );
-        if let Some((native, extensions)) = &self.archive_origin {
+        if let Some((native, extensions)) = self.archive_origin.as_deref() {
             let context = ChainResourceDerivationContext::simulator_default(native.time);
             let prefix = &self.kernel.journal()[..native.journal_len];
             let derived_manifest = oasis7_simulator::from_simulator_state(
@@ -176,11 +176,11 @@ impl WorldKernel {
             WorldSnapshotExtensions {
                 runtime_snapshot: self
                     .archive_origin
-                    .as_ref()
+                    .as_deref()
                     .and_then(|(_, extensions)| extensions.runtime_snapshot.clone()),
                 player_gameplay: self
                     .archive_origin
-                    .as_ref()
+                    .as_deref()
                     .and_then(|(_, extensions)| extensions.player_gameplay.clone()),
                 chain_resource_manifest,
                 latest_chain_resource_delta,
@@ -207,7 +207,7 @@ impl WorldKernel {
         )?;
         let mut host = Self::from_native(kernel);
         host.journal = journal.events;
-        host.archive_origin = Some((native, extensions));
+        host.archive_origin = Some(Box::new((native, extensions)));
         Ok(host)
     }
     pub fn replay_from_snapshot(
@@ -245,7 +245,7 @@ impl WorldKernel {
             host.kernel.set_module_source_compiler(compiler);
         }
         host.journal = journal.events;
-        host.archive_origin = Some((native, extensions));
+        host.archive_origin = Some(Box::new((native, extensions)));
         Ok(host)
     }
     pub fn save_to_dir(&self, dir: impl AsRef<Path>) -> Result<(), PersistError> {
