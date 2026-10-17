@@ -64,6 +64,27 @@ pub(super) fn attach_frozen(
     material: &mut ClosedRecord,
     native: &NativeExecutionEnvironmentV1,
 ) -> Result<(), String> {
+    build_frozen_attachment_unverified(body, material, native)?;
+    verify_frozen_material(body, material).map_err(|error| error.to_string())
+}
+
+/// A restore-only attachment must match the token's fully verified original
+/// before this function can return. No unchecked builder is exposed to callers.
+pub(super) fn attach_frozen_for_exact_restore(
+    body: &mut FormalFrozenBodyV1,
+    material: &mut ClosedRecord,
+    native: &NativeExecutionEnvironmentV1,
+    verified: &formal_package::VerifiedFrozenSnapshot<'_>,
+) -> Result<(), String> {
+    build_frozen_attachment_unverified(body, material, native)?;
+    verified.verify_exact_rebuild(body, material)
+}
+
+fn build_frozen_attachment_unverified(
+    body: &mut FormalFrozenBodyV1,
+    material: &mut ClosedRecord,
+    native: &NativeExecutionEnvironmentV1,
+) -> Result<(), String> {
     let mut manifest: formal_package::FormalExecutionManifestV1 =
         capture::decode_role(material, ArtifactRole::ExecutionManifest)?;
     if manifest.schema_version != 1 || manifest.native_environment_ref.is_some() {
@@ -110,7 +131,7 @@ pub(super) fn attach_frozen(
     body.runtime_manifest_digest = manifest_id;
     body.frozen_material_digest =
         frozen_material_digest(material).map_err(|error| error.to_string())?;
-    verify_frozen_material(body, material).map_err(|error| error.to_string())
+    Ok(())
 }
 
 /// First determine the full descriptor; then stage a second exact capture.

@@ -81,6 +81,7 @@ fn execute_with_business_reader(
     read_anchor: Option<&VerifiedFormalReadAnchorV1>,
     recovery: Option<&VerifiedRecovery>,
 ) -> Result<FormalCandidateMaterialV1, String> {
+    let verified_snapshot = formal_package::VerifiedFrozenSnapshot::new(frozen, authority, parent)?;
     let (mut world, original) = formal_package::restore_executable(
         frozen,
         authority,
@@ -88,6 +89,7 @@ fn execute_with_business_reader(
         None,
         read_anchor,
         business_reader,
+        &verified_snapshot,
     )?;
     let formal_retention = authority.definition().profile_version == 2;
     if formal_retention {
@@ -249,6 +251,7 @@ fn execute_with_business_reader(
         &reader,
         retained_outputs.as_ref(),
         recovery,
+        &verified_snapshot,
     )?;
     // The local executor has no serving reader; drop its private store handles
     // before publishing the immutable duplicate-output delete list.

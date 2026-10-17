@@ -12,9 +12,12 @@ use oasis7_distfs::controlled_authority::{
 use oasis7_node::{NodeLocalExecutionContinuation, compute_consensus_action_root};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+#[path = "formal_frozen_snapshot.rs"]
+mod frozen_snapshot;
 #[cfg(test)]
 #[path = "formal_package_tests.rs"]
 mod tests;
+pub(super) use frozen_snapshot::VerifiedFrozenSnapshot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -81,6 +84,7 @@ pub(super) fn freeze_material(
         None,
         None,
         None,
+        None,
     )
 }
 pub(super) fn freeze_material_with_durable_set_transition(
@@ -100,6 +104,7 @@ pub(super) fn freeze_material_with_durable_set_transition(
         None,
         None,
         Some(transition.clone()),
+        None,
         None,
     )
 }
@@ -132,6 +137,7 @@ pub(super) fn freeze_material_from_parent(
         Some(parent_qualified),
         transition,
         Some(parent_material),
+        None,
     )
 }
 
@@ -149,6 +155,7 @@ fn freeze_material_inner(
     parent_qualified: Option<FormalQualifiedCommitProofV1>,
     durable_set_transition: Option<SignedNormalDurableSetTransitionV1>,
     parent_material: Option<&ClosedRecord>,
+    verified_snapshot: Option<&VerifiedFrozenSnapshot<'_>>,
 ) -> Result<(FormalFrozenBodyV1, ClosedRecord), String> {
     if authority.definition().profile_version == 2
         && (business_tree.is_none() || parent_qualified.is_none())
@@ -235,7 +242,16 @@ fn freeze_material_inner(
     let mut objects = BTreeMap::new();
     let input = insert(&mut objects, to_cbor(&c.committed_actions)?, vec![]);
     let snapshot_ref = if let Some(parent_material) = parent_material {
-        super::formal_snapshot::inherit(&mut objects, parent_material, &snapshot_bytes)?
+        if let Some(verified) = verified_snapshot {
+            super::formal_snapshot::inherit_verified(
+                &mut objects,
+                parent_material,
+                &snapshot_bytes,
+                verified,
+            )?
+        } else {
+            super::formal_snapshot::inherit(&mut objects, parent_material, &snapshot_bytes)?
+        }
     } else {
         insert(&mut objects, snapshot_bytes, vec![])
     };
@@ -339,7 +355,12 @@ fn freeze_material_inner(
         frozen_material_digest: frozen_material_digest(&material).map_err(|e| e.to_string())?,
         handoff: None,
     };
-    verify_frozen_material(&body, &material).map_err(|e| e.to_string())?;
+    // Only restoration with a fully verified immutable original may defer this
+    // last check. Its caller must compare the complete rebuilt body/material to
+    // that token before returning; ordinary Frozen builders still verify here.
+    if verified_snapshot.is_none() {
+        verify_frozen_material(&body, &material).map_err(|e| e.to_string())?;
+    }
     Ok((body, material))
 }
 
@@ -429,16 +450,15 @@ pub(super) fn validate_modules(snapshot: &Snapshot) -> Result<(), String> {
 
 /// Only the coordinator's dual durable Frozen token can authorize execution.
 /// Replay decodes the old captured decision, never asks a planner for new input.
-pub(super) fn restore_executable(
+fn checked_execution_manifest(
     frozen: &ExecutableFormalFrozenV1,
     original_authority: &VerifiedAuthorityV1,
     parent: &VerifiedFormalCommitV1,
-    history_source: Option<&World>,
-    read_anchor: Option<&VerifiedFormalReadAnchorV1>,
-    business_reader: Option<&super::formal_business_package::SharedBusinessReader>,
-) -> Result<(World, NodeLocalExecutionContinuation), String> {
+) -> Result<FormalExecutionManifestV1, String> {
     let material = frozen.material();
-    verify_frozen_material(&frozen.input().body, material).map_err(|e| e.to_string())?;
+    if frozen.certificate().reservation != *frozen.input() {
+        return Err("formal Frozen certificate differs from original signed input".into());
+    }
     frozen
         .certificate()
         .verify(
@@ -462,11 +482,28 @@ pub(super) fn restore_executable(
     {
         return Err("formal frozen original execution artifact/context mismatch".into());
     }
+    Ok(manifest)
+}
+
+pub(super) fn restore_executable(
+    frozen: &ExecutableFormalFrozenV1,
+    original_authority: &VerifiedAuthorityV1,
+    parent: &VerifiedFormalCommitV1,
+    history_source: Option<&World>,
+    read_anchor: Option<&VerifiedFormalReadAnchorV1>,
+    business_reader: Option<&super::formal_business_package::SharedBusinessReader>,
+    verified_snapshot: &VerifiedFrozenSnapshot<'_>,
+) -> Result<(World, NodeLocalExecutionContinuation), String> {
+    verified_snapshot.check_binding(frozen, original_authority, parent)?;
+    #[cfg(test)]
+    verified_snapshot.record_restore();
+    let material = frozen.material();
+    let manifest = checked_execution_manifest(frozen, original_authority, parent)?;
     super::formal_native_environment::verify_current(material, &manifest)?;
     if let Some(transition) = &manifest.durable_set_transition {
         verify_durable_set_transition_arm(transition, original_authority, parent)?;
     }
-    let snapshot: Snapshot = capture::decode_role(material, ArtifactRole::Snapshot)?;
+    let snapshot: Snapshot = capture::decode_generic(verified_snapshot.bytes_for(material)?)?;
     let journal: Journal = capture::decode_role(material, ArtifactRole::Journal)?;
     let world = if original_authority.definition().profile_version == 2 {
         if let Some(source) = history_source {
@@ -502,13 +539,17 @@ pub(super) fn restore_executable(
         manifest.parent_qualified.clone(),
         manifest.durable_set_transition.clone(),
         (frozen.input().body.schema_version >= 2).then_some(material),
+        Some(verified_snapshot),
     )?;
     if let Some(descriptor) = super::formal_native_environment::descriptor(material)? {
-        super::formal_native_environment::attach_frozen(&mut expected, &mut rebuilt, &descriptor)?;
+        super::formal_native_environment::attach_frozen_for_exact_restore(
+            &mut expected,
+            &mut rebuilt,
+            &descriptor,
+            verified_snapshot,
+        )?;
     }
-    if &rebuilt != material || expected != frozen.input().body {
-        return Err("formal frozen exact typed execution closure mismatch".into());
-    }
+    verified_snapshot.verify_exact_rebuild(&expected, &rebuilt)?;
     Ok((world, manifest.continuation))
 }
 
@@ -537,6 +578,7 @@ pub(super) fn candidate_with_business_reader(
     business_reader: &impl oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader,
     retained_outputs: Option<&FormalRetainedExecutionOutputs>,
     recovery: Option<&VerifiedRecovery>,
+    verified_snapshot: &VerifiedFrozenSnapshot<'_>,
 ) -> Result<FormalCandidateMaterialV1, String> {
     if authority.definition().profile_version == 2 && retained_outputs.is_none() {
         return Err("formal profile 2 requires pre-prune actual execution outputs".into());
@@ -558,8 +600,15 @@ pub(super) fn candidate_with_business_reader(
     {
         return Err("formal candidate original writer key mismatch".into());
     }
-    let (before_world, continuation) =
-        restore_executable(frozen, authority, parent, Some(after_world), None, None)?;
+    let (before_world, continuation) = restore_executable(
+        frozen,
+        authority,
+        parent,
+        Some(after_world),
+        None,
+        None,
+        verified_snapshot,
+    )?;
     let manifest: FormalExecutionManifestV1 =
         capture::decode_role(frozen.material(), ArtifactRole::ExecutionManifest)?;
     if recovery.is_some() && manifest.durable_set_transition.is_some() {

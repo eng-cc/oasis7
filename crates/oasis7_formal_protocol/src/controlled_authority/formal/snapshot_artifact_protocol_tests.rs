@@ -82,6 +82,51 @@ fn frozen_v2_resolves_exact_prestate_and_legacy_v1_never_reinterprets_delta() {
     body.runtime_manifest_digest = material.roots[&ArtifactRole::ExecutionManifest].clone();
     body.frozen_material_digest = frozen_material_digest(&material).unwrap();
     verify_frozen_material(&body, &material).unwrap();
+    let expanded = verify_frozen_material_retaining_snapshot(&body, &material)
+        .unwrap()
+        .unwrap();
+    assert_eq!(expanded, material.snapshot_bytes().unwrap());
+    let mut missing = material.clone();
+    missing.objects.pop();
+    assert!(verify_frozen_material_retaining_snapshot(&body, &missing).is_err());
+    let mut corrupt = material.clone();
+    corrupt.objects[0].bytes.push(0);
+    assert!(verify_frozen_material_retaining_snapshot(&body, &corrupt).is_err());
+    let mut changed = body.clone();
+    changed.pre_state_root = h(92);
+    assert!(verify_frozen_material_retaining_snapshot(&changed, &material).is_err());
     body.schema_version = 1;
     assert!(verify_frozen_material(&body, &material).is_err());
+}
+
+#[test]
+fn legacy_frozen_verification_does_not_add_snapshot_expansion() {
+    let (_, authority, _, cut) = fixtures::initial();
+    let mut body = fixtures::frozen(&authority, &cut, None).reservation.body;
+    let mut material = delta_material();
+    let bytes = b"legacy raw Snapshot bytes".to_vec();
+    let hash = blake3::hash(&bytes).to_hex().to_string();
+    material.objects = vec![ArtifactObject {
+        content_hash: hash.clone(),
+        bytes,
+        references: vec![],
+    }];
+    for root in material.roots.values_mut() {
+        *root = hash.clone();
+    }
+    material.payload_digest = hash.clone();
+    material.before_state_root = hash.clone();
+    material.after_state_root = hash.clone();
+    body.pre_state_root = hash.clone();
+    body.payload_digest = hash.clone();
+    body.runtime_manifest_digest = hash;
+    body.frozen_material_digest = frozen_material_digest(&material).unwrap();
+    // The old schema-1 contract validates raw bytes, not typed Snapshot CBOR.
+    // Its retaining counterpart must likewise return None without decoding.
+    verify_frozen_material(&body, &material).unwrap();
+    assert!(
+        verify_frozen_material_retaining_snapshot(&body, &material)
+            .unwrap()
+            .is_none()
+    );
 }

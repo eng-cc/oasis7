@@ -17,7 +17,25 @@ pub(super) fn inherit(
     parent: &ClosedRecord,
     expected_bytes: &[u8],
 ) -> Result<String, String> {
-    if bytes(parent)? != expected_bytes {
+    inherit_from_bytes(objects, parent, expected_bytes, &bytes(parent)?)
+}
+
+pub(super) fn inherit_verified(
+    objects: &mut BTreeMap<String, ArtifactObject>,
+    parent: &ClosedRecord,
+    expected_bytes: &[u8],
+    verified: &super::formal_package::VerifiedFrozenSnapshot<'_>,
+) -> Result<String, String> {
+    inherit_from_bytes(objects, parent, expected_bytes, verified.bytes_for(parent)?)
+}
+
+fn inherit_from_bytes(
+    objects: &mut BTreeMap<String, ArtifactObject>,
+    parent: &ClosedRecord,
+    expected_bytes: &[u8],
+    original_bytes: &[u8],
+) -> Result<String, String> {
+    if original_bytes != expected_bytes {
         return Err("Snapshot inherited predecessor differs from exact current prestate".into());
     }
     let root = parent

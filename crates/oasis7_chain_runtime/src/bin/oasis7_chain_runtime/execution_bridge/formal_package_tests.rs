@@ -1,6 +1,8 @@
 use super::*;
 #[path = "formal_checkpoint_attempt_tests.rs"]
 mod checkpoint_attempt_tests;
+#[path = "formal_frozen_snapshot_tests.rs"]
+mod frozen_snapshot_tests;
 use crate::formal_read_fixtures as fixtures;
 #[path = "formal_wasm_fixture.rs"]
 mod wasm_fixture;
@@ -481,6 +483,7 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         .unwrap()
         .join(format!("oasis7-formal-wasm-replay-{}", std::process::id()));
     assert!(!root.exists());
+    super::frozen_snapshot::reset_counts();
     let first = super::super::formal_executor::execute_normal(
         &executable,
         anchor.authority(),
@@ -489,6 +492,10 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         &fixtures::key(4),
     )
     .unwrap();
+    // These counts cover only the Node token, not endpoint verification or
+    // candidate after-state validation. Both typed restores share one expansion.
+    assert_eq!(super::frozen_snapshot::counts(), (1, 2));
+    super::frozen_snapshot::reset_counts();
     let second = super::super::formal_executor::execute_normal(
         &executable,
         anchor.authority(),
@@ -497,6 +504,7 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         &fixtures::key(4),
     )
     .unwrap();
+    assert_eq!(super::frozen_snapshot::counts(), (1, 2));
     assert_eq!(first, second);
     let journal: oasis7::runtime::Journal =
         capture::decode_role(&first.material, ArtifactRole::Journal).unwrap();

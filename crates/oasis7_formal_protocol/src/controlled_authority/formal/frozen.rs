@@ -156,6 +156,16 @@ pub fn verify_frozen_material(
     body: &FormalFrozenBodyV1,
     material: &ClosedRecord,
 ) -> Result<(), FormalError> {
+    verify_frozen_material_retaining_snapshot(body, material).map(|_| ())
+}
+
+/// Perform the same complete verification, retaining an already expanded
+/// versioned Snapshot for a caller's operation-local typed restoration. Legacy
+/// schema 1 keeps its original validation and returns no expanded allocation.
+pub fn verify_frozen_material_retaining_snapshot(
+    body: &FormalFrozenBodyV1,
+    material: &ClosedRecord,
+) -> Result<Option<Vec<u8>>, FormalError> {
     body.validate()?;
     if frozen_material_digest(material)? != body.frozen_material_digest
         || material.payload_digest != body.payload_digest
@@ -185,8 +195,9 @@ pub fn verify_frozen_material(
                 "formal frozen delta Snapshot expanded prestate mismatch",
             ));
         }
+        return Ok(Some(expanded));
     }
-    Ok(())
+    Ok(None)
 }
 impl FormalFrozenCertificateV1 {
     pub fn verify(
