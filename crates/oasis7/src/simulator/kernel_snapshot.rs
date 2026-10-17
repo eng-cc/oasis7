@@ -49,3 +49,29 @@ pub struct KernelJournal {
     pub version: u32,
     pub events: Vec<KernelEvent>,
 }
+
+impl KernelSnapshot {
+    pub fn validate_version(&self) -> Result<(), super::persist_error::PersistError> {
+        validate_version("snapshot", self.version, SNAPSHOT_VERSION)
+    }
+}
+impl KernelJournal {
+    pub fn validate_version(&self) -> Result<(), super::persist_error::PersistError> {
+        validate_version("journal", self.version, JOURNAL_VERSION)
+    }
+}
+fn validate_version(
+    kind: &str,
+    version: u32,
+    expected: u32,
+) -> Result<(), super::persist_error::PersistError> {
+    if version == expected || version == expected.saturating_sub(1) {
+        Ok(())
+    } else {
+        Err(super::persist_error::PersistError::UnsupportedVersion {
+            kind: kind.into(),
+            version,
+            expected,
+        })
+    }
+}

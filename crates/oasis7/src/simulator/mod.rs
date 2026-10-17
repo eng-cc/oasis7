@@ -41,6 +41,7 @@ mod model_provider;
 mod module_visual;
 mod native_resolution;
 pub(crate) mod persist;
+mod persist_error;
 mod power;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_adapter;
@@ -134,7 +135,6 @@ pub use fragment_physics::{
 pub use init::{
     AgentSpawnConfig, AsteroidFragmentInitConfig, LocationSeedConfig, OriginLocationConfig,
     PowerPlantSeedConfig, WorldInitConfig, WorldInitError, WorldInitReport, build_world_model,
-    initialize_kernel,
 };
 pub use kernel::ChunkRuntimeConfig;
 pub(crate) use kernel::default_schedule_recipe_readiness;
@@ -142,7 +142,7 @@ pub(crate) use kernel::default_schedule_recipe_readiness;
 pub use kernel::{
     Observation, ObservedAgent, ObservedLocation, ObservedModuleArtifactRecord,
     ObservedModuleLifecycleState, ObservedModuleMarketState, ObservedPowerMarketState,
-    ObservedSocialState, WorldKernel,
+    ObservedSocialState,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use llm_agent::{
@@ -257,7 +257,7 @@ pub use kernel::{
     MicroDepotInstallQuote, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot,
     MicroDepotPressureClass, MicroDepotProposal, MicroDepotProposalResourceDebit,
     MicroDepotQuotePreview, MicroDepotRegionContext, MicroDepotResourceDebit, MicroDepotStatus,
-    PowerOrderFill, PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind,
+    PowerOrderFill, PromptUpdateOperation, RejectReason, WorldEventKind,
     compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
     merge_kernel_rule_decisions,
 };
@@ -270,4 +270,7 @@ mod kernel_snapshot;
 pub use kernel_snapshot::{KernelEvent, KernelJournal, KernelSnapshot};
 
 mod kernel_host;
+pub use archive::WorldEvent;
+pub use kernel::WorldKernel as NativeKernel;
+pub use kernel_host::{WorldKernel, initialize_kernel};
 mod source_compiler;

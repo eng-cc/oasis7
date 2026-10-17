@@ -4,7 +4,7 @@ use super::super::init::{
     summarize_chunk_generation,
 };
 use super::super::kernel_snapshot::KernelEvent;
-use super::super::persist::PersistError;
+use super::super::persist_error::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;

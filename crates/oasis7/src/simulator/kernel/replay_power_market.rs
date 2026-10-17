@@ -1,4 +1,4 @@
-use super::super::persist::PersistError;
+use super::super::persist_error::PersistError;
 use super::super::power::PowerEvent;
 use super::super::types::{PowerOrderSide, ResourceKind, ResourceOwner};
 use super::super::world_model::PowerOrderState;

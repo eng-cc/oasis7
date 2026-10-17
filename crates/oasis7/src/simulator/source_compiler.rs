@@ -32,3 +32,28 @@ impl PartialEq for KernelSourceCompiler {
 
 #[cfg(test)]
 mod tests;
+
+impl Default for KernelSourceCompiler {
+    fn default() -> Self {
+        Self::new(Arc::new(UnavailableCompiler))
+    }
+}
+struct UnavailableCompiler;
+impl ModuleSourceCompiler for UnavailableCompiler {
+    fn compile(
+        &self,
+        _: &str,
+        _: &ModuleSourcePackage,
+    ) -> Result<Vec<u8>, oasis7_agent_api::module_source::ModuleSourceCompileError> {
+        Err(
+            oasis7_agent_api::module_source::ModuleSourceCompileError::Unavailable(
+                if cfg!(target_arch = "wasm32") {
+                    "source compilation is unavailable on wasm32 target"
+                } else {
+                    "source compilation requires a host compiler capability"
+                }
+                .into(),
+            ),
+        )
+    }
+}

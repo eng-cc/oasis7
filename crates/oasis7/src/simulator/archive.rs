@@ -1,14 +1,25 @@
 //! Lossless adapters for the historical host-owned combined archives.
-use super::kernel::WorldEvent;
+use super::kernel::WorldEventKind;
 use super::kernel_snapshot::{KernelEvent, KernelSnapshot};
 use super::persist::{PlayerGameplaySnapshot, WorldSnapshot};
+use super::types::{WorldEventId, WorldTime};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::{Snapshot as RuntimeSnapshot, WorldEvent as RuntimeWorldEvent};
 use oasis7_agent_api::world_resource::{ChainResourceDelta, ChainResourceManifest};
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeWorldEvent;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorldEvent {
+    pub id: WorldEventId,
+    pub time: WorldTime,
+    pub kind: WorldEventKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_event: Option<RuntimeWorldEvent>,
+}
 
 /// Host-owned fields that must accompany a kernel snapshot on archive rewrite.
 /// This is an in-process adapter, not a replacement wire format.

@@ -1,20 +1,13 @@
-use std::collections::VecDeque;
-use std::fs;
-use std::path::Path;
-
-use super::super::persist::{PersistError, WorldJournal, WorldSnapshot};
+use super::super::persist_error::PersistError;
 use super::super::types::{
     CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION, WorldEventId,
 };
-use super::super::{KernelEvent, KernelJournal, KernelSnapshot, WorldSnapshotExtensions};
+use super::super::{KernelEvent, KernelJournal, KernelSnapshot};
 use super::WorldKernel;
-use crate::chain_resource_schema::ChainResourceDerivationContext;
+use std::collections::VecDeque;
 
 impl WorldKernel {
-    fn restore_persisted_state(
-        snapshot: KernelSnapshot,
-        journal_events: Vec<super::WorldEvent>,
-    ) -> Self {
+    fn restore_persisted_state(snapshot: KernelSnapshot, journal_events: Vec<KernelEvent>) -> Self {
         Self {
             time: snapshot.time,
             config: snapshot.config.sanitized(),
@@ -33,41 +26,6 @@ impl WorldKernel {
         }
     }
 
-    pub fn snapshot(&self) -> WorldSnapshot {
-        self.snapshot_with_chain_resource_context(
-            ChainResourceDerivationContext::simulator_default(self.time),
-        )
-    }
-
-    pub fn snapshot_with_chain_resource_context(
-        &self,
-        context: ChainResourceDerivationContext<'_>,
-    ) -> WorldSnapshot {
-        let chain_resource_manifest = crate::simulator::chain_resource::from_simulator_state(
-            context,
-            &self.model,
-            &self.config,
-            &self.chunk_runtime,
-            &self.journal,
-        );
-        let latest_chain_resource_delta =
-            crate::simulator::chain_resource::latest_from_simulator_journal(
-                context,
-                &chain_resource_manifest,
-                &self.journal,
-            );
-        WorldSnapshot::from_kernel_parts(
-            self.kernel_snapshot(),
-            WorldSnapshotExtensions {
-                runtime_snapshot: None,
-                player_gameplay: None,
-                chain_resource_manifest,
-                latest_chain_resource_delta,
-            },
-        )
-    }
-
-    /// Export only native kernel state. This is not a complete host archive.
     pub fn kernel_snapshot(&self) -> KernelSnapshot {
         KernelSnapshot {
             version: SNAPSHOT_VERSION,
@@ -87,28 +45,13 @@ impl WorldKernel {
     pub fn kernel_journal_snapshot(&self) -> KernelJournal {
         KernelJournal {
             version: JOURNAL_VERSION,
-            events: self
-                .journal
-                .iter()
-                .map(|event| KernelEvent {
-                    id: event.id,
-                    time: event.time,
-                    kind: event.kind.clone(),
-                })
-                .collect(),
-        }
-    }
-
-    pub fn journal_snapshot(&self) -> WorldJournal {
-        WorldJournal {
-            version: JOURNAL_VERSION,
             events: self.journal.clone(),
         }
     }
 
-    pub fn from_snapshot(
-        snapshot: WorldSnapshot,
-        journal: WorldJournal,
+    pub fn from_kernel_snapshot(
+        snapshot: KernelSnapshot,
+        journal: KernelJournal,
     ) -> Result<Self, PersistError> {
         snapshot.validate_version()?;
         journal.validate_version()?;
@@ -119,30 +62,27 @@ impl WorldKernel {
             });
         }
         validate_journal_event_prefix(snapshot.next_event_id, &journal.events)?;
-        Ok(Self::restore_persisted_state(
-            snapshot.into_kernel_parts().0,
-            journal.events,
-        ))
+        Ok(Self::restore_persisted_state(snapshot, journal.events))
     }
 
-    pub fn replay_from_snapshot(
-        snapshot: WorldSnapshot,
-        journal: WorldJournal,
+    pub fn replay_from_kernel_snapshot(
+        snapshot: KernelSnapshot,
+        journal: KernelJournal,
     ) -> Result<Self, PersistError> {
         Self::replay_with_compiler(snapshot, journal, None)
     }
 
-    pub fn replay_from_snapshot_with_source_compiler(
-        snapshot: WorldSnapshot,
-        journal: WorldJournal,
+    pub fn replay_from_kernel_snapshot_with_source_compiler(
+        snapshot: KernelSnapshot,
+        journal: KernelJournal,
         compiler: std::sync::Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>,
     ) -> Result<Self, PersistError> {
         Self::replay_with_compiler(snapshot, journal, Some(compiler))
     }
 
     fn replay_with_compiler(
-        snapshot: WorldSnapshot,
-        journal: WorldJournal,
+        snapshot: KernelSnapshot,
+        journal: KernelJournal,
         compiler: Option<std::sync::Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>>,
     ) -> Result<Self, PersistError> {
         snapshot.validate_version()?;
@@ -161,18 +101,13 @@ impl WorldKernel {
 
         let journal_len = snapshot.journal_len;
         validate_journal_event_prefix(snapshot.next_event_id, &journal.events[..journal_len])?;
-        let mut kernel =
-            Self::restore_persisted_state(snapshot.into_kernel_parts().0, journal.events.clone());
+        let mut kernel = Self::restore_persisted_state(snapshot, journal.events.clone());
         if let Some(compiler) = compiler {
             kernel.set_module_source_compiler(compiler);
         }
 
         for event in journal.events.iter().skip(journal_len) {
-            kernel.apply_event(&KernelEvent {
-                id: event.id,
-                time: event.time,
-                kind: event.kind.clone(),
-            })?;
+            kernel.apply_event(event)?;
         }
         let events_after_snapshot = journal.events.len() - journal_len;
         if events_after_snapshot > 0 {
@@ -183,42 +118,11 @@ impl WorldKernel {
 
         Ok(kernel)
     }
-
-    pub fn save_to_dir(&self, dir: impl AsRef<Path>) -> Result<(), PersistError> {
-        self.save_to_dir_with_chain_resource_context(
-            dir,
-            ChainResourceDerivationContext::simulator_default(self.time),
-        )
-    }
-
-    pub fn save_to_dir_with_chain_resource_context(
-        &self,
-        dir: impl AsRef<Path>,
-        context: ChainResourceDerivationContext<'_>,
-    ) -> Result<(), PersistError> {
-        let dir = dir.as_ref();
-        fs::create_dir_all(dir)?;
-        let snapshot_path = dir.join("snapshot.json");
-        let journal_path = dir.join("journal.json");
-        self.snapshot_with_chain_resource_context(context)
-            .save_json(&snapshot_path)?;
-        self.journal_snapshot().save_json(&journal_path)?;
-        Ok(())
-    }
-
-    pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, PersistError> {
-        let dir = dir.as_ref();
-        let snapshot_path = dir.join("snapshot.json");
-        let journal_path = dir.join("journal.json");
-        let snapshot = WorldSnapshot::load_json(&snapshot_path)?;
-        let journal = WorldJournal::load_json(&journal_path)?;
-        Self::from_snapshot(snapshot, journal)
-    }
 }
 
 fn validate_journal_event_prefix(
     next_event_id: WorldEventId,
-    events: &[super::WorldEvent],
+    events: &[KernelEvent],
 ) -> Result<(), PersistError> {
     if next_event_id as usize != events.len() {
         return Err(PersistError::ReplayConflict {

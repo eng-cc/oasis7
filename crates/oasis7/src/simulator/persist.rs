@@ -3,10 +3,9 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fs;
-use std::io;
 use std::path::Path;
 
-use super::kernel::WorldEvent;
+use super::archive::WorldEvent;
 use super::kernel::{ChunkRuntimeConfig, MicroDepotPlayerFacilitySnapshot};
 use super::types::{
     ActionEnvelope, ActionId, CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION,
@@ -1008,35 +1007,7 @@ impl Default for WorldJournal {
 // Errors
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PersistError {
-    Io(String),
-    Serde(String),
-    SnapshotMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    ReplayConflict {
-        message: String,
-    },
-    UnsupportedVersion {
-        kind: String,
-        version: u32,
-        expected: u32,
-    },
-}
-
-impl From<io::Error> for PersistError {
-    fn from(err: io::Error) -> Self {
-        PersistError::Io(err.to_string())
-    }
-}
-
-impl From<serde_json::Error> for PersistError {
-    fn from(err: serde_json::Error) -> Self {
-        PersistError::Serde(err.to_string())
-    }
-}
+pub use super::persist_error::PersistError;
 
 // ============================================================================
 // Helper functions

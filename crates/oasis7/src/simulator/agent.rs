@@ -1,5 +1,6 @@
 //! Agent interface: AgentBehavior trait, AgentDecision, ActionResult.
 
+use super::archive::WorldEvent;
 use serde::{Deserialize, Serialize};
 
 use oasis7_wasm_abi::AgentCommandResponse;
@@ -8,7 +9,7 @@ use super::continuous_agent_harness::{
     ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
 };
 use super::decision_provider::MemoryWriteIntent;
-use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
+use super::kernel::{Observation, RejectReason, WorldEventKind};
 use super::types::{Action, ActionId, WorldTime};
 
 // ============================================================================

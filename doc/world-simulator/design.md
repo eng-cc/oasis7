@@ -12,6 +12,10 @@
 
 宿主通过显式拆分、重组方法保存内核值与归档扩展；拆出原生内核状态不是删除扩展的授权。完整归档的读取、编辑和回写必须同时保留扩展，不能把原生快照或裁剪的读取视图当作完整归档。内核导出/恢复只消费自身字段，旧归档适配承担扩展所有权，持久化兼容回归覆盖非空 Runtime、player、chain 字段及关联事件。
 
+内核 journal、step 和 replay 使用原生事件。宿主 `WorldKernel` 封装持有完整历史事件并同步所有可变入口，不提供绕过同步的可变内核引用；旧规则回调仍读取完整宿主日志。直接 `WorldKernel` serde 保留旧字段布局与缺省值，进程内 hook/compiler 不进入编码。
+
+加载后普通保存保留宿主提供的 Runtime/player 扩展及原 committed-cut chain 证据，不按缺省链身份重建或伪造新提交；显式 `snapshot_with_chain_resource_context` 才负责按调用者提供的上下文重新派生 chain 字段。原本完全由纯内核缺省上下文生成的归档继续随内核状态更新派生字段。
+
 ## Source compiler 宿主能力
 
 源码编译通过 `oasis7_agent_api::module_source::ModuleSourceCompiler` 接收模块标识与既有源码包，返回 WASM bytes 或保持原分类的错误。文件、进程、环境与超时处理归宿主；内核只在原动作执行阶段调用能力，然后沿既有部署规则记录产物 bytes/hash。进程内 compiler hook 不进入快照；journal replay 应只消费已记录的产物，不再次编译。现有 native 宿主安装开发 compiler，WASM 缺省保持不可用错误；外部能力不是玩家准入或部署权限。Runtime 的 production release 禁编译策略继续在调用前生效。

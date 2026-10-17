@@ -1,4 +1,6 @@
 //! AgentRunner: multi-agent scheduling, quota, rate limiting, metrics.
+use super::WorldKernel;
+use super::archive::WorldEvent;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -7,7 +9,7 @@ use std::time::{Duration, Instant};
 use super::agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
 };
-use super::kernel::{WorldEvent, WorldEventKind, WorldKernel};
+use super::kernel::WorldEventKind;
 use super::runtime_perf::{RuntimePerfCollector, RuntimePerfSnapshot};
 use super::types::{Action, WorldTime};
 

@@ -1,9 +1,5 @@
 use crate::geometry::GeoPos;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::runtime::WorldEvent as RuntimeWorldEvent;
 use serde::{Deserialize, Serialize};
-#[cfg(target_arch = "wasm32")]
-use serde_json::Value as RuntimeWorldEvent;
 use std::collections::BTreeMap;
 
 use super::super::chunking::ChunkCoord;
@@ -16,7 +12,7 @@ use super::super::social::{
 use super::super::types::{
     Action, ActionId, AgentId, ChunkResourceBudget, FacilityId, FragmentElementKind, LocationId,
     LocationProfile, ModuleInstallTarget, PowerOrderSide, ResourceKind, ResourceOwner,
-    ResourceStock, WorldEventId, WorldTime,
+    ResourceStock, WorldTime,
 };
 use super::super::world_model::{
     AgentPromptProfile, InstalledModuleState, Location, ModuleArtifactBidState,
@@ -110,14 +106,7 @@ pub struct ObservedSocialState {
 // Event Types
 // ============================================================================
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorldEvent {
-    pub id: WorldEventId,
-    pub time: WorldTime,
-    pub kind: WorldEventKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_event: Option<RuntimeWorldEvent>,
-}
+pub use super::super::kernel_snapshot::KernelEvent as WorldEvent;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FragmentReplenishedEntry {

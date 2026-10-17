@@ -134,3 +134,61 @@ fn native_replay_keeps_original_host_event_bytes_on_archive_rewrite() {
         cbor
     );
 }
+
+#[test]
+fn host_archive_extensions_survive_pending_actions_and_pre_action_hooks() {
+    let world = runtime_fixture();
+    let mut snapshot = WorldKernel::new().snapshot();
+    snapshot.runtime_snapshot = Some(world.snapshot());
+    snapshot.chain_resource_manifest.world_id = "committed-world".into();
+    snapshot.chain_resource_manifest.chain_id = "committed-chain".into();
+    snapshot.chain_resource_manifest.genesis_ref = Some("original-genesis".into());
+    snapshot.chain_resource_manifest.created_at_block_hash = Some("original-block".into());
+    snapshot.chain_resource_manifest.refresh_hashes();
+    snapshot.latest_chain_resource_delta.commit_block_hash = Some("original-block".into());
+    let expected_extensions = snapshot.clone().into_kernel_parts().1;
+    let journal = crate::simulator::WorldJournal {
+        version: crate::simulator::JOURNAL_VERSION,
+        events: vec![WorldEvent {
+            id: 0,
+            time: 9,
+            kind: WorldEventKind::RuntimeEvent {
+                kind: "original-runtime-event".into(),
+                domain_kind: None,
+            },
+            runtime_event: Some(world.journal().events.last().unwrap().clone()),
+        }],
+    };
+    let original_runtime = journal.events[0].runtime_event.clone();
+    let mut kernel = WorldKernel::replay_from_snapshot(snapshot, journal).unwrap();
+    let hook_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed = hook_called.clone();
+    kernel.add_pre_action_rule_hook(move |id, _, view: &WorldKernel| {
+        assert_eq!(view.journal()[0].runtime_event, original_runtime);
+        observed.store(true, std::sync::atomic::Ordering::SeqCst);
+        crate::simulator::KernelRuleDecision::allow(id)
+    });
+    kernel.submit_action(crate::simulator::Action::RegisterLocation {
+        location_id: "host-boundary".into(),
+        name: "Host boundary".into(),
+        pos: GeoPos::new(0, 0, 0),
+        profile: Default::default(),
+    });
+    assert_eq!(kernel.snapshot().into_kernel_parts().1, expected_extensions);
+    kernel.step().unwrap();
+    assert!(hook_called.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(kernel.snapshot().into_kernel_parts().1, expected_extensions);
+    assert_eq!(
+        kernel.journal().len(),
+        kernel.kernel_journal_snapshot().events.len()
+    );
+    assert!(kernel.journal()[0].runtime_event.is_some());
+    assert!(kernel.journal().last().unwrap().runtime_event.is_none());
+    let encoded = serde_json::to_vec(&kernel).unwrap();
+    let restored: WorldKernel = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(serde_json::to_vec(&restored).unwrap(), encoded);
+    assert_eq!(restored.journal(), kernel.journal());
+    let cbor = serde_cbor::to_vec(&kernel).unwrap();
+    let restored: WorldKernel = serde_cbor::from_slice(&cbor).unwrap();
+    assert_eq!(serde_cbor::to_vec(&restored).unwrap(), cbor);
+}

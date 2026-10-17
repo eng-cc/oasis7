@@ -19,7 +19,9 @@ mod replay;
 mod replay_module_lifecycle;
 mod replay_power_market;
 mod social;
+mod state;
 mod step;
+pub use state::KernelState;
 mod types;
 
 use oasis7_wasm_abi::{
@@ -542,7 +544,6 @@ impl WorldKernel {
             id: self.next_event_id,
             time: self.time,
             kind,
-            runtime_event: None,
         };
         self.next_event_id = self.next_event_id.saturating_add(1);
         self.journal.push(event.clone());
