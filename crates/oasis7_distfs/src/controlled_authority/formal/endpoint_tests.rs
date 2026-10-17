@@ -927,3 +927,29 @@ mod artifact_cas_tests;
 
 #[path = "endpoint_durable_set_copy_graph_tests.rs"]
 mod durable_set_copy_graph_tests;
+
+#[test]
+fn typed_store_reads_packed_objects_and_reuses_their_logical_identity() {
+    let fixture = Fixture::new();
+    let endpoint = fixture.endpoint(EndpointRole::Primary);
+    let value = vec![42u64; 128];
+    let bytes = serde_cbor::to_vec(&value).unwrap();
+    let digest = blake3::hash(&bytes).to_hex().to_string();
+    let writes = vec![super::super::business_index::BusinessIndexNodeWriteV1 {
+        digest: digest.clone(),
+        bytes: bytes.clone(),
+    }];
+    endpoint.store.persist_business_nodes(&writes).unwrap();
+    assert_eq!(endpoint.store.get::<Vec<u64>>(&digest).unwrap(), value);
+    assert_eq!(endpoint.store.put(&value).unwrap(), digest);
+    assert_eq!(endpoint.store.raw_object(&digest).unwrap().unwrap(), bytes);
+    let mut physical =
+        fs::read(endpoint.store.path.join("formal-objects-v1").join(&digest)).unwrap();
+    *physical.last_mut().unwrap() ^= 1;
+    fs::write(
+        endpoint.store.path.join("formal-objects-v1").join(&digest),
+        physical,
+    )
+    .unwrap();
+    assert!(endpoint.store.get::<Vec<u64>>(&digest).is_err());
+}

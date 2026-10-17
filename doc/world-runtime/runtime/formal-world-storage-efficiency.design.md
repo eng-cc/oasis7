@@ -360,6 +360,22 @@ Trace refs: O7-REQ-87c0cd77-0b20-4eba-90ff-5a492e85b3a0；承接 [REQ-LWS-006](.
 <a id="storage-efficiency-rollout"></a>
 ### 10.2 分阶段实施及退出门槛
 
+现行前置入口：`oasis7_distfs::storage_inventory::inventory_storage` 及 `storage_inventory` example 提供只读分域 inode/allocated 基线，使用边界见[容量入口](formal-world-storage-efficiency.manual.md#v-lws-capacity)。这是 S0 的本地物理计量子范围，尚未覆盖运行时 typed root/pin 完整盘点或真实世界基准。
+
+S1 的既有表示读取统一由 `business_pack::read_object` 承接本地 raw/pack，`Store::get` 在逻辑 bytes 校验后解码，`Store::put` 重复检查比较逻辑 bytes；没有改变 canonical serializer 或写入格式。下表是后续新 codec 启用前必须继续维护的消费者边界，不能将 raw/pack 通过视为新 codec 已支持。
+
+| 消费者 | 现行入口与边界 |
+| --- | --- |
+| typed 状态、request/history/index | `endpoint_store.rs` 的 get/put → raw_object → business_pack::read_object；归档返回后仍校验 64 MiB 和 hash |
+| raw 与 committed material | Store::raw_object、endpoint_archive_file.rs → business_pack::read_object；逻辑对象逐 hash 校验 |
+| range / chunk / 本地 archive | endpoint_store_native.rs、endpoint_chunk.rs、endpoint_archive_file.rs → business_pack::read_range；保持原分片认证合同 |
+| registered durable readback | endpoint_store_durable_set_copy.rs → read_object_durable_once；每对象校验、每 inode 同步 |
+| RPC / transfer / remote archive | endpoint_archive_transfer.rs、transport/client.rs；消费逻辑 bytes/chunk，不把物理 pack 传为逻辑对象 |
+| offline/published / native restore | 上述逻辑接口的消费者；大 envelope 与完整闭包预算、逐调用审计及新格式能力 gate 仍未完成 |
+
+上述前置子范围不启用压缩、recipe、迁移或回收；S0/S1 整体退出条件仍按下表和 §11 验证，正式写入保持原表示。
+
+
 阶段是技术依赖顺序，可在后续实现交付中合并处理，不新增 workflow、审批次数或每阶段强制 PR。本文这次文档交付不执行迁移、不删除运行数据。
 
 S0–S3 的物理优化与生命周期治理可按已验证范围独立交付、部署。S4 完整 delta 与 S5 Merkle v2 可以分别后置，彼此也不作为物理优化的前置条件。S6 对本次实际启用的子集执行全部适用部署验收；未启用能力维持原数据/格式与必要限制，明确标为未验证，不要求等待所有逻辑演进后才能部署已通过的物理优化。

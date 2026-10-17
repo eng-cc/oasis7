@@ -32,6 +32,7 @@ mod feedback_p2p;
 mod manifest;
 mod pin_store;
 mod replication;
+pub mod storage_inventory;
 
 pub use challenge::*;
 pub use challenge_scheduler::*;

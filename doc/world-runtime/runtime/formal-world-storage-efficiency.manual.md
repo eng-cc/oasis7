@@ -133,6 +133,22 @@
 <a id="v-lws-capacity"></a>
 ## 9. V-LWS-CAPACITY：相同完整历史的实际用量
 
+### 本地物理基线入口（S0 子范围）
+
+在冻结写入的本地验证副本上运行：
+
+```bash
+env -u RUSTC_WRAPPER cargo run --locked -p oasis7_distfs --example storage_inventory -- \
+  primary=/absolute/primary-storage-root replica=/absolute/replica-storage-root
+```
+
+每个 `DOMAIN=PATH` 必须覆盖该端点全部纳入本次比较的本地数据（含 attempt、archive、staging 和旧表示）；根目录以外的存储需单独纳入清单并补充计量。相同域内使用一个共同根，不能把重叠子目录当独立域相加。独立域标签由操作者声明，工具不能证明设备或服务独立。
+
+JSON 分域报告 file_paths、unique_files、directories、apparent_bytes、unique_apparent_bytes 和 allocated_bytes。Unix 使用 device/inode 去重，每个 inode 的 `st_blocks * 512` 计入 allocated（含目录），域间不去重。apparent 是所有文件名的长度和；unique_apparent 仍是文件长度，不代表分配量。目录项/权限/元数据错误、缺失根、symlink 和特殊文件产生 errors、`complete=false` 及退出码 1；参数错误返回 2。非 Unix 缺 inode/分配计量能力也返回 incomplete，不能用零代替。符号链接不跟随，需提供受控实际目录并显式记录覆盖范围。
+
+遍历是只读的非原子采样，需要静止树；inode 集合与待遍历路径/错误列表随扫描规模占用内存，超大目录应预留资源，本入口不声称端到端有界历史遍历能力；不调用 GC，不判断根/pin 存活，也不对完整历史作认证。硬链接之外的共享 extent、透明压缩、远端计费和打开但已 unlink 的 inode 不由本工具精确归因，须按 §9 步骤补充原生统计。工具通过不等于完整 V-LWS-CAPACITY 通过；真实负载、写入/峰值/延迟、历史完整性与独立故障域仍须联合验证。
+
+
 **输入**：等同正式历史、负载、原结果、存储角色及独立保障的基线/优化候选；覆盖空 Tick/稳定模块、小修改大 snapshot、活跃工业/结算历史和跨冷热窗口，固定采样点。
 
 1. 在开始、稳定提交边界、归档后、迁移峰值、重启/失败恢复后及 pins 解除后采样；记录所有范围内目录、P/R、冷归档、attempt、staging、旧代与未完成回收。

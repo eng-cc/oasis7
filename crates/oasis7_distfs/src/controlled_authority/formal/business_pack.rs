@@ -62,6 +62,16 @@ fn raw_or_invalid(
 }
 fn open(path: &Path, id: &str) -> Result<Option<ObjectFile>, FormalError> {
     hash_hex(id)?;
+    // Preserve the regular-path boundary on platforms without O_NOFOLLOW.
+    // Unix also checks the descriptor below and closes the lookup/open race.
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(invalid("logical CAS path is not a regular file"));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io(error)),
+    }
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]

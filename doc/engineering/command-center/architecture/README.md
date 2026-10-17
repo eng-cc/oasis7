@@ -82,7 +82,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-06：局部双端持久证明不等于正式 CommitRef，若干原子发布切片不等于整个 World 的根事务；同机双目录不能证明独立故障域。
 - ARCH-07：已有 execution bridge v3、CAS、sidecar、retention/GC/replay 的实现合同；[本地恢复边界](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary)不证明分布式可得性或完整灾备。
 
-ARCH-07 局部设计核对（2026-10-17，文档基线 `4220622fde069346a828d42572eea61c0073d95e`）：[实施阶段与退出条件](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-rollout)先验证原字节物理共享/压缩与安全回收，再独立评估完整状态增量和 Merkle v2；当前原语、目标合同及待验收范围分别列在[现状与差距](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-current-gap)。该局部摘要不表示新 codec、attempt 回收或容量收益已实现/测得，部署与独立故障域证据保持未核验。
+ARCH-07 局部设计核对（2026-10-17，文档基线 `4220622fde069346a828d42572eea61c0073d95e`）：[实施阶段与退出条件](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-rollout)先验证原字节物理共享/压缩与安全回收，再独立评估完整状态增量和 Merkle v2；当前原语、目标合同及待验收范围分别列在[现状与差距](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-current-gap)。S0 已有[只读本地容量入口](../../../world-runtime/runtime/formal-world-storage-efficiency.manual.md#v-lws-capacity)，按域区分文件长度与 inode 分配并报告不完整扫描；S1 已统一 typed 与 raw 的既有 pack 读取。该子范围不表示新 codec、attempt 回收或容量收益已实现/测得，部署与独立故障域证据保持未核验。
 
 节点生命周期实现（2026-10-17 核对）：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。代码已合入（`da890a9125a435969b82f5a14ab3c9143cc0690e`）；具体历史验证范围以实施 PR 与 runbook 为准，当前部署与独立故障域未核验。
 
