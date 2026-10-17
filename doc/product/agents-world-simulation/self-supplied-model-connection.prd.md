@@ -10,7 +10,7 @@
 - 生命周期：`active`
 - 文档状态：目标产品合同，不是当前可用性公告。
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-16
+- Last reviewed：2026-10-17
 - 专业域权威：[LLM/provider](../../world-simulator/llm/README.md)；[模型连接系统设计](../../world-simulator/llm/self-supplied-model-connection.design.md)
 - 适用入口：受支持部署的主 Web `viewer`；Launcher 可复用同一配置入口，不产生新玩家访问模式。
 
@@ -36,7 +36,7 @@
 
 ### 1.3 依据与假设
 
-需求来自已有模型账户玩家的低摩擦接入场景。固定审读基线为 `nil-studio/oasis7@35961e32b7e7ad3469b7cd7db2e718fb1d6795b1`：已有第一方客户端分层目标和模型调用组件；尚无本专题完整网页体验的已验证证据。具体源码差距见[系统设计当前状态](../../world-simulator/llm/self-supplied-model-connection.design.md#current-state)。不推定服务端、Key 托管、两家真实调用或浏览器跨域已经可用。
+需求来自已有模型账户玩家的低摩擦接入场景。当前核对基线为 `nil-studio/oasis7@ed8d201059f84b8bebd04421e1fd0f56008bec11`：受控 Launcher 的网页模型连接和第一方执行链已交付，具体状态见下列功能点；普通玩家冷入口、两家真实供应商完整组合及网页端到端结果理解仍未由本轮证明。已有合法账号、SDK 设备登记、活动任务和执行端配置是当前受控入口的前置，模型 Key 不替代游戏授权。专业边界见[运行说明](../../world-simulator/llm/byok-model-consumption.runbook.md)。
 
 ## 2. 范围与 Non-Goals
 
@@ -77,10 +77,10 @@ Trace ID: O7-REQ-a95a56b1-22b6-4955-b152-0c672310ddb8
 - 验收：[AC-BYOK-001](#ac-byok-001)。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-001](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-001)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实
-- 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
-- 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
-- 剩余范围：模型连接表单、预设、能力发现、真实网页路径均待实现/取证。
+- 实现状态：部分实现
+- 实现与验证依据：[PR #4788](https://github.com/nil-studio/oasis7/pull/4788) 已交付主 Web Command Surface 中的模型连接面板、部署能力发现、供应商/模型预设、检查与显式开始；[PR #4812](https://github.com/nil-studio/oasis7/pull/4812)继续交付执行与恢复切片。当前连接入口和未配置部署拒绝接收 Key 的实现可定位到[面板源码](https://github.com/nil-studio/oasis7/blob/ed8d201059f84b8bebd04421e1fd0f56008bec11/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx)。
+- 核对日期与基线：2026-10-17；需求与实现源码 `ed8d201059f84b8bebd04421e1fd0f56008bec11`；受控 Launcher/Web 入口的固定源码及既有 PR 证据审读，本轮未运行测试、模型、浏览器或部署；历史实跑只代表其原候选。
+- 剩余范围：已交付连接表单与能力发现，不再列为未实现；当前仅核实受控 Launcher 接线。普通玩家冷入口到合法任务的完整组合、实际部署与两家真实供应商网页验收仍待取证。
 
 <a id="req-byok-002"></a>
 
@@ -97,10 +97,10 @@ Trace ID: O7-REQ-26cefe7a-deb5-4b21-845a-a2d4556f7dca
 - 验收：[AC-BYOK-002](#ac-byok-002)。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-002](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-002)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实
-- 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
-- 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
-- 剩余范围：凭证隔离、销毁、日志脱敏和预算边界需要安全评审及负向验证。
+- 实现状态：部分实现
+- 实现与验证依据：[PR #4788](https://github.com/nil-studio/oasis7/pull/4788) 与[PR #4812](https://github.com/nil-studio/oasis7/pull/4812) 已交付凭证接收方/执行位置/费用说明、会话内凭证、断开忘记、租约及预算约束；[运行说明](../../world-simulator/llm/byok-model-consumption.runbook.md)限定账号/设备边界、凭证销毁与未知用量保守计入。实现存在不代签全部凭证安全和跨账号组合验收。
+- 核对日期与基线：2026-10-17；需求与实现源码 `ed8d201059f84b8bebd04421e1fd0f56008bec11`；受控 Launcher/Web 入口的固定源码及既有 PR 证据审读，本轮未运行测试、模型、浏览器或部署；历史实跑只代表其原候选。
+- 剩余范围：历史局部安全评审/负向测试证据只支持原候选；当前真实部署、跨账号/多标签页、换 Key 与在途调用组合的完整覆盖尚未核实；路由与数据去向的全量产品覆盖未由本轮核实，不据局部实现声称全部完成。
 
 <a id="req-byok-003"></a>
 
@@ -117,10 +117,10 @@ Trace ID: O7-REQ-84294c93-3275-4d19-8faf-389950b87464
 - 验收：[AC-BYOK-003](#ac-byok-003)。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-003](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-003)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实
-- 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
-- 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
-- 剩余范围：同一游戏客户端接线、会话租约、任务委托和世界回执联动待验证。
+- 实现状态：部分实现
+- 实现与验证依据：[PR #4788](https://github.com/nil-studio/oasis7/pull/4788) 与[PR #4812](https://github.com/nil-studio/oasis7/pull/4812) 已交付模型/执行状态分离、显式开始、会话租约和服务端 fresh task fence 校验；当前[主控制面目标展示](https://github.com/nil-studio/oasis7/blob/ed8d201059f84b8bebd04421e1fd0f56008bec11/crates/oasis7_viewer/software_safe_src/viewer_app.jsx)及[实际投入/产出卡](https://github.com/nil-studio/oasis7/blob/ed8d201059f84b8bebd04421e1fd0f56008bec11/crates/oasis7_viewer/software_safe_src/industrial_starter_outcome_card.jsx)也已存在，各自实现不归为本轮新增。网页只提交 Agent 引用，由服务端读取当前签名任务，是现行授权边界；尚未证明所显示目标与实际任务目标的端到端对应，不能据此认定错误目标已执行。
+- 核对日期与基线：2026-10-17；需求与实现源码 `ed8d201059f84b8bebd04421e1fd0f56008bec11`；受控 Launcher/Web 入口的固定源码及既有 PR 证据审读，本轮未运行测试、模型、浏览器或部署；历史实跑只代表其原候选。
+- 剩余范围：网页所见目标与实际签名任务目标的对应、世界回执与本次运行的精确关联仍缺整合验收；已有目标与成果卡不等于任意 BYOK 未知原件的结果证明。没有证据把服务端 fresh fence 判作绕权；本次不增设客户端 task revision 合同。 后续整合与验收见 [Issue #4836](https://github.com/nil-studio/oasis7/issues/4836)。
 
 <a id="req-byok-004"></a>
 
@@ -137,10 +137,10 @@ Trace ID: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34
 - 验收：[AC-BYOK-004](#ac-byok-004)。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-004](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-004)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实
-- 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
-- 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
-- 剩余范围：停用/重启/多标签页/在途调用与原操作恢复的组合验证待完成。
+- 实现状态：部分实现
+- 实现与验证依据：[PR #4812](https://github.com/nil-studio/oasis7/pull/4812) 已交付 Stop 运行代撤销、迟到结果隔离、原 operation 全槽核对、同 run 持久预算，以及严格过期 Context 以原身份 committed context_expired 收口后的新决策路径。上述能力与[运行说明披露的同 Context 必要历史恢复缺口](../../world-simulator/llm/byok-model-consumption.runbook.md)分别成立：provider conversation 仍仅存于实例，runner/provider 重建不恢复此前必要工具/会话历史。
+- 核对日期与基线：2026-10-17；需求与实现源码 `ed8d201059f84b8bebd04421e1fd0f56008bec11`；受控 Launcher/Web 入口的固定源码及既有 PR 证据审读，本轮未运行测试、模型、浏览器或部署；历史实跑只代表其原候选。
+- 剩余范围：同一未过期 Context 的必要工具/会话历史跨 runner/provider 生命周期仍有已知实现与验证缺口；同实例测试不能代签重建后恢复。网页未知原件的只读核对或明确入口限制/受支持安全下一步仍待整合验收，不能仅因缺查询按钮报新 bug，也不能把“刷新连接状态”或重新开始当作只读世界原件查询。Stop、持久预算、权限 fence 与过期收口已有实现，不因此降为未实现。 后续分别见[网页整合 #4836](https://github.com/nil-studio/oasis7/issues/4836)与[必要历史恢复 #4837](https://github.com/nil-studio/oasis7/issues/4837)。
 
 <a id="req-byok-005"></a>
 
@@ -157,10 +157,10 @@ Trace ID: O7-REQ-e0ae0d80-31ca-488b-8ba2-a728bfb9ce8d
 - 验收：[AC-BYOK-005](#ac-byok-005)。
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-BYOK-005](../../world-simulator/llm/self-supplied-model-connection.design.md#des-byok-005)及其验证映射承接本条目标；不代表实现或安全评审已通过。
-- 实现状态：未核实
-- 实现与验证依据：本次仅交付设计；既有通用调用组件不能证明本条端到端行为。
-- 核对日期与基线：2026-10-16；`35961e32b7e7ad3469b7cd7db2e718fb1d6795b1` 远程源码/文档审读，无真实 Key、浏览器或部署验收。
-- 剩余范围：两个真实供应商、所选模型/协议、实际部署及浏览器的独立证据待取得。
+- 实现状态：部分实现
+- 实现与验证依据：[PR #4788](https://github.com/nil-studio/oasis7/pull/4788) 与[PR #4812](https://github.com/nil-studio/oasis7/pull/4812) 已交付供应商/模型预设、工具协议能力检查及固定失败分类和网页安全诊断；历史受控 DeepSeek 实际调用只支持原候选/场景，不能代签 OpenRouter、全部模型路由或本轮主干的完整可玩性。
+- 核对日期与基线：2026-10-17；需求与实现源码 `ed8d201059f84b8bebd04421e1fd0f56008bec11`；受控 Launcher/Web 入口的固定源码及既有 PR 证据审读，本轮未运行测试、模型、浏览器或部署；历史实跑只代表其原候选。
+- 剩余范围：两家供应商及具体模型/协议/路由的独立工具闭环、真实网页和失败组合证据仍不完整；受控 DeepSeek、prepared StarterChain 或单一供应商成功不能证明完整支持或正式发行。
 
 ## 5. 验收与证据
 

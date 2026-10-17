@@ -69,7 +69,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 | ARCH-04 · 单权威到 BFT | 首次开放采用受控单权威持久世界；BFT 并行研发，后续在同世界 H/H+1 交接激活写权 | 决定首次开放、切换 signer/epoch、扩展权威集合或改变保留承诺 | [当前阶段](../../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[权威 profiles](../../../p2p/design.md#des-p2p-authority-profiles) |
 | ARCH-05 · 服务分工 | P2P 维护合法提交证明，runtime 确定性执行，game/Agent/Viewer 提交意图和消费已提交状态；链进程入口位于独立 `oasis7_chain_runtime`，纯投影证明位于 `oasis7_client_api`，世界执行适配仍归只提供库的 `oasis7`；其余 21 个入口按 bridge/provider/launcher/client/ops/viewer 职责归独立包，共享策略、观测和 credit adapter 归独立库；Launcher 解析归 `oasis7_launcher_config`、Viewer 网络服务归 `oasis7_viewer_runtime`、WASM 获取/构建归 `oasis7_wasm_materializer`，独立 formal read 验证归客户端层，Web Viewer 不承担完整节点职责（2026-10-17 源码核对；未核对部署） | 拆服务/进程、加网关、改模块归属或引入第二条执行路径 | [执行分层](../../../world-runtime/design.md#3-目标设计结构)、[P2P 边界](../../../p2p/design.md#4-边界与结构)、[高层架构](../../../../README.md#高层架构) |
 | ARCH-06 · 写入与持久 | accepted、prepare、committed 分开；正式确认依赖完整记录和决定跨独立故障域持久，未知提交先查原请求 | 改存储、超时重试、写者隔离，或决定故障期间是否继续写入 | [双端持久前置](../../../p2p/design.md#des-p2p-replicated-durability-prerequisite)、[runtime 提交与恢复](../../../world-runtime/design.md#runtime-authority-commit-recovery-target) |
-| ARCH-07 · 保留与恢复 | replay log、checkpoint、snapshot 分工；GC 不破坏保留范围的重建，同世界只读恢复不自动恢复写服务 | 调保留/磁盘预算、清理迁移数据、选择归档方案或灾备切换 | [存储层次](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#4-technical-specifications)、[重新服务边界](../../../product/world-infrastructure/prd.md#恢复后的重新服务闸门) |
+| ARCH-07 · 保留与恢复 | 正式持久世界保留完整合法历史；物理共享、压缩及冷热策略保持原字节、恢复依赖与独立副本。存储 profile 不授予删历史权限，同世界只读恢复不自动恢复写服务 | 调磁盘预算、回收临时材料、改变物理格式或执行迁移与灾备切换 | [完整历史产品要求](../../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001)、[无损存储设计](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#des-lws-001)、[重新服务边界](../../../product/world-infrastructure/prd.md#恢复后的重新服务闸门) |
 
 **设计状态：** 本组是当前主责文档声明的路线与目标合同；正式 profile、完整事务和灾备目标不能因为已有前置切片而标为已验收。
 
@@ -81,6 +81,8 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - ARCH-05：已有有序动作、roots、execution records、checkpoint/replay 及多种 prepare/publish 路径；[当前实现边界](../../../world-runtime/design.md#5-current-implementation-boundary-and-target-gap)仍明确整体能力为 partial。
 - ARCH-06：局部双端持久证明不等于正式 CommitRef，若干原子发布切片不等于整个 World 的根事务；同机双目录不能证明独立故障域。
 - ARCH-07：已有 execution bridge v3、CAS、sidecar、retention/GC/replay 的实现合同；[本地恢复边界](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary)不证明分布式可得性或完整灾备。
+
+ARCH-07 局部设计核对（2026-10-17，文档基线 `4220622fde069346a828d42572eea61c0073d95e`）：[实施阶段与退出条件](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-rollout)先验证原字节物理共享/压缩与安全回收，再独立评估完整状态增量和 Merkle v2；当前原语、目标合同及待验收范围分别列在[现状与差距](../../../world-runtime/runtime/formal-world-storage-efficiency.design.md#storage-efficiency-current-gap)。该局部摘要不表示新 codec、attempt 回收或容量收益已实现/测得，部署与独立故障域证据保持未核验。
 
 节点生命周期实现（2026-10-17 核对）：[PR #4683](https://github.com/eng-cc/oasis7/pull/4683) 接通原请求持久恢复、健康集合转换与可续做节点生命周期；本机验证范围和平台/部署 TODO 见[实施边界](../../../p2p/blockchain/persistent-world-node-lifecycle.runbook.md)。代码已合入（`da890a9125a435969b82f5a14ab3c9143cc0690e`）；具体历史验证范围以实施 PR 与 runbook 为准，当前部署与独立故障域未核验。
 
@@ -149,7 +151,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - [PR #4563](https://github.com/eng-cc/oasis7/pull/4563)：固定 Codex CLI 0.137.0 的可选实验执行、原请求身份、未知结果与退出管理；真实握手/receipt 有记录，但没有成功模型输出证明。
 - [PR #4572](https://github.com/eng-cc/oasis7/pull/4572)：读取显式规范后继、保留历史版本和来源理由；记录了原生界面与重启恢复验证。
 - 首页的[来源阅读降级入口](../../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)复用既有文档索引和来源详情，分别提示缺失摘要；不新增后台来源、执行动作或聚合判断。四区首页及完整用户任务仍未验收。
-- 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#3-des-cc-tree-001文件关系与树投影)。类别不推导实现状态，目录生命周期、类型和显式配对缺口筛选沿已发布清单投影，不改变源声明。
+- 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#DES-CC-TREE-001)。类别不推导实现状态，目录生命周期、类型和显式配对缺口筛选沿已发布清单投影，不改变源声明。
 - 2026-10-15 候选源码核对：[文件清单](../../../../tools/oasis7-command-center/core/src/document_inventory.rs)沿现有有界扫描保留逐文件读取/遗漏记录，使用独立版本化 cache key，与章节/搜索同事务发布；原 Snapshot shape 和数据库 schema 版本不变。有限 DTO 查询核对项目、来源版本/代次、章节摘要及分页筛选，规范视图可查阅缺口。独立树快照/attempt、固定提交及关系投影仍待实施，见[实施范围](../document-tree.design.md#111-验证映射表)；真实宿主与交互验证范围归实现 PR。
 - 个人决定、阅读记录和未决操作与可重建缓存分开；启用连接不代表授权任务，恢复不自动重发未知副作用。
 
