@@ -1,5 +1,6 @@
 //! Independently held endpoint keys, full material durability and canonical heads.
 use super::{crypto::*, *};
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 use crate::controlled_authority::replicated_protocol::EndpointRole;
 #[cfg(test)]
 use ed25519_dalek::Signer;
@@ -59,34 +60,8 @@ pub(crate) use native_rpc::verify_formal_rpc_checkpoint;
 #[path = "endpoint_tests.rs"]
 mod tests;
 
-/// Crate-internal provenance for bounded revalidation. This is constructed only
-/// after the endpoint signature, pinned monotonic progress and referenced CAS
-/// objects have been checked; raw record callers cannot mint it.
-pub(crate) struct NativeCheckpointVerdictV1 {
-    proof: FormalQualifiedCommitProofV1,
-    parent: Option<CheckpointParent>,
-    head: FormalHeadRefV1,
-    authority_id: String,
-}
-impl NativeCheckpointVerdictV1 {
-    pub(crate) fn proof(&self) -> &FormalQualifiedCommitProofV1 {
-        &self.proof
-    }
-    pub(crate) fn verified_parent_record(&self) -> Option<&CanonicalRecordV1> {
-        self.parent.as_ref().map(|parent| &parent.record)
-    }
-    pub(crate) fn verified_parent_finalizing_authority_id(&self) -> Option<&str> {
-        self.parent
-            .as_ref()
-            .map(|parent| parent.finalizing_authority_id.as_str())
-    }
-    pub(crate) fn head(&self) -> &FormalHeadRefV1 {
-        &self.head
-    }
-    pub(crate) fn authority_id(&self) -> &str {
-        &self.authority_id
-    }
-}
+// Checked byte provenance lives with the independent proof constructors.
+pub(crate) use oasis7_formal_protocol::controlled_authority::formal::proof::NativeCheckpointVerdictV1;
 
 pub(super) fn fencing_error(error: fencing::FencingError) -> FormalError {
     match error {
@@ -222,7 +197,7 @@ impl FileFormalEndpoint {
             return Err(FormalError::FencingUnproven);
         }
         let _guard = endpoint.guard()?;
-        endpoint.reload_parent()?;
+        endpoint.reload_parent(&_guard.evidence().map_err(fencing_error)?)?;
         endpoint.verify_business_checkpoint()?;
         Ok(endpoint)
     }
@@ -301,7 +276,10 @@ impl FileFormalEndpoint {
         }
         result
     }
-    fn reload_parent(&mut self) -> Result<(), FormalError> {
+    fn reload_parent(
+        &mut self,
+        provider: &fencing::MonotonicProviderEvidenceV1,
+    ) -> Result<(), FormalError> {
         if let Some(entry) = self.store.head_entry()? {
             let FormalRequestStateV1::Qualified { candidate, proof } = entry else {
                 return Err(invalid("formal checkpoint qualified entry"));
@@ -348,18 +326,41 @@ impl FileFormalEndpoint {
             } else {
                 self.store.body.base_parent.clone()
             };
-            let verdict = NativeCheckpointVerdictV1 {
-                proof,
-                parent,
-                head: self.store.body.head.clone(),
-                authority_id: self.authority.authority_id()?,
+            let checkpoint_bytes = self.store.checkpoint_bytes()?;
+            let instance = match self.role {
+                EndpointRole::Primary => &self.authority.definition().primary.instance,
+                EndpointRole::Replica => &self.authority.definition().replica.instance,
             };
-            let original = if verdict.proof.decision.branch == FormalCompletionBranchV1::Normal {
+            let verdict = NativeCheckpointVerdictV1::verify(
+                &checkpoint_bytes,
+                &self.authority,
+                &instance.endpoint_public_key,
+                &self.store.checkpoint,
+                provider,
+                &self.store.body.head,
+                &self.store.body.head,
+                &self.authority.authority_id()?,
+                |id| {
+                    self.store
+                        .raw_object(id)?
+                        .ok_or_else(|| invalid("native checkpoint object missing"))
+                },
+            )?;
+            if verdict.proof() != &proof
+                || verdict.verified_parent_record() != parent.as_ref().map(|p| &p.record)
+                || verdict.verified_parent_finalizing_authority_id()
+                    != parent.as_ref().map(|p| p.finalizing_authority_id.as_str())
+            {
+                return Err(invalid(
+                    "native checked checkpoint context differs from held storage",
+                ));
+            }
+            let original = if verdict.proof().decision.branch == FormalCompletionBranchV1::Normal {
                 &self.authority
             } else {
                 &self.original
             };
-            let recovery = (verdict.proof.decision.branch != FormalCompletionBranchV1::Normal)
+            let recovery = (verdict.proof().decision.branch != FormalCompletionBranchV1::Normal)
                 .then_some(self.recovery.as_ref())
                 .flatten();
             self.parent = Some(restore_formal_commit_from_checkpoint(

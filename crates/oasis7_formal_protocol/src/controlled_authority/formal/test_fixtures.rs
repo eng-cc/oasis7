@@ -3,16 +3,16 @@ use crate::controlled_authority::replicated_protocol::{ArtifactRole, EndpointRol
 use ed25519_dalek::{Signer, SigningKey};
 use std::collections::BTreeMap;
 
-pub(crate) fn h(n: u8) -> String {
+pub fn h(n: u8) -> String {
     hex::encode([n; 32])
 }
-pub(crate) fn key(n: u8) -> SigningKey {
+pub fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
 }
-pub(super) fn public(n: u8) -> String {
+pub fn public(n: u8) -> String {
     hex::encode(key(n).verifying_key().to_bytes())
 }
-pub(super) fn sign(bytes: Vec<u8>, n: u8) -> String {
+pub fn sign(bytes: Vec<u8>, n: u8) -> String {
     hex::encode(key(n).sign(&bytes).to_bytes())
 }
 fn roots() -> BTreeMap<ArtifactRole, String> {
@@ -32,7 +32,7 @@ fn roots() -> BTreeMap<ArtifactRole, String> {
     .map(|(i, role)| (role, h(40 + i as u8)))
     .collect()
 }
-pub(crate) fn policy() -> RecoveryPolicyV1 {
+pub fn policy() -> RecoveryPolicyV1 {
     RecoveryPolicyV1 {
         schema_version: 1,
         recovery_issuer_public_key: public(1),
@@ -63,7 +63,7 @@ fn endpoint(role: EndpointRole, n: u8, epoch: u64) -> EndpointSignerBindingV1 {
         fault_domain_id: format!("domain-{n}"),
     }
 }
-pub(crate) fn initial() -> (
+pub fn initial() -> (
     SignedInitialActivationV1,
     VerifiedAuthorityV1,
     FormalQualifiedCommitProofV1,
@@ -71,7 +71,7 @@ pub(crate) fn initial() -> (
 ) {
     initial_with_profile(1)
 }
-pub(super) fn initial_with_profile(
+pub fn initial_with_profile(
     profile_version: u32,
 ) -> (
     SignedInitialActivationV1,
@@ -167,7 +167,7 @@ pub(super) fn initial_with_profile(
     clippy::too_many_arguments,
     reason = "The signed proof fixture keeps writer and both independent endpoint signers explicit."
 )]
-pub(super) fn proof(
+pub fn proof(
     record: CanonicalRecordV1,
     finalizer: &VerifiedAuthorityV1,
     branch: FormalCompletionBranchV1,
@@ -226,7 +226,7 @@ pub(super) fn proof(
         decision,
     }
 }
-pub(super) fn frozen(
+pub fn frozen(
     authority: &VerifiedAuthorityV1,
     cut: &VerifiedFormalCommitV1,
     handoff: Option<ProfileHandoffV1>,
@@ -292,7 +292,7 @@ pub(super) fn frozen(
         },
     }
 }
-pub(super) fn execution(
+pub fn execution(
     authority: &VerifiedAuthorityV1,
     frozen: &FormalFrozenCertificateV1,
 ) -> CanonicalRecordV1 {
@@ -325,7 +325,7 @@ pub(super) fn execution(
         handoff: body.handoff.clone(),
     }
 }
-pub(crate) fn recovery_fixture() -> (
+pub fn recovery_fixture() -> (
     VerifiedRecoveryIntent,
     VerifiedAuthorityV1,
     VerifiedFormalCommitV1,
@@ -334,7 +334,7 @@ pub(crate) fn recovery_fixture() -> (
 ) {
     recovery_fixture_for(FormalCompletionBranchV1::ReplayFrozen, None)
 }
-pub(super) fn recovery_fixture_for(
+pub fn recovery_fixture_for(
     branch: FormalCompletionBranchV1,
     handoff: Option<ProfileHandoffV1>,
 ) -> (
@@ -346,7 +346,7 @@ pub(super) fn recovery_fixture_for(
 ) {
     recovery_fixture_for_writer(branch, handoff, 10)
 }
-pub(crate) fn alternate_recovery_fixture() -> VerifiedRecoveryIntent {
+pub fn alternate_recovery_fixture() -> VerifiedRecoveryIntent {
     recovery_fixture_for_writer(FormalCompletionBranchV1::ReplayFrozen, None, 99).0
 }
 fn recovery_fixture_for_writer(
@@ -362,7 +362,7 @@ fn recovery_fixture_for_writer(
 ) {
     recovery_fixture_with_profile(branch, handoff, writer, 1)
 }
-pub(super) fn recovery_fixture_with_profile(
+pub fn recovery_fixture_with_profile(
     branch: FormalCompletionBranchV1,
     handoff: Option<ProfileHandoffV1>,
     writer: u8,
@@ -431,7 +431,7 @@ pub(super) fn recovery_fixture_with_profile(
         decision_hash: cut.head().record_id,
         qualified: true,
     };
-    let seal = fencing::test_verified_seal(
+    let seal = verified_seal(
         fencing::EpochSealBodyV1 {
             schema_version: 1,
             instance: authority.definition.primary.instance.clone(),
@@ -445,11 +445,11 @@ pub(super) fn recovery_fixture_with_profile(
             tail: sealed_tail,
             next_epoch_floor: 2,
         },
-        public(3),
+        5,
     );
     let mut replica_seal_body = seal.seal_body().clone();
     replica_seal_body.instance = authority.definition.replica.instance.clone();
-    let replica_seal = fencing::test_verified_seal(replica_seal_body, public(3));
+    let replica_seal = verified_seal(replica_seal_body, 6);
     let normal = if record.handoff.is_some() {
         None
     } else {
@@ -481,7 +481,7 @@ pub(super) fn recovery_fixture_with_profile(
             .unwrap();
     (intent, authority, cut, frozen, record)
 }
-pub(super) fn verified_recovery(
+pub fn verified_recovery(
     intent: &VerifiedRecoveryIntent,
     authority: &VerifiedAuthorityV1,
 ) -> VerifiedRecovery {
@@ -514,4 +514,72 @@ pub(super) fn verified_recovery(
     .unwrap();
     let issuance = verify_issuance_witness(&witness, &certificate, intent.policy()).unwrap();
     VerifiedRecovery::verify(&certificate, intent, authority, &issuance).unwrap()
+}
+
+/// Signed wire fixture only. Callers must still verify it under their explicit
+/// trusted provider policy; this helper never constructs opaque evidence.
+pub fn signed_epoch_seal_receipt(
+    body: fencing::EpochSealBodyV1,
+    endpoint_key: &SigningKey,
+    provider_key: &SigningKey,
+    resource_binding: String,
+) -> fencing::EpochSealReceiptV1 {
+    let checkpoint = fencing::EndpointCheckpointBindingV1 {
+        revision: body.checkpoint_before.revision.checked_add(1).unwrap(),
+        commitment: body.digest().unwrap(),
+        head: body.checkpoint_before.head.clone(),
+    };
+    let statement = fencing::MonotonicProviderStatementV1 {
+        schema_version: 1,
+        capability: fencing::ProviderCapabilityV1::MonotonicExclusiveSignerStorageV1,
+        resource_binding: resource_binding.clone(),
+        instance_digest: body.instance.digest().unwrap(),
+        checkpoint: checkpoint.clone(),
+        epoch_floor: body.next_epoch_floor,
+        seal_digest: Some(body.digest().unwrap()),
+    };
+    let provider = fencing::MonotonicProviderEvidenceV1 {
+        signature: fencing::sign(fencing::PROVIDER_DOMAIN, &statement, provider_key).unwrap(),
+        statement,
+    };
+    let mut receipt = fencing::EpochSealReceiptV1::sign(body, provider, endpoint_key).unwrap();
+    let request = fencing::ProtectedEndpointSigningRequestV1 {
+        schema_version: 1,
+        instance_digest: receipt.body.instance.digest().unwrap(),
+        checkpoint: checkpoint.clone(),
+        challenge: h(75),
+        purpose: fencing::ProtectedEndpointSignaturePurposeV1::EpochSeal,
+        preimage: fencing::epoch_seal_signing_bytes(&receipt.body).unwrap(),
+    };
+    let protected = fencing::ProtectedEndpointSignatureBodyV1 {
+        schema_version: 1,
+        custody: fencing::ProtectedSignerCustodyV1::NonexportableLeaseBoundV1,
+        instance_digest: request.instance_digest.clone(),
+        resource_binding,
+        checkpoint,
+        request_digest: request.digest().unwrap(),
+        challenge: request.challenge,
+        endpoint_signature: receipt.endpoint_signature.clone(),
+    };
+    receipt.protected_signature = Some(fencing::ProtectedEndpointSignatureV1 {
+        provider_signature: hex::encode(
+            provider_key
+                .sign(&fencing::protected_endpoint_signature_signing_bytes(&protected).unwrap())
+                .to_bytes(),
+        ),
+        body: protected,
+    });
+    receipt
+}
+fn verified_seal(body: fencing::EpochSealBodyV1, signer: u8) -> fencing::FencingVerdict {
+    let resource_binding = body.instance.storage_fingerprint.clone();
+    let receipt = signed_epoch_seal_receipt(body, &key(signer), &key(3), resource_binding.clone());
+    fencing::verify_epoch_seal(
+        &receipt,
+        &fencing::TrustedFencingPolicyV1 {
+            provider_public_key: public(3),
+            authorized_resource_bindings: vec![resource_binding],
+        },
+    )
+    .unwrap()
 }

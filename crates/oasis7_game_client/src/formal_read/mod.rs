@@ -11,7 +11,7 @@ use crate::authority;
 pub use history::*;
 use oasis7_client_api::formal_projection::{ProjectionAudienceV1, ProjectionInclusionV1};
 use oasis7_client_api::world_service::*;
-use oasis7_distfs::controlled_authority::formal::*;
+use oasis7_formal_protocol::controlled_authority::formal::*;
 use std::collections::BTreeMap;
 
 /// Projection schema validation belongs to its owning client/domain adapter.

@@ -158,7 +158,7 @@ run_oasis7_test_tier_with_viewer() {
   fi
   local viewer_binary
   viewer_binary="$(build_oasis7_viewer_binary "$features")"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client "$@" --features "$features"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client -p oasis7_cas -p oasis7_formal_protocol "$@" --features "$features"
 }
 
 run_oasis7_required_tier_tests() {
@@ -174,7 +174,7 @@ run_scenario_regression_tests() {
 }
 
 run_oasis7_required_tier_clippy() {
-  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features test_tier_required
+  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client -p oasis7_cas -p oasis7_formal_protocol --tests --features test_tier_required
 }
 
 run_oasis7_full_tier_tests() {
@@ -209,11 +209,13 @@ run_oasis7_consensus_clippy() {
 }
 
 run_oasis7_distfs_tests() {
+  run_cargo test -p oasis7_cas -p oasis7_formal_protocol --lib -- --test-threads=1
   # Keep independent RPC deadline fixtures from contending with other storage fixtures.
   run_cargo test -p oasis7_distfs --lib --bin oasis7_durability_endpoint -- --test-threads=1
 }
 
 run_oasis7_distfs_clippy() {
+  run_cargo_clippy -p oasis7_cas -p oasis7_formal_protocol --lib
   run_cargo_clippy -p oasis7_distfs --lib --bin oasis7_durability_endpoint
 }
 
@@ -680,7 +682,7 @@ run_full_support_tier_tests() {
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
-  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --features wasmtime --lib --bins
+  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client -p oasis7_cas -p oasis7_formal_protocol --features wasmtime --lib --bins
 }
 
 run_full_required_superset() {

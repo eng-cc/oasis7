@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::distributed_net::{DistributedNetwork, InMemoryNetwork};
-use oasis7_distfs::LocalCasStore;
+use oasis7_cas::LocalCasStore;
 
 use crate::{
     error::WorldError, FileMembershipRevocationAlertDeadLetterStore,

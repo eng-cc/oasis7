@@ -4,6 +4,7 @@ use super::*;
 #[derive(Clone)]
 pub(crate) struct VerifiedNativeRpcContextV1 {
     checkpoint_bytes: Vec<u8>,
+    provider: fencing::MonotonicProviderEvidenceV1,
     minimum: FormalHeadRefV1,
     endpoint_public_key: String,
     checkpoint: fencing::EndpointCheckpointBindingV1,
@@ -24,6 +25,7 @@ pub(super) fn context_after_authenticated_call(
     // request digest, protected custody, floor and minimum ancestry bridge.
     Ok(VerifiedNativeRpcContextV1 {
         checkpoint_bytes: response.checkpoint_bytes.clone(),
+        provider: response.provider.clone(),
         minimum: response.minimum.clone(),
         endpoint_public_key: instance.endpoint_public_key.clone(),
         checkpoint: response.checkpoint.clone(),
@@ -33,6 +35,9 @@ pub(super) fn context_after_authenticated_call(
     })
 }
 impl VerifiedNativeRpcContextV1 {
+    pub(crate) fn provider(&self) -> &fencing::MonotonicProviderEvidenceV1 {
+        &self.provider
+    }
     pub(crate) fn resource_binding(&self) -> &str {
         &self.resource_binding
     }

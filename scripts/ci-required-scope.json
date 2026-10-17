@@ -247,6 +247,16 @@
     ],
     "oasis7_wasm_materializer": [
       "oasis7_required"
+    ],
+    "oasis7_cas": [
+      "consensus",
+      "distfs",
+      "formal_process"
+    ],
+    "oasis7_formal_protocol": [
+      "distfs",
+      "workspace_support",
+      "formal_process"
     ]
   },
   "rules": [
