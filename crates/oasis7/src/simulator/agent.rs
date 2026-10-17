@@ -1,8 +1,6 @@
 //! Agent interface: AgentBehavior trait, AgentDecision, ActionResult.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
-use std::collections::BTreeMap;
 
 use oasis7_wasm_abi::AgentCommandResponse;
 
@@ -10,10 +8,7 @@ use super::continuous_agent_harness::{
     ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
 };
 use super::decision_provider::MemoryWriteIntent;
-use super::kernel::{
-    MicroDepotActionKind, MicroDepotInstallQuote, MicroDepotPressureClass, MicroDepotQuotePreview,
-    Observation, RejectReason, WorldEvent, WorldEventKind,
-};
+use super::kernel::{Observation, RejectReason, WorldEvent, WorldEventKind};
 use super::types::{Action, ActionId, WorldTime};
 
 // ============================================================================
@@ -130,42 +125,7 @@ pub enum AgentDecision {
     WaitTicks(u64),
 }
 
-/// A read-only request an Agent can make against the current world snapshot.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AgentQuery {
-    EvaluateMicroDepotQuote(MicroDepotQuoteRequest),
-    /// Preview a prospective micro-depot installation without submitting its
-    /// action or reserving any resources.
-    QuoteMicroDepotInstall(Action),
-}
-
-/// Arguments needed to preview a micro-depot service without creating an intent.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MicroDepotQuoteRequest {
-    pub agent_id: String,
-    pub facility_id: String,
-    pub target_id: String,
-    pub action_kind: MicroDepotActionKind,
-    pub base_cost_class: MicroDepotPressureClass,
-    pub base_risk_class: MicroDepotPressureClass,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blocker_type: Option<String>,
-}
-
-/// The structured outcome of a read-only Agent query.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AgentQueryResult {
-    EvaluateMicroDepotQuote {
-        request: MicroDepotQuoteRequest,
-        /// Facility stock copied from the same snapshot used for the preview.
-        available_units_by_kind: Option<BTreeMap<String, i64>>,
-        result: Result<MicroDepotQuotePreview, String>,
-    },
-    QuoteMicroDepotInstall {
-        action: Action,
-        result: Result<MicroDepotInstallQuote, String>,
-    },
-}
+pub use super::agent_query::{AgentQuery, AgentQueryResult, MicroDepotQuoteRequest};
 
 impl AgentDecision {
     /// Returns true if the agent decided to act.
@@ -206,22 +166,7 @@ pub struct AgentDecisionTrace {
     pub llm_chat_messages: Vec<LlmChatMessageTrace>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LlmEffectIntentTrace {
-    pub intent_id: String,
-    pub kind: String,
-    pub params: JsonValue,
-    pub cap_ref: String,
-    pub origin: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LlmEffectReceiptTrace {
-    pub intent_id: String,
-    pub status: String,
-    pub payload: JsonValue,
-    pub cost_cents: Option<u64>,
-}
+pub use super::effect_trace::{LlmEffectIntentTrace, LlmEffectReceiptTrace};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmStepTrace {

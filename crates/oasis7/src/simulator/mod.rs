@@ -13,6 +13,7 @@
 mod agent;
 pub(crate) mod agent_api_compat;
 mod agent_intent_summary;
+mod agent_query;
 mod asteroid_fragment;
 #[cfg(not(target_arch = "wasm32"))]
 mod async_agent_pilot;
@@ -24,6 +25,7 @@ mod cognition_response_identity;
 mod continuous_agent_budget;
 mod continuous_agent_harness;
 mod decision_provider;
+mod effect_trace;
 mod frag_spawn;
 mod fragment_physics;
 mod init;
@@ -33,6 +35,7 @@ mod kernel;
 mod llm_agent;
 mod llm_defaults;
 mod memory;
+mod memory_entry;
 #[cfg(not(target_arch = "wasm32"))]
 mod model_provider;
 mod module_visual;

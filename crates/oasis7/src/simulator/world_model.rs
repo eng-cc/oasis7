@@ -1,7 +1,7 @@
 //! World model entities: Agent, Location, Asset, WorldConfig, WorldModel.
 
 use crate::geometry::GeoPos;
-use crate::models::RobotBodySpec;
+use oasis7_agent_api::world_entity::RobotBodySpec;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 
@@ -13,7 +13,7 @@ mod world_model_physics_specs;
 use super::ResourceOwner;
 use super::chunking::{ChunkCoord, chunk_coord_of};
 use super::fragment_physics::FragmentPhysicalProfile;
-use super::memory::LongTermMemoryEntry;
+use super::memory_entry::LongTermMemoryEntry;
 use super::module_visual::ModuleVisualEntity;
 use super::power::{AgentPowerStatus, PowerConfig, PowerPlant};
 use super::social::{

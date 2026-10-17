@@ -168,7 +168,11 @@ impl WorldKernel {
         }
 
         for event in journal.events.iter().skip(journal_len) {
-            kernel.apply_event(event)?;
+            kernel.apply_event(&KernelEvent {
+                id: event.id,
+                time: event.time,
+                kind: event.kind.clone(),
+            })?;
         }
         let events_after_snapshot = journal.events.len() - journal_len;
         if events_after_snapshot > 0 {

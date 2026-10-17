@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as RuntimeWorldEvent;
 use std::collections::BTreeMap;
 
-use super::super::agent::{LlmEffectIntentTrace, LlmEffectReceiptTrace};
 use super::super::chunking::ChunkCoord;
+use super::super::effect_trace::{LlmEffectIntentTrace, LlmEffectReceiptTrace};
 use super::super::module_visual::ModuleVisualEntity;
 use super::super::power::PowerEvent;
 use super::super::social::{

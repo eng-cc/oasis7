@@ -3,19 +3,20 @@ use super::super::init::{
     AsteroidFragmentInitConfig, WorldInitConfig, generate_chunk_fragments,
     summarize_chunk_generation,
 };
+use super::super::kernel_snapshot::KernelEvent;
 use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;
 use super::micro_depot_commissioning::validate_install_commissioning;
 use super::micro_depot_validation::validate_micro_depot_exact_resource_debits;
-use super::types::{WorldEvent, WorldEventKind};
+use super::types::WorldEventKind;
 
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";
 const FACTORY_KIND_RADIATION_POWER_MK1: &str = "factory.power.radiation.mk1";
 
 impl WorldKernel {
-    pub(super) fn apply_event(&mut self, event: &WorldEvent) -> Result<(), PersistError> {
+    pub(super) fn apply_event(&mut self, event: &KernelEvent) -> Result<(), PersistError> {
         if event.id != self.next_event_id {
             return Err(PersistError::ReplayConflict {
                 message: format!(

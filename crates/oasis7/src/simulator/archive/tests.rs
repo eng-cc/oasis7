@@ -98,3 +98,39 @@ fn native_exports_match_the_kernel_portion_of_the_legacy_archive() {
     assert_eq!(native_journal.version, kernel.journal_snapshot().version);
     assert_eq!(native_journal.events.len(), kernel.journal().len());
 }
+
+#[test]
+fn native_replay_keeps_original_host_event_bytes_on_archive_rewrite() {
+    let world = runtime_fixture();
+    let snapshot = WorldKernel::new().snapshot();
+    let journal = crate::simulator::WorldJournal {
+        version: crate::simulator::JOURNAL_VERSION,
+        events: vec![WorldEvent {
+            id: 0,
+            time: 9,
+            kind: WorldEventKind::RuntimeEvent {
+                kind: "runtime.fixture".into(),
+                domain_kind: Some("original-domain".into()),
+            },
+            runtime_event: Some(world.journal().events.last().unwrap().clone()),
+        }],
+    };
+    let json = serde_json::to_vec(&journal).unwrap();
+    let cbor = serde_cbor::to_vec(&journal).unwrap();
+    let replayed = WorldKernel::replay_from_snapshot(snapshot, journal.clone()).unwrap();
+    assert_eq!(replayed.kernel_snapshot().time, 9);
+    assert_eq!(
+        replayed.kernel_journal_snapshot().events[0].kind,
+        journal.events[0].kind
+    );
+    let restored =
+        WorldKernel::from_snapshot(replayed.snapshot(), replayed.journal_snapshot()).unwrap();
+    assert_eq!(
+        serde_json::to_vec(&restored.journal_snapshot()).unwrap(),
+        json
+    );
+    assert_eq!(
+        serde_cbor::to_vec(&restored.journal_snapshot()).unwrap(),
+        cbor
+    );
+}

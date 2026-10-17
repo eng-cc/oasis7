@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use super::memory::LongTermMemoryEntry;
+use super::memory_entry::LongTermMemoryEntry;
 use super::types::{
     Action, ActionEnvelope, ActionId, AgentId, FragmentElementKind, WorldEventId, WorldTime,
 };
