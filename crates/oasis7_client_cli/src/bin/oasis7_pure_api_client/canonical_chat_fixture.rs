@@ -302,7 +302,7 @@ pub(super) fn canonical_fixture(recover_after_timeout: bool, key_format: Option<
         }
     });
     let mut config = oasis7::viewer::ViewerRuntimeLiveServerConfig::new(
-        oasis7::simulator::WorldScenario::Minimal,
+        oasis7_simulator::WorldScenario::Minimal,
     );
     config.world_id = identity.world_id.clone();
     config.world_service = Some(client::WorldServiceClientConfig {

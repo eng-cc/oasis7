@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod builder_context_tests;
+
 mod build_timing;
 mod build_util;
 #[cfg(test)]

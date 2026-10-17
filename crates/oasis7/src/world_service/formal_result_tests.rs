@@ -1,8 +1,8 @@
 use super::super::wire::AgentSignerDelegationChangeV1;
 use super::*;
 use crate::runtime::{ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody};
-use crate::simulator::ResourceKind;
 use ed25519_dalek::SigningKey;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_distfs::controlled_authority::formal::business_index::{
     BusinessIndexDeltaV1, BusinessIndexNodeReader, BusinessIndexNodeWriteV1,
 };

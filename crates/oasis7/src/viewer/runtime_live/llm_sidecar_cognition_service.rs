@@ -188,7 +188,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
     pub fn test_prepare_canonical_wait_provider_response(
         &mut self,
         agent_id: &str,
-        observation_action: crate::simulator::Action,
+        observation_action: oasis7_simulator::Action,
         ticks: u64,
     ) -> Result<serde_json::Value, String> {
         if ticks == 0 {
@@ -233,7 +233,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
     pub fn test_prepare_canonical_wake_provider_response(
         &mut self,
         agent_id: &str,
-        action: crate::simulator::Action,
+        action: oasis7_simulator::Action,
         original_proposal: SimulatorContinuationProposalV1,
     ) -> Result<serde_json::Value, String> {
         if self.llm_sidecar.pending_admitted_service_wait().is_some() {
@@ -635,7 +635,7 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn make_service_test_context(
         &mut self,
         agent_id: &str,
-        action: crate::simulator::Action,
+        action: oasis7_simulator::Action,
     ) -> Result<serde_json::Value, String> {
         self.ensure_canonical_agent_durable_admission()?;
         let view = self
@@ -686,7 +686,7 @@ impl RuntimeLlmSidecar {
             goal_snapshot: trusted_provider_goal_snapshot(self.prompt_profiles.get(agent_id))?,
         })?;
         let mut response = crate::simulator::DecisionResponse::wait("canonical-test-provider");
-        if !matches!(&action, crate::simulator::Action::MoveAgent { .. }) {
+        if !matches!(&action, oasis7_simulator::Action::MoveAgent { .. }) {
             return Err("deterministic canonical provider fixture requires MoveAgent".into());
         }
         response.decision = crate::simulator::ProviderDecision::Act {

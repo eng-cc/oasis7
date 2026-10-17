@@ -42,7 +42,7 @@ fn turn_context(
     super::agent_cognition_identity::production_turn_context(request)
 }
 
-fn observation() -> crate::simulator::Observation {
+fn observation() -> oasis7_simulator::Observation {
     super::agent_cognition_identity::production_observation("agent-1", 42)
 }
 

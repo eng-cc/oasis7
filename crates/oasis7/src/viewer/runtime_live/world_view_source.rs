@@ -302,7 +302,7 @@ mod tests {
         );
         state.module_visual_entities.insert(
             "facility".into(),
-            crate::simulator::ModuleVisualEntity::default(),
+            oasis7_agent_api::world_entity::ModuleVisualEntity::default(),
         );
         assert_ne!(digest, spatial_state_digest(&state));
         let mut state = server.world.state().clone();

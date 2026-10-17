@@ -171,7 +171,7 @@ fn pending_with_feedback_ack(
         correlation,
         payload,
         cognition: cognition.clone(),
-        action: crate::simulator::Action::RemoveModuleVisualEntity {
+        action: oasis7_simulator::Action::RemoveModuleVisualEntity {
             entity_id: "issued-checkpoint-test".into(),
         },
         feedback_ack: Some(ack),

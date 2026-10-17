@@ -431,7 +431,7 @@ fn restore_reconciles_committed_runtime_record_without_sidecar_terminal_marker()
         .push_back(async_support::RuntimeLlmDecision {
             agent_id: "agent-committed-recovery-sibling".to_string(),
             // This placeholder protects queue identity preservation, not Wait admission.
-            decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+            decision: AgentDecision::Act(oasis7_simulator::Action::MoveAgent {
                 agent_id: "agent-committed-recovery-sibling".into(),
                 to: "loc-recovery".into(),
             }),
@@ -442,7 +442,7 @@ fn restore_reconciles_committed_runtime_record_without_sidecar_terminal_marker()
         });
     let queued = async_support::RuntimeLlmDecision {
         agent_id: agent_id.to_string(),
-        decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+        decision: AgentDecision::Act(oasis7_simulator::Action::MoveAgent {
             agent_id: agent_id.into(),
             to: "loc-recovery".into(),
         }),
@@ -606,7 +606,7 @@ fn assert_terminal_marker_suppresses_queued_provider_decision(decision: AgentDec
 #[test]
 fn provider_lineage_restore_terminal_marker_suppresses_queued_action_replay() {
     assert_terminal_marker_suppresses_queued_provider_decision(AgentDecision::Act(
-        crate::simulator::Action::MoveAgent {
+        oasis7_simulator::Action::MoveAgent {
             agent_id: "agent-terminal-queued".to_string(),
             to: "loc-terminal-queued".to_string(),
         },

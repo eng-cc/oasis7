@@ -743,7 +743,7 @@ fn committed_marker_recovery_settles_provider_lease_before_clearing_mirror() {
         "agent-a".to_string(),
         async_support::RuntimeLlmDecision {
             agent_id: "agent-a".to_string(),
-            decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+            decision: AgentDecision::Act(oasis7_simulator::Action::MoveAgent {
                 agent_id: "agent-a".to_string(),
                 to: "loc-recovery".to_string(),
             }),

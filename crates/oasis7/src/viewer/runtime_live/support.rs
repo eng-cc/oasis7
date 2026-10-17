@@ -10,13 +10,12 @@ use crate::runtime::{
 #[cfg(test)]
 use crate::simulator::RuntimePerfHealth;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
-use crate::simulator::{
-    ChunkRuntimeConfig, Location, RuntimePerfSnapshot, WorldKernel, WorldModel,
-};
+use crate::simulator::{RuntimePerfSnapshot, WorldKernel};
 use crate::viewer::gameplay_actions::{
     FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, STARTER_INDUSTRIAL_ELECTRICITY,
     formal_release_default_seed_model,
 };
+use oasis7_simulator::{ChunkRuntimeConfig, Location, WorldModel};
 
 use super::*;
 

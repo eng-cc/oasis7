@@ -14,9 +14,9 @@ use oasis7::runtime::{
     ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
     production_hardened_main_token_config,
 };
-use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use oasis7_proto::storage_profile::StorageProfileConfig;
+use oasis7_simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_wasm_abi::ModuleCallFailure;
 use oasis7_wasm_executor::FixedSandbox;
 
@@ -515,10 +515,18 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
     });
     world.step().expect("register");
     world
-        .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Electricity, 128)
+        .set_agent_resource_balance(
+            "agent-0",
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            128,
+        )
         .expect("seed electricity");
     world
-        .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Data, 64)
+        .set_agent_resource_balance(
+            "agent-0",
+            oasis7_agent_api::world_action::ResourceKind::Data,
+            64,
+        )
         .expect("seed data");
     world.submit_action(RuntimeAction::DeployModuleArtifact {
         publisher_agent_id: "agent-0".to_string(),
