@@ -71,7 +71,7 @@ Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本页的现行流程�
   - PRD-ENGINEERING-010: As a 评审者, I want the selected tests, actual version, results and uncovered scope recorded in the PR, so that verification can be reviewed without extra task fields.
   - PRD-ENGINEERING-011: As a 文档维护者, I want doc path references validated in gate, so that migration-induced broken links are blocked before merge.
   - PRD-ENGINEERING-012（历史）: 2026-03 全量 PRD 审读清单保留为历史覆盖证据，不作为当前修改的必需台账。
-  - PRD-ENGINEERING-013: As a 模块负责人, I want code-first discrepancy handling, so that PRD behavior remains aligned with implementation.
+  - PRD-ENGINEERING-013: As a 模块负责人, I want implementation facts checked against the applicable product/design authority, so that documentation distinguishes actual behavior, adopted decisions, and implementation gaps.
   - PRD-ENGINEERING-014: As a 评审者, I want duplicate and upstream/downstream alignment checks, so that the PRD tree stays clear and non-conflicting.
   - PRD-ENGINEERING-015: As a 文档作者/评审者, I want one canonical document topology and role split, so that I can place new docs without guessing and keep detailed design discoverable.
   - PRD-ENGINEERING-022: As a `producer_system_designer`, I want external memory and reflection patterns benchmarked against our file-native governance model, so that future self-evolution upgrades borrow structure without replacing repo-native truth.
@@ -184,7 +184,7 @@ Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本页的现行流程�
   - 引用缺失：修复实际要求、设计与验证记录的链接；尚未形成的层级如实说明，不为补链新建 project 台账。
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
   - 审读范围漂移：在已有 PR 或评审记录中注明实际审阅范围和版本，不把未读内容写为已审；历史清单不重签。
-  - 事实与规范冲突：正式文档拥有相应要求，实际交付状态以 Git、PR、CI 和评审记录核实；历史 `.pm/` 资料不再定义任务或阶段真值。
+  - 事实与规范冲突：正式文档拥有相应要求，实际交付状态以 Git、PR、CI 和评审记录核实；历史 `.pm/` 资料不再定义任务或阶段真值。原 code-first 仅用于核实实现事实及已采纳设计决定，不使现有代码覆盖产品/设计 authority。偏差按[设计检查与修复](workflow/source-of-truth.md#root-cause-design-check)区分设计缺陷、实现缺陷和文档失实，不为迁就错误实现改写正确要求。
 - Non-Functional Requirements:
   - NFR-ENG-1: required 门禁平均执行时长 <= 10 分钟。
   - NFR-ENG-2: 文档治理误报率 <= 5%（按周统计）。
@@ -266,7 +266,7 @@ Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本页的现行流程�
 | DEC-ENG-010 | 模块任务项显式标注 `test_tier_required/full` | 仅在 PRD 总表声明 tier | 任务级标注更直接支撑评审与执行。 |
 | DEC-ENG-011 | 将活跃文档引用路径可达性纳入门禁并维护最小豁免白名单 | 仅靠人工抽查断链 | 迁移后断链可自动阻断，减少隐性导航故障。 |
 | DEC-ENG-012 | 2026-03 阶段采用全量逐篇审读留痕；当前该旧清单面已退役为历史留痕 | 仅维护模块级进度百分比 | 当期逐篇留痕提供了审计与遗漏定位；当前 truth 已收敛到模块入口和 round logs。 |
-| DEC-ENG-013 | 审读偏差按代码实现回写文档 | 以历史文档条款反推代码变更 | 当前阶段先恢复“文档描述事实”可降低评审噪声。 |
+| DEC-ENG-013（历史） | 当期审读先按代码核实事实描述 | 仅凭历史文档推定当前实现 | 保留当期事实回填理由；现行要求与设计 authority 不被代码覆盖，按上述偏差分流处理。 |
 | DEC-ENG-014 | 重复与上下游对齐问题在同批次完成修复与回填 | 跨批次累积处理 | 同批次闭环可避免问题扩散到下一轮审读。 |
 | DEC-ENG-015 | 根 `AGENTS.md` 仅保留 7 个组合角色入口，详细职责下沉到 `.agents/roles/*.md` | 在根 `AGENTS.md` 内持续堆叠所有角色长描述 | 入口更短、更稳，且更便于按角色独立演进职责卡。 |
 | DEC-ENG-016 | 为角色协作提供统一 handoff 模板，并放在 `.agents/roles/templates/` | 继续依赖自由格式口头/临时文本交接 | 统一模板能显著降低跨角色遗漏、返工和上下文漂移。 |
