@@ -67,6 +67,10 @@ impl GitHubClient {
             },
         }
     }
+    /// Publish an already read observation without changing its source health.
+    pub fn from_observation(snapshot: GitHubSnapshot) -> Self {
+        Self { current: snapshot }
+    }
     pub fn snapshot(&self) -> GitHubSnapshot {
         self.current.clone()
     }

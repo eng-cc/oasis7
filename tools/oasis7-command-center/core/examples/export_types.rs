@@ -8,9 +8,18 @@ use oasis7_command_center_core::domain::*;
 use oasis7_command_center_core::github::{Check, GitHubSnapshot, PullRequest};
 use oasis7_command_center_core::tools::jobs::ToolJob;
 use oasis7_command_center_core::tools::*;
+use oasis7_command_center_core::work_projection::*;
 use ts_rs::TS;
 fn main() {
     let declarations = [
+        WorkRef::decl(),
+        SourceFact::decl(),
+        FactCell::decl(),
+        WorkGoal::decl(),
+        WorkRun::decl(),
+        WorkItem::decl(),
+        WorkSource::decl(),
+        WorkProjection::decl(),
         ContextBinding::decl(),
         ContextEntry::decl(),
         ContextSummary::decl(),

@@ -58,7 +58,7 @@
 
 | 对象 | 当前实现与证据 | 目标状态与差距 |
 | --- | --- | --- |
-| 工作与首页 | [domain.rs](../../../tools/oasis7-command-center/core/src/domain.rs) 保存章节、决定、Git 字符串和手工关联；[App.tsx](../../../tools/oasis7-command-center/ui/src/App.tsx) 与 `SummarySources.tsx` 提供原文及摘要入口 | 增加原来源身份的 WorkItem 与字段级证据投影，首页、详情和关注共享同一结果；不建立新的任务主表 |
+| 工作与首页 | [work_projection.rs](../../../tools/oasis7-command-center/core/src/work_projection.rs) 与 `WorkOverview.tsx` 提供当前项目的 PR/公开自管会话来源工作列表、共享详情、多目标及分实例事实；[domain.rs](../../../tools/oasis7-command-center/core/src/domain.rs) 保存章节、决定、Git 字符串和手工关联；[App.tsx](../../../tools/oasis7-command-center/ui/src/App.tsx) 与 `SummarySources.tsx` 提供原文及摘要入口 | 增加原来源身份的 WorkItem 与字段级证据投影，首页、详情和关注共享同一结果；不建立新的任务主表 |
 | 来源时效 | [github.rs](../../../tools/oasis7-command-center/core/src/github.rs) 读取最近最多 100 个 PR；摘要正文和 PR 列表分别展示 | 明确已读窗口、逐项补读、事实时间与字段 authority；新读取旧摘要不能显示为当前交付事实 |
 | 决定与关注 | [lib.rs](../../../tools/oasis7-command-center/core/src/lib.rs) 保存已确认决定，正式回写/实现同步固定为 `notVerified`；UI 将已确认决定列入关注 | 三条决定状态与真正待响应请求分离，完成和失效均有依据；清缓存不会复活已处理项 |
 | 宿主并发 | [commands.rs](../../../tools/oasis7-command-center/src-tauri/src/commands.rs) 的四个槽位最终在同一 Application Mutex 中执行扫描、GitHub、查询和保存 | I/O 在应用锁外，有界调度、短事务发布、迟到结果隔离；该结构风险尚未转化为原生性能测量 |
@@ -755,3 +755,12 @@ Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；承接 [REQ-CC-016](co
 [REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接，默认阅读与诊断分层由 [DES-CC-TREE-004](document-tree.design.md#DES-CC-TREE-004)承接。文首固定源码已有文件清单、目录、显式产品/专业树、配对详情及阅读恢复；[覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)提供候选、读取、遗漏、原因计数和有界路径样本，仍受当前读取基线与扫描预算约束。
 
 工作详情沿同一源版本打开具体规则，文档入口返回原阅读位置或原工作，不把文档列表作为处理问题的替代路径。全局树的独立成功快照、明确提交/untracked 基线等未闭合合同及实际能力见专题设计 §11；显式树存在不证明全仓语义配对、默认阅读体验或真实桌面整体验收。
+
+
+### 当前工作投影实现边界
+
+`core/src/work_projection.rs` 承接 [DES-CC-003](#DES-CC-003)、[DES-CC-005](#DES-CC-005) 和 [DES-CC-014](#DES-CC-014) 的来源投影子集。`query_work_projection` 从当前验证项目的章节、个人关系、GitHub 最近窗口与 runtime `public_snapshot` 生成临时 DTO，不新增任务主表或修改 SQLite/Snapshot。PR 使用 host/repository/number，公开自管会话使用 owned-stdio namespace/project/environment/thread；各 instance/turn 独立保留。私有线程在普通投影前排除；UI 不接收其目的、正文、请求或操作记录。
+
+`WorkOverview.tsx` 在首页与开发执行复用该列表和工作详情；前三项仅保持源顺序，可展开其余，不声称重点排序或完整四区首页。来源核验、事件时间与读取时间分列，事件时间未知不合成成果变化。显式多目标关联保留原条款 ID 与个人确认时间，当前条款不可读时显示缺口。PR 合入只表达 PR 事实，未知 tested OID 不由 HEAD 推定。导航不改变任何工作完成状态。
+
+GitHub 子进程读取已移出 Application 锁；一个有界 GitHub 槽位拒绝重复在途读取，发布前核对原项目/路径/环境与 source generation。该子集不替代 §7.1 的完整宿主调度：扫描移锁、后继请求合并、发布快照查询、全来源预算和个人 CAS 仍需实现。UI 切项目丢弃迟到响应，普通视图切换保留详情选择；跨重启恢复、外部会话接续和多工作树聚合尚未完成。回归入口为 `core/tests/work_projection.rs`、`ui/src/WorkOverview.test.tsx`；这些自动化不代签 AC-CC-013 的真实 App 三任务验收。
