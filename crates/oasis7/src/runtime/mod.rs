@@ -255,9 +255,9 @@ pub use node_points::{
     NodePointsLedger, NodePointsLedgerSnapshot, NodeSettlement,
 };
 pub use node_points_runtime::{
-    NodePointsRuntimeAccumulatorSnapshot, NodePointsRuntimeCollector,
+    NodePointsRole, NodePointsRuntimeAccumulatorSnapshot, NodePointsRuntimeCollector,
     NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeCursorSnapshot,
-    NodePointsRuntimeHeuristics, NodePointsRuntimeObservation, measure_directory_storage_bytes,
+    NodePointsRuntimeHeuristics, NodePointsRuntimeObservation,
 };
 pub use operability::{
     LongRunOperabilityGateViolation, LongRunOperabilityReleaseGateReport,

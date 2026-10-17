@@ -644,12 +644,6 @@ fn build_prompt_control_rollback_signing_payload(
     encode_signing_payload(payload)
 }
 
-/// Return the normalized authority tuple carried by an Agent Chat request.
-///
-/// The tuple is optional only for legacy requests.  When any member is
-/// present, all three members are required so a caller cannot accidentally
-/// sign a partially scoped intent.
-
 fn build_session_register_signing_payload(
     request: &AuthoritativeSessionRegisterRequest,
     player_id: &str,

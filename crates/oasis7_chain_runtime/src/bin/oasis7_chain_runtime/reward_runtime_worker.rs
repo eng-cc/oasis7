@@ -1,3 +1,4 @@
+use oasis7::node_points_observation::measure_directory_storage_bytes;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,8 +11,8 @@ use oasis7::observability::emit_stderr_or_event;
 use oasis7::runtime::{
     Action as RuntimeAction, BlobStore, LocalCasStore, NodePointsConfig,
     NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeHeuristics,
-    NodePointsRuntimeObservation, ProtocolPowerReserve, RewardAssetConfig,
-    RewardSignatureGovernancePolicy, World as RuntimeWorld, measure_directory_storage_bytes,
+    ProtocolPowerReserve, RewardAssetConfig, RewardSignatureGovernancePolicy,
+    World as RuntimeWorld,
 };
 use oasis7_distfs::StorageChallengeProbeCursorState;
 use oasis7_node::{NodeRole, NodeRuntime, PosConsensusStatus};
@@ -300,11 +301,12 @@ fn reward_runtime_loop(
         let observed_at_unix_ms = super::now_unix_ms();
         let effective_storage_bytes =
             measure_directory_storage_bytes(config.storage_root.as_path());
-        let mut observation = NodePointsRuntimeObservation::from_snapshot(
-            &snapshot,
-            effective_storage_bytes,
-            observed_at_unix_ms,
-        );
+        let mut observation =
+            oasis7::node_points_observation::node_points_observation_from_snapshot(
+                &snapshot,
+                effective_storage_bytes,
+                observed_at_unix_ms,
+            );
         if snapshot.role == NodeRole::Storage {
             match collect_distfs_challenge_report_with_config(
                 config.storage_root.as_path(),

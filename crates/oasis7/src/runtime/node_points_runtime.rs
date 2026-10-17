@@ -1,8 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
 
-use oasis7_node::{NodeRole, NodeSnapshot};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -10,37 +7,7 @@ use super::{
     NodePointsLedger, NodePointsLedgerSnapshot,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DistFsChallengeSampleSource {
-    LocalStoreIndex,
-    ReplicationCommit,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DistFsChallengeFailureReason {
-    MissingSample,
-    HashMismatch,
-    Timeout,
-    ReadIoError,
-    Unknown,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DistFsChallengeProofHint {
-    pub sample_source: DistFsChallengeSampleSource,
-    pub sample_reference: String,
-    #[serde(default)]
-    pub failure_reason: Option<DistFsChallengeFailureReason>,
-    #[serde(default)]
-    pub proof_kind_hint: String,
-    #[serde(default)]
-    pub vrf_seed_hint: Option<String>,
-    #[serde(default)]
-    pub post_commitment_hint: Option<String>,
-}
+pub use oasis7_agent_api::node_contribution::{DistFsChallengeProofHint, NodePointsRole};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodePointsRuntimeHeuristics {
@@ -95,7 +62,7 @@ pub struct NodePointsRuntimeCollectorSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodePointsRuntimeObservation {
     pub node_id: String,
-    pub role: NodeRole,
+    pub role: NodePointsRole,
     pub tick_count: u64,
     pub running: bool,
     pub uptime_checks_passed: u64,
@@ -107,70 +74,6 @@ pub struct NodePointsRuntimeObservation {
     pub has_error: bool,
     pub effective_storage_bytes: u64,
     pub storage_challenge_proof_hint: Option<DistFsChallengeProofHint>,
-}
-
-impl NodePointsRuntimeObservation {
-    pub fn from_snapshot(
-        snapshot: &NodeSnapshot,
-        effective_storage_bytes: u64,
-        observed_at_unix_ms: i64,
-    ) -> Self {
-        Self {
-            node_id: snapshot.node_id.clone(),
-            role: snapshot.role,
-            tick_count: snapshot.tick_count,
-            running: snapshot.running,
-            uptime_checks_passed: if snapshot.running { 1 } else { 0 },
-            uptime_checks_total: 1,
-            storage_checks_passed: if snapshot.role == NodeRole::Storage && snapshot.running {
-                1
-            } else {
-                0
-            },
-            storage_checks_total: if snapshot.role == NodeRole::Storage {
-                1
-            } else {
-                0
-            },
-            staked_storage_bytes: effective_storage_bytes,
-            observed_at_unix_ms,
-            has_error: snapshot.last_error.is_some(),
-            effective_storage_bytes,
-            storage_challenge_proof_hint: if snapshot.role == NodeRole::Storage {
-                Some(DistFsChallengeProofHint {
-                    sample_source: DistFsChallengeSampleSource::LocalStoreIndex,
-                    sample_reference: format!(
-                        "distfs://{}/tick/{}",
-                        snapshot.node_id, snapshot.tick_count
-                    ),
-                    failure_reason: snapshot
-                        .last_error
-                        .as_deref()
-                        .map(classify_storage_failure_reason),
-                    proof_kind_hint: "reserved".to_string(),
-                    vrf_seed_hint: None,
-                    post_commitment_hint: None,
-                })
-            } else {
-                None
-            },
-        }
-    }
-}
-
-fn classify_storage_failure_reason(error: &str) -> DistFsChallengeFailureReason {
-    let lower = error.to_ascii_lowercase();
-    if lower.contains("hash") || lower.contains("integrity") {
-        DistFsChallengeFailureReason::HashMismatch
-    } else if lower.contains("timeout") {
-        DistFsChallengeFailureReason::Timeout
-    } else if lower.contains("not found") || lower.contains("missing") {
-        DistFsChallengeFailureReason::MissingSample
-    } else if lower.contains("io") || lower.contains("read") {
-        DistFsChallengeFailureReason::ReadIoError
-    } else {
-        DistFsChallengeFailureReason::Unknown
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +100,7 @@ impl NodeCursor {
 
 #[derive(Debug, Clone, Default)]
 struct NodeEpochAccumulator {
-    role: Option<NodeRole>,
+    role: Option<NodePointsRole>,
     self_sim_compute_units: u64,
     delegated_sim_compute_units: u64,
     world_maintenance_compute_units: u64,
@@ -234,7 +137,7 @@ impl NodeEpochAccumulator {
             role: snapshot
                 .role
                 .as_deref()
-                .and_then(|role| role.parse::<NodeRole>().ok()),
+                .and_then(|role| role.parse::<NodePointsRole>().ok()),
             self_sim_compute_units: snapshot.self_sim_compute_units,
             delegated_sim_compute_units: snapshot.delegated_sim_compute_units,
             world_maintenance_compute_units: snapshot.world_maintenance_compute_units,
@@ -346,19 +249,6 @@ impl NodePointsRuntimeCollector {
         Ok(None)
     }
 
-    pub fn observe_snapshot(
-        &mut self,
-        snapshot: &NodeSnapshot,
-        effective_storage_bytes: u64,
-        observed_at_unix_ms: i64,
-    ) -> Result<Option<EpochSettlementReport>, NodePointsError> {
-        self.observe(NodePointsRuntimeObservation::from_snapshot(
-            snapshot,
-            effective_storage_bytes,
-            observed_at_unix_ms,
-        ))
-    }
-
     pub fn force_settle(&mut self) -> Result<Option<EpochSettlementReport>, NodePointsError> {
         if self.current_epoch.is_empty() {
             return Ok(None);
@@ -458,17 +348,17 @@ impl NodePointsRuntimeCollector {
                 .saturating_add(delta_ticks);
 
             match observation.role {
-                NodeRole::Sequencer => {
+                NodePointsRole::Sequencer => {
                     accumulator.world_maintenance_compute_units = accumulator
                         .world_maintenance_compute_units
                         .saturating_add(delta_ticks);
                 }
-                NodeRole::Observer => {
+                NodePointsRole::Observer => {
                     accumulator.delegated_sim_compute_units = accumulator
                         .delegated_sim_compute_units
                         .saturating_add(delta_ticks);
                 }
-                NodeRole::Storage => {
+                NodePointsRole::Storage => {
                     let delegated = scale_ticks(
                         delta_ticks,
                         self.heuristics.storage_role_delegated_tick_ratio,
@@ -515,39 +405,14 @@ fn observation_time_delta(start_ms: i64, end_ms: i64) -> u64 {
     (end_ms - start_ms) as u64
 }
 
-pub fn measure_directory_storage_bytes(path: &Path) -> u64 {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return 0,
-    };
-
-    if metadata.is_file() {
-        return metadata.len();
-    }
-    if !metadata.is_dir() {
-        return 0;
-    }
-
-    let mut total = 0_u64;
-    let entries = match fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(_) => return 0,
-    };
-    for entry in entries.flatten() {
-        total = total.saturating_add(measure_directory_storage_bytes(entry.path().as_path()));
-    }
-    total
-}
-
 #[cfg(test)]
 mod tests {
+    use super::NodePointsRole;
     use super::{
-        DistFsChallengeFailureReason, DistFsChallengeSampleSource, NodePointsRuntimeCollector,
-        NodePointsRuntimeCollectorSnapshot, NodePointsRuntimeHeuristics,
-        NodePointsRuntimeObservation, measure_directory_storage_bytes,
+        NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot,
+        NodePointsRuntimeHeuristics, NodePointsRuntimeObservation,
     };
     use crate::runtime::NodePointsConfig;
-    use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -576,7 +441,7 @@ mod tests {
 
         let first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Sequencer,
+            role: NodePointsRole::Sequencer,
             tick_count: 10,
             running: true,
             uptime_checks_passed: 1,
@@ -623,7 +488,7 @@ mod tests {
 
         let first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Observer,
+            role: NodePointsRole::Observer,
             tick_count: 1,
             running: true,
             uptime_checks_passed: 1,
@@ -667,7 +532,7 @@ mod tests {
         );
         let first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Observer,
+            role: NodePointsRole::Observer,
             tick_count: 1,
             running: true,
             uptime_checks_passed: 1,
@@ -707,7 +572,7 @@ mod tests {
         );
         let first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Observer,
+            role: NodePointsRole::Observer,
             tick_count: 1,
             running: true,
             uptime_checks_passed: 1,
@@ -748,7 +613,7 @@ mod tests {
 
         let first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Observer,
+            role: NodePointsRole::Observer,
             tick_count: 5,
             running: true,
             uptime_checks_passed: 1,
@@ -795,7 +660,7 @@ mod tests {
 
         let node_a_first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Observer,
+            role: NodePointsRole::Observer,
             tick_count: 10,
             running: true,
             uptime_checks_passed: 1,
@@ -875,7 +740,7 @@ mod tests {
         let gib16 = 16_u64 * 1024 * 1024 * 1024;
         let node_a_first = NodePointsRuntimeObservation {
             node_id: "node-a".to_string(),
-            role: NodeRole::Storage,
+            role: NodePointsRole::Storage,
             tick_count: 10,
             running: true,
             uptime_checks_passed: 1,
@@ -938,73 +803,5 @@ mod tests {
         assert_eq!(settlement_b.storage_reward_score, 0.0);
         assert_eq!(settlement_a.awarded_points, 100);
         assert_eq!(settlement_b.awarded_points, 0);
-    }
-
-    #[test]
-    fn observation_from_snapshot_sets_distfs_proof_semantics() {
-        let snapshot = NodeSnapshot {
-            node_id: "node-storage".to_string(),
-            player_id: "node-storage".to_string(),
-            world_id: "world-1".to_string(),
-            role: NodeRole::Storage,
-            replication_enabled: false,
-            running: true,
-            tick_count: 42,
-            last_tick_unix_ms: Some(1_000),
-            consensus: NodeConsensusSnapshot::default(),
-            consensus_progress_observer_error: None,
-            last_error: Some("hash mismatch for sampled chunk".to_string()),
-        };
-
-        let observation = NodePointsRuntimeObservation::from_snapshot(&snapshot, 1024, 2_000);
-        let hint = observation
-            .storage_challenge_proof_hint
-            .expect("storage proof hint");
-        assert_eq!(
-            hint.sample_source,
-            DistFsChallengeSampleSource::LocalStoreIndex
-        );
-        assert_eq!(hint.sample_reference, "distfs://node-storage/tick/42");
-        assert_eq!(
-            hint.failure_reason,
-            Some(DistFsChallengeFailureReason::HashMismatch)
-        );
-        assert_eq!(hint.proof_kind_hint, "reserved");
-        assert!(hint.vrf_seed_hint.is_none());
-        assert!(hint.post_commitment_hint.is_none());
-    }
-
-    #[test]
-    fn observation_from_snapshot_non_storage_has_no_distfs_proof_hint() {
-        let snapshot = NodeSnapshot {
-            node_id: "node-observer".to_string(),
-            player_id: "node-observer".to_string(),
-            world_id: "world-1".to_string(),
-            role: NodeRole::Observer,
-            replication_enabled: false,
-            running: true,
-            tick_count: 7,
-            last_tick_unix_ms: Some(50),
-            consensus: NodeConsensusSnapshot::default(),
-            consensus_progress_observer_error: None,
-            last_error: None,
-        };
-
-        let observation = NodePointsRuntimeObservation::from_snapshot(&snapshot, 0, 100);
-        assert!(observation.storage_challenge_proof_hint.is_none());
-    }
-
-    #[test]
-    fn measure_directory_storage_counts_nested_files() {
-        let root = temp_dir("measure-storage");
-        let nested = root.join("a").join("b");
-        fs::create_dir_all(&nested).expect("nested");
-        fs::write(root.join("root.bin"), vec![1_u8; 11]).expect("root file");
-        fs::write(nested.join("leaf.bin"), vec![1_u8; 29]).expect("leaf file");
-
-        let bytes = measure_directory_storage_bytes(root.as_path());
-        assert_eq!(bytes, 40);
-
-        let _ = fs::remove_dir_all(root);
     }
 }

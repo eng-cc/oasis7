@@ -47,3 +47,5 @@ pub mod world_geometry;
 pub mod world_resource;
 
 pub mod module_source;
+
+pub mod node_contribution;
