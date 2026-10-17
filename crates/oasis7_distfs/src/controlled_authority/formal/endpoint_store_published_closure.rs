@@ -351,6 +351,7 @@ impl ClosureJob {
         store: &Store,
         proof_digest: &str,
     ) -> Result<Option<FormalPublishedClosureReceiptV1>, FormalError> {
+        let page_started = std::time::Instant::now();
         if self.proof_digest != proof_digest {
             return Err(invalid("published closure job proof changed"));
         }
@@ -434,12 +435,18 @@ impl ClosureJob {
                 }
                 _ => return Err(invalid("published closure sparse node type/depth")),
             }
-            // Keep each authenticated RPC page below its existing frame deadline,
-            // including fresh object hashing and durable inventory markers.
-            if nodes >= 16 || read_bytes >= 8 * 1024 * 1024 {
+            // Preserve the design caps, and yield after a complete bounded
+            // object when this page has used its local work time slice.
+            if nodes >= 256
+                || read_bytes >= 8 * 1024 * 1024
+                || page_started.elapsed() >= std::time::Duration::from_secs(1)
+            {
                 #[cfg(test)]
                 if std::env::var_os("OASIS7_FORMAL_CLOSURE_DIAGNOSTICS").is_some() {
-                    eprintln!("published_closure_page nodes={nodes} bytes={read_bytes}");
+                    eprintln!(
+                        "published_closure_page nodes={nodes} bytes={read_bytes} elapsed_us={}",
+                        page_started.elapsed().as_micros()
+                    );
                 }
                 return Ok(None);
             }
@@ -452,6 +459,10 @@ impl ClosureJob {
         // Cleanup may already have removed these markers. The physical pin
         // remains live, but completed/cleaning jobs use ordinary durable reads.
         (!self.retiring_scratch).then(|| self.seen.root.join("fsync-v1"))
+    }
+    #[cfg(test)]
+    pub(crate) fn append_test_root(&mut self, root: BusinessIndexRootV1) {
+        self.roots.push(root);
     }
     pub(crate) fn complete(&self) -> bool {
         self.complete

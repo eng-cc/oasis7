@@ -65,6 +65,41 @@ pub(crate) fn pending_test_position(path: &Path) -> Result<u64, String> {
     Ok(pending.original.body.next_position)
 }
 
+#[cfg(all(test, unix))]
+pub(crate) fn retirement_test_target(root: &Path, sidecar: &Path) -> Result<(String, u64), String> {
+    let (schema, position, block, digest): (u32, u64, String, String) = read(sidecar)?;
+    let (candidate, proof) = read_published_candidate_at(root, position)?
+        .ok_or("retired original publication missing")?;
+    if schema != 1
+        || position < 2
+        || candidate.candidate.record.position != position
+        || proof.decision.record != candidate.candidate.record
+        || super::formal_attempt_lifecycle::candidate_digest(&candidate)? != digest
+    {
+        return Err("retired original candidate/publication binding differs".into());
+    }
+    let frozen = candidate
+        .frozen_material
+        .as_ref()
+        .ok_or("retired original Frozen missing")?;
+    let reservation = &candidate
+        .frozen
+        .as_ref()
+        .ok_or("retired original reservation missing")?
+        .reservation
+        .body;
+    verify_frozen_material(reservation, frozen).map_err(|error| error.to_string())?;
+    let manifest: super::formal_package::FormalExecutionManifestV1 =
+        super::controlled_capture::decode_role(frozen, ArtifactRole::ExecutionManifest)?;
+    if manifest.continuation.context.node_block_hash != block
+        || block.trim().is_empty()
+        || reservation.next_position != position
+    {
+        return Err("retired original Frozen continuation binding differs".into());
+    }
+    Ok((block, position))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Published {

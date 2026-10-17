@@ -25,61 +25,161 @@ struct PublicPreparedRequest {
     request_digest: String,
     trusted_issuer_public_key: String,
 }
-struct CliChild(Child);
+type CliOutput = thread::JoinHandle<Result<Vec<u8>, String>>;
+struct CliChild(
+    Child,
+    Option<CliOutput>,
+    Option<CliOutput>,
+    String,
+    Arc<AtomicBool>,
+);
 impl Drop for CliChild {
     fn drop(&mut self) {
         let _ = self.0.kill();
         let _ = self.0.wait();
+        self.4.store(true, Ordering::Release);
     }
 }
+fn drain_cli(
+    mut pipe: impl Read + std::os::fd::AsRawFd + Send + 'static,
+    stopped: Arc<AtomicBool>,
+) -> CliOutput {
+    thread::spawn(move || {
+        // A descendant may inherit the pipe after the shipping child exits.
+        // Nonblocking reads plus cancellation keep collection inside the test
+        // deadline even when such a descendant retains an open descriptor.
+        let fd = std::os::fd::AsRawFd::as_raw_fd(&pipe);
+        // SAFETY: the reader owns this live pipe descriptor for this thread.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        const LIMIT: usize = 8 * 1024 * 1024;
+        let mut bytes = Vec::new();
+        let mut buffer = [0; 8192];
+        let mut overflow = false;
+        let mut after_stop = 0usize;
+        loop {
+            if stopped.load(Ordering::Acquire) && after_stop >= LIMIT {
+                break;
+            }
+            let count = match pipe.read(&mut buffer) {
+                Ok(count) => count,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if stopped.load(Ordering::Acquire) {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                Err(error) => return Err(error.to_string()),
+            };
+            if count == 0 {
+                break;
+            }
+            if stopped.load(Ordering::Acquire) {
+                after_stop += count;
+            }
+            let keep = count.min(LIMIT - bytes.len());
+            bytes.extend_from_slice(&buffer[..keep]);
+            overflow |= keep != count;
+        }
+        if overflow {
+            return Err("world-init CLI output exceeds 8 MiB".into());
+        }
+        Ok(bytes)
+    })
+}
 fn start_cli(binary: &Path, args: &[&str]) -> Result<CliChild, String> {
-    Ok(CliChild(
-        Command::new(binary)
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| e.to_string())?,
-    ))
+    let mut child = Command::new(binary)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    // Drain from spawn, including while the fault gate waits for Prepare.
+    // Waiting for exit before reading a full pipe can deadlock the child.
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stdout = drain_cli(
+        child.stdout.take().ok_or("world-init stdout missing")?,
+        stopped.clone(),
+    );
+    let stderr = drain_cli(
+        child.stderr.take().ok_or("world-init stderr missing")?,
+        stopped.clone(),
+    );
+    let stage = args.iter().take(3).copied().collect::<Vec<_>>().join(" ");
+    Ok(CliChild(child, Some(stdout), Some(stderr), stage, stopped))
+}
+fn collected(reader: Option<CliOutput>) -> Result<Vec<u8>, String> {
+    reader
+        .ok_or("world-init output reader missing")?
+        .join()
+        .map_err(|_| "world-init output reader panicked")?
 }
 fn finish_cli(mut child: CliChild, success: bool) -> Result<Vec<u8>, String> {
-    let deadline = Instant::now() + Duration::from_secs(40);
+    let started = Instant::now();
+    // Preserve the existing test bound while draining both pipes. Stage and
+    // captured output diagnose slow native work separately from pipe blockage.
+    let budget = Duration::from_secs(40);
+    let mut timed_out = false;
     while child.0.try_wait().map_err(|e| e.to_string())?.is_none() {
-        if Instant::now() >= deadline {
-            return Err("world-init shipping CLI deadline".into());
+        if started.elapsed() >= budget {
+            timed_out = true;
+            child.0.kill().map_err(|e| e.to_string())?;
+            break;
         }
         thread::sleep(Duration::from_millis(10));
     }
-    let mut stdout = Vec::new();
-    child
-        .0
-        .stdout
-        .take()
-        .ok_or("world-init stdout missing")?
-        .read_to_end(&mut stdout)
-        .map_err(|e| e.to_string())?;
-    let mut stderr = Vec::new();
-    child
-        .0
-        .stderr
-        .take()
-        .ok_or("world-init stderr missing")?
-        .read_to_end(&mut stderr)
-        .map_err(|e| e.to_string())?;
     let status = child.0.wait().map_err(|e| e.to_string())?;
-    if status.success() != success {
+    child.4.store(true, Ordering::Release);
+    let mut stdout = collected(child.1.take())?;
+    let stderr = collected(child.2.take())?;
+    eprintln!(
+        "world-init CLI stage={} elapsed={:?} status={status}",
+        child.3,
+        started.elapsed()
+    );
+    if timed_out || status.success() != success {
         return Err(format!(
-            "world-init expected success={success}: {status}: {}",
+            "world-init stage={} expected success={success} timed_out={timed_out} budget={budget:?}: {status}: stdout={} stderr={}",
+            child.3,
+            String::from_utf8_lossy(&stdout),
             String::from_utf8_lossy(&stderr)
         ));
     }
     if !success {
         // The shipping tracing subscriber may write diagnostics to stdout.
-        // Keep both streams when asserting the explicit refusal cause.
         stdout.extend_from_slice(&stderr);
     }
     Ok(stdout)
+}
+#[test]
+fn world_init_cli_drains_both_pipes_before_waiting_for_exit() {
+    let child = start_cli(
+        Path::new("/bin/sh"),
+        &[
+            "-c",
+            "head -c 131072 /dev/zero; head -c 131072 /dev/zero >&2",
+        ],
+    )
+    .unwrap();
+    let stdout = finish_cli(child, true).unwrap();
+    assert_eq!(stdout, vec![0; 131072]);
+}
+#[test]
+fn world_init_cli_collection_does_not_wait_for_inherited_pipe_eof() {
+    let (mut input, output) = std::os::unix::net::UnixStream::pair().unwrap();
+    let inherited = input.try_clone().unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let reader = drain_cli(output, stopped.clone());
+    input.write_all(b"original child output").unwrap();
+    drop(input);
+    stopped.store(true, Ordering::Release);
+    assert_eq!(collected(Some(reader)).unwrap(), b"original child output");
+    drop(inherited);
 }
 fn p(path: &Path) -> Result<&str, String> {
     path.to_str()

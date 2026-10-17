@@ -291,7 +291,10 @@ pub(super) fn reclaim(
                 super::controlled_capture::decode_role(material,
                     oasis7_distfs::controlled_authority::replicated_protocol::ArtifactRole::ExecutionManifest)?;
             super::formal_crash_test_boundary::select_original_input(&manifest.continuation)?;
-            super::formal_crash_test_boundary::stop_after("attempt_output_unlinked")?;
+            super::formal_crash_test_boundary::stop_after_retirement(
+                candidate.candidate.record.position,
+                &digest,
+            )?;
         }
         if removed >= 8 {
             return Ok(false);

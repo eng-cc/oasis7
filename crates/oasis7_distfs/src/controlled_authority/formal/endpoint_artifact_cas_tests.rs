@@ -380,3 +380,100 @@ fn pending_published_closure_pin_allows_new_publications_but_blocks_retirement()
     primary.collect_physical_orphans().unwrap();
     assert_eq!(primary.store.raw_object(&node_id).unwrap().unwrap(), bytes);
 }
+
+#[test]
+fn published_closure_real_sparse_tree_pages_preserve_exact_receipt() {
+    use crate::controlled_authority::formal::business_index::{
+        BusinessIndexDeltaV1, BusinessIndexLeafKindV1, BusinessIndexLeafV1,
+        BusinessIndexNodeReader, BusinessIndexRootV1, metadata_key_digest,
+    };
+    struct Empty;
+    impl BusinessIndexNodeReader for Empty {
+        fn read_node(&self, _: &str) -> Result<Option<Vec<u8>>, String> {
+            Ok(None)
+        }
+    }
+    let fixture = Fixture::new();
+    let mut coordinator = fixture.coordinator();
+    let candidate = fixture.initial.clone();
+    let digest = blake3::hash(&serde_cbor::to_vec(&candidate.candidate).unwrap())
+        .to_hex()
+        .to_string();
+    let mut updates = vec![BusinessIndexLeafV1 {
+        key_digest: metadata_key_digest(),
+        kind: BusinessIndexLeafKindV1::CommitMetadata,
+        canonical_value: serde_cbor::to_vec(&0u32).unwrap(),
+    }];
+    for value in 1u32..=24 {
+        updates.push(BusinessIndexLeafV1 {
+            key_digest: blake3::hash(&value.to_be_bytes()).to_hex().to_string(),
+            kind: BusinessIndexLeafKindV1::Outcome,
+            canonical_value: serde_cbor::to_vec(&value).unwrap(),
+        });
+    }
+    updates.sort_by(|left, right| left.key_digest.cmp(&right.key_digest));
+    let delta =
+        BusinessIndexDeltaV1::build_v2(BusinessIndexRootV1::empty().unwrap(), updates, &Empty)
+            .unwrap();
+    coordinator.submit(candidate.clone()).unwrap();
+    let (primary, _) = coordinator.endpoints_mut();
+    primary
+        .store
+        .persist_business_nodes(&delta.node_writes)
+        .unwrap();
+    let cas = primary.store.path.join("formal-objects-v1");
+    assert!(crate::controlled_authority::formal::physical::enabled(&cas).unwrap());
+    assert!(
+        std::fs::read_dir(cas.join(".representation-v1"))
+            .unwrap()
+            .next()
+            .is_some(),
+        "real tree must exercise selected physical recipes/frames"
+    );
+    let mut receipts = Vec::new();
+    for _ in 0..2 {
+        let mut job = super::super::store::published_closure::ClosureJob::new(
+            &primary.store,
+            &candidate,
+            fixture.authority.definition().profile_version,
+            &digest,
+            &h(240),
+        )
+        .unwrap();
+        // Only the isolated typed-walker fixture injects this separately
+        // generated root; shipping roots are extracted from signed materials.
+        job.append_test_root(delta.new.clone());
+        let mut pages = 0;
+        let mut elapsed_us = Vec::new();
+        loop {
+            let started = std::time::Instant::now();
+            let result = job.advance(&primary.store, &h(240)).unwrap();
+            let elapsed = started.elapsed();
+            elapsed_us.push(elapsed.as_micros());
+            assert!(
+                elapsed < std::time::Duration::from_secs(3),
+                "bounded sparse-tree page exceeded RPC frame budget: {elapsed:?}"
+            );
+            pages += 1;
+            assert!(pages < 2000, "finite real tree must converge");
+            if let Some(receipt) = result {
+                assert!(receipt.logical_objects > 5000);
+                elapsed_us.sort_unstable();
+                eprintln!(
+                    "published_closure_real_tree tree_nodes={} pages={pages} p50_page_us={} max_page_us={} objects={} bytes={}",
+                    delta.node_writes.len(),
+                    elapsed_us[elapsed_us.len() / 2],
+                    elapsed_us.last().unwrap(),
+                    receipt.logical_objects,
+                    receipt.logical_bytes
+                );
+                receipts.push(receipt);
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        receipts[0], receipts[1],
+        "fresh independent jobs preserve traversal order and exact inventory receipt"
+    );
+}

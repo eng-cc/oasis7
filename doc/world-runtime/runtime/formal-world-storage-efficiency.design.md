@@ -423,7 +423,7 @@ S2 另有 `build_formal_storage_shadow` 和 `formal_storage_shadow` example：�
 
 正式 endpoint 的 `advance_physical_generation` 使用独立带 checksum 的 build/selection/retire 状态和分片 catalog；单次复制、退休最多 1,024 对象/8 MiB（单个较大有界对象除外）。切换前在稳定根 fence 内补查 overlay，新选中代损坏不得回落到旧 overlay。旧代及根 orphan frames 分页回收；仍被新 overlay 引用的共享帧保留。catalog v3 采用按内容 hash 认证的层级目录：manifest 只保存固定大小的根引用及计数，每个内部节点最多 16 个子引用，每个叶最多 4,096 个有序 IDs；叶满时按下一个 hash nibble 分裂，深度只受原 64 位十六进制对象 hash 的自然边界限制，不以固定分片总数限制历史。lookup、分页及验证沿原 hash 路径进行，不把完整目录装入 manifest 或内存。每轮提交新目录根后，以可恢复清单分批回收不再被当前 objects/completed 根引用的旧目录节点；仍被任一根引用的节点必须保留，不能用索引版本堆积换取表面 payload 节省。同步 typed orphan GC 另有独立 mark 预算，预算不足只保留，分批 generation 不继承其整轮 1 GiB/262,144 对象限制。
 
-attempt 回收要求原 Published envelope 与 P/R 分别完成的独立 typed 闭包读回。每个闭包作业在活跃内核 pin 内分页，重启失去 pin 后重新读回；未完成或 unknown 保留 attempt。业务提交与 Node 空闲轮询仅推进有界维护步骤；源中独有的 world/外部结果/未决义务不能因已经 Qualified 而删除。完整实现是否达到退出门槛仍按下表和 §11 的实际 source/environment 证据判断。
+attempt 回收要求原 Published envelope 与 P/R 分别完成的独立 typed 闭包读回。每个闭包作业在活跃内核 pin 内分页，重启失去 pin 后重新读回；未完成或 unknown 保留 attempt。稀疏树遍历页保留最多 256 节点/8 MiB 的工作上限，并在完整校验一个节点后按 1 秒软工作时窗让出；软时窗不替代原 RPC 截止时间，也不允许部分校验节点进入 receipt。业务提交与 Node 空闲轮询仅推进有界维护步骤；源中独有的 world/外部结果/未决义务不能因已经 Qualified 而删除。完整实现是否达到退出门槛仍按下表和 §11 的实际 source/environment 证据判断。
 
 
 阶段是技术依赖顺序，可合并实施，不新增 workflow、审批次数或每阶段强制 PR。当前无运行世界时直接创建新表示；本地实现与验证不代替真实节点部署验收。

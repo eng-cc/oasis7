@@ -195,8 +195,15 @@ pub(super) fn run_crash_recovery(
             .ok_or("test writer directory missing")?,
     )
     .join("pending.cbor");
-    let original_block_hash = crate::execution_bridge_real_tests::real_execution_bridge::formal_writer::pending_test_block_hash(&pending_file)?;
-    let target_position = crate::execution_bridge_real_tests::real_execution_bridge::formal_writer::pending_test_position(&pending_file)?;
+    let (original_block_hash, target_position) = if phase == "attempt_output_unlinked" {
+        crate::execution_bridge_real_tests::real_execution_bridge::formal_writer::retirement_test_target(
+            pending_file.parent().ok_or("writer root missing")?,
+            &marker.with_extension("retirement-target.cbor"),
+        )?
+    } else {
+        (crate::execution_bridge_real_tests::real_execution_bridge::formal_writer::pending_test_block_hash(&pending_file)?,
+         crate::execution_bridge_real_tests::real_execution_bridge::formal_writer::pending_test_position(&pending_file)?)
+    };
     if phase == "primary_published" {
         // Force the retained genesis path to use the endpoint's durable
         // logical artifact CAS, not an old local Published C0 byte cache.
@@ -269,7 +276,10 @@ pub(super) fn run_crash_recovery(
             }
         };
         if original_commit.position != target_position {
-            return Err("C03 original result changed its qualified decision identity".into());
+            return Err(format!(
+                "C03 original result changed its qualified decision identity: expected position {target_position}, got {}",
+                original_commit.position
+            ));
         }
         let exact_original = runtime.history.fixed_publication(&original_commit)?;
         if wasm_emit_count(exact_original.world()) != initial_emits + 1 {

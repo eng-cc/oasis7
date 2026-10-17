@@ -88,6 +88,34 @@ fn published_attempt_reclamation_retries_independent_readback_and_partial_unlink
     }
     durable_transaction::write_private_file_durable(&publication_path, &to_cbor(&exact).unwrap())
         .unwrap();
+    // Retirement's original target is authenticated independently of the
+    // writer's newer pending heartbeat. Tampered sidecars cannot move it.
+    let target = root.join("retirement-target.cbor");
+    let block = pending_test_block_hash(&root.join("pending.cbor")).unwrap();
+    let digest =
+        super::super::super::formal_attempt_lifecycle::candidate_digest(&exact.candidate).unwrap();
+    let save_target = |position, block: &str, digest: &str| {
+        durable_transaction::write_private_file_durable(
+            &target,
+            &to_cbor(&(1u32, position, block, digest)).unwrap(),
+        )
+        .unwrap();
+    };
+    save_target(proof.decision.record.position, &block, &digest);
+    assert_eq!(
+        retirement_test_target(&root, &target).unwrap(),
+        (block.clone(), proof.decision.record.position)
+    );
+    save_target(proof.decision.record.position, &block, &"00".repeat(32));
+    assert!(retirement_test_target(&root, &target).is_err());
+    save_target(
+        proof.decision.record.position,
+        "other-original-block",
+        &digest,
+    );
+    assert!(retirement_test_target(&root, &target).is_err());
+    save_target(proof.decision.record.position + 1, &block, &digest);
+    assert!(retirement_test_target(&root, &target).is_err());
     drop(writer);
     // Model interruption after an unlink: the durable exact delete list permits
     // retry, and independently stored material must be read again on reopening.
