@@ -265,7 +265,7 @@
 - 系统设计状态：已覆盖
 - 系统设计依据：[容量、性能与证据范围](../../world-runtime/runtime/formal-world-storage-efficiency.design.md#des-lws-009)承接全生命周期口径、同负载对照及各项独立判定。
 - 实现状态：部分实现
-- 实现与验证依据：[现有存储 metrics](https://github.com/nil-studio/oasis7/blob/2676c835cc50f12d7fd16a762eaa21f026ae79d4/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/storage_metrics.rs)提供部分尺寸与引用信息；实际分配量、文件数、独立端点和全生命周期同证据尚待补齐，本 PR 不提供容量实测结论。
+- 实现与验证依据：[现有存储 metrics](https://github.com/nil-studio/oasis7/blob/2676c835cc50f12d7fd16a762eaa21f026ae79d4/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/storage_metrics.rs)提供部分尺寸与引用信息；[本地物理计量](../../../crates/oasis7_distfs/src/storage_inventory.rs)与[容量操作入口](../../world-runtime/runtime/formal-world-storage-efficiency.manual.md#v-lws-capacity)补充静止树的分域 inode 去重、allocated bytes 和不完整扫描报告；[离线 shadow 打包](../../world-runtime/runtime/formal-world-storage-efficiency.manual.md#v-lws-codec)可构建并精确读回相同对象命名空间的紧凑候选，提供源/目标 allocated 比较；它不激活、不删除源，不证明净释放。完整生命周期、真实独立端点与同业务历史容量收益仍未验证。
 - 核对日期与基线：2026-10-17；需求为 `4220622fde069346a828d42572eea61c0073d95e` 上本 PR 候选；实现审读为固定 `2676c835cc50f12d7fd16a762eaa21f026ae79d4` 的 metrics 路径，无基准执行。
 - 剩余范围：设计目标已承接；完整采样、真实独立副本、业务规模矩阵、性能与恢复联合验证及运营者报告待实现验证。
 

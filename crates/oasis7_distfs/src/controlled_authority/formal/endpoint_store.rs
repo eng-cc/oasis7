@@ -139,6 +139,11 @@ impl Store {
         if !cfg!(unix) {
             return Err(invalid("formal durable endpoint needs directory fsync"));
         }
+        match fs::symlink_metadata(path.join(super::super::storage_shadow::SHADOW_MARKER)) {
+            Ok(_) => return Err(invalid("formal shadow directory cannot open an endpoint")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io(error)),
+        }
         directory(path)?;
         let lock_path = path.join(".formal-endpoint.lock");
         if fs::symlink_metadata(&lock_path).is_ok() {
@@ -242,20 +247,9 @@ impl Store {
         sync(dir)
     }
     pub fn get<T: DeserializeOwned>(&self, id: &str) -> Result<T, FormalError> {
-        hash_hex(id)?;
-        let file = self.path.join("formal-objects-v1").join(id);
-        let bytes = if file.try_exists().map_err(io)? {
-            read(&file)?
-        } else {
-            let mut bytes = None;
-            for source in &self.sources {
-                if let Some(found) = source.read_object(id)? {
-                    bytes = Some(found);
-                    break;
-                }
-            }
-            bytes.ok_or_else(|| invalid("referenced formal archive object missing"))?
-        };
+        let bytes = self
+            .raw_object(id)?
+            .ok_or_else(|| invalid("referenced formal archive object missing"))?;
         if bytes.len() > LIMIT {
             return Err(invalid("formal archive source object limit"));
         }
@@ -270,7 +264,7 @@ impl Store {
         let dir = self.path.join("formal-objects-v1");
         let target = dir.join(&id);
         if target.try_exists().map_err(io)? {
-            if read(&target)? != bytes {
+            if self.raw_object(&id)?.as_deref() != Some(bytes.as_slice()) {
                 return Err(invalid("formal immutable object changed"));
             }
         } else {

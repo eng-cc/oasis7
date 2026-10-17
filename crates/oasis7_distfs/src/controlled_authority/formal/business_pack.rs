@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const MAGIC: &[u8] = b"oasis7.formal.business-cas.pack.v1\0";
 const HEADER: usize = MAGIC.len() + 4 + 4 + 8 + 8;
 const INDEX_ENTRY: u64 = 44;
-const MAX_PACK: u64 = 80 * 1024 * 1024;
+pub(super) const MAX_PACK: u64 = 80 * 1024 * 1024;
 const MAX_LOGICAL: u64 = 64 * 1024 * 1024;
 pub(crate) const MAX_PACK_NODE: u64 = 4 * 1024 * 1024 + 128;
 const MAX_ENTRIES: usize = BUSINESS_INDEX_MAX_UPDATES * (BUSINESS_INDEX_DEPTH + 1);
@@ -62,6 +62,16 @@ fn raw_or_invalid(
 }
 fn open(path: &Path, id: &str) -> Result<Option<ObjectFile>, FormalError> {
     hash_hex(id)?;
+    // Preserve the regular-path boundary on platforms without O_NOFOLLOW.
+    // Unix also checks the descriptor below and closes the lookup/open race.
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(invalid("logical CAS path is not a regular file"));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io(error)),
+    }
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]

@@ -43,6 +43,22 @@
 <a id="v-lws-codec"></a>
 ## 3. V-LWS-CODEC：原字节、共享与所有读者
 
+### 离线 v1 pack shadow 入口（S2 子范围）
+
+停机一个受控验证副本的 endpoint，在已有父目录下选择全新、位于源 endpoint 外的目标目录：
+
+```bash
+env -u RUSTC_WRAPPER cargo run --locked -p oasis7_distfs --example formal_storage_shadow -- \
+  /absolute/source-endpoint /absolute/new-shadow-directory
+```
+
+入口取得 endpoint 同名独占 lease；运行中的 endpoint 会使其在创建目标前失败。它读取 `formal-objects-v1` 全部 digest 名对象，解析原 raw/v1 pack，再把不超过既有 pack node 上限的小对象按 8 MiB payload 批次写入现有 v1 pack；空对象及更大对象保持 raw。65,536 对象、1 GiB 总逻辑输入为本工具的固定上限；单对象沿用原 reader 的 64 MiB 逻辑/80 MiB 物理限制，读回同时持有两个逻辑对象，内存最多约 128 MiB 加有界名称清单及常数解码元数据。超限返回错误并保留源，不放宽预算继续。
+
+必须将全部原对象逐个读回并比较精确 bytes；每次逻辑读取继续校验原 hash。源中未知文件、symlink、非空 staging 或不完整物理盘点都会拒绝，不能跳过 pending 材料来扩大容量收益。输出 JSON 分列原逻辑 bytes、对象数量和源/目标物理盘点；以 allocated_bytes 比较该**对象命名空间**的候选占用。目标 hardlink 的按路径 apparent_bytes 会重复计整个 pack，不代表逻辑内容增长；源/目标保留同一逻辑对象，不能从总磁盘增量推算已释放量。
+
+源文件和 checkpoint 始终保留，目标既有内容绝不覆盖；任何失败都保留源及可能不完整的目标。写入任何对象前先创建并同步 `.shadow-only` 标志；初始化阶段失败可能仅留下空目录。目标只包含对象及打包元数据，不复制 checkpoint、authority 或 generation selector，**不能作为 endpoint 启动或视为可激活的完整恢复 generation**；当前 endpoint open 在创建 checkpoint 前拒绝任何带此标志的目录。成功仅证明该命名空间的全对象精确读回；不证明 typed 全世界闭包、独立故障域、运行时恢复续跑或新 codec。原子激活、旧 reader/rollback capability、迁移恢复、压缩/分块与回收仍需独立实现和验收；本入口不执行这些动作，也不删除源来获得净释放。失败重试使用另一个新目标；清理明确归属的验证输出按仓库交付规则执行。
+
+
 **输入**：包含 raw、旧 business pack、阶段外壳、candidate/frozen、大小对象、CBOR 整数数组 artifact、snapshot/module 的固定 corpus；另有不同授权范围的两个读者。
 
 1. 保存原始 canonical bytes、对象 hash、typed digest、签名/证明结果和 range 基准。固定目标表示版本及 frame/chunker 参数，保留原 corpus。
@@ -132,6 +148,22 @@
 
 <a id="v-lws-capacity"></a>
 ## 9. V-LWS-CAPACITY：相同完整历史的实际用量
+
+### 本地物理基线入口（S0 子范围）
+
+在冻结写入的本地验证副本上运行：
+
+```bash
+env -u RUSTC_WRAPPER cargo run --locked -p oasis7_distfs --example storage_inventory -- \
+  primary=/absolute/primary-storage-root replica=/absolute/replica-storage-root
+```
+
+每个 `DOMAIN=PATH` 必须覆盖该端点全部纳入本次比较的本地数据（含 attempt、archive、staging 和旧表示）；根目录以外的存储需单独纳入清单并补充计量。相同域内使用一个共同根，不能把重叠子目录当独立域相加。独立域标签由操作者声明，工具不能证明设备或服务独立。
+
+JSON 分域报告 file_paths、unique_files、directories、apparent_bytes、unique_apparent_bytes 和 allocated_bytes。Unix 使用 device/inode 去重，每个 inode 的 `st_blocks * 512` 计入 allocated（含目录），域间不去重。apparent 是所有文件名的长度和；unique_apparent 仍是文件长度，不代表分配量。目录项/权限/元数据错误、缺失根、symlink 和特殊文件产生 errors、`complete=false` 及退出码 1；参数错误返回 2。非 Unix 缺 inode/分配计量能力也返回 incomplete，不能用零代替。符号链接不跟随，需提供受控实际目录并显式记录覆盖范围。
+
+遍历是只读的非原子采样，需要静止树；inode 集合与待遍历路径/错误列表随扫描规模占用内存，超大目录应预留资源，本入口不声称端到端有界历史遍历能力；不调用 GC，不判断根/pin 存活，也不对完整历史作认证。硬链接之外的共享 extent、透明压缩、远端计费和打开但已 unlink 的 inode 不由本工具精确归因，须按 §9 步骤补充原生统计。工具通过不等于完整 V-LWS-CAPACITY 通过；真实负载、写入/峰值/延迟、历史完整性与独立故障域仍须联合验证。
+
 
 **输入**：等同正式历史、负载、原结果、存储角色及独立保障的基线/优化候选；覆盖空 Tick/稳定模块、小修改大 snapshot、活跃工业/结算历史和跨冷热窗口，固定采样点。
 
