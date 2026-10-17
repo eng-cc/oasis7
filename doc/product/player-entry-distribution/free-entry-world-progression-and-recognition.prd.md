@@ -126,7 +126,7 @@ Trace ID: O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
 - 实现状态：未核实
-- 实现与验证依据：上游成熟世界认可要求和入口早期负边界明确；产品语义与认领局部代码不足以证明机会来源/失效实现。 [世界认可上游产品要求](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)；[声誉机会主责](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
+- 实现与验证依据：上游[成熟世界认可要求](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[情境声誉要求](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)和入口早期负边界明确；产品语义与认领局部代码不足以证明机会来源/失效实现。 [世界认可上游产品要求](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)；[声誉机会主责](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
 - 剩余范围：设计：成熟世界认可/机会组合与早期入口信号不产生世界效果的负边界的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。 本次实现核对剩余：成熟期认可/机会有界来源与失效、历史不抹除和独立基线；早期接入/付费/在线时长不产生世界效果的实际负例。
 

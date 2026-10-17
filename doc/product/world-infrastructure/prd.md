@@ -365,7 +365,7 @@ Trace ID: O7-REQ-7a3866ed-cd66-48ea-9cc7-bb793575c957
 - 实现状态：部分实现
 - 实现与验证依据：builtin loader 优先读取 online manifest hashes，生产 fallback policy 关闭时缺条目拒绝；但进入 host materializer 后仍按 hash 尝试 fetch 与本地 compile。 [crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)；[crates/oasis7_wasm_materializer/src/lib.rs L78-L130](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_wasm_materializer/src/lib.rs#L78-L130)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
 - 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
-- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：生产来源约束不能只由外层 action gate 证明；materializer 的 policy/identity/receipt 输入与生产 fallback 限制尚须闭合，同候选 AC-1 未取得运行证据。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：生产来源约束不能只由外层 action gate 证明；materializer 的 policy/identity/receipt 输入与生产 fallback 限制尚须闭合，同候选 [AC-1](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-1) 未取得运行证据。
 
 <a id="req-infra-release-identity"></a>
 #### REQ-INFRA-RELEASE-IDENTITY：生产模块身份与签名合法性
@@ -395,7 +395,7 @@ Trace ID: O7-REQ-1440a1a4-3240-4644-8ada-bf9a34771465
 - 实现状态：部分实现
 - 实现与验证依据：governance certificate 校验 proposal/manifest/height/epoch/set hash/stake root/阈值、成员与 Ed25519 签名；生产 install/upgrade/rollback/apply 的缺 finality 拒绝与合法证书路径有回归定义。 [crates/oasis7/src/runtime/world/governance_internal.rs L420-L590](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L590)；[crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
 - 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
-- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：完整外部 certificate 供给、所有生产应用路径不可本地派生自签、同候选外部信任材料与 AC-4/8/9 实际运行仍待核清；当前 prototype 不等于正式 BFT。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：完整外部 certificate 供给、所有生产应用路径不可本地派生自签、同候选外部信任材料与 [AC-4](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-4)/[AC-8](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-8)/[AC-9](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-9) 实际运行仍待核清；当前 prototype 不等于正式 BFT。
 
 <a id="req-infra-release-attestation-authorization"></a>
 #### REQ-INFRA-RELEASE-ATTESTATION-AUTHORIZATION：发布证明聚合满足当前授权门槛
@@ -410,7 +410,7 @@ ModuleReleaseApply 必须按当前 epoch 快照 signer 集聚合 attestation，�
 - 实现状态：部分实现
 - 实现与验证依据：apply 按 current governance epoch snapshot 筛选 signer、集合去重、累计 stake，同时检查 min_unique_signers 与 threshold_bps；不足会 ActionRejected，随后才进入安装路径。 [crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
 - 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
-- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：需要同候选对当前/过期/非成员 signer、阈值不足不激活，以及 attestation 与外部 finality 两个独立必要条件的组合运行；现有权重测试定义不代替整组 AC-14。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：需要同候选对当前/过期/非成员 signer、阈值不足不激活，以及 attestation 与外部 finality 两个独立必要条件的组合运行；现有权重测试定义不代替整组 [AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-14)。
 
 <a id="req-infra-release-release-triage"></a>
 #### REQ-INFRA-RELEASE-RELEASE-TRIAGE：发布阻断故障可分诊
