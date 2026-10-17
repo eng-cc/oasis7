@@ -1,35 +1,50 @@
+import { applyWorldViewDelta, worldViewAuthorityKey, worldViewQueryKey, validateWorldViewEvolution, freezeWorldView } from "./pixel_world_world_view_delta.js";
 import { pixelWorldScope } from "./pixel_world_scope.js";
 // A read-only client. Request generation fences callbacks; it is not a world version.
 export function worldViewScopeKey(state, deployment = '') {
   return JSON.stringify([deployment, pixelWorldScope(state)]);
 }
-const binding = view => JSON.stringify([view.world_id, view.scope_id, view.source_cut, view.world_bounds]);
+const binding = view => JSON.stringify([view.world_id, view.scope_id, view.source_cut, view.world_bounds, worldViewAuthorityKey(view)]);
 export function createWorldViewClient({ request, onChange = () => {} }) {
-  let generation = 0, scope = null, expectedWorld = null;
-  let state = { view: null, loading: false, stale: false, error: null };
+  let generation = 0, scope = null, expectedWorld = null, baselineQuery = null;
+  let state = { view: null, loading: false, stale: false, error: null, changes: [] };
   const publish = patch => { state = { ...state, ...patch }; onChange(state); };
   return {
     state: () => state,
     invalidate() { generation += 1; },
-    reset(nextScope, worldId = null) { generation += 1; scope = nextScope; expectedWorld = worldId; publish({ view: null, loading: false, stale: false, error: null }); },
-    async query(query = {}) {
+    clearChanges() { publish({changes:[]}); },
+    reset(nextScope, worldId = null) { generation += 1; scope = nextScope; expectedWorld = worldId; publish({ view: null, loading: false, stale: false, error: null, changes: [] }); },
+    async query(query = {}, { delta = false, preserveChanges = false } = {}) {
       const current = ++generation, currentScope = scope;
       const active = () => current === generation && currentScope === scope;
       const requestGeneration = String(current);
       const pageSize = Math.min(200, query.page_size || 200);
       publish({ loading: true, error: null });
-      let first = null, cursor, entities = new Map(), relations = new Map(), seen = new Set(), pages = 0;
+      const queryKey = worldViewQueryKey(query);
+      let resume = delta && baselineQuery === queryKey && !state.stale && !state.view?.source_frozen ? state.view?.resume_cursor : null;
+      if (!resume && !preserveChanges) publish({changes:[]});
+      let lastPublished = null, recoveries = 0, restart = false, first = null, cursor, entities = new Map(), relations = new Map(), aggregates = new Map(), events = new Map(), seen = new Set(), pages = 0;
       const deadline = Date.now() + 30000;
       try {
         do {
+          restart = false;
           if (++pages > 20 || Date.now() > deadline) throw Error('World view request budget exceeded');
-          const page = await request({ ...query, page_size: pageSize, request_generation: requestGeneration, ...(cursor ? { cursor } : {}) });
+          const page = await request({ ...query, page_size: pageSize, request_generation: requestGeneration, ...(cursor ? { cursor } : {}), ...(resume ? {resume_cursor:resume} : {}) });
           if (!active()) return null;
+          if (page?.delivery === 'reset') { if (++recoveries > 1) throw Error('World view baseline unavailable'); resume = null; cursor = null; restart = true; baselineQuery = null; publish({view:null,stale:false,changes:[]}); continue; }
+          if (page?.delivery === 'delta' || page?.delivery === 'unchanged') {
+            try {
+              if (!resume || page.request_generation !== requestGeneration) throw Error('World view unexpected delta');
+              const view = applyWorldViewDelta(state.view,page);
+              publish({view,loading:false,stale:false,error:null,changes:page.removals?.length ? page.removals : state.changes}); return view;
+            } catch { if (++recoveries > 1) throw Error('World view continuity unavailable'); resume = null; cursor = null; restart = true; baselineQuery = null; publish({view:null,stale:false,changes:[]}); continue; }
+          }
+          if (!first && state.view && worldViewAuthorityKey(state.view) !== worldViewAuthorityKey(page)) publish({changes:[]});
           if (page?.unavailable_reasons?.length && page.completeness === 'unknown') throw Error('World view scope unavailable');
           if (expectedWorld && page?.world_id !== expectedWorld) throw Error('World view world binding mismatch');
           if (!page || !Array.isArray(page.entities) || !page.world_id || !page.source_cut || page.request_generation !== requestGeneration) throw Error('World view response binding mismatch');
           if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 2 * 1024 * 1024) throw Error('World view page byte budget exceeded');
-          if (page.entities.length + (page.relations?.length || 0) > pageSize || (first && binding(first) !== binding(page))) throw Error('World view page binding mismatch');
+          if (page.entities.length + (page.relations?.length || 0) + (page.aggregates?.length || 0) + (page.events?.length || 0) > pageSize || (first && binding(first) !== binding(page))) throw Error('World view page binding mismatch');
           first ||= page;
           if (page.source_frozen) {
             first = { ...first, source_frozen: true };
@@ -50,17 +65,30 @@ export function createWorldViewClient({ request, onChange = () => {} }) {
             if (relations.has(relation.relation_id) && JSON.stringify(relations.get(relation.relation_id)) !== JSON.stringify(relation)) throw Error('World view conflicting relation');
             relations.set(relation.relation_id, relation);
           }
-          if (entities.size + relations.size > 1000) throw Error('World view object budget exceeded');
+          for (const [field,map,id] of [['aggregates',aggregates,'aggregate_id'],['events',events,'event_id']]) {
+            if (page[field] != null && !Array.isArray(page[field])) throw Error('World view records invalid');
+            for (const value of page[field] || []) {
+              if (!value[id] || (map.has(value[id]) && JSON.stringify(map.get(value[id])) !== JSON.stringify(value))) throw Error('World view identity conflict');
+              map.set(value[id],value);
+            }
+          }
+          if (entities.size + relations.size + aggregates.size + events.size > 1000) throw Error('World view object budget exceeded');
           cursor = page.next_cursor || null;
           if (cursor && seen.has(cursor)) throw Error('World view cursor cycle');
           if (cursor) seen.add(cursor);
-          publish({ view: { ...first, entities: [...entities.values()], relations: [...relations.values()], next_cursor: cursor, completeness: cursor ? 'partial' : page.completeness }, stale: false });
-          if (cursor && entities.size + relations.size + pageSize > 1000) {
+          const nextView = validateWorldViewEvolution(freezeWorldView({ ...first, entities: [...entities.values()], relations: [...relations.values()], aggregates:[...aggregates.values()],events:[...events.values()], next_cursor: cursor, resume_cursor:page.resume_cursor, update_sequence:page.update_sequence, completeness: cursor ? 'partial' : page.completeness }));
+          if (new TextEncoder().encode(JSON.stringify(nextView)).byteLength > 2 * 1024 * 1024) {
+            if (!lastPublished) throw Error('World view cumulative byte budget exceeded');
+            publish({view:{...lastPublished,completeness:'partial',budget_limited:true,resume_cursor:undefined},loading:false});return state.view;
+          }
+          lastPublished = nextView;
+          publish({ view:nextView, stale:false });
+          if (cursor && entities.size + relations.size + aggregates.size + events.size + pageSize > 1000) {
             publish({view:{...state.view,completeness:'partial',budget_limited:true},loading:false});
             return state.view;
           }
-        } while (cursor);
-        if (active()) { publish({ loading: false }); return state.view; }
+        } while (cursor || restart);
+        if (active()) { baselineQuery = state.view?.completeness === 'complete' && !state.view?.budget_limited ? queryKey : null; publish({ loading: false }); return state.view; }
         return null;
       } catch (error) {
         if (active()) publish({ loading: false, stale: Boolean(state.view), error: String(error?.message || error) });
@@ -111,9 +139,14 @@ export function createWorldViewTransport({ send, timeoutMs = 10000, getScope = (
 // Text can retain disclosed unavailable routes; drawing remains a Rust authority check.
 export function worldViewRelations(view) {
   const entities = new Set((view?.entities || []).map(entity => `${entity.kind}:${entity.entity_id}`));
-  return (view?.relations || []).filter(relation => relation.relation_id
-    && relation.kind === 'logistics_route' && relation.source_class === 'runtime_projection'
-    && relation.valid_at_source_cut === view.source_cut
-    && entities.has(`${relation.from?.kind}:${relation.from?.id}`)
-    && entities.has(`${relation.to?.kind}:${relation.to?.id}`));
+  const aggregates = new Set((view?.aggregates || []).map(value=>value.aggregate_id));
+  return (view?.relations || []).filter(relation => {
+    if (!relation.relation_id || relation.valid_at_source_cut !== view.source_cut) return false;
+    const runtime = relation.kind === 'logistics_route' && relation.source_class === 'runtime_projection';
+    const industrial = relation.kind === 'industry_route' && relation.source_class === 'display_aggregation'
+      && typeof relation.route_count === 'string' && /^(0|[1-9]\d*)$/.test(relation.route_count);
+    const endpoint = ref => ref?.kind === 'aggregate'
+      ? industrial && aggregates.has(ref.id) : entities.has(`${ref?.kind}:${ref?.id}`);
+    return (runtime || industrial) && endpoint(relation.from) && endpoint(relation.to);
+  });
 }

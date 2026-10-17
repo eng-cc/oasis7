@@ -3475,7 +3475,7 @@ function attachSocket(ws) {
     initialSnapshotRetryCount = 0;
     clearHelloAckTimer();
     clearInitialSnapshotRetryTimer();
-    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY, "world_view", "world_view_pins_v1"] });
+    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY, "world_view", "world_view_pins_v1", "world_view_delta_v1", "world_view_aggregate_v1", "world_view_event_anchor_v1"] });
     scheduleHelloAckTimeout(ws);
     syncHostedSessionRefreshLoop();
     render();

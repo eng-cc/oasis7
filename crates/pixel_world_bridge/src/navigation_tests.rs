@@ -6,6 +6,7 @@ fn state(mode: &str, request_id: &str) -> RenderState {
     state.navigation = Some(Navigation {
         mode: mode.into(),
         request_id: request_id.into(),
+        bounds: None,
         target: Some(Selection {
             kind: "agent".into(),
             id: "agent-0".into(),
@@ -94,4 +95,75 @@ fn changing_selection_keeps_camera_fit_and_overview_explicitly_resets_it() {
     update(&mut runtime, state("overview", "2"), 3);
     assert_eq!(runtime.camera_fit_version, 0);
     assert!(runtime.needs_reconcile);
+}
+
+#[test]
+fn fit_bounds_uses_world_transform_and_does_not_create_follow_or_business_subject() {
+    let mut runtime = BevyRuntimeState::default();
+    let mut next = state("fit_bounds", "fit-1");
+    next.navigation.as_mut().unwrap().bounds = Some(
+        json!({"min_x_cm":"1200000","max_x_cm":"1800000","min_y_cm":"800000","max_y_cm":"1200000"}),
+    );
+    update(&mut runtime, next, 1);
+    super::apply_pending_fit_bounds(&mut runtime, 1000.0, 600.0);
+    assert!(runtime.camera.zoom > 3.5);
+    let zoom = runtime.camera.zoom;
+    process_input_event(&mut runtime, InputEvent::Wheel { delta_y: -1.0 });
+    assert!(runtime.camera.zoom > zoom);
+    process_input_event(&mut runtime, InputEvent::Wheel { delta_y: 1.0 });
+    let b = runtime
+        .render_state
+        .as_ref()
+        .unwrap()
+        .world_bounds
+        .as_ref()
+        .unwrap();
+    let (x, y) = to_canvas_point(
+        &Position {
+            x_cm: 1500000.0,
+            y_cm: 1000000.0,
+            z_cm: 0.0,
+        },
+        b,
+        1000.0,
+        600.0,
+        &runtime.camera,
+    )
+    .unwrap();
+    assert!((x - 500.0).abs() < 0.001 && (y - 300.0).abs() < 0.001);
+    assert!(runtime.active_follow_target.is_none());
+    assert!(runtime.pending_focus_target.is_none());
+    assert!(runtime.pending_fit_bounds.is_none());
+}
+
+#[test]
+fn event_can_be_located_at_its_original_point_but_never_becomes_a_follow_target() {
+    let mut runtime = BevyRuntimeState::default();
+    let mut next = state("locate", "event-1");
+    next.world_events
+        .push(crate::spatial_display::SpatialVisual {
+            id: "event".into(),
+            label: "Published".into(),
+            pos: Position {
+                x_cm: 100.0,
+                y_cm: 200.0,
+                z_cm: 0.0,
+            },
+            historical: true,
+            member_count: None,
+        });
+    next.navigation.as_mut().unwrap().target = Some(Selection {
+        kind: "world_event".into(),
+        id: "event".into(),
+    });
+    update(&mut runtime, next.clone(), 1);
+    assert_eq!(
+        runtime.pending_focus_target.as_ref().unwrap().kind,
+        "world_event"
+    );
+    next.navigation.as_mut().unwrap().request_id = "event-2".into();
+    next.navigation.as_mut().unwrap().mode = "follow".into();
+    update(&mut runtime, next, 2);
+    assert!(runtime.active_follow_target.is_none());
+    assert!(runtime.pending_focus_target.is_none());
 }

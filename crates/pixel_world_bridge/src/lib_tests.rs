@@ -53,6 +53,8 @@ pub(super) fn sample_render_state_for_camera(selection_kind: &str) -> RenderStat
         links: vec![],
         social_links: vec![],
         visual_hotspots: vec![],
+        industry_aggregates: vec![],
+        world_events: vec![],
         selection: Some(Selection {
             kind: selection_kind.to_string(),
             id: if selection_kind == "location" {
