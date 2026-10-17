@@ -1382,11 +1382,11 @@ Trace ID: O7-REQ-96cb1655-2ca3-445f-af2e-9f113e6f3e8e
 
 - 主责范围：仅 [SC-32](#sc-32) 的“owner/payer、quote、affordability、unknown/degraded可解释；执行预算与Electricity/Data等资源分离，不隐式转移payer或预算”。这里的 execution budget 是能力执行计量，不替代玩家委托给 Agent 的授权累计额度。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
 - 系统设计状态：未核实
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
-- 实现与验证依据：2026-10-17 固定候选静态复核：module owner权限不是owner/payer budget affordability读面，缺专门消费者链。 源码/测试定位：[module_action_loop_regressions.rs:423–458](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_regressions.rs#L423-L458)。测试定义不等于执行通过；本次未运行业务测试，同候选 CI 的业务测试组 skipped，不能代签本卡验收。
-- 核对日期与基线：2026-10-17；需求、设计与静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；实际业务运行未执行。
-- 剩余范围：owner/payer、quote、affordability、unknown/degraded可解释；执行预算与Electricity/Data等资源分离，不隐式转移payer或预算的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+- 实现与验证依据：2026-10-17固定main只读续核：已定位直接CapabilityGrantV2 execution-budget链，不再仅依赖module所有权测试。CapabilityBudgetAccount按subject+grant_id键保存remaining/reserved/spent，与artifact-owner Data/Electricity费用分离；Agent owner_binding/generation由live identity校验。Catalog携带subject/audience/能力scope，authorization receipt携带budget_before/after；governed quote仅units及模块/schema/有效期。以上是局部底层读出/quote切片，catalog未投影预算、quote未给owner/payer或affordability四态，未定位玩家端完整消费。 定位：[capability_authorization](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/capability_authorization.rs#L150-L166)；[capability_catalog](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/world/capability_catalog.rs#L111-L218)；[cognition_command](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/world/cognition_command.rs#L19-L65)；[capability_authorization](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/capability_authorization.rs#L216-L260)。
+- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `6463975178f3d32ef6d8e19e14f0b24f1c7f9471`；引用源码逐文件 Git blob 校验。本轮未运行测试或产品验收。
+- 剩余范围：补全Agent及Module/System的owner/payer映射、能力scope/是否计费/预算影响、affordable/insufficient/unknown/degraded与复查修复路径，贯通真实Viewer/API或能力预览/提交结果；不得以原始账本getter、snapshot或Data/Electricity资源费替代玩家execution-budget读面。保留SC-32适用条件和test_tier_full；本次未运行。
 
 <a id="root-sc32-budgetcommit"></a>
 #### 功能状态卡：预算与世界效果原子单次提交
@@ -1395,11 +1395,11 @@ Trace ID: O7-REQ-70e55a1f-7087-41e8-918d-7d1989c0155a
 
 - 主责范围：仅 [SC-32](#sc-32) 的“preview/stale/deny/无效果失败不debit，actual effect+debit+receipt原子一次；retry/replay不重复扣费/credit，owner失配或unknown不能透支”。验收沿用原 SC 对应的适用条件、成功/失败边界和 §5.1 测试层级；不创建新 AC 或缩小原文。
 - 系统设计状态：未核实
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：已核对 [Runtime 制度迁移](../../world-runtime/design.md#61-institution-migration-test)、[事务模型](../../world-runtime/design.md#621-explicit-transaction-and-typed-delta-model)。Runtime 已有制度迁移/事务架构；产品四类分类、唯一 pilot、owner/payer 读面与 budget 单次结算需分别核对，架构 current 不等于每条玩家义务已获完整专业承接。本卡不将相关设计的存在表述为本要求已完整覆盖。
-- 实现与验证依据：2026-10-17 固定候选静态复核：通用事务与模块所有权重验不能证明effect+budget debit+receipt的单次原子结算。 源码/测试定位：[module_action_loop_regressions.rs:423–458](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_regressions.rs#L423-L458)。测试定义不等于执行通过；本次未运行业务测试，同候选 CI 的业务测试组 skipped，不能代签本卡验收。
-- 核对日期与基线：2026-10-17；需求、设计与静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；实际业务运行未执行。
-- 剩余范围：preview/stale/deny/无效果失败不debit，actual effect+debit+receipt原子一次；retry/replay不重复扣费/credit，owner失配或unknown不能透支的精确专业分配/验证关系、当前实现和实际验收仍由 §5.1 对应 owner 核定；不得以根 SC 的局部或历史结果代签。
+- 实现与验证依据：2026-10-17固定main只读续核：execute_trusted_module_command在sandbox前按subject/grant账户检查和reservation，staged输出验证后按确定性logical units结算，CommandCommitted将budget/grant/nonce/authorization receipt/effect links同批准备发布；post-prepare失败、insufficient、owner失配、nonce重试和snapshot/replay均有直接源码/定向fixture。governed wrapper另有preview/no-effect免费门，但调用定位仅本身和测试，adapter直接trusted路径未经过该门。排队effect及授权receipt不能替代外部effect已完成；专业设计亦明确持久提交/outbox/恢复整体仍partial。 定位：[capability_authorization_command](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/world/capability_authorization_command.rs#L263-L416)；[cognition_command](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/world/cognition_command.rs#L72-L194)；[provider_loopback_adapter](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/simulator/provider_loopback_adapter.rs#L16-L100)；[capability_grant_v2](https://github.com/nil-studio/oasis7/blob/6463975178f3d32ef6d8e19e14f0b24f1c7f9471/crates/oasis7/src/runtime/tests/capability_grant_v2.rs#L1080-L1127)。
+- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `6463975178f3d32ef6d8e19e14f0b24f1c7f9471`；引用源码逐文件 Git blob 校验。本轮未运行测试或产品验收。
+- 剩余范围：继续贯通全部适用生产入口preview/stale/deny/no-effect无扣账与零预算操作；核准实际effect和receipt边界、外部effect completion及持久unknown恢复，给出同候选test_tier_full单次结算/重连/restore/replay/no-credit证据。已定位直接实现但全义务未闭合，故部分实现而非仅欠验收的待验证。
 
 <a id="root-sc33-extscope"></a>
 #### 功能状态卡：可选外部性 profile 与 legacy 边界
