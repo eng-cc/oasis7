@@ -68,9 +68,9 @@ Trace ID: O7-REQ-21f1c7b1-8be0-438e-8f92-d4d1b34be0e6
 - 系统设计状态：部分覆盖
 - 系统设计依据：[声明场景与证据身份](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-scope-evidence)及[受限结论与扩面边界](../../world-simulator/llm/provider-agent-experience-parity.design.md#parity-rollout-boundary)承接组合身份、证据不足不扩面和明确下一步。剩余：各入口玩家可读受限/退化呈现及真实组合全范围验证，不能由局部parity设计代签。
 - 实现状态：未核实
-- 实现与验证依据：[有界native runner原操作恢复](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_harness/src/native_task.rs#L231-L277)及[已合入#4744](https://github.com/nil-studio/oasis7/pull/4744#issuecomment-6209860321)确认原生工业Harness切片已交付，合入a7555be3f4e6c7814b3660ca04e42130b244de61；不再使用旧50e128候选尚未合入的表述。实际验证source d5c111b560d1a8a11dd6169121ab615c3d229028及其core 9cf5557cef16ce8eadd8107c7eec905a199dc9b6记录真实Node/HTTP、确定性provider四效果、stale拒绝后新决策及restart；这是协议fixture，非自主模型或全provider parity；上述执行切片不证明本卡声明组合/权限/证据范围与超范围受限下一步的直接义务，状态保持未核实。
-- 核对日期与基线：2026-10-17；需求、设计与静态实现固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；历史执行候选、入口和环境分别按上列记录限定。本轮只读核查，未运行测试、模型、浏览器或部署。
-- 剩余范围：已交付共享SDK/原操作恢复和native工业Harness有界切片；全部保留能力迁移、真实provider组合/自主试玩、各入口受限/退化可读性及AGC-10性能仍需独立同候选证据。#4726已关闭并不代签这些原验收；历史评论须按其日期阅读。
+- 实现与验证依据：[第一方执行入口](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_model_client/execution.rs#L1-L90)→[SessionModelProvider身份与检查](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_model_provider/src/harness_adapter.rs#L26-L73)及[实验范围/权限/失败下一步表面](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx#L146-L172)已核：表面诚实标第一方实验连接、读取部署preset、提示连接不授予权限、失败给出核对配置/结果的下一步。但该链未核到消费parity场景、权限与证据范围的声明记录，也未核清“组合超范围/证据不足”如何进入玩家受限状态；不能以工业运行或技术配置blocked替代本卡。
+- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，源码逐文件 Git blob 校验；本轮未运行模型、Runtime、浏览器或产品验收。既有PR运行记录仅按各自候选/范围引用。
+- 剩余范围：继续追专业parity声明/证据记录→实际支持组合判定→各入口超范围/证据不足的limited/degraded/blocked与真实下一步。现有技术失败/实验标识只缩小已查范围，不作为本产品项直接完成子范围；不以真实模型或工业效果充数。
 
 - 要求：provider 切换的连续性只能在专业 authority 已声明的 provider 组合、玩家场景、权限和证据范围内作出产品承诺；技术接通、一次成功或历史样本不能扩大当前支持、默认或发布结论。
 - 验收：AC-AGENT-PARITY-001

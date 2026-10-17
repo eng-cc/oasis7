@@ -156,9 +156,9 @@ Trace ID: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
 - 系统设计状态：部分覆盖
 - 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：concept/illustrative/runtime_capture 与小说类型分离，目标/概念不冒充真实运行来源；同 Trace 五列承接与六列验证限定网站子范围。 [认领经济四层边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)原接收保留。 [测试 benchmark 局部边界](../../testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md#des-bench-public-categories)仅承接历史事实、目标、假设与证据范围分离；不覆盖全渠道发布、撤回、LiveOps 审核或四层全域验收，不改变本卡实现状态和既有证据。
 - 实现状态：未核实
-- 实现与验证依据：真实播放器 unknown/unavailable 文案是运行状态，不自动成为公开 claim 四层审核。 [canonical 请求超时明确 unknown，提示刷新当前世界](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/legacy_core.js#L945-L970)；[玩家图形不可用说明与 Retry Renderer](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx#L1280-L1293)。本轮静态审读；测试定义及历史 PR 结果不替代完整验收。
-- 核对日期与基线：2026-10-17；需求/源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅后继文档调整；未执行本项业务验收。
-- 剩余范围：每个拟发布 claim 的事实/目标/假设/证据边界及同窗 publish-ready 审批仍未知；不能用诚实 runtime 错误文案代替全量公开 claim 管理。
+- 实现与验证依据：首页真实 case provenance/controlled replay → 静态构建 gate；release 改 tag → 历史试玩 claim 自动收窄。 已定位历史证据不续签新候选的真实运行消费者；gate 校验 source/build/window 格式与限定文案，但不建立每 claim 的事实/目标/假设/可发布审核记录。 [site/assets/app.js:1051–1065](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/site/assets/app.js#L1051-L1065)；[scripts/site-homepage-claim-check.sh:392–442](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/scripts/site-homepage-claim-check.sh#L392-L442)；[.github/workflows/pages.yml:23–39](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/.github/workflows/pages.yml#L23-L39)；[README.md:8–33](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/README.md#L8-L33)
+- 核对日期与基线：2026-10-17；源码 `0ec10379419b0aaedb9d16157b81c92f4e6e3495`，本轮固定源码/操作记录只读复核；未运行安装、浏览器、模型或业务验收。
+- 剩余范围：每个拟发布 claim 的四层字段与根 README/authority/同窗 QA 的语义支持及 publish_ready 授权仍未核清；保留网站子范围，不能因 provenance 字段齐全就升整体实现。
 
 - 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：其他专业领域、非官网渠道及全部公开审核仍外部。不改变本卡固定源码与已取得实现范围。
 

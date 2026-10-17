@@ -97,9 +97,9 @@ Trace ID: O7-REQ-ff67822b-5943-4728-ad4c-795c94fca95a
 - 系统设计状态：未核实
 - 系统设计依据：已核对 [ledger 来源/去重字段](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#2-ledger)与[有界 round 导入](../../readme/governance/readme-limited-preview-contributor-reward-ledger.md#32-merged-pr-round-scan)。字段存在不证明跨渠道去重、不可变 trace、撤回/失效证据与窗口关闭的完整技术处置；该完整技术范围仍未核实。
 - 实现状态：未核实
-- 实现与验证依据：沿用前轮 reward intake 源与操作合同；本轮不把 account join 去重替代贡献去重。 [原 join attempt/key 重用；错误查原 candidate 状态，不据丢回复盲目恢复](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_hosted_world_account_module.js#L23-L57)。本轮静态审读；测试定义及历史 PR 结果不替代完整验收。
-- 核对日期与基线：2026-10-17；需求/源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅后继文档调整；未执行本项业务验收。
-- 剩余范围：需贡献身份/重复或失效事件→认可机会决定→玩家反馈的同实体链；join_attempt 幂等不是贡献信号幂等。
+- 实现与验证依据：PR payload → build_result → draft/deferred ledger row → round scan PR-id → 人工 approved rows → pending distribution。 按 PR 编号命名不是跨渠道去重。真实 round 的 unique 与 exclusion 是该轮操作决定，不能证明重试、撤回、窗口关闭时全局唯一认可。 [scripts/readme_reward_pr_intake_lib.py:162–214](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/scripts/readme_reward_pr_intake_lib.py#L162-L214)；[scripts/readme-reward-pr-intake-round-scan.py:104–151](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/scripts/readme-reward-pr-intake-round-scan.py#L104-L151)；[doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md:3–24](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md#L3-L24)；[doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md:3–16](https://github.com/nil-studio/oasis7/blob/0ec10379419b0aaedb9d16157b81c92f4e6e3495/doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md#L3-L16)
+- 核对日期与基线：2026-10-17；源码 `0ec10379419b0aaedb9d16157b81c92f4e6e3495`，本轮固定源码/操作记录只读复核；未运行安装、浏览器、模型或业务验收。
+- 剩余范围：尚需同贡献跨渠道 immutable trace 与 supersede/revoke/reject 决定到反馈/执行的接线；不把 join_attempt 或普通 auth nonce 去重代签。
 
 - 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
