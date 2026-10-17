@@ -3945,8 +3945,7 @@ export function mountViewerApp(root = document.getElementById("app")) {
   }
 
   const initialized = core.initializeSoftwareSafeCore();
-  // The shell stays interactive during identity bootstrap. Construct the world
-  // scope guard only once the initial identity, endpoint and fixtures are set.
+  // Keep the shell interactive; construct the world scope guard after bootstrap and fixtures.
   const [pixelWorldReady, setPixelWorldReady] = createSignal(false);
   let dispose = mount(() => <AppShell pixelWorldReady={pixelWorldReady()} />, root);
   core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
