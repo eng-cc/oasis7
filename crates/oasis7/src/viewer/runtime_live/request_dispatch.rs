@@ -57,7 +57,9 @@ impl ViewerRuntimeLiveServer {
                     | ViewerRequest::HelloV2 { .. }
                     | ViewerRequest::Subscribe { .. }
                     | ViewerRequest::RequestSnapshot
+                    | ViewerRequest::RequestScopeSnapshot { .. }
                     | ViewerRequest::RequestWorldFeed { .. }
+                    | ViewerRequest::RequestWorldView { .. }
             )
         {
             return Err(ViewerRuntimeLiveServerError::Init(
@@ -127,6 +129,9 @@ impl ViewerRuntimeLiveServer {
                             && !self.world.capability_invocation_contexts().is_empty())
                 };
                 if version >= 2 {
+                    if offered.iter().any(|capability| capability == "world_view") {
+                        selected.push("world_view".to_string());
+                    }
                     if self.authoritative_recovery_dir().is_some()
                         && offered.iter().any(|capability| {
                             capability
@@ -274,6 +279,56 @@ impl ViewerRuntimeLiveServer {
                 }
                 session.initial_snapshot_sent = true;
                 self.enable_auto_play_for_session_if_available(session);
+            }
+            ViewerRequest::RequestScopeSnapshot { request_generation } => {
+                if request_generation.is_empty() || request_generation.len() > 64 {
+                    send_response(
+                        writer,
+                        &ViewerResponse::Error {
+                            message: "invalid_scope_snapshot_generation".into(),
+                        },
+                    )?;
+                } else {
+                    send_response(
+                        writer,
+                        &ViewerResponse::ScopeSnapshot {
+                            request_generation,
+                            snapshot: self.compat_snapshot_for_session(session),
+                        },
+                    )?;
+                }
+            }
+            ViewerRequest::RequestWorldView { query } => {
+                if (self.config.world_service.is_some() && self.verified_world_view.is_none())
+                    || (self.chain_link_enabled()
+                        && !session.chain_runtime_authoritatively_primed
+                        && !session.initial_snapshot_sent)
+                {
+                    session.world_view_projection = None;
+                    let view = serde_json::json!({"world_id":self.config.world_id,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["source_unavailable"]});
+                    send_response(writer, &ViewerResponse::WorldView { view })?;
+                    return Ok(());
+                }
+                let local_runtime =
+                    self.config.world_service.is_none() && !self.chain_link_enabled();
+                let mut cache = session.world_view_projection.take();
+                let world_id = self.config.world_id.clone();
+                let audience = session
+                    .current_player_id
+                    .clone()
+                    .unwrap_or_else(|| "public".into());
+                let epoch = self.reorg_epoch;
+                let view = crate::viewer::world_view::build_session(
+                    &mut cache,
+                    || self.compat_snapshot_for_session(session),
+                    &world_id,
+                    epoch,
+                    &audience,
+                    query,
+                    local_runtime,
+                );
+                session.world_view_projection = cache;
+                send_response(writer, &ViewerResponse::WorldView { view })?;
             }
             ViewerRequest::RequestWorldFeed { cursor, limit } => {
                 let feed = world_feed::build_world_feed(

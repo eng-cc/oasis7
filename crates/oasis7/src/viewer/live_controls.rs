@@ -525,6 +525,34 @@ impl ViewerLiveSession {
                     )?;
                 }
             }
+            ViewerRequest::RequestScopeSnapshot { request_generation } => {
+                if request_generation.is_empty() || request_generation.len() > 64 {
+                    send_response(
+                        writer,
+                        &ViewerResponse::Error {
+                            message: "invalid_scope_snapshot_generation".into(),
+                        },
+                    )?;
+                } else {
+                    send_response(
+                        writer,
+                        &ViewerResponse::ScopeSnapshot {
+                            request_generation,
+                            snapshot: world.snapshot(),
+                        },
+                    )?;
+                }
+            }
+            ViewerRequest::RequestWorldView { query } => {
+                let view = crate::viewer::world_view::build(
+                    &world.snapshot(),
+                    world_id,
+                    0,
+                    "public",
+                    query,
+                );
+                send_response(writer, &ViewerResponse::WorldView { view })?;
+            }
             ViewerRequest::RequestWorldFeed { .. } => {
                 send_response(
                     writer,

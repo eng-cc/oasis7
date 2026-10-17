@@ -87,6 +87,12 @@ pub enum ViewerRequest {
         event_kinds: Vec<ViewerEventKind>,
     },
     RequestSnapshot,
+    RequestScopeSnapshot {
+        request_generation: String,
+    },
+    RequestWorldView {
+        query: serde_json::Value,
+    },
     RequestCanonicalAgentOwnerReadContext {
         agent_id: String,
     },
@@ -555,6 +561,13 @@ pub enum ViewerControl {
     reason = "ViewerResponse is a public wire/API enum; boxing a response branch would break existing Rust pattern matches even though serde could preserve its bytes."
 )]
 pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
+    ScopeSnapshot {
+        request_generation: String,
+        snapshot: Snapshot,
+    },
+    WorldView {
+        view: serde_json::Value,
+    },
     CanonicalAgentOwnerReadContext {
         context: serde_json::Value,
     },

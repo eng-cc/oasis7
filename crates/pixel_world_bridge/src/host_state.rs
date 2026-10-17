@@ -14,6 +14,8 @@ mod resource_summary_projection;
 mod social_links;
 #[path = "host_world_bounds.rs"]
 mod world_bounds;
+#[path = "host_world_view.rs"]
+mod world_view;
 
 use action_receipt_support::{
     action_receipt_title, has_enabled_first_agent_claim, is_authoritative_world_delta_stage,
@@ -577,7 +579,20 @@ fn pick_known_agent_id(candidate_ids: Vec<Option<String>>, agents: &[Value]) -> 
     })
 }
 
-fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<&str>) -> Value {
+// A published null is a player-level or unknown binding, never a request
+// to borrow the recommendation or current observation target.
+fn receipt_target_agent_id(gameplay: &Value) -> Option<String> {
+    if gameplay.get("receiptTargetAgentId").is_some() {
+        return string_key(gameplay, "receiptTargetAgentId");
+    }
+    let feedback = obj(gameplay, "recentFeedback");
+    if feedback.get("agentId").is_some() {
+        return string_key(feedback, "agentId");
+    }
+    string_key(gameplay, "acceptedIntentTarget")
+}
+
+fn build_action_receipt(locale: &str, gameplay: &Value) -> Value {
     let recent_feedback = obj(gameplay, "recentFeedback");
     let recent_feedback_action = str_key(recent_feedback, "action");
     let execution_stage = str_key(gameplay, "executionState");
@@ -703,15 +718,7 @@ fn build_action_receipt(locale: &str, gameplay: &Value, active_agent_id: Option<
         "summary": summary,
         "detail": detail,
         "target_agent_id": if present {
-            string_key(gameplay, "acceptedIntentTarget")
-                .or_else(|| string_key(obj(gameplay, "recommendedAction"), "targetAgentId"))
-                .or_else(|| {
-                    arr(gameplay, "availableActions")
-                        .iter()
-                        .find(|action| str_key(action, "actionId") == Some("claim_first_agent"))
-                        .and_then(|action| string_key(action, "targetAgentId"))
-                })
-                .or_else(|| active_agent_id.map(ToString::to_string))
+            receipt_target_agent_id(gameplay)
                 .map(Value::String)
                 .unwrap_or(Value::Null)
         } else {
@@ -893,17 +900,13 @@ fn build_commercial_surface(
     visual_hotspots: &[Value],
     selection: &Value,
 ) -> Value {
+    // Observation, recommendation and original operation each retain their own identity.
     let active_agent_id = pick_known_agent_id(
-        vec![
-            string_key(obj(gameplay, "recommendedAction"), "targetAgentId"),
-            string_key(gameplay, "acceptedIntentTarget"),
-            if str_key(selection, "kind") == Some("agent") {
-                string_key(selection, "id")
-            } else {
-                None
-            },
-            agents.first().and_then(|agent| string_key(agent, "id")),
-        ],
+        vec![if str_key(selection, "kind") == Some("agent") {
+            string_key(selection, "id")
+        } else {
+            None
+        }],
         agents,
     );
     let objective_title = localized_goal_title(locale, gameplay);
@@ -930,7 +933,7 @@ fn build_commercial_surface(
         .or_else(|| str_key(gameplay, "acceptedIntentDetail"))
         .or_else(|| str_key(gameplay, "progressDetail"))
         .map(ToString::to_string);
-    let action_receipt = build_action_receipt(locale, gameplay, active_agent_id.as_deref());
+    let action_receipt = build_action_receipt(locale, gameplay);
     let blocker_label = localized_blocker_label(locale, gameplay);
 
     json!({
@@ -943,7 +946,6 @@ fn build_commercial_surface(
             "label": next_action_label,
             "detail": next_action_detail,
             "target_agent_id": string_key(obj(gameplay, "recommendedAction"), "targetAgentId")
-                .or_else(|| active_agent_id.clone())
                 .map(Value::String)
                 .unwrap_or(Value::Null),
             "execute_kind": string_key(obj(gameplay, "recommendedAction"), "executeKind")
@@ -975,6 +977,8 @@ fn build_commercial_surface(
 }
 
 pub(crate) fn build_render_state(input: &Value) -> Value {
+    let adapted = world_view::adapt_input(input);
+    let input = adapted.as_ref().unwrap_or(input);
     let locale = str_key(input, "locale").unwrap_or("en");
     let world_bounds = build_world_bounds(input);
     let world_scale_base = number_key(&world_bounds, "width_cm", 1.0)
@@ -1155,6 +1159,8 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
 
     json!({
         "locale": locale,
+        "exploration_mode": input.get("worldView").is_some(),
+        "navigation": obj(input, "navigation").clone(),
         "world_bounds": world_bounds,
         "locations": locations,
         "fragment_terrain": fragment_terrain,
@@ -1182,3 +1188,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
 #[cfg(test)]
 #[path = "host_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "host_identity_tests.rs"]
+mod identity_tests;

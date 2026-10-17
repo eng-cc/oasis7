@@ -1,3 +1,6 @@
+import { bindFeedbackScope } from "./viewer_feedback_scope.js";
+import { createScopeSnapshotTransport } from "./pixel_world_scope_snapshot.js";
+import { createWorldViewTransport, worldViewScopeKey } from "./pixel_world_world_view.js";
 import { createHostedWorldAccount } from "./viewer_hosted_world_account_module.js";
 import { createCanonicalOwnerReadModule } from "./viewer_canonical_owner_read_module.js";
 import { createViewerHostedAccountLoginIssuer } from "./viewer_hosted_account_login_issuer.js";
@@ -2511,7 +2514,7 @@ function requestSnapshotSafe() {
 }
 
 function createSemanticFeedback(kind, action, agentId, extra = {}) {
-  return {
+  return bindFeedbackScope({
     id: nextRequestId(),
     kind,
     action,
@@ -2523,7 +2526,7 @@ function createSemanticFeedback(kind, action, agentId, extra = {}) {
     effect: null,
     response: null,
     ...extra,
-  };
+  }, state);
 }
 
 function markCurrentGameplayActionFeedbackError(error, effect = "gameplay action send failed") {
@@ -3372,7 +3375,15 @@ function handleAuthoritativeRecoveryError(error) {
   void recoverHostedSessionFromError(error);
 }
 
+const worldViewTransport = createWorldViewTransport({ send: sendJson, getScope: () => worldViewScopeKey(state), getConnection: () => socket });
+export const requestWorldView = query => worldViewTransport.request(query);
+const scopeSnapshotTransport = createScopeSnapshotTransport({send:sendJson,getScope:()=>worldViewScopeKey(state),getConnection:()=>socket});
+export const requestScopeSnapshot = () => scopeSnapshotTransport.request();
+// Host authorizes the captured scope before this existing adopter triggers render.
+export const acceptScopeSnapshot = snapshot => handleSnapshot(snapshot);
 function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket && socket !== sourceSocket) return;
+  if (scopeSnapshotTransport.handle(message)) return;
+  if (worldViewTransport.handle(message)) return;
   if (quoteProtocolFacade.handleQuoteViewerMessage(message)) return;
   switch (message?.type) {
     case "hello_ack":
@@ -3464,7 +3475,7 @@ function attachSocket(ws) {
     initialSnapshotRetryCount = 0;
     clearHelloAckTimer();
     clearInitialSnapshotRetryTimer();
-    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY] });
+    sendJson({ type: "hello_v2", client: "viewer", version: 2, capabilities: [PROMPT_CONTROL_RESULT_CAPABILITY, "world_view"] });
     scheduleHelloAckTimeout(ws);
     syncHostedSessionRefreshLoop();
     render();
@@ -3491,6 +3502,8 @@ function attachSocket(ws) {
       state.auth.syncInFlight = false;
       state.auth.runtimeStatus = "disconnected";
     }
+    worldViewTransport.clear();
+    scopeSnapshotTransport.clear();
     clearPendingSessionRegisterWaiter("websocket disconnected during player session registration");
     failPendingAgentChatAck(
       "websocket disconnected before agent_chat ack/error returned",

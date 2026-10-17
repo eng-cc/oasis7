@@ -109,6 +109,8 @@ Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可�
 
 ### 6. 外部游戏 Runtime 的 owner 目标控制前置
 
+世界舞台局部更新（2026-10-17，仅 [PR #4825](https://github.com/nil-studio/oasis7/pull/4825)，实现基线 `bb27f5c033674419d24575872bd64e8a0c44a4d0`）：主体绑定隔离、Web 显示恢复和 Agent/Location 探索切片已实现，待完整测试；本次核对时尚未合入。正式独立试玩缺私有世界/GameClient 配置，原生客户端及完整设施/关系/事件、容量目标仍未交付或验证。用户已要求保留测试缺口推进合入，不表示整体验收或部署完成。范围与后续验收见[产品实现摘要](../../product/agents-world-simulation/player-readable-world-stage.prd.md#stage-implementation-status)，不刷新本页其他核验时点。
+
 局部摘要核对于 2026-10-14，仅本项：owner 私有目标控制、原生 fenced 执行、物流、权威配方及 prepared claimed Agent 建厂到首产物的代码切片已交付。实际游玩仍限定各自候选与 prepared-world 场景；失败、超时、cleanup 和普通 CI 修复分别回到 [执行 PR](https://github.com/eng-cc/oasis7/pull/4628#issuecomment-6162407180)、[物流 PR](https://github.com/eng-cc/oasis7/pull/4634#issuecomment-6162407791)、[生产 PR](https://github.com/eng-cc/oasis7/pull/4650#issuecomment-6162408442)、[建厂链 PR](https://github.com/eng-cc/oasis7/pull/4662#issuecomment-6162409087)。不将这些 targeted 结果提升为完整首局、两 Runtime parity、GUI 或生产部署验收。
 
 完整协作 TaskSnapshot、身份注册/配对及公开 Game HTTP 写入口尚未由这些切片证明；部署暂停继续有效。支持范围与证据入口见 [Game API 专业合同](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)和[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。本次不刷新全局和环境核验基线。

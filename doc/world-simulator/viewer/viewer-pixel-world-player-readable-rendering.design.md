@@ -32,7 +32,7 @@
 
 pixel_world_host.jsx将bounded snapshot交Rust host_state.rs::build_render_state，消费world_bounds、locations、fragment_terrain、agents、links、hotspots、selection与commercial_surface；WASM绘制世界。focus/right-panel兼容hooks、Targets的entity-search仍存在；world_feed/v1来自独立Runtime journal。
 
-当前build_commercial_surface沿recommended target、accepted target、selection、first visible agent解析active_agent_id，并用于next_action fallback；build_action_receipt也接收它补target。此为静态源码风险，不再作为正确主体要求，也不据此断言已发生越权执行。
+当前active_agent_id只取可见集合中的明确selection；next_action只取推荐动作自己的target。回执消费独立receiptTargetAgentId（包括显式null），本地反馈固定其提交主体，Runtime兼容绑定来自原player-facing feedback；不再借推荐/选择/首项补主体。缺绑定保留未知或玩家级范围，不推断控制资格。
 
 <a id="design-decision"></a>
 ## 4. 边界与设计决策

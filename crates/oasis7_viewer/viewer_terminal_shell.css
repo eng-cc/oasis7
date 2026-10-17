@@ -1775,3 +1775,21 @@ body {
 .pixel-world-render-unavailable__retry {
   min-height: 44px;
 }
+
+.pixel-world-exploration { border: 1px solid rgba(148,163,184,.25); border-radius: .5rem; padding: .65rem; min-width: 0; }
+.pixel-world-exploration form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+.pixel-world-exploration label { display: flex; flex: 1 1 12rem; flex-direction: column; gap: .25rem; min-width: 0; }
+.pixel-world-exploration input { width: 100%; min-width: 0; box-sizing: border-box; }
+.pixel-world-exploration ul { margin: .5rem 0 0; padding: 0; list-style: none; max-height: 14rem; overflow-y: auto; }
+.pixel-world-exploration li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .4rem 0; border-top: 1px solid rgba(148,163,184,.15); overflow-wrap: anywhere; }
+.pixel-world-exploration li > button:first-child { text-align: start; flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
+.pixel-world-exploration p { margin: .5rem 0; font-size: .85rem; }
+.pixel-world-exploration button:focus-visible, .pixel-world-exploration input:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+
+.pixel-world-exploration-disclosure { position: absolute; top: 5rem; left: 1.5rem; z-index: 65; pointer-events: auto; max-width: calc(100vw - 3rem); color: var(--text, #dce5dc); }
+.pixel-world-exploration-disclosure > summary { cursor: pointer; width: fit-content; padding: .5rem .75rem; border: 1px solid rgba(148,163,184,.35); border-radius: .5rem; background: rgba(12,24,25,.96); }
+.pixel-world-exploration-disclosure[open] { width: min(32rem, calc(100vw - 3rem)); }
+.pixel-world-exploration-disclosure[open] > .pixel-world-exploration { max-height: min(55vh, 32rem); overflow: auto; background: rgba(12,24,25,.98); margin-top: .3rem; }
+@media (max-width: 600px) { .pixel-world-exploration-disclosure { left: .75rem; top: 8rem; max-width: calc(100vw - 1.5rem); } .pixel-world-exploration-disclosure[open] { width: calc(100vw - 1.5rem); } }
+
+[data-viewer-shell="player-fullscreen"]:has(.pixel-world-exploration-disclosure[open]) [data-viewer-overlay="feed"] { visibility: hidden; }

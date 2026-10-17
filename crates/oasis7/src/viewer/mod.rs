@@ -18,6 +18,7 @@ mod game_read_api;
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
 mod web_bridge;
+mod world_view;
 
 pub(crate) use auth::{
     claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,

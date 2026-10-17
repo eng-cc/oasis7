@@ -8,8 +8,10 @@ use super::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
+pub(super) fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
     RenderState {
+        exploration_mode: false,
+        navigation: None,
         locale: "en".to_string(),
         world_bounds: Some(WorldBounds {
             width_cm: 3_000_000.0,
