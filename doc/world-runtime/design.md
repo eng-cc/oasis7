@@ -15,6 +15,9 @@
 `oasis7` owns the shared world library and no executable targets. `oasis7_launcher_backend` owns game/Web launcher backends; `oasis7_viewer_runtime` owns viewer processes; `oasis7_client_cli` and `oasis7_ops_tools` own client commands and world operations. Newapi service, local provider bridge and provider diagnostics/benchmarks have separate package ownership. Observability, hosted-access policy and LetAI credit adaptation are shared libraries; libraries and executables must not borrow another binary's source. Client CLI production defaults exclude Wasmtime/libp2p. Entrypoints that execute local worlds, resolve authoritative simulator configuration or serve viewers retain explicit world-library dependencies instead of duplicating protocol, authorization or recovery logic. Executable names, CLI, serialized formats and persistence behavior remain unchanged.
 
 
+Launcher bootstrap address parsing is shared by desktop and backend launchers in `oasis7_launcher_config`; world execution does not own CLI topology parsing. Viewer HTTP/WebSocket and offline socket hosting belong to `oasis7_viewer_runtime`, consuming the existing authoritative world/view protocols. `oasis7_wasm_materializer` owns artifact transport, external build invocation and cache resolution, while the world adapter preserves module identity, hash validation and admission failures. Independent formal read proof verification belongs to the client layer; world-specific projection construction and typed gameplay adapters remain with the world. These ownership boundaries preserve existing wire bytes, signer/trust configuration, recovery behavior and artifact fallback order.
+
+
 ## 2. 阅读顺序
 1. `doc/world-runtime/prd.md`
 2. `doc/world-runtime/design.md`

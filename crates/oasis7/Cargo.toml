@@ -22,12 +22,12 @@ serde_ignored = "0.1"
 serde_cbor = "0.11"
 blake3 = "1"
 unicode-normalization = "0.1"
-multiaddr = "0.18"
 ed25519-dalek = { version = "3", features = ["rand_core"] }
 rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+oasis7_wasm_materializer = { path = "../oasis7_wasm_materializer" }
 oasis7_observability = { path = "../oasis7_observability" }
 oasis7_hosted_access = { path = "../oasis7_hosted_access" }
 oasis7_game_client = { path = "../oasis7_game_client" }
@@ -42,14 +42,10 @@ oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = f
 oasis7_wasm_executor = { version = "0.1.0", path = "../oasis7_wasm_executor", default-features = false }
 oasis7_wasm_router = { version = "0.1.0", path = "../oasis7_wasm_router" }
 oasis7_wasm_store = { version = "0.1.0", path = "../oasis7_wasm_store" }
-async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }
-ctrlc = { version = "3.4", features = ["termination"] }
 hmac = "0.13"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "rustls"], default-features = false }
 toml = "0.9.12"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "tracing-log"] }
-tungstenite = "0.30.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
@@ -68,3 +64,6 @@ test_tier_full = ["test_tier_required"]
 [dev-dependencies]
 oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = false, features = ["test-hooks"] }
 oasis7_hosted_access = { path = "../oasis7_hosted_access", features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }

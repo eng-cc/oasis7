@@ -5,6 +5,12 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+url = "2"
+oasis7_wasm_abi = { version = "0.1.0", path = "../oasis7_wasm_abi" }
+serde_ignored = "0.1"
+oasis7_agent_api = { version = "0.1.0", path = "../oasis7_agent_api" }
+serde = { version = "1", features = ["derive"] }
+tungstenite = "0.30.0"
 oasis7 = { version = "0.1.0", path = "../oasis7", default-features = false }
 ed25519-dalek = { version = "3", features = ["rand_core"] }
 hex = "0.4"
@@ -21,4 +27,5 @@ test_tier_required = ["oasis7/test_tier_required"]
 test_tier_full = ["test_tier_required", "oasis7/test_tier_full"]
 
 [dev-dependencies]
+reqwest = { version = "0.13.4", features = ["blocking", "json", "rustls"], default-features = false }
 oasis7 = { version = "0.1.0", path = "../oasis7", default-features = false, features = ["test_tier_required"] }

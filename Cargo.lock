@@ -6317,13 +6317,11 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "chacha20poly1305 0.11.0",
- "ctrlc",
  "ed25519-dalek",
  "getrandom 0.4.3",
  "hex",
  "hmac 0.13.0",
  "libc",
- "multiaddr 0.18.2",
  "oasis7_agent_api",
  "oasis7_agent_harness",
  "oasis7_client_api",
@@ -6336,6 +6334,7 @@ dependencies = [
  "oasis7_proto",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
+ "oasis7_wasm_materializer",
  "oasis7_wasm_router",
  "oasis7_wasm_store",
  "rand_core 0.10.1",
@@ -6347,8 +6346,6 @@ dependencies = [
  "sha2 0.11.0",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
- "tracing-subscriber",
- "tungstenite",
  "unicode-normalization",
  "windows-sys 0.61.2",
  "zeroize",
@@ -6452,8 +6449,8 @@ dependencies = [
  "hex",
  "js-sys",
  "libc",
- "multiaddr 0.18.2",
  "oasis7_client_api",
+ "oasis7_launcher_config",
  "oasis7_launcher_ui",
  "reqwest 0.13.5",
  "serde",
@@ -6526,8 +6523,10 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "libc",
+ "oasis7",
  "oasis7_agent_api",
  "oasis7_client_api",
+ "oasis7_distfs",
  "oasis7_wasm_abi",
  "reqwest 0.13.5",
  "serde",
@@ -6568,6 +6567,7 @@ dependencies = [
  "oasis7_client_api",
  "oasis7_game_client",
  "oasis7_hosted_access",
+ "oasis7_launcher_config",
  "oasis7_launcher_ui",
  "oasis7_model_provider",
  "oasis7_proto",
@@ -6586,6 +6586,14 @@ dependencies = [
  "webauthn-rs-core",
  "windows-sys 0.61.2",
  "zeroize",
+]
+
+[[package]]
+name = "oasis7_launcher_config"
+version = "0.1.0"
+dependencies = [
+ "multiaddr 0.18.2",
+ "oasis7_client_api",
 ]
 
 [[package]]
@@ -6773,9 +6781,16 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "oasis7",
+ "oasis7_agent_api",
  "oasis7_client_api",
+ "oasis7_wasm_abi",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_ignored",
  "serde_json",
  "tracing",
+ "tungstenite",
+ "url",
 ]
 
 [[package]]
@@ -6807,6 +6822,17 @@ dependencies = [
  "sha2 0.11.0",
  "wasmtime",
  "wat",
+]
+
+[[package]]
+name = "oasis7_wasm_materializer"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "oasis7_distfs",
+ "oasis7_proto",
+ "reqwest 0.13.5",
+ "sha2 0.11.0",
 ]
 
 [[package]]

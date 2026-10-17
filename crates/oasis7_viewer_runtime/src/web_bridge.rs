@@ -3,7 +3,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
-use crate::world_service::client::RemoteWorldServiceClient;
+use oasis7::world_service::client::RemoteWorldServiceClient;
 use tracing::Level;
 use tungstenite::error::ProtocolError;
 use tungstenite::handshake::HandshakeError;
@@ -12,7 +12,7 @@ use tungstenite::protocol::Message;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Error as WsError, accept};
 
-use crate::observability::emit_stderr_or_event;
+use oasis7::observability::emit_stderr_or_event;
 
 #[derive(Debug, Clone)]
 pub struct ViewerWebBridgeConfig {
@@ -71,7 +71,7 @@ impl ViewerWebBridge {
         if !bind.ip().is_loopback() {
             return Err("Game API bootstrap requires a loopback IP bind".into());
         }
-        let endpoint = reqwest::Url::parse(&client.config().endpoint)
+        let endpoint = url::Url::parse(&client.config().endpoint)
             .map_err(|_| "invalid World Service endpoint")?;
         if endpoint.scheme() != "https"
             && !endpoint.host_str().is_some_and(|host| {
@@ -315,8 +315,8 @@ fn drain_upstream_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulator::WorldScenario;
-    use crate::viewer::{
+    use oasis7::simulator::WorldScenario;
+    use oasis7::viewer::{
         VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse, ViewerRuntimeLiveServer,
         ViewerRuntimeLiveServerConfig, ViewerStream,
     };
@@ -616,7 +616,7 @@ mod tests {
                 version,
                 ..
             } => {
-                assert_eq!(control_profile, crate::viewer::ViewerControlProfile::Live);
+                assert_eq!(control_profile, oasis7::viewer::ViewerControlProfile::Live);
                 assert_eq!(version, VIEWER_PROTOCOL_VERSION);
             }
             other => panic!("expected live hello ack through bridge, got {other:?}"),

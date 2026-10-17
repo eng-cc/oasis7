@@ -3,13 +3,13 @@
 use super::*;
 
 #[derive(Debug, Clone)]
-pub(super) struct CursorJournal {
+pub(super) struct CursorJournal<P: FormalReadProjection> {
     origin: String,
-    frames: Vec<FormalReadCursorFrameV1<WorldServiceProjection>>,
+    frames: Vec<FormalReadCursorFrameV1<P>>,
     bytes: usize,
     unavailable: bool,
 }
-impl CursorJournal {
+impl<P: FormalReadProjection> CursorJournal<P> {
     pub(super) fn invalidate(&mut self) {
         self.unavailable = true;
         self.frames.clear();
@@ -29,7 +29,7 @@ impl CursorJournal {
     pub(super) fn record(
         &mut self,
         request: &ReadWorldViewRequest,
-        response: &ReadWorldViewResponse<WorldServiceProjection>,
+        response: &ReadWorldViewResponse<P>,
     ) -> Result<(), String> {
         if self.unavailable || request.scope_id != "public" || request.fixed_commit.is_some() {
             return Ok(());
@@ -81,8 +81,8 @@ impl CursorJournal {
     }
 }
 
-impl FormalReadVerifier {
-    pub(crate) fn adopt_rebased_cursor(
+impl<P: FormalReadProjection> FormalReadVerifier<P> {
+    pub fn adopt_rebased_cursor(
         &mut self,
         mut next: Self,
         expected: &FormalReadReplayCursorV1,
@@ -132,16 +132,14 @@ impl FormalReadVerifier {
         *self = next;
         Ok(())
     }
-    pub(crate) fn is_fresh_cursor_target(&self, external: &Self) -> Result<bool, String> {
+    pub fn is_fresh_cursor_target(&self, external: &Self) -> Result<bool, String> {
         Ok(self.replay_cursor()? == external.replay_cursor()?
             && self.proved_commits.is_empty()
             && self.qualified_commits.is_empty()
             && self.cursor.frames.is_empty()
             && !self.cursor.unavailable)
     }
-    pub fn export_cursor(
-        &self,
-    ) -> Result<FormalReadCursorBundleV1<WorldServiceProjection>, String> {
+    pub fn export_cursor(&self) -> Result<FormalReadCursorBundleV1<P>, String> {
         if self.cursor.unavailable {
             return Err("HistoryUnavailable: formal cursor evidence budget exhausted; configure an independently pinned later root".into());
         }
@@ -192,7 +190,7 @@ impl FormalReadVerifier {
         trust: &InitialActivationTrustV1,
         external_anchor: VerifiedFormalReadAnchorV1,
         external_digest: &str,
-        bundle: &FormalReadCursorBundleV1<WorldServiceProjection>,
+        bundle: &FormalReadCursorBundleV1<P>,
         reader_public_key: &str,
     ) -> Result<Self, String> {
         bundle
@@ -234,6 +232,8 @@ impl FormalReadVerifier {
 #[cfg(test)]
 mod budget_tests {
     use super::*;
+    type FormalReadVerifier =
+        super::super::FormalReadVerifier<oasis7::world_service::projection::WorldServiceProjection>;
 
     #[test]
     fn cursor_budget_exhaustion_retains_prior_frames_and_refuses_new_cut_export() {

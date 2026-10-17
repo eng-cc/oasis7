@@ -240,6 +240,13 @@
     ],
     "oasis7_letai_credit_adapter": [
       "oasis7_required"
+    ],
+    "oasis7_launcher_config": [
+      "oasis7_required",
+      "launcher_web"
+    ],
+    "oasis7_wasm_materializer": [
+      "oasis7_required"
     ]
   },
   "rules": [
