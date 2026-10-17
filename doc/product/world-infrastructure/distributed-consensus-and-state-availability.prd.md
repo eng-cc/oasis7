@@ -38,8 +38,10 @@
 - 一个全局 canonical order 和一个权威 `world_id` 历史是默认拓扑；区域只是逻辑作用域，不能独立最终化。未来分片必须先证明跨域收敛。
 - chain 保存顺序、commitment、验证者转换和最终性证明；DistFS/CAS 保存 hash-bound 的 snapshot、blob 和历史可用性材料，永不自行取得最终写入权。
 - 验证者为治理注册、可轮换的受保护节点；公开 sentry/relay、full/state-sync/archive、RPC/proof gateway 可无许可运行。服务节点被攻破不能产生共识权威。
-- 验证者保留权威恢复/投票窗口；full/state-sync 节点提供较长热历史和快照；archive 保存完整审计历史；light companion 保留 finalized header、验证者转换和所需证明。任何 pruning 仅在可重建、hash/root 验证和冗余 archive 可用被证明后进行。
+- 验证者保留权威恢复/投票窗口；full/state-sync 节点提供较长热历史和快照；archive 保存完整审计历史；light companion 保留 finalized header、验证者转换和所需证明。这些角色决定本地常驻工作集，不缩减正式持久世界的完整合法历史及原始依赖保留承诺。任何 pruning 仅在所有受影响历史仍可重建、原 bytes/hash/root 验证及必要独立故障域中的冗余 archive 实际可读被证明后进行；hash、索引或 manifest 本身不能替代原材料。
 - bootstrap/recovery 必须依序绑定 固定 world/chain/genesis 身份、各历史高度合法 profile/epoch/manifest 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical committed-log replay 和 verified state root。任一身份、签名、连续性、hash、replay 或 root 不匹配均 fail closed。
+
+完整历史的具体保留对象、无损优化、冷热读取、回收、迁移与容量验收由[完整世界历史与无损存储](lossless-world-history-storage.prd.md#req-lws-001)承接。`dev_local`、`release_default`、`soak_forensics` 是存储工作集与预算策略，不是提交权威或历史保留权限；用于同一正式持久世界时均不得以热窗口、条数、时间或磁盘上限删除唯一历史。数据随真实新增信息持续增长，容量不足按既有可用性语义限制相应操作，不改写已确认结果或减少必要独立副本。
 
 ## 3. 运行与经济边界
 
