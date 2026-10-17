@@ -54,6 +54,9 @@
 <a id="des-agc-001"></a>
 ### DES-AGC-001：职责、依赖与复用边界
 
+`oasis7_client_storage` 承载私有目录、私钥文件、加密记录、操作状态和本地模型调用预算持久化；不依赖 HTTP transport 或世界执行。共享客户端与世界服务直接消费该存储库，`oasis7_game_client` 保留旧公开路径的重导出。文件格式、权限校验、锁、原子写入和预算语义保持不变；本地预算与操作记录不授予世界权限。
+
+
 ```text
 外部 Runtime + Skill            官方内置 Harness
      |                              |

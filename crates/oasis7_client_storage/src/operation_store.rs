@@ -25,7 +25,9 @@ impl OperationStore {
             Err("private client operation storage unsupported".into())
         }
     }
-    pub(crate) fn read_feedback_state<T: serde::de::DeserializeOwned>(
+    /// Read the immutable feedback journal using the caller's payload validator.
+    /// This checks storage integrity; the validator establishes record semantics.
+    pub fn read_feedback_state<T: serde::de::DeserializeOwned>(
         &self,
         operation: &str,
         validate: impl Fn(&ClientStateV1<T>, ClientStateKind) -> Result<(), String>,
@@ -39,7 +41,9 @@ impl OperationStore {
             validate,
         )
     }
-    pub(crate) fn put_feedback_state<T: Serialize + serde::de::DeserializeOwned>(
+    /// Publish a feedback journal candidate and return the immutable winner.
+    /// The caller must validate its payload and compare the returned original.
+    pub fn put_feedback_state<T: Serialize + serde::de::DeserializeOwned>(
         &self,
         operation: &str,
         record: &ClientStateV1<T>,

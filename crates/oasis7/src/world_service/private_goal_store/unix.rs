@@ -4,7 +4,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
     aead::{Aead, KeyInit, Payload},
 };
-pub(super) use oasis7_game_client::private_storage::{
+pub(super) use oasis7_client_storage::private_storage::{
     initialize_key, open_root, publish_bounded_record, publish_record, read_bounded_record,
     read_record,
 };
@@ -35,8 +35,8 @@ pub(super) fn put_with_reference(
     plaintext: &[u8],
     mut next_reference: impl FnMut() -> Result<PrivateGoalRef, String>,
 ) -> Result<PrivateGoalRef, String> {
-    oasis7_game_client::private_storage::private_directory(dir)?;
-    oasis7_game_client::private_storage::verify_key(dir, key)?;
+    oasis7_client_storage::private_storage::private_directory(dir)?;
+    oasis7_client_storage::private_storage::verify_key(dir, key)?;
     for _ in 0..8 {
         let reference = next_reference()?;
         let nonce = random::<24>()?;
@@ -56,7 +56,7 @@ pub(super) fn put_with_reference(
         if envelope.len() > MAX_PRIVATE_GOAL_FILE_BYTES {
             return Err("private goal file exceeds byte limit".into());
         }
-        if oasis7_game_client::private_storage::publish_immutable(
+        if oasis7_client_storage::private_storage::publish_immutable(
             dir,
             reference.as_str(),
             &envelope,
@@ -72,9 +72,9 @@ pub(super) fn get(
     reference: &PrivateGoalRef,
     binding: &PrivateGoalBindingV1,
 ) -> Result<Zeroizing<Vec<u8>>, String> {
-    oasis7_game_client::private_storage::private_directory(dir)?;
-    oasis7_game_client::private_storage::verify_key(dir, key)?;
-    let bytes = oasis7_game_client::private_storage::read_private(
+    oasis7_client_storage::private_storage::private_directory(dir)?;
+    oasis7_client_storage::private_storage::verify_key(dir, key)?;
+    let bytes = oasis7_client_storage::private_storage::read_private(
         dir,
         reference.as_str(),
         MAX_PRIVATE_GOAL_FILE_BYTES,

@@ -253,10 +253,12 @@ run_oasis7_net_libp2p_clippy() {
 run_oasis7_workspace_support_crate_tests() {
   run_cargo_clippy -p oasis7_agent_api --all-targets
   run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo_clippy -p oasis7_client_storage -p oasis7_signer_protocol --all-targets
   run_cargo_clippy -p oasis7_game_client --all-targets
   run_cargo_clippy -p oasis7_model_provider --all-targets
   run_cargo test -p oasis7_agent_api
   run_cargo test -p oasis7_agent_harness --lib
+  run_cargo test -p oasis7_client_storage -p oasis7_signer_protocol --lib
   run_cargo test -p oasis7_game_client --lib
   run_cargo test -p oasis7_model_provider --all-targets
   run_cargo test \
@@ -325,6 +327,7 @@ PY
       oasis7_model_provider) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --all-targets ;;
       oasis7_agent_harness|oasis7_game_client) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
       oasis7_wasm_executor) run_cargo test -p "$profile" --features wasmtime --lib ;;
+      oasis7_client_storage|oasis7_signer_protocol) run_cargo_clippy -p "$profile" --all-targets; run_cargo test -p "$profile" --lib ;;
       oasis7_secure_envelope|oasis7_context) run_cargo test -p "$profile" --all-targets --locked ;;
       oasis7_local_signer) run_cargo test -p "$profile" --lib; run_cargo test -p "$profile" --test context_cli --locked ;;
       oasis7_client_launcher) run_cargo test -p "$profile" --bin oasis7_client_launcher ;;

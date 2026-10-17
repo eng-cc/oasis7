@@ -379,14 +379,14 @@ impl WorldServiceTransport {
     }
 }
 
-pub mod private_key_file;
+pub use oasis7_client_storage::private_key_file;
 #[cfg(unix)]
-pub mod private_storage;
+pub use oasis7_client_storage::private_storage;
 
 mod task_client;
 pub use task_client::WorldServiceTaskClient;
 
-pub mod operation_store;
+pub use oasis7_client_storage::operation_store;
 
 mod verified_task_view;
 pub use verified_task_view::{
