@@ -323,7 +323,9 @@ fn formal_initial_existing_world_has_complete_approved_material_and_stable_ident
         )
         .unwrap(),
     );
-    let mut legacy_world = World::from_snapshot(world.snapshot(), world.journal().clone()).unwrap();
+    let mut legacy_world =
+        oasis7::runtime_host::world::from_snapshot(world.snapshot(), world.journal().clone())
+            .unwrap();
     legacy_world
         .record_world_service_result(CanonicalIntentResultV1 {
             request: SubmitIntentRequest {
@@ -436,9 +438,9 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         "node-a",
         oasis7::consensus_action_payload::encode_consensus_action_payload(
             &oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope::from_runtime_action(
-                oasis7::runtime::Action::RegisterAgent {
+                oasis7_runtime::Action::RegisterAgent {
                     agent_id: "formal-wasm-agent".into(),
-                    pos: oasis7::GeoPos::new(0, 0, 0),
+                    pos: oasis7_agent_api::world_action::GeoPos::new(0, 0, 0),
                 },
             ),
         )
@@ -532,12 +534,14 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
         1,
         "next Frozen inherits only the new complete Snapshot"
     );
-    let journal: oasis7::runtime::Journal =
+    let journal: oasis7_runtime::Journal =
         capture::decode_role(&first.material, ArtifactRole::Journal).unwrap();
-    assert!(journal.events.iter().any(|event| matches!(
-        event.body,
-        oasis7::runtime::WorldEventBody::ModuleEmitted(_)
-    )));
+    assert!(
+        journal
+            .events
+            .iter()
+            .any(|event| matches!(event.body, oasis7_runtime::WorldEventBody::ModuleEmitted(_)))
+    );
     first.candidate.verify_original(anchor.authority()).unwrap();
     verify_record_material(&first.candidate.record, &first.material).unwrap();
     verify_formal_candidate(

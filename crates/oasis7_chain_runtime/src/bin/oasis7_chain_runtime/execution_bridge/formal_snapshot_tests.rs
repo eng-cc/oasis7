@@ -1,5 +1,5 @@
 use super::*;
-use oasis7::runtime::{World, blake3_hex};
+use oasis7_runtime::{World, blake3_hex};
 fn material(root: String, objects: &BTreeMap<String, ArtifactObject>) -> ClosedRecord {
     ClosedRecord {
         payload_digest: "00".repeat(32),
@@ -34,7 +34,7 @@ fn sparse_snapshot_history_uses_bounded_checkpoints_and_exact_expanded_state_roo
         assert_eq!(bytes(&frozen).unwrap(), raw_after);
         assert_eq!(blake3_hex(&bytes(&frozen).unwrap()), state_root);
         let (_, depth) =
-            oasis7::runtime::resolve_snapshot_artifact_with_depth(&snapshot_ref, &|hash| {
+            oasis7_runtime::resolve_snapshot_artifact_with_depth(&snapshot_ref, &|hash| {
                 capture::object(&frozen, hash).map(<[u8]>::to_vec)
             })
             .unwrap();

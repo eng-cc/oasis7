@@ -1,7 +1,6 @@
 //! Actual private runtime execution, gated by dual durable formal Frozen input.
 use super::{ExecutionBridgeState, checkpoint, controlled_capture as capture, formal_package};
 use ed25519_dalek::SigningKey;
-use oasis7::runtime::World;
 use oasis7_distfs::controlled_authority::formal::{
     coordinator::ExecutableFormalFrozenV1, endpoint::FormalCandidateMaterialV1, *,
 };
@@ -100,7 +99,7 @@ fn execute_with_business_reader(
         let reader = business_reader.ok_or("formal retention CAS reader unavailable")?;
         let bytes = super::to_cbor(world.snapshot())?;
         let retained =
-            oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
+            oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
         world.attach_verified_formal_history(retained, reader.0.clone())?;
     }
     // Create a new private attempt. Existing partial attempts are evidence,
@@ -205,8 +204,8 @@ fn execute_with_business_reader(
                 .ok_or("formal output effect missing")?,
         )
         .map_err(|e| format!("{e:?}"))?;
-    let output_snapshot: oasis7::runtime::Snapshot = capture::decode_snapshot(&snapshot)?;
-    let output_journal: oasis7::runtime::Journal = capture::decode_generic(&journal)?;
+    let output_snapshot: oasis7_runtime::Snapshot = capture::decode_snapshot(&snapshot)?;
+    let output_journal: oasis7_runtime::Journal = capture::decode_generic(&journal)?;
     let after = if formal_retention {
         executor
             .execution_world
@@ -216,7 +215,8 @@ fn execute_with_business_reader(
             )
             .map_err(|e| format!("{e:?}"))?
     } else {
-        World::from_snapshot(output_snapshot, output_journal).map_err(|e| format!("{e:?}"))?
+        oasis7::runtime_host::world::from_snapshot(output_snapshot, output_journal)
+            .map_err(|e| format!("{e:?}"))?
     };
     let reader = business_reader.cloned().unwrap_or_else(|| {
         super::formal_business_package::SharedBusinessReader(std::sync::Arc::new(

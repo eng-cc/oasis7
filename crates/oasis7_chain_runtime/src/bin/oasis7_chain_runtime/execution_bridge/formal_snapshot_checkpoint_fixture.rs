@@ -24,10 +24,10 @@ pub(super) fn frozen_at_snapshot_depth(
                 .module_tick_schedule
                 .insert("checkpoint-fixture".into(), level as u64);
         }
-        let artifact = oasis7::runtime::SnapshotArtifactV1::new(
+        let artifact = oasis7_runtime::SnapshotArtifactV1::new(
             root.clone(),
             level,
-            oasis7::runtime::SnapshotDeltaV1::between(&before, &after).unwrap(),
+            oasis7_runtime::SnapshotDeltaV1::between(&before, &after).unwrap(),
         )
         .unwrap();
         root = insert(&mut objects, artifact.encode().unwrap(), vec![root]);

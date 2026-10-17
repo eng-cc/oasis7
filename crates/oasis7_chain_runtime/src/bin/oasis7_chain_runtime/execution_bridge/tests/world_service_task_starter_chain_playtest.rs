@@ -1,9 +1,9 @@
 //! Claimed-Agent construction and first production through the real native service.
 use super::*;
-use oasis7::runtime::*;
 use oasis7::world_service::private_task_context::*;
 use oasis7::world_service::task_factory_quote::*;
 use oasis7::world_service::task_recipe_quote::*;
+use oasis7_runtime::*;
 #[path = "world_service_task_starter_chain_expiry_recovery.rs"]
 mod expiry_recovery;
 #[path = "world_service_task_starter_chain_factory_quote_retry.rs"]
@@ -761,7 +761,7 @@ fn read_context_until_expiry<F: Fn() -> u64>(
     }
 }
 
-fn settle_expired_context<F: Fn() -> oasis7::runtime::RuntimeCognitionBaseBindingV1>(
+fn settle_expired_context<F: Fn() -> oasis7_runtime::RuntimeCognitionBaseBindingV1>(
     client: &RemoteWorldServiceClient,
     delegate: &str,
     world: &WorldIdentity,

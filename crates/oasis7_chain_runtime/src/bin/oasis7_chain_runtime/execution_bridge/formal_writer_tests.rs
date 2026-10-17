@@ -467,7 +467,8 @@ fn initial_node_bootstrap_is_bound_by_external_activation_closure() {
     let (world, mut trust, origin, _) = fixtures::actual_world_initial_fixture();
     let mut snapshot = world.snapshot();
     snapshot.state.time = 7;
-    let world = World::from_snapshot(snapshot, world.journal().clone()).unwrap();
+    let world =
+        oasis7::runtime_host::world::from_snapshot(snapshot, world.journal().clone()).unwrap();
     trust.initial_state_root = blake3_hex(&to_cbor(world.snapshot()).unwrap());
     let policy = ReleaseSecurityPolicy::default();
     let bootstrap = super::super::formal_initial::InitialNodeBootstrapV1 {

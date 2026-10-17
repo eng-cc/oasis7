@@ -106,14 +106,14 @@ pub(super) fn verify_provider_closure(public_client: &RemoteWorldServiceClient) 
         .unwrap();
     assert_eq!(
         view.projection().state.agents["agent-a"].state.pos,
-        oasis7::GeoPos::new(2, 2, 0)
+        oasis7_agent_api::world_action::GeoPos::new(2, 2, 0)
     );
     assert!(
         view.projection()
             .cognition_leases
             .iter()
             .any(
-                |lease| lease.status == oasis7::runtime::CognitionLeaseStatusV1::Settled
+                |lease| lease.status == oasis7_runtime::CognitionLeaseStatusV1::Settled
                     && lease.settled_amount > 0
             ),
         "canonical lease settlement missing"

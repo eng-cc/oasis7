@@ -109,7 +109,7 @@ pub(super) fn awaiting(
 ) -> Result<(), String> {
     let mut attempt = load(path)?;
     bind(&attempt, candidate)?;
-    let store = oasis7::runtime::LocalCasStore::new(path.join("storage"));
+    let store = oasis7_runtime::LocalCasStore::new(path.join("storage"));
     let mut verified = std::collections::BTreeSet::new();
     for id in outputs {
         let bytes = store.get_verified(id).map_err(|e| format!("{e:?}"))?;
@@ -264,7 +264,7 @@ pub(super) fn reclaim(
                 read_bytes += meta.len();
             }
         }
-        let store = oasis7::runtime::LocalCasStore::new(path.join("storage"));
+        let store = oasis7_runtime::LocalCasStore::new(path.join("storage"));
         let bytes = store.get_verified(id).map_err(|e| format!("{e:?}"))?;
         if !redundant(candidate, id, &bytes)? {
             return Err("attempt duplicate changed before deletion".into());

@@ -336,7 +336,7 @@ fn wait_for_new_long_history_result(
 }
 
 fn fresh_long_history_result(
-    world: &oasis7::runtime::World,
+    world: &oasis7_runtime::World,
     key: &str,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> Result<Option<oasis7::world_service::CanonicalIntentResultV1>, String> {
@@ -345,10 +345,12 @@ fn fresh_long_history_result(
 
 #[test]
 fn fresh_long_history_wait_avoids_cold_absence_and_requires_exact_success() {
-    use oasis7::{runtime::World, world_service::CanonicalIntentResultV1};
-    let mut staged = World::new();
+    use oasis7::world_service::CanonicalIntentResultV1;
+    let mut staged = oasis7::runtime_host::world::new();
     staged.initialize_empty_formal_history().unwrap();
-    let mut world = World::from_snapshot(staged.snapshot(), staged.journal().clone()).unwrap();
+    let mut world =
+        oasis7::runtime_host::world::from_snapshot(staged.snapshot(), staged.journal().clone())
+            .unwrap();
     let identity = WorldIdentity {
         world_id: "formal-fixture-world".into(),
         genesis_digest: "08".repeat(32),
@@ -401,7 +403,7 @@ fn fresh_long_history_wait_avoids_cold_absence_and_requires_exact_success() {
     assert!(fresh_long_history_result(&world, &key, &different).is_err());
     let mut rejected = result;
     rejected.rejected = Some("canonical rejection".into());
-    let mut rejected_world = World::new();
+    let mut rejected_world = oasis7::runtime_host::world::new();
     rejected_world
         .record_world_service_result(rejected)
         .unwrap();

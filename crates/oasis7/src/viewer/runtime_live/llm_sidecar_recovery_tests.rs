@@ -321,7 +321,7 @@ fn restore_reconciles_committed_runtime_record_without_sidecar_terminal_marker()
             .as_nanos()
     ));
     let agent_id = "agent-committed-recovery";
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime("world", "main", 0, None, "pending", 0)
         .expect("Runtime cognition binding");
@@ -621,7 +621,7 @@ fn provider_lineage_restore_terminal_marker_suppresses_queued_wait_replay() {
 
 #[test]
 fn provider_transport_exhaustion_closes_recovered_runtime_prefix_before_release() {
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime("world", "recovery-branch", 0, None, "pending", 0)
         .expect("Runtime cognition binding");
@@ -752,7 +752,7 @@ fn restored_mismatched_active_identity_terminalizes_runtime_before_release() {
     active_marker.request_context.request_digest = marker_digest.clone();
     active_marker.turn_context.request_digest = marker_digest;
 
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime("world", "quarantine-branch", 0, None, "pending", 0)
         .expect("Runtime cognition binding");
@@ -884,7 +884,7 @@ fn restored_missing_active_identity_terminalizes_runtime_and_feedback() {
     active_marker.request_context.request_digest = marker_digest.clone();
     active_marker.turn_context.request_digest = marker_digest;
 
-    let mut world = RuntimeWorld::new();
+    let mut world = crate::runtime_host::world::new();
     world
         .bind_cognition_runtime("world", "missing-terminal-branch", 0, None, "pending", 0)
         .expect("Runtime cognition binding");

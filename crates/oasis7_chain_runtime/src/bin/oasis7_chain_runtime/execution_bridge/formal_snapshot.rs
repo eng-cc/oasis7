@@ -1,9 +1,9 @@
 //! Self-contained sparse Snapshot checkpoint closures; state roots stay raw-byte hashes.
 use super::{controlled_capture as capture, formal_package::insert, to_cbor};
-use oasis7::runtime::{MAX_SNAPSHOT_DELTA_DEPTH, Snapshot, SnapshotArtifactV1, SnapshotDeltaV1};
 use oasis7_distfs::controlled_authority::replicated_protocol::{
     ArtifactObject, ArtifactRole, ClosedRecord,
 };
+use oasis7_runtime::{MAX_SNAPSHOT_DELTA_DEPTH, Snapshot, SnapshotArtifactV1, SnapshotDeltaV1};
 use std::collections::{BTreeMap, BTreeSet};
 
 // Producer policy only: old signed chains through depth 32 remain readable.
@@ -90,7 +90,7 @@ pub(super) fn append(
         .ok_or("Frozen Snapshot missing")?
         .clone();
     let (base_snapshot, depth) =
-        oasis7::runtime::resolve_snapshot_artifact_with_depth(&base_ref, &|hash| {
+        oasis7_runtime::resolve_snapshot_artifact_with_depth(&base_ref, &|hash| {
             capture::object(frozen, hash).map(<[u8]>::to_vec)
         })?;
     if to_cbor(&base_snapshot)? != to_cbor(before)? {
@@ -105,8 +105,8 @@ pub(super) fn append(
             let artifact = SnapshotArtifactV1::new(base_ref.clone(), depth + 1, delta)?;
             let encoded = artifact.encode()?;
             if encoded.len() < raw_after.len() {
-                let digest = oasis7::runtime::blake3_hex(&encoded);
-                let rebuilt = oasis7::runtime::resolve_snapshot_artifact(&digest, &|hash| {
+                let digest = oasis7_runtime::blake3_hex(&encoded);
+                let rebuilt = oasis7_runtime::resolve_snapshot_artifact(&digest, &|hash| {
                     if hash == digest {
                         Ok(encoded.clone())
                     } else {

@@ -3,7 +3,6 @@ use super::{
     controlled_capture as capture, durable_transaction, formal_executor, formal_package, to_cbor,
 };
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use oasis7_distfs::controlled_authority::{
     formal::{
         coordinator::{FormalCoordinator, FormalDurabilityEndpoint},
@@ -15,6 +14,7 @@ use oasis7_distfs::controlled_authority::{
     replicated_protocol::{ArtifactRole, ClosedRecord},
 };
 use oasis7_node::NodeLocalExecutionContinuation;
+use oasis7_runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -581,7 +581,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         }
         if self.world.state().retained_history_root.is_some() {
             let bytes = to_cbor(self.world.snapshot())?;
-            let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(
+            let parent = oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(
                 &self.anchor,
                 &bytes,
             )?;

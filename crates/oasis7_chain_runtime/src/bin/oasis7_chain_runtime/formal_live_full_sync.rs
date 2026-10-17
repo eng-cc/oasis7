@@ -560,7 +560,7 @@ fn wire_role(role: ArtifactRole) -> WireRole {
 
 fn retained_history_root(material: &ClosedRecord) -> Result<Option<String>, String> {
     let bytes = material.snapshot_bytes().map_err(|e| e.to_string())?;
-    let snapshot: oasis7::runtime::Snapshot =
+    let snapshot: oasis7_runtime::Snapshot =
         serde_cbor::from_slice(&bytes).map_err(|error| error.to_string())?;
     Ok(snapshot
         .state
@@ -578,7 +578,7 @@ fn verify_business_path(
     target: &str,
 ) -> Result<Vec<u8>, String> {
     let bytes = material.snapshot_bytes().map_err(|e| e.to_string())?;
-    let snapshot: oasis7::runtime::Snapshot =
+    let snapshot: oasis7_runtime::Snapshot =
         serde_cbor::from_slice(&bytes).map_err(|error| error.to_string())?;
     let retained = snapshot
         .state

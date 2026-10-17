@@ -57,6 +57,8 @@
       "crates/oasis7_net/Cargo.toml",
       "crates/oasis7_node/Cargo.toml",
       "crates/oasis7_proto/Cargo.toml",
+      "crates/oasis7_runtime/Cargo.toml",
+      "crates/oasis7_world_service/Cargo.toml",
       "crates/oasis7_simulator/Cargo.toml",
       "crates/oasis7_wasm_executor/Cargo.toml",
       "crates/oasis7_wasm_sdk/Cargo.toml",

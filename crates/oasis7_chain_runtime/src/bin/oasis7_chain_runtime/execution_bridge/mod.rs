@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
 use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce};
+use oasis7_runtime::{BlobStore, LocalCasStore, blake3_hex};
 use serde::{Deserialize, Serialize};
 
 pub(crate) mod controlled_live;

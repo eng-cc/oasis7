@@ -576,8 +576,10 @@ impl FormalFullSyncSession {
             store: Arc::clone(&self.cas),
             integrity_poisoned: Arc::clone(&self.cas_integrity_poisoned),
         });
-        let world = World::from_verified_formal_snapshot(snapshot, journal, parent, reader)
-            .map_err(|error| format!("full-sync cold restore: {error:?}"))?;
+        let world = oasis7::runtime_host::world::from_verified_formal_snapshot(
+            snapshot, journal, parent, reader,
+        )
+        .map_err(|error| format!("full-sync cold restore: {error:?}"))?;
         let restored_bytes = serde_cbor::to_vec(&world.snapshot())
             .map_err(|error| format!("full-sync restored Snapshot encode: {error}"))?;
         if blake3::hash(&restored_bytes).to_hex().as_str() != cut.after_state_root {

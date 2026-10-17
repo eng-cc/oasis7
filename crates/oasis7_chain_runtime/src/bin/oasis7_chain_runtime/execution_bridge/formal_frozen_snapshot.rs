@@ -37,7 +37,7 @@ impl<'a> VerifiedFrozenSnapshot<'a> {
                 .snapshot_bytes()
                 .map_err(|error| error.to_string())?,
         };
-        if bytes.len() > oasis7::runtime::MAX_SNAPSHOT_DELTA_BYTES
+        if bytes.len() > oasis7_runtime::MAX_SNAPSHOT_DELTA_BYTES
             || blake3_hex(&bytes) != body.pre_state_root
         {
             return Err("formal original Snapshot size or prestate mismatch".into());

@@ -5,7 +5,7 @@ use crate::simulator::WorldKernel;
 use oasis7_simulator::WorldEventKind;
 
 fn runtime_fixture() -> World {
-    let mut world = World::new_with_state(WorldState::default());
+    let mut world = crate::runtime_host::world::new_with_state(WorldState::default());
     world.submit_action(Action::RegisterAgent {
         agent_id: "archive-agent".into(),
         pos: GeoPos::new(10, 20, 30),

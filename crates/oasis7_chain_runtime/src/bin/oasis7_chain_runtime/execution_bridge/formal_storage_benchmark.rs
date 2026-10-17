@@ -1,7 +1,6 @@
 //! Actual World/profile-2 execution capacity fixture. Test signers supply
 //! protocol proofs; two local directories do not establish S6 fault domains.
 use super::*;
-use oasis7::runtime::{Journal, Snapshot, VerifiedFormalRetainedHistoryParentV1};
 use oasis7_distfs::{
     controlled_authority::formal::{
         FormalStorageShadowOptions, advance_formal_storage_shadow,
@@ -10,6 +9,7 @@ use oasis7_distfs::{
     },
     storage_inventory::inventory_storage,
 };
+use oasis7_runtime::{Journal, Snapshot, VerifiedFormalRetainedHistoryParentV1};
 use std::{
     collections::BTreeSet,
     fs,
@@ -182,7 +182,10 @@ fn restore(
     let retained =
         VerifiedFormalRetainedHistoryParentV1::verify(&anchor, &to_cbor(&snapshot).unwrap())
             .unwrap();
-    let world = World::from_verified_formal_snapshot(snapshot, journal, retained, reader).unwrap();
+    let world = oasis7::runtime_host::world::from_verified_formal_snapshot(
+        snapshot, journal, retained, reader,
+    )
+    .unwrap();
     let record: super::super::super::ExecutionBridgeRecord =
         super::super::super::formal_business_package::execution_result(&candidate.material, true)
             .unwrap();
@@ -204,7 +207,7 @@ fn run(heights: u64) {
         &to_cbor(fixture.world.snapshot()).unwrap(),
     )
     .unwrap();
-    fixture.world = World::from_verified_formal_snapshot(
+    fixture.world = oasis7::runtime_host::world::from_verified_formal_snapshot(
         fixture.world.snapshot(),
         fixture.world.journal().clone(),
         parent,

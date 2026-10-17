@@ -7,7 +7,6 @@
 use super::{
     EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord, formal_writer::FormalWriter, to_cbor,
 };
-use oasis7::runtime::{World, blake3_hex};
 use oasis7_distfs::controlled_authority::formal::{
     FormalRecordKindV1, SignedNormalDurableSetTransitionV1, VerifiedFormalReadAnchorV1,
     coordinator::FormalDurabilityEndpoint,
@@ -17,6 +16,7 @@ use oasis7_node::{
     NodeExecutionCommitResult, NodeExecutionGenesisBootstrap, NodeExecutionHook,
     NodeLocalExecutionContinuation,
 };
+use oasis7_runtime::{World, blake3_hex};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]

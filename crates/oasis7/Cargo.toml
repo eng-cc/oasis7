@@ -9,6 +9,7 @@ license = "MIT"
 path = "src/lib.rs"
 
 [dependencies]
+oasis7_runtime = { path = "../oasis7_runtime", default-features = false }
 oasis7_simulator = { path = "../oasis7_simulator" }
 oasis7_agent_harness = { version = "0.1.0", path = "../oasis7_agent_harness" }
 oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }
@@ -28,6 +29,7 @@ rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+oasis7_world_service = { path = "../oasis7_world_service", default-features = false }
 oasis7_wasm_materializer = { path = "../oasis7_wasm_materializer" }
 oasis7_observability = { path = "../oasis7_observability" }
 oasis7_hosted_access = { path = "../oasis7_hosted_access" }
@@ -39,7 +41,6 @@ zeroize = "1"
 cap-std = "4"
 cap-fs-ext = "4"
 libc = "0.2"
-oasis7_formal_protocol = { version = "0.1.0", path = "../oasis7_formal_protocol" }
 oasis7_distfs = { version = "0.1.0", path = "../oasis7_distfs" }
 oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = false }
 oasis7_wasm_executor = { version = "0.1.0", path = "../oasis7_wasm_executor", default-features = false }
@@ -76,10 +77,10 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 [features]
 default = ["wasmtime", "node-libp2p"]
 node-libp2p = ["oasis7_node/libp2p"]
-wasmtime = ["oasis7_wasm_executor/wasmtime"]
+wasmtime = ["oasis7_wasm_executor/wasmtime", "oasis7_runtime/wasmtime", "oasis7_world_service/wasmtime"]
 viewer_live_integration = []
-test_tier_required = ["oasis7_simulator/test_tier_required"]
-test_tier_full = ["test_tier_required", "oasis7_simulator/test_tier_full"]
+test_tier_required = ["oasis7_simulator/test_tier_required", "oasis7_runtime/test_tier_required", "oasis7_world_service/test_tier_required"]
+test_tier_full = ["test_tier_required", "oasis7_simulator/test_tier_full", "oasis7_runtime/test_tier_full", "oasis7_world_service/test_tier_full"]
 ci_formal_required_features = [
     "dep:ci_formal_host_bitflags",
     "dep:ci_formal_host_indexmap",
@@ -99,4 +100,5 @@ oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = f
 oasis7_hosted_access = { path = "../oasis7_hosted_access", features = ["test-support"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+oasis7_runtime = { path = "../oasis7_runtime", default-features = false, features = ["test-support"] }
 async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }

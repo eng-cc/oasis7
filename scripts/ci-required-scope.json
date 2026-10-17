@@ -117,6 +117,8 @@
   },
   "package_groups": {
     "scenario_test_runner": ["oasis7_required"],
+    "oasis7_runtime": ["oasis7_required", "launcher_web"],
+    "oasis7_world_service": ["oasis7_required"],
     "oasis7_simulator": ["oasis7_required", "launcher_web"],
     "oasis7_agent_api": [
       "workspace_support"

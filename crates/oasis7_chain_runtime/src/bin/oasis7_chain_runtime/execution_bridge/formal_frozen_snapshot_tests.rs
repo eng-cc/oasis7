@@ -18,10 +18,10 @@ fn original_snapshot_token_rejects_equal_clones_and_changed_rebuilds() {
     base.cognition = serde_json::json!({"original-base": true});
     let base_bytes = to_cbor(&base).unwrap();
     let base_ref = blake3_hex(&base_bytes);
-    let artifact = oasis7::runtime::SnapshotArtifactV1::new(
+    let artifact = oasis7_runtime::SnapshotArtifactV1::new(
         base_ref.clone(),
         1,
-        oasis7::runtime::SnapshotDeltaV1::between(&base, &target).unwrap(),
+        oasis7_runtime::SnapshotDeltaV1::between(&base, &target).unwrap(),
     )
     .unwrap();
     let mut objects: BTreeMap<_, _> = source
@@ -153,7 +153,8 @@ fn original_snapshot_token_rejects_equal_clones_and_changed_rebuilds() {
     // The original token cannot authorize rebuilding a different typed World.
     let mut changed_world = world.snapshot().clone();
     changed_world.cognition = serde_json::json!({"changed-original-snapshot": true});
-    let changed_world = World::from_snapshot(changed_world, world.journal().clone()).unwrap();
+    let changed_world =
+        oasis7::runtime_host::world::from_snapshot(changed_world, world.journal().clone()).unwrap();
     assert!(
         freeze_material_inner(
             anchor.authority(),
