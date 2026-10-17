@@ -84,10 +84,10 @@ mkdir -p \
 
 cd "$REPO_ROOT"
 if [[ "$PROFILE" == "release" ]]; then
-  env -u RUSTC_WRAPPER cargo build --release -p oasis7 --bin oasis7_testnet_faucet
+  env -u RUSTC_WRAPPER cargo build --release -p oasis7_ops_tools --bin oasis7_testnet_faucet
   BIN_PATH="${REPO_ROOT}/target/release/oasis7_testnet_faucet"
 else
-  env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_testnet_faucet
+  env -u RUSTC_WRAPPER cargo build -p oasis7_ops_tools --bin oasis7_testnet_faucet
   BIN_PATH="${REPO_ROOT}/target/debug/oasis7_testnet_faucet"
 fi
 

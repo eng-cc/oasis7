@@ -268,7 +268,7 @@ fi
 cp -a "$SOURCE_WORLD_DIR"/. "$BACKUP_DIR"/
 
 run_and_capture baseline_pre_audit \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -277,12 +277,12 @@ run_and_capture baseline_pre_audit \
     --require-single-failure-tolerance
 
 run_and_capture pass_import \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$PASS_MANIFEST"
 
 run_and_capture pass_audit \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$PASS_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -291,12 +291,12 @@ run_and_capture pass_audit \
     --require-single-failure-tolerance
 
 run_and_capture block_import \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BLOCK_MANIFEST"
 
 run_and_capture block_audit \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BLOCK_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -306,12 +306,12 @@ run_and_capture block_audit \
 
 if [[ "$BLOCK_ENFORCEMENT_STAGE" == "audit_failover_gate" ]]; then
   run_and_capture rejoin_to_pass_import \
-    oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
+    oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- \
       --world-dir "$SOURCE_WORLD_DIR" \
       --public-manifest "$PASS_MANIFEST"
 
   run_and_capture rejoin_audit \
-    oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
+    oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
       --world-dir "$SOURCE_WORLD_DIR" \
       --public-manifest "$PASS_MANIFEST" \
       --finality-slot-id "$FINALITY_SLOT_ID" \
@@ -328,12 +328,12 @@ else
 fi
 
 run_and_capture restore_import \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_import -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST"
 
 run_and_capture restore_audit \
-  oasis7_cargo_dev run -p oasis7 --bin oasis7_governance_registry_audit -- \
+  oasis7_cargo_dev run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
     --world-dir "$SOURCE_WORLD_DIR" \
     --public-manifest "$BASELINE_MANIFEST" \
     --finality-slot-id "$FINALITY_SLOT_ID" \

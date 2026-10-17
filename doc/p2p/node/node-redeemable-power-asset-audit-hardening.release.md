@@ -12,7 +12,7 @@
   - `crates/oasis7/src/runtime/reward_asset.rs`
   - `crates/oasis7/src/runtime/world/resources.rs`
   - `crates/oasis7/src/runtime/tests/reward_asset.rs`
-  - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
+  - `crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_live.rs`
 
 ## 交付摘要
 - AHA-2：结算签名语义升级为 `mintsig:v1:<sha256>`，并提供 `World::verify_reward_mint_record_signature` 校验接口。
@@ -40,7 +40,7 @@
 - 资产闭环与签名/审计：
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 reward_asset_ -- --nocapture`
 - reward runtime 参数与报表单测：
-  - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_viewer_live -- --nocapture`
+  - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer_runtime --bin oasis7_viewer_live -- --nocapture`
 - 编译检查：
   - `env -u RUSTC_WRAPPER cargo check -p oasis7`
 

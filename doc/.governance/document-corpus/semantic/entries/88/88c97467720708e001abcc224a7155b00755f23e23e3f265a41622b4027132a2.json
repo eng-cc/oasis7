@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a21021d371c14bfb523b88dea09df444fcd81d6f85404768af17e73e864d11bb",
+    "content_sha256": "d2976ffc557b854de639ab6aaa7913224a5716a4809c697bb8ca911cbfeff84c",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_procedure",
-    "note": "current headed manual acceptance procedure; developer workflow record projection updated, product authority retained",
+    "note": "current headed manual acceptance procedure; developer workflow record projection updated, product authority retained Scoped executable ownership review: updated Cargo package selectors and source anchors for the bin extraction; existing behavior, authority, disposition and evidence limits are retained. The runtime design additionally records seven executable owners and shared policy/observability/credit libraries; this is ownership documentation, not gameplay or deployment acceptance.",
     "path": "doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

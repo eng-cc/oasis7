@@ -552,8 +552,8 @@ P0 的网页推荐 Passkey、邮箱可选、多凭证与账号会话合同已由
 | [W2] | FIDO Alliance：Passkeys | 同步与设备绑定凭证的差异、本地生物识别处理 |
 | [W3] | W3C WebAuthn Level 2 | 多凭证与恢复、签名计数及认证验证背景 |
 
-[R1]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs#L137-L215
-[R2]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs#L73-L108
+[R1]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_identity.rs#L137-L215
+[R2]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs#L73-L108
 [R3]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/doc/p2p/blockchain/hosted-public-join-managed-identity-custody.design.md
 [R4]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/crates/oasis7_viewer/software_safe_src/viewer_hosted_auth_state_module.js#L90-L178
 [R5]: https://github.com/eng-cc/oasis7/blob/f69c8a666024fa564e52314965025b019fa42d4c/doc/p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md

@@ -87,19 +87,19 @@
 
 固定核读基线：`a0b6ab12ad14c6c881e48cecdb4adbdb322dd30e`。以下是源码与 fixture 定义的 located 事实，不是 executed/pass；本文所有原判定、整数计算、fallback 和不新增 gate 约束继续有效。规范与实现差距留给 demo/runtime 与脚本 owner 核对，本次不改变规范迁就实现，不增加第三类规范判定、调度策略、阈值或发布条件。
 
-- [CLI / TraceCounts](../../../crates/oasis7/src/bin/oasis7_llm_agent_demo/oasis7_llm_agent_demo_cli.rs)：`TraceCounts` 定义 skipped 与 ppm；`observe_trace` 每次调用最多加一次。`trace_skipped_llm_tick` 的 OR 除 `llm_input == None` 和 `input_summary=skip_llm_with_active_execute_until`，还接受 `step_type=execute_until_continue`。额外兼容判定与本文两种规范判定的语义关系待 owner 确认，不能推断三者各自等价。
-- [runtime](../../../crates/oasis7/src/bin/oasis7_llm_agent_demo/oasis7_llm_agent_demo_runtime.rs)：`tick_decide_only` 返回 Some 才增加 `active_ticks`；仅 `decision_trace.as_ref()` 为 Some 才调用 `observe_trace`。无 trace 对象时只增加 active、不增加 skipped；这不同于有 trace 但 `llm_input=None`。缺 trace 规则仍需分类证据，不能以缺文件产生的 0 冒充实际观测。
+- [CLI / TraceCounts](../../../crates/oasis7_provider_tools/src/bin/oasis7_llm_agent_demo/oasis7_llm_agent_demo_cli.rs)：`TraceCounts` 定义 skipped 与 ppm；`observe_trace` 每次调用最多加一次。`trace_skipped_llm_tick` 的 OR 除 `llm_input == None` 和 `input_summary=skip_llm_with_active_execute_until`，还接受 `step_type=execute_until_continue`。额外兼容判定与本文两种规范判定的语义关系待 owner 确认，不能推断三者各自等价。
+- [runtime](../../../crates/oasis7_provider_tools/src/bin/oasis7_llm_agent_demo/oasis7_llm_agent_demo_runtime.rs)：`tick_decide_only` 返回 Some 才增加 `active_ticks`；仅 `decision_trace.as_ref()` 为 Some 才调用 `observe_trace`。无 trace 对象时只增加 active、不增加 skipped；这不同于有 trace 但 `llm_input=None`。缺 trace 规则仍需分类证据，不能以缺文件产生的 0 冒充实际观测。
 - `finalize` 使用 u64 `saturating_mul(1_000_000).checked_div(active_ticks).unwrap_or(0)`；已定位零分母处理和饱和乘法，但未验证近上界输入仍符合理想数学比例。整数 floor/中间溢出合同不变。
 - runtime `write_report_json` 以 serde_json 写完整 report，终态 stdout 包含同名字段。未取得此次真实运行的 report/log artifact，序列化定义不等于输出链实跑通过。
 - [stress 脚本](../../../scripts/llm-longrun-stress.sh) 已定位 jq、Python、log 三路解析，场景 summary、TSV 和 aggregate summary/JSON。report/scene 使用 `llm_skipped_ticks`，aggregate text 使用 `llm_skipped_ticks_total`，aggregate JSON 使用 `totals.llm_skipped_ticks`；不能机械统一键路径。
 - shell 先求 `agg_active_ticks`、`agg_llm_skipped_ticks` 的和再计算比率，不平均场景 ppm。shell 使用整数乘除；Python aggregate JSON 的 `int((sum_skipped * 1_000_000) / max(sum_active, 1))` 中间 `/` 为浮点。不同权重、非整除、极大输入和溢出/精度一致性未验证，不能声称全范围三路数学等价。
 - jq 的 `// 0`、Python 默认 0、log 的 `echo 0` fallback 已定位；尚未取得专用断言证明缺来源、损坏来源与真实零值在完整诊断中区分。规范要求仍保留，不能从字段存在推断有效采集。
-- [现有测试](../../../crates/oasis7/src/bin/oasis7_llm_agent_demo/tests.rs) 的 `observe_trace_counts_llm_skipped_tick_ratio` 设置 active=4，观察一条三条件同时命中的 skip 和一条普通 request，断言 skipped=1、ppm=250000。它仅定义此复合 fixture 和同时命中不重复的断言，不能分别证明 None-only、marker-only、step-type-only，也不能证明零 active、非整除、无 trace、近上界、持久化、加权聚合或 fallback。
+- [现有测试](../../../crates/oasis7_provider_tools/src/bin/oasis7_llm_agent_demo/tests.rs) 的 `observe_trace_counts_llm_skipped_tick_ratio` 设置 active=4，观察一条三条件同时命中的 skip 和一条普通 request，断言 skipped=1、ppm=250000。它仅定义此复合 fixture 和同时命中不重复的断言，不能分别证明 None-only、marker-only、step-type-only，也不能证明零 active、非整除、无 trace、近上界、持久化、加权聚合或 fallback。
 - 已核 stress gate 仍针对 llm_errors、parse_errors、repair_rounds 与 gameplay coverage；未在该脚本定位到 skipped 比率专属 fail gate。此只读定位不替全部调用链背书，不修改已有 gate。
 
 ## 13. 验证执行边界与兼容决策
 
-真实 fixture 选择器为 `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_llm_agent_demo --features test_tier_required tests::observe_trace_counts_llm_skipped_tick_ratio -- --exact`。该命令本次未执行，即使将来通过也仅证明上述复合 fixture。`bash -n scripts/llm-longrun-stress.sh` 仅为语法检查，不证明 fallback 或数值边界。S8 的 demo/report/stress 入口保留于 [testing-manual](../../../testing-manual.md)，不因纯文档变更启动 provider、长跑或改变 tier。
+真实 fixture 选择器为 `env -u RUSTC_WRAPPER cargo test -p oasis7_provider_tools --bin oasis7_llm_agent_demo --features test_tier_required tests::observe_trace_counts_llm_skipped_tick_ratio -- --exact`。该命令本次未执行，即使将来通过也仅证明上述复合 fixture。`bash -n scripts/llm-longrun-stress.sh` 仅为语法检查，不证明 fallback 或数值边界。S8 的 demo/report/stress 入口保留于 [testing-manual](../../../testing-manual.md)，不因纯文档变更启动 provider、长跑或改变 tier。
 
 待验证的独立 oracle：None-only、marker-only、双命中与普通请求；零分母、非整除及近上界；无 trace 的 active/skip 分离；report 序列化与终态日志一致；不同 active 权重先 sum 后 ratio；jq/Python/log 在无 jq、无 Python、report 缺失或损坏、实际全零时的来源诊断。源码额外 step-type-only 应由 owner 先确认语义，不能用现有复合测试替它作规范裁决。
 

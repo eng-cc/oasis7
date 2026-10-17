@@ -155,7 +155,7 @@ provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-openclaw}"
 "$provider_cli_bin" --version
 curl -sS http://127.0.0.1:18789/health
 bash scripts/setup-provider-oasis7-runtime.sh
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-backend legacy-cli --provider-cli-bin "$provider_cli_bin" --provider-agent oasis7_provider_agent
+env -u RUSTC_WRAPPER cargo run -p oasis7_provider_local_bridge --bin oasis7_provider_local_bridge -- --provider-backend legacy-cli --provider-cli-bin "$provider_cli_bin" --provider-agent oasis7_provider_agent
 ```
 
 The repo-owned lightweight agent defaults are `oasis7_provider_agent`, workspace
@@ -167,7 +167,7 @@ only diagnoses this route; it is not a general Rust-direct readiness gate.
 For no-quota/no-billing plumbing tests, use the deterministic mock instead:
 
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --mode mock
+env -u RUSTC_WRAPPER cargo run -p oasis7_provider_local_bridge --bin oasis7_provider_local_bridge -- --mode mock
 ```
 
 The mock exposes the loopback HTTP contract without calling a provider CLI or
@@ -188,7 +188,7 @@ configuration; repo bridge/smoke scripts are not implied to be in the bundle.
 Repo source path:
 
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
+env -u RUSTC_WRAPPER cargo run -p oasis7_launcher_backend --bin oasis7_game_launcher -- \
   --scenario llm_bootstrap \
   --with-llm \
   --agent-provider-mode provider_loopback_http \
@@ -278,8 +278,8 @@ as end-to-end player-authority paths or lift their existing contract limitations
 
 - Normal local preset: `scripts/run-local-letai-game-test.sh`.
 - Rust-direct / legacy adapter selection: `scripts/run-local-letai-provider-bridge.sh`.
-- Bridge: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`.
-- Launcher: `crates/oasis7/src/bin/oasis7_game_launcher.rs`.
+- Bridge: `crates/oasis7_provider_local_bridge/src/bin/oasis7_provider_local_bridge.rs`.
+- Launcher: `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher.rs`.
 - Legacy workspace installer/policy: `scripts/setup-provider-oasis7-runtime.sh` and `tools/provider/oasis7_provider_workspace/AGENTS.md`.
 - Parity harness: `scripts/provider-parity-p0.sh`.
 - Dual-mode contract/verdict: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` and `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`.

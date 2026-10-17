@@ -231,7 +231,7 @@ support 仍有固定 material/electricity/Data 与 factory bootstrap；grant 不
 
 Trace refs: O7-REQ-41fc7ce2-9979-43b2-be4f-1c7f8c80e58b；唯一工程声明与范围见下方对应 PRD 身份。
 
-[分离身份](unified-world-seed-fragment-runtime.prd.md#uws-artifact-separation)由[#1797 采用记录](https://github.com/nil-studio/oasis7/issues/1797#issuecomment-4867727910)及[#1801](https://github.com/nil-studio/oasis7/pull/1801)支持。[build/validate 脚本](../../../scripts/p2p-build-governed-bootstrap-world.sh)保留 audited governed runtime world，将生成场景写入 generated-scenario-world；[generator](../../../crates/oasis7/src/bin/oasis7_generate_world_artifact.rs)保存 scenario/seed/config/public manifest provenance。artifact 生成成功或 sidecar 存在不代替 governed world 激活，也不证明 public genesis 已选择 canonical seed 字段、starter 或自然资源承载。
+[分离身份](unified-world-seed-fragment-runtime.prd.md#uws-artifact-separation)由[#1797 采用记录](https://github.com/nil-studio/oasis7/issues/1797#issuecomment-4867727910)及[#1801](https://github.com/nil-studio/oasis7/pull/1801)支持。[build/validate 脚本](../../../scripts/p2p-build-governed-bootstrap-world.sh)保留 audited governed runtime world，将生成场景写入 generated-scenario-world；[generator](../../../crates/oasis7_ops_tools/src/bin/oasis7_generate_world_artifact.rs)保存 scenario/seed/config/public manifest provenance。artifact 生成成功或 sidecar 存在不代替 governed world 激活，也不证明 public genesis 已选择 canonical seed 字段、starter 或自然资源承载。
 
 [world_initialization.rs](../../../crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/world_initialization.rs)接收 externally prepared world/snapshot/journal/issuer/approval，并不创建 World 或制造身份；这是真实正式激活信任边界，不是业务生成方案的选择记录。
 

@@ -858,7 +858,7 @@ The merged GWSC semantic validator already requires unequal migration versions; 
 最低诊断字段：session/turn/request ids、request/response digest、provider/adapter/protocol version、base head、outcome/error code、attempt count、native model/tool budget limits and consumed counts、latency/token/cost diagnostics、feedback lineage、memory intent disposition、continuation disposition。C0 counters 只表示 native Harness protocol admission；opaque ProviderBacked usage 必须由其 adapter 自行提供，不能从该字段推断。token/latency/cost 在 P0 只是 diagnostics/evaluation inputs；不代表资源扣账或发布证据。
 
 可执行入口固定为：文档阶段运行 `./scripts/doc-governance-check.sh`；P0.1 实现阶段运行
-`env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_provider_local_bridge -- decision_identity`
+`env -u RUSTC_WRAPPER cargo test -p oasis7_provider_local_bridge --bin oasis7_provider_local_bridge -- decision_identity`
 与 `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib provider_loopback_adapter`；集成阶段运行
 `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib agent_cognition_mvcc`（P0.2 paired runtime）与
 `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib agent_cognition_recovery`（P0.3 paired runtime）；

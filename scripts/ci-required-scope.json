@@ -208,6 +208,38 @@
     "oasis7_chain_runtime": [
       "oasis7_required",
       "formal_process"
+    ],
+    "oasis7_client_cli": [
+      "oasis7_required"
+    ],
+    "oasis7_launcher_backend": [
+      "oasis7_required",
+      "launcher_web"
+    ],
+    "oasis7_newapi_bridge_service": [
+      "oasis7_required"
+    ],
+    "oasis7_ops_tools": [
+      "oasis7_required"
+    ],
+    "oasis7_provider_local_bridge": [
+      "oasis7_required"
+    ],
+    "oasis7_provider_tools": [
+      "oasis7_required"
+    ],
+    "oasis7_viewer_runtime": [
+      "oasis7_required"
+    ],
+    "oasis7_observability": [
+      "oasis7_required"
+    ],
+    "oasis7_hosted_access": [
+      "oasis7_required",
+      "launcher_web"
+    ],
+    "oasis7_letai_credit_adapter": [
+      "oasis7_required"
     ]
   },
   "rules": [
@@ -299,7 +331,7 @@
         "doc/world-simulator/scenario/**",
         "crates/oasis7/scenarios/**",
         "crates/oasis7/src/simulator/scenario.rs",
-        "crates/oasis7/tests/oasis7_init_demo.rs"
+        "crates/oasis7_ops_tools/tests/oasis7_init_demo.rs"
       ],
       "groups": [
         "scenario_regression"

@@ -420,23 +420,23 @@ trap cleanup EXIT
 
 release_web_fixture_build "$out_dir/fixture-build.json"
 
-echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_game_launcher"
-if ! OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_game_launcher >>"$launcher_log" 2>&1; then
+echo "+ oasis7_cargo_dev build -p oasis7_launcher_backend -p oasis7_viewer_runtime --bin oasis7_viewer_live --bin oasis7_game_launcher"
+if ! OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7_launcher_backend -p oasis7_viewer_runtime --bin oasis7_viewer_live --bin oasis7_game_launcher >>"$launcher_log" 2>&1; then
   print_launcher_failure_context "launcher prebuild failed"
   exit 1
 fi
 
 release_web_fixture_start "$out_dir"
 
-echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
+echo "+ oasis7_cargo_dev run -p oasis7_launcher_backend --bin oasis7_game_launcher -- ${live_args[*]}"
 {
   echo
-  echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
+  echo "+ oasis7_cargo_dev run -p oasis7_launcher_backend --bin oasis7_game_launcher -- ${live_args[*]}"
 } >>"$launcher_log"
 for launcher_env_default in "${launcher_env_defaults[@]}"; do
   export "$launcher_env_default"
 done
-OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- "${live_args[@]}" >>"$launcher_log" 2>&1 &
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev run -p oasis7_launcher_backend --bin oasis7_game_launcher -- "${live_args[@]}" >>"$launcher_log" 2>&1 &
 launcher_pid=$!
 
 if ! wait_for_port "$web_bind_host" "$web_bind_port" 240; then

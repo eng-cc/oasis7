@@ -415,7 +415,7 @@ if [[ -z "$GAME_URL" ]]; then
   BOOTSTRAPPED_STACK=1
   if [[ "$BOOTSTRAP_USES_BUNDLE" -ne 1 ]]; then
     log_note build_oasis7_viewer_live
-    OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live >>"$ab_log" 2>&1
+    OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7_viewer_runtime --bin oasis7_viewer_live >>"$ab_log" 2>&1
   fi
   if [[ "$REQUIRE_AGENT_SPOKE_EXPLICIT" -ne 1 && "$BOOTSTRAP_USES_BUNDLE" -ne 1 ]]; then
     REQUIRE_AGENT_SPOKE=1

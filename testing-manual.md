@@ -72,7 +72,7 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - 运行时：`crates/oasis7/src/runtime/tests/*.rs`
   - 模拟器：`crates/oasis7/src/simulator/tests/*.rs`
   - LLM 行为：`crates/oasis7/src/simulator/llm_agent/tests_part2.rs`
-  - Viewer live 服务：`crates/oasis7/src/bin/oasis7_viewer_live.rs`（内置 `#[cfg(test)]`）
+  - Viewer live 服务：`crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_live.rs`（内置 `#[cfg(test)]`）
   - 端到端集成：`crates/oasis7/tests/*.rs`
 
 ### Pixel World Bridge（Bevy + wasm）
@@ -584,14 +584,14 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
   - 对外样张链路需使用 strict 语义门禁，不得以 `off` / `soft` 结果作为发布判定证据。
 - 若需要为 `#46 PostOnboarding` 补无 UI / 非浏览器验证，执行 `./scripts/viewer-post-onboarding-headless-smoke.sh`。
   - 该脚本只验证 live TCP 协议、快照推进、控制完成 ack 与 runtime event feed；不替代 headed Web/UI 截图复核。
-- 若需要直接以纯 API 客户端操作 live 会话，可使用 `cargo run -q -p oasis7 --bin oasis7_pure_api_client -- ...`。
+- 若需要直接以纯 API 客户端操作 live 会话，可使用 `cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- ...`。
   - 该链路属于 `pure_api` 玩家访问模式；若同时牵涉 Local Provider provider-backed 路径，应额外标注 `agent_decision_source + agent_provider_backend/contract/transport` 与实际 execution lane；`agent_direct_connect/provider_loopback_http` 只在兼容迁移说明里保留。
   - 推荐最小链路：
 ```bash
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 step --count 8 --events
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- keygen
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 reconnect-sync --player-id player-1 --with-snapshot
+cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
+cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 step --count 8 --events
+cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- keygen
+cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 reconnect-sync --player-id player-1 --with-snapshot
 ```
   - chain-linked Viewer 的 `chat` 会协商 `canonical_agent_chat_v1`，在同一连接用非空 owner public key 恢复**已注册**会话，再本地签名 owner ReadView 并校验原请求、world/branch/generation 和当前替换目标。首次注册仍须合法执行 `register-session`；Hosted identity 仍须有效 registration grant，CLI 不创建 owner claim 或 grant；canonical owner 身份须已经由合法 canonical 注册建立，Viewer register-session 不能代替它。
   - canonical chat 只把匹配原 nonce、agent、player、intent sequence/tick 的 committed ACK 当作完成；pending、unknown、provider 回复和无关后台错误都不是 chain commit。legacy 非 chain chat 继续等待 AgentSpoke 或请求错误。
@@ -646,7 +646,7 @@ GAME_URL="$(./scripts/worktree-harness.sh url)"
 ./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-software-safe-chat-regression.sh --bundle-dir output/release/game-launcher-local
-cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
+cargo run -q -p oasis7_client_cli --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
 ./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ```
   - active-LLM / provider 预检：
@@ -731,7 +731,7 @@ npm --prefix crates/oasis7_viewer run build:viewer:visual-test
   - 详细参数与 profile 组合请以 `./scripts/llm-longrun-stress.sh --help` 为准；
   - `llm-longrun-stress.sh` 是 provider-backed LLM 长跑入口；`--no-llm-io` 只关闭 raw LLM I/O 日志，不会禁用 provider。日常本机 LetAI 长跑优先使用 `--with-local-letai-provider-bridge`，让脚本生成临时 token config、继承本地代理并启动本地 Rust provider bridge，保留 auto-topup；若确实要复用已启动 bridge，必须显式传 `--reuse-local-provider-bridge` 接受既有 bridge 的 config/token 状态。`--with-letai-config` 只保留给直连 Responses API 的低层排障；
   - 多场景评测固定 scenario/fixture、profile、provider/adapter 与协议版本、timeout、tick budget 和 `--jobs`，并保留每场景及聚合工件；单次样本、总量或并行运行本身都不证明 provider parity、成本稳定性或 release readiness。历史多场景/工业调试样本仅供追溯，当前语义以 `doc/world-simulator/llm/decision-provider-contract.prd.md` 和相应 gameplay/runtime authority 为准；
-  - `./scripts/runtime-module-routing-perf-harness.sh` 现在走专用 bin `cargo run -p oasis7 --bin oasis7_runtime_module_routing_perf`，避免继续依赖 ignored test 的重编译路径；它会把稳定内环 module routing 的 event/action 平均耗时写到 `.tmp/runtime_module_routing_perf/<run>/summary.{json,md}`；当前目的是提供日常可回归的轻量 runtime perf 入口，不替代长窗 `runtime_perf.tick.*` 指标；
+  - `./scripts/runtime-module-routing-perf-harness.sh` 现在走专用 bin `cargo run -p oasis7_ops_tools --bin oasis7_runtime_module_routing_perf`，避免继续依赖 ignored test 的重编译路径；它会把稳定内环 module routing 的 event/action 平均耗时写到 `.tmp/runtime_module_routing_perf/<run>/summary.{json,md}`；当前目的是提供日常可回归的轻量 runtime perf 入口，不替代长窗 `runtime_perf.tick.*` 指标；
   - 当前已记录首个 `release` baseline 数值：`modules=192`、`iterations=80`、`event_avg_ms=5.591`、`action_avg_ms=6.992`；对应一次本地验证 run 的冷 `release` 编译耗时约 `23m 10s`。原始 `summary.json` 属于本地临时产物，应以 task execution log 中登记的验证记录为证据来源；因此当前更适合先作为本地/report-only 基线，而不是立刻升成默认 blocking gate；
   - Viewer 性能 probe 使用当前 `crates/oasis7_viewer` canonical `viewer` Web 入口，通过 `agent-browser` 采集 rAF frame timing、Long Task、ready time、DOM 规模与 gate 结果，并输出 `output/playwright/viewer-performance/<run>/summary.{json,md}`；
   - 旧 `viewer-owr4-stress` 属于历史已删除入口，不再作为当前 Viewer 性能门禁真值；
@@ -1084,7 +1084,7 @@ git diff --check
   - 若复用 network-rehearsal / mixed-topology lane 作为 full-tier 证据，summary 中必须单独标注哪些 case 验证的是用户模式推荐，哪些 case 验证的是底层 reachability 真值。
 - `P2PARCH-9` executable full-tier 基线（2026-04-07）：
 ```bash
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_web_launcher -- --nocapture
 env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture
 env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unknown-unknown
 ```

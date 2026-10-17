@@ -85,8 +85,8 @@ device_config_path = "/absolute/private/device.json"
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7_model_provider --lib
 env -u RUSTC_WRAPPER cargo clippy -p oasis7_model_provider -p oasis7_agent_harness --all-targets -- -D warnings
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_model_client
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher model_session
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher hosted_model_client
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher model_session
 npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/viewer_model_connection_client.test.js software_safe_src/model_connection_panel.test.jsx
 npm --prefix crates/oasis7_viewer run build:viewer
 ```

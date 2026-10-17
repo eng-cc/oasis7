@@ -53,7 +53,7 @@
 
 ### 1）启动 live server
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer_runtime --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
 Major World Event audience policy is a separate explicit runtime option. The default is
@@ -384,7 +384,7 @@ turn those tests into issuer-backed production access or a release claim.
 ### 底层 Viewer Debug 人工闭环
 终端 A：
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer_runtime --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
 终端 B：

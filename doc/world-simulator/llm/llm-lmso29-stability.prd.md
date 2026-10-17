@@ -60,7 +60,7 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 llm_prompt_profile_uses_relaxed_token_budget_for_stability -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 llm_agent_prompt_contains_execute_until_and_exploration_guidance -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo check -p oasis7`
-  - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_llm_agent_demo -- llm_bootstrap --ticks 30 --report-json .tmp/lmso29_final_30_promptfix/report.json`
+  - `env -u RUSTC_WRAPPER cargo run -p oasis7_provider_tools --bin oasis7_llm_agent_demo -- llm_bootstrap --ticks 30 --report-json .tmp/lmso29_final_30_promptfix/report.json`
 
 ## 回归观察
 - 对比 LMSO28 基线（`.tmp/lmso28_peak_30_final/report.json`）：
