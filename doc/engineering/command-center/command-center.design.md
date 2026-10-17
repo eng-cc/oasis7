@@ -5,9 +5,9 @@
 - owner_role：`runtime_engineer`；产品归 `producer_system_designer`，Codex 接入归 `agent_engineer`
 - module：`engineering`
 - 上游：[指挥客户端产品设计](command-center.prd.md)、[PRD-ENGINEERING-034](../prd.md#PRD-ENGINEERING-034)
-- 设计基线：`main@7039bc376882ab8f84f88ca014f6d7ce642539a8`；既有方案 `56a33562436ffa4b65a66d05e61f26a849b16728`
-- last_reviewed_at：2026-10-13
-- 文档交付与评审入口：[PR #4518](https://github.com/eng-cc/oasis7/pull/4518)
+- 当前实现审读基线：`main@0ec10379419b0aaedb9d16157b81c92f4e6e3495`；初始设计基线 `7039bc376882ab8f84f88ca014f6d7ce642539a8`，既有方案 `56a33562436ffa4b65a66d05e61f26a849b16728`
+- last_reviewed_at：2026-10-17
+- 初始设计与评审来源：[PR #4518](https://github.com/eng-cc/oasis7/pull/4518)
 
 本文把客户端形态、Rust 技术调研和架构方案收敛为一份系统设计。产品行为和验收由配对 PRD 主责；本文定义如何承接，不把目标状态写成已交付事实。通用授权、开发、验证和交付仍由 [workflow/source-of-truth](../workflow/source-of-truth.md) 主责，客户端内部状态不增加上游任务准入或审批门禁。
 
@@ -15,7 +15,7 @@
 
 客户端需要把分散的项目目标、规范理由、Git/PR/CI 和 Codex 开发现场放到同一可追溯上下文，解决负责人难以判断方向、回忆决定和管理并行执行的问题。系统最重要的性质是来源与操作正确性：部分读取不能变成“没有工作”，会话结束不能变成“目标完成”，重连不能重复发出模型输入。
 
-本轮目标补齐“首页判断—统一工作详情—原工具或自管执行—结果回读”的产品闭环。来源索引和现有协议继续复用；新投影、关联修复及外部入口是待实施设计，不能把现有原文页面称为完整基础首版。技术正确性和日常任务完成分别验证。
+当前实现把章节、PR、决定和协议表单直接交给用户组合，缺少可复用的工作上下文；来源读取时间也不足以证明摘要里的交付判断仍然有效。本设计补齐“首页判断—统一工作详情—原工具或自管执行—结果回读”，使一次用户操作得到可定位的结果或可继续核对的未知状态。来源索引、原任务身份和现有协议继续复用；新投影、关联修复及外部入口是目标合同，不能把现有原文页面称为完整基础首版。技术正确性和日常任务完成分别验证。
 
 采用 **Tauri 2 + 独立 Rust 核心 + SolidJS / TypeScript strict / Vite + SQLite**。Rust 拥有领域、来源、持久化、索引、操作与运行时；TypeScript 负责呈现、输入和界面状态。生产形态为 macOS App，静态界面随包发布，Core 驻留 App；不需要用户在终端启动看板服务。[Tauri 进程模型](https://v2.tauri.app/concept/process-model/)支持这种系统 WebView 与 Rust Core 分工。
 
@@ -31,40 +31,49 @@
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-001](command-center.prd.md#REQ-CC-001) | App 独立启动，打开正确项目和工作树，恢复个人上下文；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=App 独立启动，打开正确项目和工作树，恢复个人上下文 | [DES-CC-001](#DES-CC-001) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；runtime_engineer；Tauri / 系统 Git | 不以游戏栈或终端后端为前提 |
-| [REQ-CC-002](command-center.prd.md#REQ-CC-002) | 来源、版本、覆盖与失败分别保留；局部可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=来源、版本、覆盖与失败分别保留；局部可用 | [DES-CC-002](#DES-CC-002) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；各 adapter；上游查询能力 | 不推定完整全局快照 |
+| Trace refs: O7-REQ-6e70287f-a156-4544-997d-5c1752e5efde；[REQ-CC-001](command-center.prd.md#REQ-CC-001) | App 独立启动，打开正确项目和工作树，恢复个人上下文；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=App 独立启动，打开正确项目和工作树，恢复个人上下文 | [DES-CC-001](#DES-CC-001) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；runtime_engineer；Tauri / 系统 Git | 不以游戏栈或终端后端为前提 |
+| Trace refs: O7-REQ-2d1f3577-785e-40ac-8d25-ba0d414511f6；[REQ-CC-002](command-center.prd.md#REQ-CC-002) | 来源、版本、覆盖与失败分别保留；局部可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=来源、版本、覆盖与失败分别保留；局部可用 | [DES-CC-002](#DES-CC-002) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；各 adapter；上游查询能力 | 不推定完整全局快照 |
 | [REQ-CC-003](command-center.prd.md#REQ-CC-003) | 当前与长期目标关联到适用验收，进度有可核实分母；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=当前与长期目标关联到适用验收，进度有可核实分母 | [DES-CC-003](#DES-CC-003) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；producer_system_designer；core PRD / 交付事实 | 不按提交数或活动量计算完成率 |
-| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
-| [REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
-| [REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；真实请求方；已有授权 | 不将普通实现转为待批准 |
-| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | [src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx)；agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
+| Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；[REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
+| Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；[REQ-CC-004](command-center.prd.md#REQ-CC-004) | 决定版本、规范回写、实现同步及个人关注分别保存，旧数据恢复不复活已处理项；产品适用性：N/A；reason=工程客户端合同不定义游戏玩家能力；scope=决定版本、规范回写、实现同步及个人关注分别保存，旧数据恢复不复活已处理项 | [cc-decision-attention-state](#cc-decision-attention-state) | runtime_engineer；旧个人记录及具体证据来源 | 个人确认和停止关注不改源任务/规范/实现事实 |
+| Trace refs: O7-REQ-a6126ad0-2f2d-47ad-a504-5e9ceff92cff；[REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
+| Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；[REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；真实请求方；已有授权 | 不将普通实现转为待批准 |
+| Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；[REQ-CC-006](command-center.prd.md#REQ-CC-006) | 真正待回复、待核实及知悉变化分组，处理后返回原工作且重开可恢复；产品适用性：N/A；reason=工程客户端合同不定义游戏玩家能力；scope=真正待回复、待核实及知悉变化分组，处理后返回原工作且重开可恢复 | [cc-attention-projection](#cc-attention-projection) | UI 实现 / qa_engineer；原请求和个人处理记录 | 无可读接口时个人陈述不冒充外部回执 |
+| Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；[REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | [src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx)；agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
+| Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；[REQ-CC-007](command-center.prd.md#REQ-CC-007) | 用户一次发起内部按步骤登记和发送，未知停步不重放，私有属性先落盘；产品适用性：N/A；reason=工程客户端合同不定义游戏玩家能力；scope=用户一次发起内部按步骤登记和发送，未知停步不重放，私有属性先落盘 | [cc-start-intent](#cc-start-intent) | agent_engineer；现有锁定协议与操作记录 | 不承诺上游幂等，不按 idle/sourceResolved 推断可重发 |
 | [REQ-CC-008](command-center.prd.md#REQ-CC-008) | 不确定副作用持久保留，恢复不自动重发；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=不确定副作用持久保留，恢复不自动重发 | [DES-CC-008](#DES-CC-008) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；源端可核实事实 | 不承诺上游幂等或完整事件重放 |
 | [REQ-CC-009](command-center.prd.md#REQ-CC-009) | 关窗留后台，完整退出明确处理自管活跃或未知工作；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=关窗留后台，完整退出明确处理自管活跃或未知工作 | [DES-CC-009](#DES-CC-009) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；进程所有权 | 不保证崩溃、强退、重启后继续 |
-| [REQ-CC-010](command-center.prd.md#REQ-CC-010) | 中文短查询、IME、键盘、读屏和有界长列表可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=中文短查询、IME、键盘、读屏和有界长列表可用 | [DES-CC-010](#DES-CC-010) | [src/App.test.tsx](../../../tools/oasis7-command-center/ui/src/App.test.tsx)；UI 实现 / qa_engineer；真实 macOS | 浏览器模拟不证明系统体验 |
+| Trace refs: O7-REQ-76d54ed7-4028-460a-b22b-37a9088ad245；[REQ-CC-010](command-center.prd.md#REQ-CC-010) | 中文短查询、IME、键盘、读屏和有界长列表可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=中文短查询、IME、键盘、读屏和有界长列表可用 | [DES-CC-010](#DES-CC-010) | [src/App.test.tsx](../../../tools/oasis7-command-center/ui/src/App.test.tsx)；UI 实现 / qa_engineer；真实 macOS | 浏览器模拟不证明系统体验 |
 | [REQ-CC-011](command-center.prd.md#REQ-CC-011) | 缓存重建保留个人与未决数据，凭据和展示内容有边界；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=缓存重建保留个人与未决数据，凭据和展示内容有边界 | [DES-CC-011](#DES-CC-011) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；runtime_engineer；SQLite / Keychain | 不默认记录或上传完整会话 |
 | [REQ-CC-012](command-center.prd.md#REQ-CC-012) | 本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它 | [DES-CC-012](#DES-CC-012) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；产品负责人；环境和协议能力 | 不把 stdio 或非实验 API 当生产支持承诺 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 首页聚合重点、成果、真实请求及返回工作，三场景可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=首页聚合重点、成果、真实请求及返回工作，三场景可用 | [DES-CC-013](#DES-CC-013) | producer_system_designer；主责文档/状态摘要与来源适配器 | 不随刷新运行模型或伪造排序、事实时间 |
-| [REQ-CC-014](command-center.prd.md#REQ-CC-014) | 明确关联复用、失效修复、统一详情及已有现场接续；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=明确关联复用、失效修复、统一详情及已有现场接续 | [DES-CC-014](#DES-CC-014) | application/domain、UI与受支持原工具定位 | 不从分支名移交运行控制，不自动合并个人/私有数据 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机工具作为独立辅助入口接续原工作；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=本机工具作为独立辅助入口接续原工作 | [DES-CC-015](#DES-CC-015) | 本机工具设计、context与既有 signer | 原暂停和私有隔离合同继续约束；工具不成为全部工作的前置 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 文档全局树、配对与覆盖透明；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=文档全局树、配对与覆盖透明 | [DES-CC-016](#DES-CC-016) | Rust 索引、文档 owner、Solid UI / QA | 本次仅设计；不推断完成状态 |
+| Trace refs: O7-REQ-ce7b612a-3316-4c40-9009-c0d295ff0ed6；[REQ-CC-013](command-center.prd.md#REQ-CC-013) | 首页聚合重点、成果、真实请求及返回工作，三场景可用；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=首页聚合重点、成果、真实请求及返回工作，三场景可用 | [DES-CC-013](#DES-CC-013) | producer_system_designer；主责文档/状态摘要与来源适配器 | 不随刷新运行模型或伪造排序、事实时间 |
+| Trace refs: O7-REQ-fdf061f8-ebdf-46e3-91a5-a2311e2bcb93；[REQ-CC-014](command-center.prd.md#REQ-CC-014) | 明确关联复用、失效修复、统一详情及已有现场接续；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=明确关联复用、失效修复、统一详情及已有现场接续 | [DES-CC-014](#DES-CC-014) | application/domain、UI与受支持原工具定位 | 不从分支名移交运行控制，不自动合并个人/私有数据 |
+| Trace refs: O7-REQ-fd3b34c6-4fb4-4614-8d7b-744a86d29c3a；[REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机工具作为独立辅助入口接续原工作；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=本机工具作为独立辅助入口接续原工作 | [DES-CC-015](#DES-CC-015) | 本机工具设计、context与既有 signer | 原暂停和私有隔离合同继续约束；工具不成为全部工作的前置 |
+| Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；[REQ-CC-016](command-center.prd.md#REQ-CC-016) | 文档全局树、配对与覆盖透明；产品适用性：N/A；reason=开发指挥客户端的工作、来源及会话管理，不定义游戏玩家能力；scope=文档全局树、配对与覆盖透明 | [DES-CC-016](#DES-CC-016) | Rust 索引、文档 owner、Solid UI / QA | 不由树存在推断完成、全局完整或原生体验通过 |
 
-## 3. 初始设计基线、目标状态与差距
 
-| 领域 | 初始设计基线中的状态 | 当时的目标与差距 |
+## 3. 当前基线、目标状态与差距
+
+下表针对文首固定源码基线，描述已读取的实现结构及其与目标合同的差距；不代替真实 macOS 交互、性能或产品验收。实现结果仍归对应 PR/CI，项目动态状态见[项目状态](README.md)。
+
+| 对象 | 当前实现与证据 | 目标状态与差距 |
 | --- | --- | --- |
-| 方案与使用入口 | 仓库已有指挥看板 Skill；本 PR 收敛设计正文 | 尚无本方案的桌面程序、数据库或接口实现 |
-| 工具链 | 基线 [rust-toolchain.toml](https://github.com/eng-cc/oasis7/blob/7039bc376882ab8f84f88ca014f6d7ce642539a8/rust-toolchain.toml) 为 Rust 1.96.0 | 应用对齐现有工具链，锁定真实验证的依赖组合 |
-| 前端经验 | 基线 [Viewer package](https://github.com/eng-cc/oasis7/blob/7039bc376882ab8f84f88ca014f6d7ce642539a8/crates/oasis7_viewer/package.json) 已声明 Solid、Vite、Vitest | 复用开发经验，建立独立应用入口与状态 |
-| 项目事实 | 目标与规范在文档；交付在 Git/PR/CI；运行状态在具体会话来源 | 需要来源适配、关联和不确定性投影，不能从一处推导全部状态 |
-| 桌面与协议 | 本次已完成一手资料调研 | 未完成依赖切片、真实 macOS 体验、Codex 版本契约或性能测量 |
+| 工作与首页 | [domain.rs](../../../tools/oasis7-command-center/core/src/domain.rs) 保存章节、决定、Git 字符串和手工关联；[App.tsx](../../../tools/oasis7-command-center/ui/src/App.tsx) 与 `SummarySources.tsx` 提供原文及摘要入口 | 增加原来源身份的 WorkItem 与字段级证据投影，首页、详情和关注共享同一结果；不建立新的任务主表 |
+| 来源时效 | [github.rs](../../../tools/oasis7-command-center/core/src/github.rs) 读取最近最多 100 个 PR；摘要正文和 PR 列表分别展示 | 明确已读窗口、逐项补读、事实时间与字段 authority；新读取旧摘要不能显示为当前交付事实 |
+| 决定与关注 | [lib.rs](../../../tools/oasis7-command-center/core/src/lib.rs) 保存已确认决定，正式回写/实现同步固定为 `notVerified`；UI 将已确认决定列入关注 | 三条决定状态与真正待响应请求分离，完成和失效均有依据；清缓存不会复活已处理项 |
+| 宿主并发 | [commands.rs](../../../tools/oasis7-command-center/src-tauri/src/commands.rs) 的四个槽位最终在同一 Application Mutex 中执行扫描、GitHub、查询和保存 | I/O 在应用锁外，有界调度、短事务发布、迟到结果隔离；该结构风险尚未转化为原生性能测量 |
+| 文档阅读 | 清单、目录、显式产品/专业树及阅读恢复已有实现，见[文档树设计 §11](document-tree.design.md#11-验证映射与实施顺序) | 阅读默认、二级诊断和完整树合同分别承接；不将局部树实现写为缺失，也不宣称全局完整 |
+| 自管执行 | [codex/actions.rs](../../../tools/oasis7-command-center/core/src/codex/actions.rs) 分开建会话与发送输入，已有原实例绑定和未决操作 | 工作级 StartIntent 编排同一预览的明确发起，保留未知不重发；已有安全边界不扩大 |
 
-上表保留 2026-10-10 初始设计基线，不能用作今日能力清单。后续实现与验证入口见 §11；当前项目动态状态见[项目状态](README.md)，关键合同见[架构索引](architecture/README.md)。运行时读取实际选定来源，不把历史调研的阶段、包版本或工作列表永久作为当前状态。
+2026-10-10 的初始选型及调研理由保留在 §12。运行时读取实际选定来源，不把历史阶段、包版本或工作列表永久作为当前状态。
 
 ## 4. 边界与结构
 
 <a id="DES-CC-001"></a>
 
 ### 4.1 App、核心与外部来源
+
+Trace refs: O7-REQ-6e70287f-a156-4544-997d-5c1752e5efde；承接 [REQ-CC-001](command-center.prd.md#REQ-CC-001) 的适用义务。
 
 ```mermaid
 flowchart TB
@@ -91,11 +100,15 @@ Tauri 宿主负责窗口、菜单栏、来源选择、系统通知、IPC 转接�
 
 项目通过登记 ID、可取得的 repository ID、环境、规范化工作树及 Git 公共目录识别；分支是属性，不是身份。首次选择验证真实仓库，路径失效后允许重新定位且核对项目身份；恢复时读取偏好与位置。多项目可切换，首版不做跨项目组织平台。
 
-项目总览和执行上下文分别处理：共同仓库身份及用户选择的工作树集合决定总览读取范围，明确主线版本决定默认目标；每项工作仍保留其环境、工作树和源版本。当前个人数据按工作树隔离的实现先保持兼容，跨工作树总览通过引用组合已获准来源，不搬移决定、私有资料或 runtime 记录。若后续持久化需要迁移，先定义旧数据归属与恢复验证，不因本设计自动合并数据库。
+项目总览和执行上下文分别处理，承接 [REQ-CC-001](command-center.prd.md#REQ-CC-001) 的项目进入与恢复。`RepositoryScope` 只描述用户选定的共同仓库、默认阅读基线和获准工作树引用集合；它是读取范围，不是新的 Git 仓库、任务或运行控制身份。共同仓库先核对规范化 `git_common_dir`；不同 clone 仅凭 remote URL 相同不自动合并，须由用户明确加入并保留各自来源。
+
+`ExecutionContext` 继续引用现有 `Project.id + environment + worktree path + HEAD`，发送时重新核对工作树与运行绑定。当前 `Project.id = digest(git_common_dir:root)`、个人键 `project.id:kind`、runtime scope `project.id:environment` 和私有绑定的 `registered_project_id` 保持原义。总览通过引用读取已选 scope，不重写这些键、不迁移决定或私有资料，也不将全仓概览的主线 HEAD 当执行工作树 HEAD。用户未选主线基线时沿当前工作树并明确提示，不能猜 main 指向的实际版本。
+
+切换阅读范围只改变投影/返回位置；切换执行目标需要重新预览相应上下文，不能将未发送输入或旧请求隐式投给另一工作树。路径重定位验证共同仓库与原身份，不可核实时保留旧记录供选择恢复。旧客户端兼容及新增个人记录见 §10.2。
 
 ### 4.2 代码落点与职责
 
-以下路径承载客户端实现，具体已覆盖能力和验证边界见 §11。
+以下路径承载客户端实现。新增模块名是本设计的实施落点，不表示文件已存在；保持一个独立核心 crate，不抽出通用任务服务。
 
 | 路径 | 职责 |
 | --- | --- |
@@ -104,6 +117,16 @@ Tauri 宿主负责窗口、菜单栏、来源选择、系统通知、IPC 转接�
 | `tools/oasis7-command-center/src-tauri/` | 薄宿主、配置、production capabilities、打包 |
 | `tools/oasis7-command-center/ui/` | 独立前端包、生成 DTO、有限 bridge、界面测试和 lockfile |
 | `tools/oasis7-command-center/tests/fixtures/` | 文档、GitHub、Codex 和故障回放样本 |
+
+| 现有落点 → 目标职责 | 具体改动边界 |
+| --- | --- |
+| `core/src/domain.rs` → `work_projection` / `source_facts` | 定义 WorkRef、逐字段证据、首页/工作详情 DTO；只从来源和个人选择生成派生视图 |
+| `core/src/index.rs`、`github.rs` | 继续负责有界来源读取；补来源事件/观测/拉取时间、窗口与已知对象补读，不在 adapter 内决定目标完成 |
+| `core/src/lib.rs` → 应用协调与存储接口 | 分离读取候选和提交，处理关系修复、决定同步证据、view revision；个人数据写入使用 record revision/CAS |
+| `src-tauri/src/commands.rs` | 去除跨 I/O 的 Application 大锁；查询、刷新、保存走独立的有界通路，宿主仅转接类型化命令 |
+| `core/src/codex/`、`src-tauri/src/runtime_commands.rs` | 保留现有版本/实例门控与操作记录，新增 StartIntent 的有限顺序编排，不改外部会话所有权 |
+| `ui/src/App.tsx` → 首页、工作详情、关注及路由组件 | 由共享 WorkRef 进入详情，区分呈现、编辑草稿和来源状态；不在 JSX 再算一套完成/关注状态 |
+| `ui/src/RuntimePanel.tsx`、`LocalTools.tsx`、`DocumentInventory.tsx` | 接入原工作返回上下文；配置/诊断按需展开，具体工具与文档树合同沿配对设计 |
 
 实现时在根 workspace 明确排除应用路径，按 [Cargo workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) 规则维护独立锁文件。沿用仓库 Rust 与 Cargo/sccache 缓存策略，不改写 `CARGO_TARGET_DIR` 或为每项任务建新缓存；不依赖模拟器、游戏 Agent 协议或 Viewer 启动。
 
@@ -132,11 +155,15 @@ Tauri 宿主负责窗口、菜单栏、来源选择、系统通知、IPC 转接�
 
 ### 5.1 打开项目、索引规范与记录决定
 
+Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；承接 [REQ-CC-004](command-center.prd.md#REQ-CC-004) 的适用义务。
+
 打开项目后，按 [项目地图](../../../skills/oasis7-command-center/references/project-map.md) 找到当前主责入口与显式引用；目标读取 core PRD 当前阶段章节，规范效力读取主责身份、范围和替代关系，不按 mtime 排序。已提交基线和 dirty 工作树分别索引与展示，切分支或修订变化使相关投影失效。
 
 [pulldown-cmark](https://docs.rs/pulldown-cmark/latest/pulldown_cmark/) 产生可定位的标题、段落、表格、代码与链接块；解析语法不自动决定条款效力。已有条款 ID 优先，标题定位须处理重复；行号只辅助跳转。保存原版本引用与可取得内容，历史工作可回到当时条款并找到明确后继。
 
 按真实阅读版本计算“自上次查看变化”；没有历史内容或明确阅读记录时说明缺口。用户决定草稿、已明确决定、正式条款更新、实现同步分别记录。首版通过原文编辑入口或明确的 Codex 工作回写主责文档，只以实际结果更新来源；保存草稿不改规范效力，也不创建另一个通用决策 registry。
+
+决定的三条状态、证据和终态遵守 [§7.4](#cc-decision-attention-state)。确认意图仅改变决定状态；后续补理由、关联来源或查看决定均不改原确认时间。正式回写和实现同步分别记录适用范围及证据，来源中未发现关联只表示未核实，不能让该决定永久出现在“需要我决定”。
 
 [notify](https://docs.rs/notify/latest/notify/) 事件只提示失效，合并去抖后重读。初次载入、唤醒、重新聚焦、手动刷新和检测到遗漏时校准；必要时受限轮询。不索引 `target`、`node_modules` 或 Git objects，不能把全目录递归监听当作一致性保证。
 
@@ -144,7 +171,9 @@ Tauri 宿主负责窗口、菜单栏、来源选择、系统通知、IPC 转接�
 
 Git 采用 [status](https://git-scm.com/docs/git-status) 的 `--porcelain=v2 -z --branch`、[worktree](https://git-scm.com/docs/git-worktree) 的 `list --porcelain -z` 等机器输出。Rust 用参数数组、明确 cwd、超时和输出上限调用，处理空格/换行路径与 detached HEAD。读取不隐含 fetch、切分支、reset、提交或清理；本地远端引用只是最近所知状态。
 
-GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请求、分页和退避建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)。桌面首版没有公网 webhook 接收服务，使用克制轮询，优先当前可见与关联的 PR/检查；Issue/Project 按需。
+GitHub 先复用当前固定只读参数的 gh adapter；扩展分页或改用共享 reqwest Client 时仍按 host/account 绑定，并遵循[条件请求、分页和退避建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)。桌面首版没有公网 webhook 接收服务，使用克制轮询，优先当前可见与显式关联的 PR/检查；Issue/Project 按需。近期列表没有包含某个已知 PR 时，详情可在该来源获准且有能力的条件下按其真实身份补读；列表截断、404 和未读取分别保留，不能由缺席推断未合入或删除。
+
+初始刷新预算：每个 Git/gh 子进程或 HTTP 请求最多 10 秒，单来源刷新总期限 30 秒；列表每页最多 100 项、一次最多 10 页，已知对象补读一次最多 20 个且计入同一总期限。当前 gh 仅最近 100 PR 的能力不因此扩大为已实现分页。到达页数/时间预算返回已读范围和剩余 cursor/原因；用户明确“继续读取”开启有界新尝试，不能在后台无限追页。限额按来源返回的 retry-after 显示下次可重读时间，不在截止后持续等待或忙重试；分页期间来源变化保留各页实际版本/时间，不宣称原子快照。
 
 一次刷新按“读取候选 → 核对版本/范围 → 事务应用 → 发布 view revision”处理。慢 generation 不能覆盖新快照。分页记录时间范围与完整度；即使页已读完，也不宣称各字段属于同一瞬间。403、404、限额、超时、部分页和成功空结果分别处理，失败保留最近成功数据。
 
@@ -152,9 +181,17 @@ GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请�
 
 ### 5.3 工作操作与待处理请求
 
+Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；承接 [REQ-CC-006](command-center.prd.md#REQ-CC-006) 的适用义务。
+
 用户从目标或工作选择明确范围、依据版本、环境与连接能力，应用准备相应操作；真正启动、输入或中断经核对版本与能力的 Codex 连接器执行，新工作准入和停用后的既有工作管理遵循 §6.4。看板不复制 Agent 执行循环，也不自动分发所有未完成目标。
 
 运行时反向请求按真实 runtime/request/thread/turn 身份登记，包含背景、可选输入及影响；重复投影同一问题可以聚合，多次独立请求不能因文字相同而合并。展示普通提醒与真实阻塞的区别；已授权实现继续按既有授权推进，不加看板总审批。处理结果由回执与来源确认，刷新不重复回复。
+
+<a id="cc-attention-projection"></a>
+
+Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；承接 [REQ-CC-006](command-center.prd.md#REQ-CC-006) 的关注呈现、处理与恢复。
+
+关注区按 [PRD 关注闭环](command-center.prd.md#cc-attention-lifecycle) 消费统一 `AttentionItem` 投影：需要用户输入的真实请求、待核实事实、知悉变化分别查询。`DecisionRecord.confirmed_at` 存在不构成待处理条件。每项需回复事项绑定原请求或一项明确的用户待定问题、所属 WorkRef、仍有效的待答理由及可用动作；缺少背景时允许先进入详情，不能用连接设置页代替问题处理。处理后详情和首页由同一已提交 revision 更新，结果未知进入核对状态，终态保留原证据但退出待答列表。
 
 <a id="DES-CC-009"></a>
 
@@ -187,27 +224,56 @@ GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请�
 
 ### 5.6 首页判断投影
 
-application 在既有来源快照之上生成首页投影，四个区域及内容由 [REQ-CC-013](command-center.prd.md#REQ-CC-013) 主责。目标定位沿 core 当前阶段及显式主责引用；状态摘要沿现有稳定章节读取，复用 Markdown 块和链接，而非把文件全文直接放到首页。摘要无法结构化提取时提供该区正文的阅读入口及覆盖说明，保留其他已解析区域；只完成该降级不能宣称首页整体验收通过。
+Trace refs: O7-REQ-ce7b612a-3316-4c40-9009-c0d295ff0ed6；承接 [REQ-CC-013](command-center.prd.md#REQ-CC-013) 的适用义务。
+
+application 在既有来源快照之上生成 `HomeProjection`，四个区域及默认交互由 [REQ-CC-013](command-center.prd.md#REQ-CC-013) 与[首页布局](command-center.prd.md#cc-home-layout)主责。目标定位沿 core 当前阶段及显式主责引用；状态摘要沿现有稳定章节读取，复用 Markdown 块和链接，而非把文件全文直接放到首页。摘要无法结构化提取时提供该区正文的阅读入口及覆盖说明，保留其他已解析区域；只完成该降级不能宣称首页整体验收通过。
 
 投影中的每个结论分别保留原文定位、源 revision、事实性质、摘要内部核验时间和读取时间。已核实 PR/CI 更新其对应字段，不覆盖主责目标；与摘要冲突时保留双方版本及冲突字段，不用一个“最新时间”覆写整条记录。摘要自己的归纳不升级为运行事实。
 
 重点排序输入只有主责显式阶段顺序、用户已保存置顶及组内来源顺序；缺少优先级时保留并列。下一步引用现有主责或个人选择，分析建议单独带性质且不改变源关系。近期结果按明确 PR/交付身份聚合，保留事件时间和比较基线。待处理投影复用原请求身份和 §5.3 的已处理结果；人工关注、事实缺口和普通提醒分组，观察不全不生成虚构请求。
 
-首页、工作详情和待处理共享同一 view revision，慢来源按 §5.2 发布更新，避免处理完请求后旧投影重新制造待办。项目选择和连接配置只在首次打开或用户展开时占据主要空间；身份、SHA和诊断按需展开，当前判断受影响的具体缺口直接显示。优先加载可用来源并显示分区加载状态，后台索引不挡住已可读首页。
+| 分区 | 投影输入与输出 | 缺口/动作边界 |
+| --- | --- | --- |
+| 当前重点与下一步 | 目标原条款、已核实成果、剩余条件、显式下一动作、关联 WorkRef；默认最多三项，其余可展开 | 无明确排序保留并列；不从 PR 数量推算优先级，不让用户先填写关系才显示可读取目标 |
+| 最近成果变化 | 按用户选择的比较窗口、事件身份与适用版本聚合真实结果，链接同一工作 | 同一 PR 的提交/检查/合入不重复算成果；没有事件时间则不伪入窗口，改列“本次新观察到”并说明时间未知 |
+| 需要我处理 | §7.4 的仍需用户回答事项与数量，事实缺口和知悉信息分组 | 没有真实待答项可以为空；来源不可用显示该范围未知，不能显示“全部处理完” |
+| 返回工作 | 已确认工作关系、用户近期进入位置和未发送草稿存在性 | 不包含私有正文、秘密或私有线程；没有历史时给可读工作入口，不创建空任务 |
+
+`HomeProjection`、`WorkDetailProjection` 和 `AttentionProjection` 从同一已提交来源集合及个人记录 revision 生成，并发布共同 `viewRevision`。各区返回自己的可用/部分/旧结果和缺口，来源集合并非原子远端时刻；一处失败不清空其他区。投影缓存键包括 schema、RepositoryScope、实际阅读基线、来源 revision 集合、个人记录 revision 和比较窗口，缓存缺失可重算。一次保存/处理成功使相关投影失效；旧计算结果提交前须核对全部输入 revision，不能重新引入已处理问题。
+
+项目选择和连接配置只在首次打开或用户展开时占据主要空间；身份、SHA 和诊断按需展开，当前判断受影响的具体缺口直接显示。查询先返回已验证身份下的最后成功投影及分区状态，再异步校准来源；新恢复路径未完成身份校验时只提供带“待核对”标记的安全阅读，不开放执行。后台全量扫描不作为每次 `query_view` 的前置。
 
 <a id="DES-CC-014"></a>
 
 ### 5.7 统一工作详情、关联与原工具接续
 
-application 以 §6.2 的 WorkItem 原来源身份构造工作详情，组合目标、规则、PR/CI、会话引用、原始请求及操作回执。不同视图只传相同工作引用和返回位置；详情不创建新任务表或将多个源状态压成统一完成值。未产生 PR 的明确会话仍可作为工作入口，后续取得显式 PR 关系再关联到原工作。
+Trace refs: O7-REQ-fdf061f8-ebdf-46e3-91a5-a2311e2bcb93；承接 [REQ-CC-014](command-center.prd.md#REQ-CC-014) 的适用义务。
 
-关联保存来源双方身份、原依据版本、提出方式（源明确引用、用户确认或建议）、适用工作树及当前可定位性。明确 URL/条款引用从已读取文档和来源中提取；文本相似度不直接建依赖。相同关系去重，重复刷新只更新观测。失效检查先找同一稳定身份，再找显式后继及适用范围；无法核实保留旧引用和修复候选，修复由用户明确选择，不能靠缓存重建删除关系。采用个人决定的回写证据仍引用真实源 revision，未知同步结果不自动转为已完成。
+application 以 §6.2 的 WorkItem 原来源身份构造[统一工作详情](command-center.prd.md#cc-work-detail)。首屏先返回工作目的、当前可核实结果、主要剩余条件和可用下一动作；来源/目标关系、PR/CI、会话、真实请求及操作回执作为同一详情的区域。原文、完整 SHA、协议身份和诊断可展开，不抢占首屏判断。不同视图只传相同工作引用和返回位置；详情不创建新任务表或将多个源状态压成统一完成值。未产生 PR 的明确会话仍可作为工作入口，后续取得显式 PR 关系再关联到原工作。
+
+关联保存来源双方身份、原依据版本、关系种类、提出方式（源明确引用、用户确认或建议）、适用工作树及当前可定位性。读取到 URL 只证明链接存在；只有正文明确表达的服务目标、验收或会话关系才能投影为该语义。候选查询优先当前工作已有关系、来源明确引用和用户选择范围，不默认展开上百个全仓复选框。相同端点/种类/范围关系去重，重复刷新只更新观测；具体修改、冲突和移除沿 §7.5。采用个人决定的回写证据仍引用真实源 revision，未知同步结果不自动转为已完成。
 
 外部会话入口先使用已支持且获准的来源接口或用户明确保存的引用；详情分别显示历史读取、实时观察、原工具打开、控制能力。没有会话能力时保留 PR/工作树定位与缺口。导航校验复用有限来源打开命令及允许的协议/目标，不能运行任意 shell 或解析私有库来宣称接管；没有受支持的深链就提供可复制定位和实际原工具入口，不伪造跳转成功。新入口格式需独立校验，不能把任意文档 URL 作为命令执行。
 
-自管动作复用已有 start/input 及操作账本。UI先从工作详情生成可编辑输入预览，明确区分目的/范围元数据、引用版本、实际输入和权限；用户一次明确发起后由 application 顺序建立会话及发送该预览。前一步结果未知则停止后续动作并沿原 operation 核对；已确认建会话但输入失败时保留该会话和草稿，不再创建另一会话。连接/能力不可用时仍能回原工具。这里只规定目标编排，当前建立会话与手动输入入口不被写成已实现单次发起。
+自管动作复用已有 start/input 及操作账本，单次发起合同见 §5.8。连接/能力不可用时仍能回原工具，不用启用实验连接器作为打开已有工作的前置。原工具打开结果只证明操作系统接受了该导航请求；返回 App 后按原 WorkRef 重新读取有权取得的事实，不因此标记任务完成。
 
 返回位置、筛选和未发送草稿绑定工作来源身份、项目/环境及适用运行目标；切换视图不重新录入。普通草稿默认会话内保留，用户明确选择留存后才进入个人存储，支持删除；重开只恢复所选普通草稿且不发送。私有资料引用及秘密回复沿原隔离与保存边界，恢复普通工作草稿不自动持久化私有正文或秘密。来源变更后提示具体差异，重新核对实际目标后才开放动作。
+
+<a id="cc-start-intent"></a>
+
+### 5.8 一次明确发起与结果回读
+
+Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；承接 [REQ-CC-007](command-center.prd.md#REQ-CC-007) 的一次发起与操作结果。
+
+[PRD 发起工作](command-center.prd.md#cc-start-work)对应有限应用命令 `start_work`。`StartIntent` 是一次用户输入的本地操作组合，复用现有 operation 身份与子步骤记录，不成为另一套开发任务。它包含原 WorkRef、ExecutionContext、目的/范围、依据版本、实际发送预览的摘要及当前获准 runtime 目标；目的/范围元数据不能代替实际输入，更不能升级权限。
+
+1. 用户在工作详情修改同一份预览并明确发起。Rust 重新核对项目/工作树/HEAD、输入预算、连接版本/能力、目标和已有授权；不兼容返回具体可修复原因，保留草稿。UI 抑制同一意图重复点击，Rust 按本地 operation 身份拒绝重复受理。
+2. 先持久记录意图及预定步骤。需要新会话时记录并执行 `thread/start`；已有可用自管会话时复用其真实 thread，不以同分支推定目标。私有资料的实际输入 frame 必须等真实 thread 已知且线程私有属性已持久保存后才可发送，保存失败则不发送。
+3. 建会话回执核实、真实 thread 与原实例已保存后，才为同一预览记录并执行 `turn/start`。前一步已确认而后一步确认未发送时，显示“会话已建立，输入未发送”，允许在该会话明确续发；不重新建立会话。拒绝或失败分别保留来源结果。
+4. 任一步发送边界或回执不明时停止后续自动推进，显示“结果待核实”，按原 operation/instance/thread/turn 回读。重连、重开、超时、来源刷新和用户再次打开详情均不重发；无可核实身份时保留未知，不按标题搜索一个会话认领结果。
+5. 回执、已开始一轮、该轮结果、PR/CI 和目标验收分别更新详情；成功发送仅退出发送表单，不清掉未被核实的工作剩余条件。原 preview 若未获准持久保存，重开只恢复操作元数据和核对入口，不从日志重建私有/秘密输入。
+
+本地去重只能抑制本客户端已知的重复操作；上游没有幂等保证时不能声称 exactly-once。明确重试仅适用于已证明未发送，或上游明确拒绝且能核实未产生该步效果的步骤，并形成新的可追溯操作；仍未知时不可用“重试”掩盖可能已有的副作用。现有 `sourceResolved` 仅证明原实例已无可观察活跃工作，原输入效果仍未核实；它及 `idle`、中断完成均不成为可重放输入的证据。未知 `thread/start` 没有 thread ID 时不补造身份。已有创建会话与输入分离接口继续兼容，但基础产品默认入口采用上述一次发起。
 
 ## 6. 接口与数据合同
 
@@ -215,9 +281,32 @@ application 以 §6.2 的 WorkItem 原来源身份构造工作详情，组合目
 
 ### 6.1 来源合同与错误
 
-关键对象包含 `SourceRef`：来源类别、主机/账号/环境、对象身份、可得 revision、观测时间、事实性质与 coverage。事实性质区分源事实、Agent 汇报、模型归纳和待核实关联。未取得的字段保留未知，不生成伪造时间或身份。
+Trace refs: O7-REQ-2d1f3577-785e-40ac-8d25-ba0d414511f6；承接 [REQ-CC-002](command-center.prd.md#REQ-CC-002) 的适用义务。
 
-每个来源记录 `last_attempt`、`last_success`、`source_revision`、`generation`、覆盖范围、错误和能力。加载、成功空、部分、过期、错误、未接入分别可见。错误 DTO 包含类别、来源、必要诊断引用及是否适合重读；是否重发副作用由操作语义决定，不能仅凭 `retryable` 自动重发输入。
+关键对象包含 `SourceRef`：来源类别、主机/账号/环境、对象身份、可得 revision、事实性质与 coverage。事实性质区分源事实、Agent 汇报、模型归纳、用户选择和待核实关联。未取得的字段保留未知，不生成伪造时间或身份；[产品来源状态](command-center.prd.md#cc-source-states)所需字段在 Rust 统一产生，不由各页面自行解释。
+
+| 字段组 | 语义与更新条件 |
+| --- | --- |
+| `sourceRevision` / `observedAt` | 实际读取的源版本与该事实被来源/采样者核实的时间；摘要正文有独立核验时间时保留它，缺失则未知 |
+| `fetchedAt` / `lastAttempt` / `lastSuccess` | 本 App 拉取、尝试及成功读取的本地时间；重新读到同一旧正文只更新读取元数据，不改变正文事实的 `observedAt` |
+| `eventAt` / 事件身份 | 合入、测试完成或其他来源明确事件的实际时间；未知时不能用文件 mtime、拉取时间或排序位置替代 |
+| `coverage` | 仓库/账号、选定工作树/基线、对象或查询范围、已读页及游标/窗口、截断/遗漏/失败原因；“查询空”只在成功且该声明范围完整时成立 |
+| `generation` / `viewRevision` | 本地读取代次和已提交投影版本；只比较同一来源键/读取范围的代次，不把本地计数当上游事件顺序 |
+| `FactCell<T>` | 值、原 SourceRef、依据版本、事实性质、适用范围、核实/旧结果/冲突/未知状态及原因；每个结论可独立回溯 |
+
+时间统一存可解析 UTC 值及来源时区/精度信息，UI 按用户时区呈现；没有上游时间时保留空值。不同来源时钟与精度不足以证明严格先后，不用“最近读取”覆盖跨源冲突。`stale` 必须带原因：如关联源已出现新版本、超出该来源声明的有效窗口、刷新失败沿用上次结果；仅有日期较老而无时效合同的规范不能自动退役。日期范围变化使成果窗口重新投影，不能改写历史事实。
+
+| 字段 authority | 可更新的字段 | 不得顺带推出 |
+| --- | --- | --- |
+| 当前主责文档/明确验收条款 | 目标、适用条件、规范效力及显式下一步 | PR/CI 现状、实际部署或验收通过 |
+| 派生状态摘要 | 其原核验窗口内的说明与判断，保留摘要性质 | 新拉取时即为当前事实，或凭摘要修改正式要求 |
+| Git / GitHub | 对应工作树状态、PR source HEAD、PR 状态、真实事件；CI 的测试对象/结果按返回的实际字段保存 | 未读页没有工作、合入代表部署或整体目标完成；缺 tested OID 时声称测试覆盖新 HEAD |
+| 原运行时/操作回执 | 原实例/thread/turn/request 的观察及该操作结果 | 所有外部会话状态、所有后台工作结束或产品验收 |
+| 用户明确选择/确认 | 置顶、个人计划、关系与有证据的核实结论 | 改写源状态、接管会话或授予新权限 |
+
+读取到比摘要窗口更新的 PR 合入事实时，用它展示该 PR 的状态和事件；摘要旧的“待合入”保留为过期依据，并指出冲突字段。目标、部署和验收仍保留各自来源，不能整条记录 last-write-wins。两个来源对同一权限范围内的字段冲突而无法判定时并列双方依据，将受影响结论设为待核对；其他字段继续可用。
+
+来源加载、成功空、部分、旧结果、错误、未接入分别可见。错误 DTO 返回 `category`、受影响来源/字段、最后成功范围、必要诊断引用和有限 `recoveryAction`，区分未安装、未认证、无权限、目标不在覆盖范围、限额、超时、存储故障及版本冲突；UI 在原操作附近提供打开配置、重读该来源、查看原工具或解决冲突的具体入口。适合重读不等于适合重发副作用，不能仅凭 `retryable` 自动重发输入。
 
 ID、Git OID、外部节点和本地 cursor 用明确字符串表示；可能超出 JavaScript 安全整数的值使用约定字符串等 JSON 编码。ts-rs 的 TypeScript `bigint` 不代表 JSON 自动转换。Rust 在实际协议入口解码，bridge 验证命令/参数/错误与 DTO 的 JSON 往返。
 
@@ -227,17 +316,19 @@ ID、Git OID、外部节点和本地 cursor 用明确字符串表示；可能超
 
 | 对象 | 身份与关联规则 |
 | --- | --- |
-| Goal / Milestone | 来自当前主责条款与明确关系；长期方向和当前阶段分别建模 |
-| Rule / DocumentSection | 路径、条款 ID 或稳定章节定位、revision/content hash、适用范围及后继 |
-| WorkItem | PR URL/稳定身份可独立成立；已有 Issue 或明确开发会话可关联；分支不是主键 |
-| EvidenceLink | 指向真实源版本、适用 AC 和结果；来源事实、用户确认、建议关联分开 |
-| DecisionRecord | 草稿或明确用户意图；保存内容、理由、范围和真实确认信息，正式规范与实现同步状态另列 |
+| Goal / Milestone | 引用当前主责条款、长期/当前阶段及显式关系；身份沿源文档/条款，不按首页卡片另发目标 ID |
+| Rule / DocumentSection | 仓库/阅读范围、路径、条款 ID 或稳定章节定位、revision/content hash、适用范围及后继；标题/行号变化不自动替换历史依据 |
+| WorkRef / WorkItem | WorkRef 为来源命名空间与原对象身份：GitHub host/repository/PR 或 Issue，或原会话 SessionKey。WorkItem 是目的、关联目标、规范、PR/CI、会话、请求、证据和可用动作的派生组合；PR 无 Issue 仍独立成立，分支不作主键 |
+| EvidenceLink | 引用真实源对象/版本、适用 AC/范围与结果性质；有 URL 仅证明链接存在，相关性和结论核实另行记录 |
+| DecisionRecord | 保留原决定 ID、内容/理由/范围、确认时间与修订；决定本身、规范回写、实现同步三条状态及各自证据独立，见 §7.4 |
 | 状态摘要 / 架构索引 | 普通仓库文档及其稳定章节；记录派生性质、来源基线/核验时间/范围，引用 Goal、WorkItem 和主责条款，不创建新的目标或任务身份 |
 | 首页 / 工作详情投影 | 组合已有身份及结果；各结论保留来源，项目总览不隐去工作树与环境边界 |
-| 关系定位与修复 | 原始双方身份及版本、来源或用户确认、有效/待修复/建议；变化不删除历史依据 |
+| 关系定位与修复 | 原始双方身份及版本、关系种类、提出/确认来源、记录 revision、解析状态和移除标记；见 §7.5，不删除原依据 |
 | 原工具入口 | 工具/来源命名空间、环境和明确定位；可打开、可观察、可控制分别判断 |
 
 同一工作可服务多个目标；建议依赖不自动成为阻塞。仅当适用验收集合、分母与结果均可核实时显示验证比例，未核实部分单列。文档 active、PR merged、CI passed、turn completed、部署和目标验收各说明自身事实，互不代替。
+
+显式关系可以把同一 PR 的多个会话组合到一个详情，仍保存全部原 WorkRef/SessionKey；同分支或同标题不证明属于同一工作。没有 PR 的会话先以原会话引用展示，后续出现明确 PR 关系时旧入口可转到该组合详情，原引用和返回位置继续有效。关系有歧义时保留独立工作和候选，不分配“统一任务 ID”来掩盖不确定性。临时输入预览只有草稿/operation 身份，未产生源工作前不计为进行中成果。
 
 PR source HEAD、实际测试 SHA、main 前进和验收分别关联：旧 SHA 绿灯不覆盖新提交；main 前进也不自动否定同一 source HEAD 的适用 CI，解释服从当前流程主责。
 
@@ -245,7 +336,11 @@ PR source HEAD、实际测试 SHA、main 前进和验收分别关联：旧 SHA �
 
 ### 6.3 会话身份、运行绑定与 Codex 边界
 
+Trace refs: O7-REQ-a6126ad0-2f2d-47ad-a504-5e9ceff92cff；承接 [REQ-CC-005](command-center.prd.md#REQ-CC-005) 的适用义务。
+
 持久 `SessionKey` 由来源存储/配置命名空间、环境及 thread/session ID 构成；同一会话可以有多个运行绑定。活跃状态按 `runtime instance + thread + turn` 保存，分支或会话标题不能用于去重；一个实例 idle 不覆盖另一个实例 active。
+
+工作级关联沿 §6.2 的原 WorkRef 和 §5.7 的共享详情读取；详情可以包含多个 SessionKey/运行绑定，但不能因组合显示改变原对象身份或控制权。会话结果更新其对应事实字段，不直接更新目标完成值。
 
 连接分别声明历史可读、实时可观察、可控制及具体范围。新 app-server 的已加载状态不能证明其他 App/CLI/IDE 的运行状态；读取历史不自动 resume/fork 或获取控制。外部连接按实际支持复用，不以私有数据库/JSONL 解析作为默认协议。
 
@@ -261,6 +356,8 @@ Rust runtime 持有自管 child、stdin writer、stdout reader、限量 stderr �
 
 ### 6.4 应用 IPC 与能力校验
 
+Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；承接 [REQ-CC-007](command-center.prd.md#REQ-CC-007) 的适用义务。
+
 下列是本应用计划的命令族，不是声称 Codex 存在同名方法。
 
 | 命令族 | 示例 | 合同 |
@@ -270,6 +367,19 @@ Rust runtime 持有自管 child、stdin writer、stdout reader、限量 stderr �
 | 执行 | `start_work`、`send_input`、`interrupt_turn`、`answer_runtime_request` | 验证授权、能力、环境、原运行目标；返回 operation ID |
 | 个人数据 | `save_preference`、`save_decision_draft`、`confirm_link` | 保存用户明确动作；不改写源端交付状态 |
 | 导航 | `open_source_target` | Rust 校验项目范围、规范化路径和 URL 协议 |
+
+基础闭环增加的有限命令沿现有 bridge 生成/核验 DTO，不暴露通用 SQL、shell 或任意协议调用：
+
+| 命令/方向 | 身份、版本与输入边界 | 成功、冲突及恢复 |
+| --- | --- | --- |
+| `query_home` / `query_work_detail`：Rust → UI | schemaVersion、RepositoryScope、WorkRef、可选 viewRevision；分页 cursor 绑定范围/筛选/快照 | 返回分区 FactCell、来源健康与能力；旧 cursor 明确失效，仅重查有关列表，不清掉返回位置 |
+| `query_work_candidates`：Rust → UI | 原 WorkRef、关系种类、选定目标范围、有限 query/cursor | 已有/明确/建议分组并带依据；默认每页最多 50 项，结果不足不自动扫描私有资料或外部会话存储 |
+| `confirm_link` / `repair_link` / `remove_link`：UI → Rust | 原端点/范围、关系种类、expectedRecordRevision、明确选择 | 事务 CAS；冲突返回当前记录和差异，保留用户选择供重新核对；不自动改源文件或PR |
+| 决定与同步证据保存：UI → Rust | 原决定 ID、expectedRecordRevision、修改轨道、EvidenceLink/适用范围 | 原确认信息不可被普通编辑重置；失效证据转待核对，保存失败保留草稿，不静默覆盖 |
+| `start_work`：UI → Rust | §5.8 的明确 StartIntent；实际输入沿现有 32 KiB 上限、目的/范围沿现有有界校验 | 返回 operation 和各步骤状态；结果未知只核对原操作，不能将前端重新请求当自动重发 |
+| 原工具/来源打开：UI → Rust → 系统 | 已保存 WorkRef、允许的目标协议、真实环境和经验证定位 | 不支持深链时返回复制定位/原工具入口；系统接受打开请求不证明工具已定位或工作已完成 |
+
+上述查询可重复执行而无写入；关系和决定修改必须带旧版本，操作命令使用原操作合同。每个响应包含实际应用的范围，不能仅用当前页面选中项解释晚到响应。未知 DTO/schema 明确返回 unsupported，同包 UI 不猜字段含义；既有 IPC 保持原响应 shape，新增详情命令独立演进。
 
 Rust 边界不能信任前端提供的“已授权”“可控制”布尔值，应核对已有授权事实、连接能力和目标。新连接/新任务同时检查该项目/环境的实验启用状态；停用后的现有工作管理独立保留原目标核对、必要输入、明确中断和仅为收尾所需的恢复连接，不能用一个全局 enabled 判断把这些入口一并屏蔽。副作用与请求回复绑定原 runtime instance 及上游对象；重连先核实绑定，不因持久 thread ID 相同自动移交控制。
 
@@ -287,17 +397,35 @@ Rust 边界不能信任前端提供的“已授权”“可控制”布尔值，
 | 个人持久数据 | 布局、筛选、阅读版本/位置、手工关联、草稿及已确认未回写的 DecisionRecord | 独立备份与迁移，索引清理不得删除 |
 | 操作记录 | operation、原目标、上游回执、未知结果、待协调关联 | 重开仍保留，已协调后才按保留策略清理 |
 
-首版一个 SQLite 文件分表，递增 schema version 与事务迁移。单写者、短事务、明确 busy timeout；按实际读取并发启用 WAL，不把 WAL 当多写者保证。数据库线程独占 rusqlite 连接，经有界请求/oneshot 通路服务，索引小批事务让交互查询在批次间执行。长解析与同步系统调用进入受限阻塞池。
+采用一个 SQLite 文件分组，数据库层仍需维护 schema 兼容；本增量优先使用 §10.2 的独立版本化键，维持现有 `user_version=2`。新增投影及个人记录的写入由同一数据库协调通路拥有，其工作线程独占该通路的 rusqlite 连接，经有界请求/oneshot 服务；既有 runtime 和 ToolJobs 连接继续沿各自短事务、版本及实例条件写合同，不声称整个应用只有一个 writer。写入设置明确 busy timeout，按实际读取并发启用 WAL，不把 WAL 当并行写保证。索引小批事务让交互查询在批次间执行，长解析与同步系统调用进入受限阻塞池。
 
 快照替换和对应 source 元数据在同一事务提交后发布 view revision；查询不能看到半批更新。缓存重建只作用目标表组，不能删整个库修一个索引。决定从草稿变为用户已确认时仍属个人持久数据，内容、理由、范围与真实确认信息不能降为可重建缓存；重启和索引重建均保留。凭据、敏感展示及诊断边界见 §8。
 
+首页/工作详情仅缓存可重建组合；关联确认/修复/移除、决定同步证据及用户选择留存的返回位置是个人记录。知悉已读、个人问题已处理及“已在原工具处理”的个人陈述保存为独立 `work_attention_v1` personal 记录，保留原问题/请求引用、scope、状态、记录 revision 和时间；真实 runtime 请求/秘密回复仍归原操作存储，不复制到普通关注记录。个人修改先在同一短事务写记录及其 revision，再使关联投影失效；应用回执只在事务提交后显示已保存。物理写入失败与事实尚未核实是两类状态。范围切换不取消已获准的个人保存，但结果必须回到原 scope，不能覆盖新页面的记录。
+
 ### 7.2 流量控制与故障隔离
+
+<a id="cc-host-concurrency"></a>
+
+宿主不再用持有 `Application` Mutex 的闭包包住完整扫描、gh/Git 子进程、文件选择器或等待网络。目标通路是“短锁捕获身份与输入版本 → 锁外读取/解析候选 → 数据库短事务 CAS 提交 → 发布不可变投影”，交互查询读取最近已发布结果，不能排在慢来源 I/O 后面。文件选择器在选中后才提交打开请求；取消不占用全应用锁。
+
+| 阶段 | 并发/取消与提交条件 |
+| --- | --- |
+| 调度读取 | 初始预算为全 App 最多 4 个来源 I/O、每个 scope/source 同时 1 次；同源重复刷新合并为至多 1 个后继请求。交互查询与个人保存不消耗来源槽位，后台扫描不借用 runtime 控制通路 |
+| 读取与解析 | 长 I/O 无应用/DB 锁；解析阻塞池初始最多 2 个任务。Git/gh 沿现有每子进程 10 秒超时及输出上限，HTTP/分页按 §5.2 的 10 秒单次/30 秒总期限及页数预算；超时保留旧事实。取消只停止只读候选，不中断未获准停止的模型或工具任务 |
+| 数据库提交 | 写请求有界（初始队列上限 64），区分短交互提交和可合并后台发布；调度在有限后台批次间服务交互，不能无限堆积等待。队列满时只读保留最近结果，个人保存返回“未保存”并保留草稿，协议关键记录按既有降级合同处理 |
+| CAS 校验 | 校验 RepositoryScope/执行范围、source generation、实际读取基线、账号与连接 epoch、个人 record revision；任一变化不得发布旧候选为当前结果。跨项目晚到结果仅可进入其原范围缓存，已移除/失效范围直接丢弃候选 |
+| 发布与恢复 | 快照与来源元数据事务成功后单调发布 viewRevision；UI 丢弃不属于当前订阅/范围的响应。失败不推进成功版本，重读仅重试该来源；持续失败提供原工具与最后成功来源入口 |
+
+这些数字是首个实现的有界配置，不是实测吞吐或时延承诺；实施时用 §9.2 的受控慢源/队列故障验证公平性，再依实际机器记录调整依据。来源 generation 只在该来源键内有序；同时到来的用户确认用个人 revision 校验，不能因来源更新覆盖刚保存的决定或关联。来源候选的身份/generation 校验与最终投影的个人 revision 校验分开：个人记录变化只基于已取得来源重新计算投影，不因保存关系再次执行 Git/gh 或全扫描。基线改变后重读有次数/预算限制，超限保留旧快照并提示，禁止自动刷新自旋。
 
 UI 投递设置按条数/字节的批次、有界队列、有限在途数和 ACK。切换项目或取消订阅回收该流，不能向所有窗口广播敏感内容。可替代进度合并；日志以有限窗口保留，截断显示 gap，只在来源支持历史读取时补取。
 
 协议 reader 与 UI/DB 投递分离，不等待 UI ACK 或数据库队列腾空。响应、反向请求与运行终态走独立的有限控制通路，由协调任务持久登记。容量或存储故障时不无限等待、不静默丢弃关键请求：停止接受新副作用，标记连接降级和未决结果，按来源能力重新核对；这不等于停止外部任务。
 
 每次连接 epoch 与源版本明确。上游有稳定事件身份才据此去重，无身份文字 delta 不用内容 hash 去重，以保留合法重复文本。晚到旧连接事件不能覆盖新连接的运行绑定或已发布快照。
+
+runtime 现有 `sequence + instance` 条件写及独立 reader 不被新投影替换。线程 `private_sources` 属持久隐私属性：输入发送前先提交该属性，后续公开输入或晚到旧 snapshot 均不得将它清空。普通投影只消费允许展示的非私有元数据，不能先写入总览再靠 UI 隐藏。任何数据库结构变更须同时考虑 runtime 的异步 writer，不能只迁移首页读写端。
 
 <a id="DES-CC-008"></a>
 
@@ -324,9 +452,50 @@ stateDiagram-v2
 
 这是客户端操作状态，不是开发任务状态机。`pending` 在写入网络/stdio 前持久保存 operation ID、原目标、请求指纹和已有上游 ID，UI 抑制重复点击；持久保存失败则该新动作不发送。崩溃恢复发现发送边界不明的 pending 时也视为结果未知，不能假定未执行。
 
-JSON-RPC request ID 仅关联响应，不是上游幂等键。传输失败、超时或回执丢失不能自动重发启动、输入、批准回复或其他写入。恢复先读已有事实、核对原 instance/thread/turn 与可取得回执；无法确认时保留具体不确定项供用户处理。已确定未发送与已确定远端失败可提供新的明确重试动作，不与未知结果混同。
+JSON-RPC request ID 仅关联响应，不是上游幂等键。传输失败、超时或回执丢失不能自动重发启动、输入、批准回复或其他写入。恢复先读已有事实、核对原 instance/thread/turn 与可取得回执；无法确认时保留具体不确定项供用户处理。已确定未发送，或明确拒绝且能核实未产生该步效果时，才可提供新的明确重试动作；远端报告失败却不能排除部分效果时继续保留未知，不与安全重试混同。
 
 `Acknowledged` 只表示上游接受/回复，`Confirmed` 表示该操作的预期效果已被核实；启动一轮的效果确认不代表整轮成功，更不代表产品目标达成。中断请求接受与实际停止分别记录。断开观察不把运行状态改为空闲、失败或完成；协调不会把旧请求答复投给新实例。
+
+<a id="cc-decision-attention-state"></a>
+
+### 7.4 决定、同步证据与关注状态
+
+Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；承接 [REQ-CC-004](command-center.prd.md#REQ-CC-004) 的决定修订、同步证据与个人展示状态。
+
+三条决定状态分别承接 [REQ-CC-004](command-center.prd.md#REQ-CC-004) 与 [REQ-CC-006](command-center.prd.md#REQ-CC-006)。决定本身属于个人明确意图；规范及实现结果仍由各自来源拥有，不能用一个 `confirmed` 值统管它们。
+
+| 轨道 | 状态与转移 | 完成/变化的证明 |
+| --- | --- | --- |
+| 决定本身 | `draft → decided`；后续明确替代/撤回用 `superseded` / `withdrawn` 并保留原记录，不退回未确认草稿 | 用户明确确认保存内容、范围与确认时间；一般编辑增加修订及编辑时间，不改原确认时间。实质新决定单独记录并关联前身 |
+| 正式条款回写 | `unknown / notRequired / pending / evidenceLinked / verified / needsReview` | 未知不等于待批准；确认不适用须保留理由/范围。关联原 PR/文档 revision 后仅为有证据入口；核实该版本实际承接决定的适用范围后才为 verified，来源失效/明确修订冲突转 needsReview |
+| 实现同步 | 同上，独立于条款回写 | 关联真实改动、版本及适用测试/结果，说明只证明的范围；PR 合入不自动证明语义符合，未运行验收保留未知。来源改变只重核受影响义务，不因 main 前进撤销所有已有结果 |
+
+`verified` 的依据是可回读的具体来源加明确核实结论，记录核实者/来源、时间、范围和记录 revision；App 只读刷新最多发现/更新证据入口，不凭关键词自动核实整个决定已实现。证据无法读取时保留上次核实结果作为历史依据，当前显示“待核实/不可读”，不能无条件计为当前同步完成；明确反证或不适用版本进入 needsReview。范围部分覆盖须逐项保留余项，不能用一项 CI 覆盖全部同步条件。旧 `notVerified` 导入为 unknown，保留旧确认信息，不造 pending 工作或虚假完成。
+
+全部适用同步义务已核实或有理由地不适用时，决定可从待同步列表进入历史；个人停止/恢复关注则仅修改 `work_attention_v1` 的展示偏好，不改变三条状态或原请求。恢复关注仍显示真实未决义务，已隐藏项可从完整范围核对；停止关注不伪造来源完成，不代替原 runtime 请求的回复。
+
+`AttentionItem` 是原请求或明确个人问题的派生项，包含原身份/WorkRef、种类、仍需处理原因、可用动作、依据版本和处理记录。来源请求的回答与个人决定保存为不同动作，前者仍沿 §7.3 绑定实际 runtime request。状态采用 `open → responding → awaitingEvidence → resolved`，新版本取代原问题可为 `superseded`；明确未发送则回到 open，发送效果不明停留 awaitingEvidence，不能自动回到可重发的 open。
+
+首页“需要我处理”只显示仍需用户输入且原请求/问题未终止的 open 项；等待来源核实的项进入“待核实”，resolved/superseded 保留历史入口。用户已作决定即结束该个人问题的待答义务，规范回写未完成可保留工作剩余条件；只有实际出现需用户选择的新问题才建立新的待答项。知悉变化可标记已读，不修改源工作；事实未知不能批量转换成需要批准。
+
+回复/核实记录持久保留原请求身份及状态版本，缓存重建和旧来源刷新不能重置为 open。外部原工具回复只能按来源回读核实；如果没有可读接口，用户可记“已在原工具处理”，它属于个人陈述，源状态继续未知并提供核对入口，不冒充 runtime 回执。实际新请求使用新原身份，内容相同也不会被已处理记录吞掉。
+
+<a id="cc-link-lifecycle"></a>
+
+### 7.5 关联生命周期与并发修改
+
+关系的“是谁提出/确认”与“当前能否定位”分别保存，避免把源明确引用、个人确认和猜测混成一个 active 状态。
+
+| 事件 | 持久/派生结果 | 用户与来源边界 |
+| --- | --- | --- |
+| 读到明确源引用 | 保存源端点、关系种类、源版本和语义依据；由该来源投影，仍可与个人关系并存 | 普通链接不升级为依赖；源更新后重读，其历史依据不丢失 |
+| 出现建议/用户确认 | 建议保留候选和理由，确认后保存个人 relation revision、确认时间与范围 | 建议不参与完成/阻塞判断；确认不改源文件，不授予会话控制 |
+| 条款修订/重命名 | 优先同一显式稳定身份，再核对明确后继及适用范围；保存新定位和原依据 | 唯一且范围可核实的后继可更新解析定位，并显示变化；语义替换或多候选须用户修复，不能靠标题相似强行迁移 |
+| 缺失/冲突/读取失败 | 保留原关系，解析状态为 `missing / ambiguous / unavailable / changed` 并带候选/原因 | 未读取不是删除；失败不清空已确认关系。只有相关工作显示缺口 |
+| 修复/变更 | 用户从原关系查看差异并确认新端点/种类/范围，CAS 更新记录 | 原端点与版本留存；失败保留选择，冲突不静默覆盖另一视图的修改 |
+| 移除 | 个人关系记录 removal 标记；源关系可保存个人隐藏/不采用选择 | 不删除源 PR/会话/条款、不伪称源已取消关系；同一关系重读或仅源 commit 变化不复活已移除项，真正新声明可列为变化但不自动恢复个人关系 |
+
+关系键为两端稳定身份、种类及适用范围，原文版本作为依据版本另存；刷新不能因为行号变化生成重复关系。修复/移除后的个人记录先提交再失效首页/详情投影；同一 work 同时服务多个目标仍引用同一源工作。用户只隐藏关系时，原源声明及其真实性仍可在来源详情核对。
 
 ## 8. 部署、安全与运行约束
 
@@ -350,7 +519,13 @@ macOS 产物为 `.app` / `.dmg`，按实际目标硬件验证 arm64 和需要支
 
 ### 9.1 中文、可访问性与信息密度
 
+Trace refs: O7-REQ-76d54ed7-4028-460a-b22b-37a9088ad245；承接 [REQ-CC-010](command-center.prd.md#REQ-CC-010) 的适用义务。
+
 界面以紧凑列表、表格和按需详情承载四视图，保留筛选与返回位置。Solid 只拥有选择、展开、输入草稿和显示缓存；Rust 投影负责事实与进度。显示来源和读取范围，状态配文字，键盘路径有焦点和可读名称，虚拟列表保持辅助技术可理解的上下文。
+
+[产品信息层级](command-center.prd.md#cc-ui-hierarchy)在组件层实现为一致的“标题/结果/下一动作 → 相关来源与范围 → 原文/诊断”顺序：首页卡片、工作详情、关注卡片使用共享状态和动作组件，禁止每个面板重新堆叠路径、完整 SHA 与统一样式的原始字段。普通操作区不默认显示协议枚举或 JSON；需要它们作判断的原始请求保留可展开原文。未安装/未连接时只展示当前可行动的恢复说明，不把不可执行的完整表单留作默认工作流。
+
+保存、失败和未知结果反馈贴近触发动作并通过可读状态区域通知；焦点按提交结果留在错误字段或进入相应工作结果，不能跳到底部的独立信息区。返回原工作恢复选中项、筛选及滚动/焦点；窄窗口使用列表与详情切换而非多个横向压缩面板。字号、间距和状态色由主题 token 统一，不把密度理解为所有文本使用同一级小字号；实际可读性与 VoiceOver 仍以原生场景验证。
 
 中文文档采用 [SQLite FTS5 trigram](https://sqlite.org/fts5.html#the_trigram_tokenizer) 子串索引，标题、路径与已有条款 ID 优先；少于三个 Unicode 字符的“规范”“合入”等查询回退到选定范围内的参数化子串查询，限制结果、支持取消与去抖。unicode61 不被当作完整中文分词，trigram 也不被当成覆盖两字搜索。
 
@@ -361,6 +536,16 @@ IME composition 期间 Enter 只用于候选操作，不能误提交搜索/发�
 实现必须为来源分页、解析池、DB 请求、协议帧、控制队列、日志窗口、UI 在途批次、诊断与缓存设显式容量/时间界限；异常大输入产生可解释错误或截断范围，不无限占用。关键控制通路溢出按 §7.2 降级，不静默抹掉真实请求。
 
 验证记录机器、系统、构建模式、数据规模、持续时间、冷启动/检索时延、滚动阻塞和整个 App 进程树资源；在首个切片中确定实际阈值并记录证据。当前没有包体、内存或帧率实测，不能宣称某框架已优于另一框架。容量优化先定位解析、I/O、DB、投递或渲染瓶颈，再决定局部调整。
+
+| 场景 | 环境与刺激 | 可判定的预期响应 | 指标/验证入口与当前范围 |
+| --- | --- | --- | --- |
+| 日常任务理解 | PRD 代表性真实项目，至少三项工作及旧/缺失来源；macOS 正式 App | 已可用数据下五分钟内形成重点/成果/剩余条件判断，进入正确工作；处理中断、返回结果与恢复原位置 | 阈值来自 [整体验收](command-center.prd.md#cc-product-acceptance)，记录真实耗时/额外搜索、切换和输入；当前未验证 |
+| 慢来源隔离 | 固定候选、假 gh/GitHub 延迟 10 秒或手动释放读取屏障，同时查询已缓存详情、保存关系 | 在慢读取解除前可返回缓存查询与已提交个人保存；超额刷新合并/明确拒绝，旧源保留 | Core/host 受控屏障断言，记录队列高水位与操作顺序；不是原生绝对时延证明 |
+| 迟到/竞争发布 | 刷新 A 后切到 B，A 晚到；刷新期间保存决定、修复关联或变更账号 | A 不覆盖 B，旧个人 revision 不覆盖新保存；来源与投影事务一致 | 临时 worktree/fake source 与 CAS 故障回放；未证明真实 API 完整度 |
+| 大范围/部分读取 | 代表性仓库实际规模加超扫描/分页/显示预算样本 | 已读内容可用，数量/窗口/遗漏范围准确；不把最后 100 PR 当全仓完成度 | 记录文件数/字节、页数、工作数、输出上限及截断；不从单样本推导容量上限 |
+| 存储和控制压力 | DB 队列满/事务失败与真实格式反向请求、退出观察同时发生 | 新副作用暂停，草稿未丢失，原未决记录/私有标记保留，控制路径有限降级 | fake runtime + 存储故障；真实退出/IME/辅助技术另在 App 验证 |
+
+对实际 macOS 性能不预设未经测量的毫秒、内存或帧率通过线；实现 PR 固定硬件/系统/构建、冷暖样本窗口及分位数，先定位 I/O、DB、投递和渲染耗时，再由产品/实现负责人确定目标。上述有界配置和受控顺序断言可独立验证，不能因此报告整体性能已达标。
 
 ## 10. 兼容、迁移与回滚
 
@@ -383,9 +568,21 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 ### 10.2 数据迁移与版本回退
 
-每次 schema 迁移按实际安装版本与数据库版本核对，先验证备份可恢复、版本兼容及事务边界；失败保留原文件和可解释诊断，禁止通过清空个人/操作数据恢复启动。可重建索引单独重建。
+本增量采用兼容扩展：保留 `Snapshot` 和现有个人键的 shape，新增独立 `work_projection_v1` 可重建 cache 键，以及 `work_relations_v1`、`decision_followthrough_v1`、`work_navigation_v1`、`work_attention_v1` personal 记录。名称表示本地记录格式，不新增任务数据库或公共运行协议。RepositoryScope 仅保存显式来源引用/阅读偏好，旧 Project.id、runtime scope、私有库注册身份与现有操作表不迁移或合并；私有正文及线程不进入这些普通投影记录。
 
-回退应用先检查旧版本是否理解现有 schema；不支持时使用匹配备份或修复版本，不能把新数据库直接交旧代码试写。恢复备份时保留升级后新增的个人数据与未决操作副本并核对，不能用陈旧快照重放动作。协议连接重新建立后恢复事实，任何版本切换都不自动再发未知副作用。
+现有 SQLite `user_version=2` 和 runtime 事件 writer 的版本校验保持不变；追加 cache/personal 键无需提升全库版本。运行输入未决记录仍使用原 operation 表，StartIntent 只添加可兼容的关联元数据，缺失时按原操作独立展示，不能修改旧状态含义。若实施必须改变公共表或提升 user_version，须先补齐全部 writer（含异步 runtime/store）的停写/迁移/恢复合同和独立兼容评审，不能仅在首页构造时执行升级。
+
+| 数据情形 | 迁移/读取规则 | 回退或失败处理 |
+| --- | --- | --- |
+| 首次使用新记录 | 缺扩展记录时按旧决定/关联逐项读取，以旧 key、原 ID 与内容摘要做幂等导入；原确认时间、历史引用保留 | 没有证据的同步状态映射 unknown；不制造待答任务或已完成状态。导入事务失败保留旧记录，仍可阅读旧入口 |
+| 旧关系与新关系并存 | 旧 URL/section IDs 作为原依据，定位结果独立核实；新 revision 只写扩展记录，源关系从当前源重建 | 不强制重写旧决定/关联。旧 App 若后来编辑 legacy 记录，新 App 比较导入摘要并标明冲突，不能静默覆盖新修复/移除/证据 |
+| 缓存缺失/损坏/未来版本 | 仅重建支持版本的派生缓存；未知 personal 版本明确拒绝编辑并保留原值 | 不以默认空值覆盖不可读个人记录；有影响的详情降级，其余来源/旧视图继续使用 |
+| 回退至文首固定源码基线的 App | schema 2 保持兼容，旧 App 忽略新增键；普通已发布源、原个人数据、操作与私有属性保持原合同 | 新首页/修复/同步证据暂不呈现；不能据此声称记录丢失或恢复已处理请求。再次升级须核对 legacy 改动，不自动回放任何动作 |
+| 实际需要不兼容迁移 | 先核对旧/新安装版本与数据库版本，备份个人/操作记录，停止所有受影响 writer，在事务内迁移并验证 | 失败保留原库；旧版不能理解新 schema 时用匹配备份或修复版，不做破坏性降级。升级后新增记录/未决操作留副本供核对 |
+
+投影/个人格式、生成 DTO 和同包 UI 按明确版本切换，新功能读取失败可退到来源入口；不双写两套有不同语义的完成状态。真实旧库、关闭/已启用偏好、未决操作、私有线程标记和晚到事件均须在实际迁移候选上验证。恢复备份不能撤销已发生的模型/签名效果；按原目标核对仍未知的副作用，禁止用陈旧快照重放。
+
+<a id="cc-system-verification"></a>
 
 ## 11. 验证设计与可追溯性
 
@@ -426,7 +623,7 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 ### 11.0.4 日常工作闭环的实现差距
 
-2026-10-13 文档核对基线 `main@81649fd3baa248a905c2dd47a979ec5f04ef4a7d`。该基线有原文首页、手工关联、独立 PR/CI区、自管会话和本机工具基础；没有据此确认完整用户任务通过。本轮只修订目标与实施合同，不改变程序、来源覆盖或既有验收结果。
+文首 2026-10-17 固定源码基线已有原文首页、手工关联、独立 PR/CI 区、自管会话、本机工具及显式文档树基础；没有据此确认完整用户任务通过。本轮补齐工作投影、来源/状态、并发与兼容合同，不改变程序、来源覆盖或既有验收结果。
 
 | 目标 | 当前基础 | 尚待实施或证明 |
 | --- | --- | --- |
@@ -445,22 +642,26 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-001](command-center.prd.md#REQ-CC-001) | [DES-CC-001](#DES-CC-001) | AC-CC-001；真实 App 打开与恢复正确仓库 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) 项目打开/隔离与 `ui/src/App.test.tsx`；macOS 打包和原生恢复见 README verification | 实现 PR 的构建、机器与恢复结果 | 未证明安装、平台与路径行为 |
-| [REQ-CC-002](command-center.prd.md#REQ-CC-002) | [DES-CC-002](#DES-CC-002) | AC-CC-002；错误、部分页、空结果和慢刷新不混同 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) GitHub 故障保留；当前仅最近 100 PR 的部分窗口，非全量分页 | 实现 PR 的故障样本、源 revision 与投影断言 | 未证明真实 API 覆盖 |
+| Trace refs: O7-REQ-6e70287f-a156-4544-997d-5c1752e5efde；[REQ-CC-001](command-center.prd.md#REQ-CC-001) | [DES-CC-001](#DES-CC-001) | AC-CC-001；仓库阅读范围与执行身份独立，重开/路径失效可恢复；原生步骤见 [verification](../../../tools/oasis7-command-center/README.md#verification) | [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 扩展两个同仓工作树、不同 clone、路径重定位及旧个人键反例；按本行原生步骤在真实 App 进入/返回 | 实现 PR 的 source/build、实际工作树/身份和旧库恢复结果 | 源码与 fixture 不证明 macOS 安装/路径体验；不证明跨 clone 自动身份合并 |
+| Trace refs: O7-REQ-2d1f3577-785e-40ac-8d25-ba0d414511f6；[REQ-CC-002](command-center.prd.md#REQ-CC-002) | [DES-CC-002](#DES-CC-002) | AC-CC-002；逐字段时间/authority、部分页/已知对象补读和慢源隔离 | [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 扩展旧摘要待合入但 PR 已合入、事件时间缺失、分页失败/超预算、10秒屏障、跨 scope 晚到结果；按 §9.2 核对实际预算与恢复 | 实现 PR 的固定源/页/字段样本、候选版本、CAS/队列断言与错误恢复 | 当前 gh 窗口不证明全量 API 覆盖；受控并发不证明原生性能 |
 | [REQ-CC-003](command-center.prd.md#REQ-CC-003) | [DES-CC-003](#DES-CC-003) | AC-CC-003；PR无Issue、多目标、未知分母不伪造进度 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) 与 `ui/src/association.test.tsx` 多目标关联；不从局部窗口推导整体完成度 | 实现 PR 的真实来源样本与关联结果 | 未证明项目实际完成度 |
-| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | [DES-CC-004](#DES-CC-004) | AC-CC-004；替代、历史、草稿和正式回写分别解释 | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs) 声明解析、历史保留与旧缓存兼容；`core/tests/section_identity.rs` 条款身份；`core/tests/foundation.rs` 决定与缓存隔离 | 实现 PR 的条款定位、后继与写入事实 | 未证明规范实现已符合 |
-| [REQ-CC-005](command-center.prd.md#REQ-CC-005) | [DES-CC-005](#DES-CC-005) | AC-CC-005；同分支多会话与同会话多实例不覆盖 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) fake stdio 契约/身份隔离回放；`ui/src/RuntimePanel.test.tsx` 原实例控制边界 | 实现 PR 的环境、schema 与绑定回放 | 未证明全机会话可观察 |
-| [REQ-CC-006](command-center.prd.md#REQ-CC-006) | [DES-CC-006](#DES-CC-006) | AC-CC-006；真实请求身份、已处理恢复与授权边界 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 原请求身份、秘密回复与失回执回放；`ui/src/RuntimePanel.test.tsx` 请求表单与重复提交边界 | 实现 PR 的请求身份与回复回执 | 未证明外部运行时所有请求可用 |
-| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | [DES-CC-007](#DES-CC-007) | AC-CC-007；只读不控制，刷新不运行，动作绑定原环境 | `src-tauri/src/runtime_commands.rs` 有限 IPC/admission 测试；[src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx) 默认无动作和身份门控 | 实现 PR 的能力矩阵与命令契约结果 | 未证明模型任务成功 |
+| Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；[REQ-CC-004](command-center.prd.md#REQ-CC-004) | [DES-CC-004](#DES-CC-004) | AC-CC-004；显式规范后继、历史版本与效力分别解释 | [document lifecycle tests](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs) 核对声明解析、历史保留、旧缓存兼容与后继定位；验证方法延续 §11.0.2 | 实现 PR 的原条款/后继版本和历史读取结果 | 声明/链接可读不证明实现已符合规范 |
+| Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；[REQ-CC-004](command-center.prd.md#REQ-CC-004) | [cc-decision-attention-state](#cc-decision-attention-state) | AC-CC-004；决定确认时间、回写/实现同步、个人停止关注和恢复独立 | [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 扩展旧 notVerified 导入、编辑不重置确认、证据失效/部分覆盖、停止/恢复关注、清缓存和重开不复活已处理项 | 实现 PR 的原决定/证据版本、迁移样本及状态转移断言 | 有证据入口不证明语义实现符合；真实验收仍沿各主责来源 |
+| Trace refs: O7-REQ-a6126ad0-2f2d-47ad-a504-5e9ceff92cff；[REQ-CC-005](command-center.prd.md#REQ-CC-005) | [DES-CC-005](#DES-CC-005) | AC-CC-005；共享 WorkRef 详情，原会话/运行实例不可混同 | [codex runtime tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 身份回放；扩展一PR多目标、无Issue/无会话PR、仅会话工作和同分支多会话详情，核对原来源引用与私有排除 | 实现 PR 的固定来源样本、工作/运行身份和详情投影断言 | 不证明全机会话可观察或外部控制能力 |
+| Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；[REQ-CC-006](command-center.prd.md#REQ-CC-006) | [DES-CC-006](#DES-CC-006) | AC-CC-006；真实请求身份、回复结果与未决恢复 | [codex runtime tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 扩展回复失回执、旧请求晚到、未知不重发、原请求终态与重开/缓存重建 | 实现 PR 的原请求/运行身份、操作记录及来源回执 | 不证明未接入外部运行时的请求可观察或已回复 |
+| Trace refs: O7-REQ-649217d9-4c9c-43fb-898e-4fd3606a0bf5；[REQ-CC-006](command-center.prd.md#REQ-CC-006) | [cc-attention-projection](#cc-attention-projection) | AC-CC-006；已决定退出待答，待核实/知悉分组，处理后回原工作 | [RuntimePanel tests](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx) 扩展已决定仍待回写、外部个人处理陈述、状态分组、原工作返回及重开恢复；真实 App 按 §11.2 完成处理中断 | 实现 PR 的个人处理记录 revision、显示结果及真实导航结果 | 个人陈述不证明外部已回复；无接口范围仍未知 |
+| Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；[REQ-CC-007](command-center.prd.md#REQ-CC-007) | [DES-CC-007](#DES-CC-007) | AC-CC-007；预览的实际输入、能力/环境校验及一次明确发起 | [RuntimePanel tests](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx) 扩展预览编辑、重复点击、错误工作树/能力的就地反馈、失败保留草稿；沿有限 IPC 核对实际发送目标 | 实现 PR 的能力矩阵、DTO/命令契约及 UI 交互结果 | UI 回执不证明模型任务效果；真实协议编排另按同要求 start intent 关系验证 |
+| Trace refs: O7-REQ-417e1bc6-1dac-4b80-891a-cef1f770bf55；[REQ-CC-007](command-center.prd.md#REQ-CC-007) | [cc-start-intent](#cc-start-intent) | AC-CC-007；各步持久登记，建会话/输入未知不续步不重放 | [codex runtime tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 扩展建会话未知、已建但输入未发送、turn 回执丢失、重开、sourceResolved、私有标记先于 frame 及原目标核对 | 实现 PR 的锁定协议/构建、操作步骤与发送计数/次序 | fixture 不证明模型任务效果或上游 exactly-once；当前分离入口不等于新编排已实现 |
 | [REQ-CC-008](command-center.prd.md#REQ-CC-008) | [DES-CC-008](#DES-CC-008) | AC-CC-008；发送后丢回执、崩溃重开不重发 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 发送前登记、失回执、重开和只读核对回放；未知结果不重放 | 实现 PR 的持久操作、故障点与协调结果 | 未证明上游幂等或重放 |
 | [REQ-CC-009](command-center.prd.md#REQ-CC-009) | [DES-CC-009](#DES-CC-009) | AC-CC-009；关窗、活跃/未知退出、外部所有权 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 自管进程/退出回放；`src-tauri/src/runtime_commands.rs` 全局退出测试及原生菜单验收 | 实现 PR 的进程树、事件与退出结果 | 未证明强退或重启后继续 |
-| [REQ-CC-010](command-center.prd.md#REQ-CC-010) | [DES-CC-010](#DES-CC-010) | AC-CC-010；两字搜索、IME、读屏、慢消费者有界 | `core/tests/foundation.rs` 中文短查询；[src/App.test.tsx](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 和 `RuntimePanel.test.tsx` IME；真实 macOS 体验见实现 PR | 实现 PR 的机器、样本、交互与测量记录 | 未证明性能或辅助技术达标 |
+| Trace refs: O7-REQ-76d54ed7-4028-460a-b22b-37a9088ad245；[REQ-CC-010](command-center.prd.md#REQ-CC-010) | [DES-CC-010](#DES-CC-010) | AC-CC-010；四视图共享信息层级，就地反馈/返回/键盘可用 | [App tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 及工作/关注场景扩展焦点、表单错误、窄窗口导航和草稿恢复；真实 macOS 核对中文IME、VoiceOver、原文返回、视觉层级与滚动 | 实现 PR 的实际机器/窗口/构建、场景截图及交互结果 | DOM/fixture 不证明像素可读性、真实辅助技术或性能达标 |
 | [REQ-CC-011](command-center.prd.md#REQ-CC-011) | [DES-CC-011](#DES-CC-011) | AC-CC-011；清缓存保留个人/未决数据，凭据和内容隔离 | `core/tests/foundation.rs` 缓存/个人数据隔离；[tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) schema2/未决账本回放；主窗口有限权限配置 | 实现 PR 的迁移、内容样本、生产配置核对 | 未证明完整安全审计 |
 | [REQ-CC-012](command-center.prd.md#REQ-CC-012) | [DES-CC-012](#DES-CC-012) | AC-CC-012；默认关闭、启用/停用、独立降级与环境隔离 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 默认关闭/启停/版本拒绝回放；`ui/src/RuntimePanel.test.tsx` 默认无任务和停用后管理 | 实现 PR 的接入等级、启停与降级场景结果 | 未证明上游生产支持、远端或跨平台能力 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-013](#DES-CC-013) | AC-CC-013；三场景及局部冲突/过期仍可行动 | 按 [来源核对手册](command-center.manual.md#cc-maintenance-delivery)及项目状态样本核对首页投影；增加排序/冲突/成果去重反例，再按 PRD代表性项目执行真实 App 三场景；当前仅有原文首页测试 | 实现 PR source/build、样本范围、任务耗时/额外操作及结果 | 本轮只验证文档；首页与整体验收待实现 |
-| [REQ-CC-014](command-center.prd.md#REQ-CC-014) | [DES-CC-014](#DES-CC-014) | AC-CC-014；关系复用/修复、外部只读入口；启用自管时验证输入预览和结果反馈 | 复用 [关联 UI测试](../../../tools/oasis7-command-center/ui/src/association.test.tsx) 及后继/runtime反例，后续补失效关系、错误环境、建会话未知与输入失败不重复创建；真实 App 验证原工具往返 | 实现 PR 原工作/关系版本、目标身份与交互结果 | 当前手工关联和自管操作不证明完整接续 |
-| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-015](#DES-CC-015) | AC-CC-015；辅助动作返回原工作且保持私有隔离/暂停范围 | 复用 [资料隔离测试](../../../tools/oasis7-command-center/core/tests/context.rs) 及本机工具验收方法，补工作详情往返及普通首页不出现私有来源的反例 | 实现 PR 工具/工作身份和真实环境结果 | 完整关联往返待证明；特权能力保持用户暂停 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-016](#DES-CC-016) | 产品/设计树与覆盖反馈 | 按专题验证映射承接；扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，实施后执行真实 App 定位与恢复 | 实现 PR source/build 与实际结果 | 当前仅文档，无树 UI 或桌面验收 |
+| Trace refs: O7-REQ-ce7b612a-3316-4c40-9009-c0d295ff0ed6；[REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-013](#DES-CC-013) | AC-CC-013；首页四区与共享结果可完成三个日常任务；场景/阈值见 [整体验收](command-center.prd.md#cc-product-acceptance) | 在 [UI入口](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 和核心投影扩展排序、同一交付去重、事件/观察时间区分、局部旧结果/冲突、已处理项不复活；再按本行整体验收跑真实 App 三场景 | 实现 PR 的 source/build、来源窗口、任务耗时/额外搜索、切换/录入与结果 | 现有原文首页及自动化不证明完整首页或日常价值已验收 |
+| Trace refs: O7-REQ-fdf061f8-ebdf-46e3-91a5-a2311e2bcb93；[REQ-CC-014](command-center.prd.md#REQ-CC-014) | [DES-CC-014](#DES-CC-014) | AC-CC-014；关联确认/修复/移除、详情复用与原工具往返 | [association tests](../../../tools/oasis7-command-center/ui/src/association.test.tsx) 扩展同一WorkRef多入口、失效/歧义/个人移除、并发CAS、后继修复和旧库回退；用受支持真实工具验证打开/复制定位及返回原工作 | 实现 PR 的原工作/关系版本、来源/个人记录差异与真实往返结果 | 不支持深链时不宣称已定位；旧手工关联不证明完整生命周期 |
+| Trace refs: O7-REQ-fd3b34c6-4fb4-4614-8d7b-744a86d29c3a；[REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-015](#DES-CC-015) | AC-CC-015；辅助动作就地反馈并返回原工作，私有/暂停边界不变；任务交互见 [本机工具任务合同](local-tools.design.md#DES-CC-TOOLS-005) | [LocalTools tests](../../../tools/oasis7-command-center/ui/src/LocalTools.test.tsx) 扩展返回上下文、独立导出/恢复口令、无依赖工作不被阻塞及普通投影私有排除；核心隔离沿本机工具设计的独立验证映射和 §11.2 执行 | 实现 PR 的工具/工作身份、动作结果及真实本机环境 | 不证明特权初装/管理；Apple签名与管理员能力仍暂停 |
+| Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；[REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-016](#DES-CC-016) | AC-CC-016；阅读默认、显式配对和二级诊断可定位主题；专题关系及范围见 [文档阅读合同](document-tree.design.md#DES-CC-TREE-004) | [DocumentInventory tests](../../../tools/oasis7-command-center/ui/src/DocumentInventory.test.tsx) 扩展默认树/详情、二级诊断和来源范围呈现；复用专题既有清单/树/恢复验证，真实 App 核对产品/系统主题定位、返回、键盘/读屏与读取缺口 | 实现 PR 的 source/build、实际来源范围、定位用时与交互结果 | 已有清单/显式树/恢复为局部实现；完整树合同与真实桌面整体验收仍未证明 |
+
 
 ### 11.2 实施时的验证层与关键反例
 
@@ -479,6 +680,22 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 关键恢复场景同时注入 UI 慢、DB 队列满、存储失败、协议控制消息到达和 App 退出，观察有限资源、明确降级及未决记录；不能只验证 UI 顺畅或成功路径。补充未启用时不 spawn app-server、已启用偏好恢复不发任务、活跃/未知工作停用后仍可管理的情形；默认关闭用例不能代替启用状态下的会话控制与恢复验收。fixture/replay 不消费模型额度；真实模型运行仅在任务已授权且该验证需要时进行。按实际改动与仓库现行 CI 检查，不把完整游戏栈作为客户端文档或局部验证的前提。
 
 日常闭环验证另按 [AC-CC-013](command-center.prd.md#AC-CC-013) 至 [AC-CC-015](command-center.prd.md#AC-CC-015) 记录三场景及辅助工具往返。确定性回放覆盖来源缺失/冲突、同分支不同会话、显式关系失效、输入失败及旧结果晚到；真实 App 验证判断、定位、返回和草稿。把用户任务完成与协议正确性分别记录，不能以单元数量代替日常价值结果。仅优化设计文档不执行模型或游戏试玩，因本轮不改变游戏 Skill/API、runtime 或玩家行为。
+
+<a id="cc-implementation-dependencies"></a>
+
+### 11.3 实施依赖与最小可用结果
+
+下表是实现依赖，不是新的任务状态、审批或拆 PR 规则；可原子交付的相关项可在同一 PR 完成，实际 TODO、排期和验证结果放在跟踪 Issue/PR。每个增量只声明其实际用户结果，不以基础模块数量表示产品完成度。
+
+| 依赖顺序 | 主要落点 | 必须可核对的增量结果 |
+| --- | --- | --- |
+| 来源身份与兼容投影基础 | `domain` / `work_projection`、版本化 cache/personal、bridge DTO | 旧项目/个人/未决/私有数据可读，原 WorkRef 与执行 scope 分离；一个 PR 可服务两个目标，无关系仍可读来源 |
+| 来源更新与响应隔离 | `index` / `github`、`commands` 调度、来源/CAS发布 | 旧摘要与新 PR 分字段解释；慢/部分来源不阻塞已可用详情或个人保存，迟到结果不覆盖新范围 |
+| 基础日常闭环 | 首页/工作详情/关注组件、关系与决定状态、导航恢复 | 从首页进入已有工作、处理一个真实问题、返回实际结果；明确关系可复用/修复/移除，已决定不会持续索要批准；以原工具入口完成基础三场景 |
+| 阅读与辅助工具接续 | 文档树、LocalTools 的配对设计 | 默认阅读可定位主题，诊断可展开；辅助动作与结果在原工作上下文往返，私有资料不进入总览，无依赖工作不被工具缺失阻断 |
+| 可选自管动作编排 | StartIntent、既有 codex operation/身份合同、RuntimePanel | 同一预览一次明确发起；建会话或输入未知均不重放，输入失败可在原目标核对；独立启用与真实验证，不成为基础只读闭环前置 |
+
+实现复核先用受控来源/协议与旧库回放定位状态和恢复缺陷，再在真实 macOS App 做 PRD 三个任务及适用工具/执行场景。真实模型只在该任务已授权且需要时运行；来源/文档/UI 改动的验证不因此消费模型额度。界面截图、输入/返回结果与耗时保留在实现 PR 的固定构建证据中，文档检查只证明本设计的链接和结构。
 
 ## 12. 决策、长期风险与未决问题
 
@@ -523,12 +740,18 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 
 <a id="DES-CC-015"></a>
 
+Trace refs: O7-REQ-fd3b34c6-4fb4-4614-8d7b-744a86d29c3a；承接 [REQ-CC-015](command-center.prd.md#REQ-CC-015) 的适用义务。
+
 本机资料、同包 CLI、已有 signer 的普通调用、后台操作与私有运行线程合同见[本机工具集成](local-tools.design.md)。资料由原 context 文件与历史主责，App 的内置能力和已安装 CLI 分别观察。Apple 签名及管理员助手已按用户要求暂停，未开放特权安装/管理；完整首装签名闭环尚未验收。
 
-辅助工具入口复用 §5.7 的工作引用和返回位置。工具结果保留原 operation/job 与来源范围，返回工作只更新真实有关结果；工具安装、资料保存或签名准备不使工作/PR/目标自动完成。私有资料与其派生线程仍只在受控工具/运行界面展示，不进入普通首页或共享工作投影。
+辅助工具入口复用 §5.7 的工作引用和返回位置，任务入口、就地反馈、独立导出/恢复输入及可信签名请求沿 [DES-CC-TOOLS-005](local-tools.design.md#DES-CC-TOOLS-005)。工具结果保留原 operation/job 与来源范围，返回工作只更新真实有关结果；工具安装、资料保存或签名准备不使工作/PR/目标自动完成。私有资料与其派生线程仍只在受控工具/运行界面展示，不进入普通首页或共享工作投影。
 
 <a id="DES-CC-016"></a>
 
 ## 文档全局阅读增量
 
-[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；完整树能力尚未实现或验收。已有章节索引现由 [覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)提供候选、读取、遗漏、原因计数和有界路径样本，并限制实际读取量；具体范围与缺口见专题设计 §11。这不证明文件级树、独立快照、配对或真实桌面验收。
+Trace refs: O7-REQ-729d655d-d8a8-4c44-9ea7-32578dc10f3f；承接 [REQ-CC-016](command-center.prd.md#REQ-CC-016) 的适用义务。
+
+[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接，默认阅读与诊断分层由 [DES-CC-TREE-004](document-tree.design.md#DES-CC-TREE-004)承接。文首固定源码已有文件清单、目录、显式产品/专业树、配对详情及阅读恢复；[覆盖统计](../../../tools/oasis7-command-center/core/src/index_coverage.rs)提供候选、读取、遗漏、原因计数和有界路径样本，仍受当前读取基线与扫描预算约束。
+
+工作详情沿同一源版本打开具体规则，文档入口返回原阅读位置或原工作，不把文档列表作为处理问题的替代路径。全局树的独立成功快照、明确提交/untracked 基线等未闭合合同及实际能力见专题设计 §11；显式树存在不证明全仓语义配对、默认阅读体验或真实桌面整体验收。
