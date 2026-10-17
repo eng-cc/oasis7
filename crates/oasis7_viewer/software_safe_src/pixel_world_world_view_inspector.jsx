@@ -16,21 +16,23 @@ export function PixelWorldEntityInspector(props) {
 export function PixelWorldRouteExplorer(props) {
   const [inspected,setInspected] = createSignal(null);
   const routes = () => worldViewRelations(props.view);
-  const entity = ref => props.view.entities.find(value => value.kind === ref.kind && value.entity_id === ref.id);
+  const entity = ref => ref.kind === 'aggregate' ? props.view.aggregates?.find(value=>value.aggregate_id === ref.id) : props.view.entities.find(value => value.kind === ref.kind && value.entity_id === ref.id);
   const label = ref => entity(ref)?.label || ref.id;
   const route = () => routes().find(value => value.relation_id === inspected());
-  const point = ref => worldViewPosition(entity(ref),props.view,props.stale,true);
+  const point = ref => ref.kind === 'aggregate' ? null : worldViewPosition(entity(ref),props.view,props.stale,true);
+  const selection = ref => ({kind:ref.kind === 'aggregate' ? 'industry_aggregate' : ref.kind,id:ref.id});
   return <Show when={routes().length}><section aria-label={props.text('授权路线','Authorized routes')}>
     <h4>{props.text('路线与端点','Routes and endpoints')}</h4>
     <ul><For each={routes()}>{value=><li>
       <button type="button" onClick={()=>setInspected(value.relation_id)}>{value.label || value.relation_id}</button>
       <span>{value.status === 'active' ? props.text('可用','Available') : props.text('不可用','Unavailable')} · {props.freshnessLabel(value.freshness)}</span>
+      <Show when={value.kind === 'industry_route'}><span> · {value.route_count} {props.text('条路线汇总','routes summarized')}</span></Show>
       <span>{label(value.from)} → {label(value.to)}</span>
     </li>}</For></ul>
     <Show when={route()}><div role="region" aria-label={props.text('路线检查','Route inspection')}>
       <p>{props.text('路线仅供观察，不会提交行动。','Routes are read-only and do not submit actions.')}</p>
       <For each={[route().from,route().to]}>{ref=><div>
-        <button type="button" onClick={()=>props.onSelect?.({kind:ref.kind,id:ref.id})}>{props.text('检查','Inspect')} {label(ref)}</button>
+        <button type="button" onClick={()=>props.onSelect?.(selection(ref))}>{props.text('检查','Inspect')} {label(ref)}</button>
         <button type="button" disabled={!point(ref)} onClick={()=>props.onLocate?.({kind:ref.kind,id:ref.id},point(ref))}>{props.text('定位','Locate')} {label(ref)}</button>
       </div>}</For>
     </div></Show>

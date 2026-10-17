@@ -6,6 +6,7 @@ use crate::{
         WorldKernel,
     },
 };
+use std::collections::BTreeSet;
 fn fixture() -> WorldSnapshot {
     let mut snapshot = WorldKernel::new().snapshot();
     snapshot.model.agents.clear();
@@ -75,6 +76,212 @@ fn fixture() -> WorldSnapshot {
 }
 fn query() -> Value {
     json!({"request_generation":"q","page_size":200})
+}
+#[test]
+fn industrial_levels_count_only_authorized_trusted_members_and_preserve_pins() {
+    let mut snapshot = fixture();
+    let second = snapshot.model.factories["f"].clone();
+    let mut second = second;
+    second.id = "g".into();
+    snapshot.model.factories.insert("g".into(), second);
+    let mut visual = snapshot
+        .runtime_snapshot
+        .as_ref()
+        .unwrap()
+        .state
+        .module_visual_entities["f"]
+        .clone();
+    visual.entity_id = "g".into();
+    snapshot
+        .runtime_snapshot
+        .as_mut()
+        .unwrap()
+        .state
+        .module_visual_entities
+        .insert("g".into(), visual);
+    let source = SourceAuthority::local_runtime();
+    let prepared = prepare(&snapshot, "w", 0, "public", &source).unwrap();
+    let overview = projection::query_objects(&prepared, "overview", None, &[], None, false);
+    let aggregate = overview
+        .iter()
+        .find(|o| o.value.get("aggregate_id").is_some())
+        .unwrap();
+    assert_eq!(aggregate.value["member_count"], "2");
+    assert_eq!(aggregate.value["counts_by_kind"]["smelter"], "2");
+    assert!(!overview.iter().any(|o| o.value["kind"] == "factory"));
+    let relation = overview.iter().find(|o| o.relation).unwrap();
+    assert_eq!(relation.value["to"]["kind"], "aggregate");
+    assert_eq!(relation.value["route_count"], "1");
+    let pinned = projection::query_objects(
+        &prepared,
+        "overview",
+        None,
+        &[("factory".into(), "f".into())],
+        None,
+        false,
+    );
+    assert!(!pinned.iter().any(|o| o.value.get("aggregate_id").is_some()));
+    assert_eq!(
+        pinned
+            .iter()
+            .filter(|o| o.value["kind"] == "factory")
+            .count(),
+        2
+    );
+    let detail = projection::query_objects(&prepared, "entity", None, &[], None, false);
+    assert!(!detail.iter().any(|o| o.value.get("aggregate_id").is_some()));
+    let searched = projection::query_objects(&prepared, "overview", None, &[], Some("g"), false);
+    assert!(
+        searched
+            .iter()
+            .all(|o| o.value.get("aggregate_id").is_none())
+    );
+    // A hidden member is absent before aggregation; neither its count nor ID survives.
+    snapshot.model.factories.remove("g");
+    let prepared = prepare(&snapshot, "w", 0, "public", &source).unwrap();
+    assert!(
+        !projection::query_objects(&prepared, "overview", None, &[], None, false)
+            .iter()
+            .any(|o| o.value.get("aggregate_id").is_some())
+    );
+}
+
+#[test]
+fn explicit_event_position_stays_historical_and_never_follows_current_entity() {
+    let snapshot = fixture();
+    let event = crate::runtime::WorldEvent {
+        id: 9007199254740993,
+        time: 0,
+        caused_by: None,
+        body: crate::runtime::WorldEventBody::Domain(
+            crate::runtime::DomainEvent::AgentRegistered {
+                agent_id: "a".into(),
+                pos: GeoPos::new(12, 34, 56),
+            },
+        ),
+    };
+    let authority =
+        SourceAuthority::local_runtime().with_events(std::slice::from_ref(&event), "w", 7);
+    let prepared = prepare(&snapshot, "w", 7, "public", &authority).unwrap();
+    let objects = projection::query_objects(&prepared, "entity", None, &[], None, true);
+    let anchor = objects
+        .iter()
+        .find(|o| o.value.get("event_id").is_some())
+        .unwrap();
+    assert_eq!(anchor.value["position"]["x_cm"], "12");
+    assert_eq!(anchor.value["identity"]["event_seq"], "9007199254740993");
+    assert_eq!(anchor.value["identity"]["reorg_epoch"], "7");
+    assert_eq!(anchor.value["freshness"], "last_known");
+    assert_eq!(anchor.value["source_cut"], prepared.cut);
+    assert_eq!(anchor.value["feed_ref"], anchor.value["identity"]);
+    assert!(anchor.value.get("visibility_ref").is_none());
+    assert!(
+        !projection::query_objects(&prepared, "entity", None, &[], None, false)
+            .iter()
+            .any(|o| o.value.get("event_id").is_some())
+    );
+    let mut hidden = snapshot.clone();
+    hidden.model.agents.clear();
+    let hidden = prepare(&hidden, "w", 7, "public", &authority).unwrap();
+    assert!(
+        !hidden
+            .objects
+            .iter()
+            .any(|o| o.value.get("event_id").is_some())
+    );
+    let mut conflict = event.clone();
+    conflict.time += 1;
+    let conflict = SourceAuthority::local_runtime().with_events(&[event, conflict], "w", 7);
+    assert!(conflict.events().is_empty());
+}
+
+#[test]
+fn explicit_factory_retirement_evidence_is_local_and_changes_the_cut() {
+    let mut snapshot = fixture();
+    let source = SourceAuthority::local_runtime()
+        .with_retirement_candidates(BTreeSet::from(["retired".into()]));
+    let before = prepare(&snapshot, "w", 0, "public", &source).unwrap();
+    snapshot
+        .runtime_snapshot
+        .as_mut()
+        .unwrap()
+        .state
+        .retired_factory_ids
+        .insert("retired".into());
+    snapshot
+        .runtime_snapshot
+        .as_mut()
+        .unwrap()
+        .state
+        .retired_factory_ids
+        .insert("unseen-private-retirement".into());
+    let after = prepare(&snapshot, "w", 0, "public", &source).unwrap();
+    assert!(after.deleted_factories.contains("retired"));
+    assert_eq!(after.deleted_factories.len(), 1);
+    assert_ne!(before.cut, after.cut);
+    let remote = SourceAuthority::remote(json!({}), json!({}), String::new());
+    assert!(
+        prepare(&snapshot, "w", 0, "public", &remote)
+            .unwrap()
+            .deleted_factories
+            .is_empty()
+    );
+}
+#[test]
+fn module_event_anchors_require_typed_absolute_payload_and_visible_visual_identity() {
+    let mut snapshot = fixture();
+    let mut visual = snapshot
+        .runtime_snapshot
+        .as_ref()
+        .unwrap()
+        .state
+        .module_visual_entities["f"]
+        .clone();
+    visual.anchor = ModuleVisualAnchor::Absolute {
+        pos: GeoPos::new(12, 34, 0),
+    };
+    let event = |id, kind: &str, payload| crate::runtime::WorldEvent {
+        id,
+        time: 0,
+        caused_by: None,
+        body: crate::runtime::WorldEventBody::ModuleEmitted(oasis7_wasm_abi::ModuleEmitEvent {
+            module_id: "industry".into(),
+            trace_id: "private-trace-not-a-display-field".into(),
+            kind: kind.into(),
+            payload,
+        }),
+    };
+    let absolute = event(1, "module_visual_entity_upserted", json!({"entity":visual}));
+    visual.anchor = ModuleVisualAnchor::Agent {
+        agent_id: "a".into(),
+    };
+    let relative = event(2, "module_visual_entity_upserted", json!({"entity":visual}));
+    let removed = event(3, "module_visual_entity_removed", json!({"entity_id":"f"}));
+    let source =
+        SourceAuthority::local_runtime().with_events(&[absolute, relative, removed], "w", 0);
+    let prepared = prepare(&snapshot, "w", 0, "public", &source).unwrap();
+    let anchors: Vec<_> = prepared
+        .objects
+        .iter()
+        .filter(|o| o.value.get("event_id").is_some())
+        .collect();
+    assert_eq!(anchors.len(), 1);
+    assert_eq!(anchors[0].value["position"]["x_cm"], "12");
+    assert!(!anchors[0].value.to_string().contains("private-trace"));
+    snapshot
+        .runtime_snapshot
+        .as_mut()
+        .unwrap()
+        .state
+        .module_visual_entities
+        .clear();
+    assert!(
+        !prepare(&snapshot, "w", 0, "public", &source)
+            .unwrap()
+            .objects
+            .iter()
+            .any(|o| o.value.get("event_id").is_some())
+    );
 }
 #[test]
 fn factories_require_explicit_fixed_geometry_and_routes_require_visible_endpoints() {

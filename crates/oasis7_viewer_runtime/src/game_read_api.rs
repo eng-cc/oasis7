@@ -1,6 +1,6 @@
 //! Opt-in signed-read bootstrap for Game API. No pairing, token issuance or
 //! writes are exposed until the corresponding Runtime contracts exist.
-use crate::world_service::{
+use oasis7::world_service::{
     SignedReadRequest, VIEW_PATH, authority,
     client::{RemoteWorldServiceClient, WorldServiceClientError},
 };

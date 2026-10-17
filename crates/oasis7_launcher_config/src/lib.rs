@@ -1,3 +1,8 @@
+//! Shared launcher transport configuration validation.
+//!
+//! Pure protocol defaults remain owned by `oasis7_client_api`; multiaddr
+//! parsing belongs here so launchers share policy without depending on runtime.
+
 use multiaddr::Multiaddr;
 
 const MULTIADDR_EXAMPLE: &str = "/dns4/bootstrap1.oasis7.tech/tcp/5612";

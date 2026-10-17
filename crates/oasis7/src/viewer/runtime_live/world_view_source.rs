@@ -10,7 +10,13 @@ impl ViewerRuntimeLiveServer {
                 SourceAuthority::unknown()
             } else {
                 spatial_state_digest(self.world.state())
-                    .map(SourceAuthority::local_bound)
+                    .map(|digest| {
+                        SourceAuthority::local_bound(digest).with_events(
+                            &self.world.journal().events,
+                            &self.config.world_id,
+                            self.reorg_epoch,
+                        )
+                    })
                     .unwrap_or_else(SourceAuthority::unknown)
             };
         };
@@ -55,7 +61,11 @@ impl ViewerRuntimeLiveServer {
             "contract_version":oasis7_client_api::world_service::WORLD_SERVICE_CONTRACT_VERSION,
             "reader_binding":reader
         });
-        SourceAuthority::remote(binding, scope_binding, actual_digest)
+        SourceAuthority::remote(binding, scope_binding, actual_digest).with_events(
+            &view.projection().events,
+            &self.config.world_id,
+            self.reorg_epoch,
+        )
     }
 }
 

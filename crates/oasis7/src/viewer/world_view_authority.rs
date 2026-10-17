@@ -1,6 +1,9 @@
 //! Display freshness evidence, separate from admission or an owner capability.
 use crate::{runtime::WorldState, simulator::WorldSnapshot};
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
+#[path = "world_view_event_projection.rs"]
+mod event_projection;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct SourceAuthority {
@@ -8,6 +11,8 @@ pub(super) struct SourceAuthority {
     binding: Option<Value>,
     scope_binding: Value,
     snapshot_digest: Option<String>,
+    spatial_events: Vec<Value>,
+    retirement_candidates: BTreeSet<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SourceKind {
@@ -22,6 +27,8 @@ impl SourceAuthority {
             binding: None,
             scope_binding: json!("unknown"),
             snapshot_digest: None,
+            spatial_events: Vec::new(),
+            retirement_candidates: BTreeSet::new(),
         }
     }
     /// Compatibility for the existing local-only projection entrypoint.
@@ -31,6 +38,8 @@ impl SourceAuthority {
             binding: None,
             scope_binding: json!("local_runtime"),
             snapshot_digest: None,
+            spatial_events: Vec::new(),
+            retirement_candidates: BTreeSet::new(),
         }
     }
     pub(super) fn local_bound(snapshot_digest: String) -> Self {
@@ -45,7 +54,31 @@ impl SourceAuthority {
             binding: Some(decimal_integers(binding)),
             scope_binding,
             snapshot_digest: Some(snapshot_digest),
+            spatial_events: Vec::new(),
+            retirement_candidates: BTreeSet::new(),
         }
+    }
+    pub(super) fn with_events(
+        mut self,
+        events: &[crate::runtime::WorldEvent],
+        world: &str,
+        epoch: u64,
+    ) -> Self {
+        self.spatial_events = event_projection::project(events, world, epoch);
+        self
+    }
+    pub(super) fn events(&self) -> &[Value] {
+        &self.spatial_events
+    }
+    pub(super) fn with_retirement_candidates(mut self, candidates: BTreeSet<String>) -> Self {
+        self.retirement_candidates = candidates;
+        self
+    }
+    pub(super) fn retirement_candidates(&self) -> &BTreeSet<String> {
+        &self.retirement_candidates
+    }
+    pub(super) fn is_local(&self) -> bool {
+        self.kind == SourceKind::LocalRuntime
     }
     pub(super) fn current(&self) -> bool {
         self.kind != SourceKind::Unknown
@@ -72,9 +105,14 @@ impl SourceAuthority {
     /// Internal reuse identity; the display proof digest never goes on the wire.
     pub(super) fn cut_key(&self) -> String {
         blake3::hash(
-            json!([self.source_ref(), &self.binding, &self.snapshot_digest])
-                .to_string()
-                .as_bytes(),
+            json!([
+                self.source_ref(),
+                &self.binding,
+                &self.snapshot_digest,
+                &self.spatial_events
+            ])
+            .to_string()
+            .as_bytes(),
         )
         .to_hex()
         .to_string()
@@ -111,7 +149,8 @@ pub(super) fn spatial_state_digest(state: &WorldState) -> Option<String> {
         "time":state.time,"agents":agents,"factories":state.factories,
         "logistics_routes":state.logistics_routes,
         "factory_site_authorities":state.factory_site_authorities,
-        "location_anchors":state.location_anchors,"module_visual_entities":state.module_visual_entities
+        "location_anchors":state.location_anchors,"module_visual_entities":state.module_visual_entities,
+        "retired_factory_ids":state.retired_factory_ids
     });
     serde_json::to_vec(&material)
         .ok()

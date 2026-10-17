@@ -1,4 +1,3 @@
-use super::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 use super::*;
 use oasis7_client_api::{
     AGENT_DECISION_SOURCE_BUILTIN_LLM as BUILTIN_LLM_DECISION_SOURCE,
@@ -11,6 +10,7 @@ use oasis7_client_api::{
     AGENT_PROVIDER_TRANSPORT_REMOTE_HTTPS as REMOTE_HTTPS_PROVIDER_TRANSPORT,
     DEFAULT_AGENT_PROVIDER_URL as DEFAULT_PROVIDER_DISCOVERY_BASE_URL,
 };
+use oasis7_launcher_config::parse_chain_replication_bootstrap_peers;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::Read;
 

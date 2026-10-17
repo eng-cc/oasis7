@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-multiaddr = "0.18"
+oasis7_launcher_config = { version = "0.1.0", path = "../oasis7_launcher_config" }
 oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }
 oasis7_launcher_ui = { version = "0.1.0", path = "../oasis7_launcher_ui" }
 serde = { version = "1", features = ["derive"] }

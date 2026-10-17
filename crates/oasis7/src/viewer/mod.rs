@@ -12,12 +12,6 @@ mod runtime_live;
 pub(crate) fn canonical_runtime_provider_env_lock() -> &'static std::sync::Mutex<()> {
     runtime_live::canonical_runtime_provider_env_lock()
 }
-#[cfg(not(target_arch = "wasm32"))]
-mod game_read_api;
-#[cfg(not(target_arch = "wasm32"))]
-mod server;
-#[cfg(not(target_arch = "wasm32"))]
-mod web_bridge;
 mod world_view;
 mod world_view_authority;
 
@@ -108,8 +102,8 @@ pub use protocol::{
     RevokeSocialFactQuoteRequest, ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest,
     SocialAdjudicationDecision, SocialContactQuotePreflight, SocialContactQuoteRequest,
     TransferMaterialPriority, TransferMaterialQuotePreflight, TransferMaterialQuoteRequest,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerRequest, ViewerResponse,
-    ViewerStream, WORLD_FEED_SCHEMA_VERSION, WarDeclarationQuotePreflight,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
+    ViewerResponse, ViewerStream, WORLD_FEED_SCHEMA_VERSION, WarDeclarationQuotePreflight,
     WarDeclarationQuoteRequest, WorldFeedEnvelope, WorldFeedEvent, WorldFeedGapReason,
     WorldFeedStatus, WorldFeedUnavailableReason,
 };
@@ -124,7 +118,7 @@ pub use runtime_live::{
     runtime_agent_chat_echo_enabled_from_env, viewer_bootstrap_formal_release_runtime_world,
     viewer_bootstrap_generated_sidecar_runtime_world,
 };
-#[cfg(not(target_arch = "wasm32"))]
-pub use server::{ViewerServer, ViewerServerConfig, ViewerServerError};
-#[cfg(not(target_arch = "wasm32"))]
-pub use web_bridge::{ViewerWebBridge, ViewerWebBridgeConfig, ViewerWebBridgeError};
+
+// Playback projection remains a runtime authority; transport hosts consume it.
+pub use protocol::viewer_event_kind_matches;
+pub use world_view::build as build_playback_world_view;

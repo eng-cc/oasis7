@@ -62,3 +62,32 @@ it('offers read-only route endpoint inspection only when both endpoints are in t
  fireEvent.click(screen.getByRole('button',{name:'Inspect Furnace'}));expect(onSelect).toHaveBeenCalledWith({kind:'factory',id:'F'});
  setState({view:{source_cut:'cut',entities:[from],relations:[route]}});expect(screen.queryByRole('region',{name:'Authorized routes'})).not.toBeInTheDocument();
 });
+
+it('explores aggregate regions and locates a trusted historical event without offering follow',()=>{
+ const aggregate={aggregate_id:'area',label:'Industry zone',member_count:'20',provenance:{freshness:'current'},drilldown:{bounds:{min_x_cm:'0',max_x_cm:'20',min_y_cm:'0',max_y_cm:'20'},detail_level:'entity'}};
+ const event={event_id:'W:0:1',identity:{world_id:'W',reorg_epoch:'0',event_seq:'1'},label:'Factory opened',freshness:'last_known',source_class:'runtime_journal_payload',source_cut:'cut',position:{x_cm:'1',y_cm:'2',z_cm:'0'}};
+ const onDrilldown=vi.fn(),onLocate=vi.fn(),onEventFeed=vi.fn();
+ render(()=> <PixelWorldWorldViewExplorer locale="en" state={{view:{world_id:'W',reorg_epoch:'0',source_cut:'cut',entities:[],aggregates:[aggregate],events:[event]}}} onDrilldown={onDrilldown} onLocate={onLocate} onEventFeed={onEventFeed}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Explore area'}));expect(onDrilldown).toHaveBeenCalledWith(aggregate);
+ fireEvent.click(screen.getByRole('button',{name:'Locate event'}));expect(onLocate).toHaveBeenCalledWith({kind:'world_event',id:'W:0:1'});
+ fireEvent.click(screen.getByRole('button',{name:'View world feed'}));expect(onEventFeed).toHaveBeenCalledWith(event);
+ expect(screen.queryByRole('button',{name:'Follow'})).toBeNull();
+});
+it('keeps unknown event anchors read-only and explains an absent exact feed event',()=>{
+ render(()=> <PixelWorldWorldViewExplorer locale="en" state={{notice:'event_feed_unavailable',view:{source_cut:'cut',entities:[],events:[{event_id:'unknown',label:'Unknown event',freshness:'unknown'}]}}}/>);
+ expect(screen.getByRole('button',{name:'Locate event'}).disabled).toBe(true);expect(screen.getByText('This event is absent from the current world feed.')).toBeTruthy();
+});
+
+it('exposes an industrial aggregate route as a summary with read-only aggregate inspection',()=>{
+ const onSelect=vi.fn();const aggregates=[{aggregate_id:'north',label:'North industry',member_count:'3',provenance:{freshness:'current'}},{aggregate_id:'south',label:'South industry',member_count:'2',provenance:{freshness:'current'}}];
+ const relation={relation_id:'summary-route',kind:'industry_route',source_class:'display_aggregation',route_count:'12',label:'Industrial corridor',status:'active',freshness:'current',valid_at_source_cut:'cut',from:{kind:'aggregate',id:'north'},to:{kind:'aggregate',id:'south'}};
+ render(()=> <PixelWorldWorldViewExplorer locale="en" state={{view:{source_cut:'cut',entities:[],aggregates,relations:[relation]}}} onSelect={onSelect}/>);
+ expect(screen.getByText(/12 routes summarized/)).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Industrial corridor'}));
+ fireEvent.click(screen.getByRole('button',{name:'Inspect North industry'}));expect(onSelect).toHaveBeenCalledWith({kind:'industry_aggregate',id:'north'});
+ expect(screen.getByRole('button',{name:'Locate North industry'}).disabled).toBe(true);expect(screen.getAllByRole('button',{name:'Explore area'})).toHaveLength(2);
+});
+it('does not expose a runtime route with forged aggregate endpoints',()=>{
+ const relation={relation_id:'forged',kind:'logistics_route',source_class:'runtime_projection',label:'Forged runtime route',valid_at_source_cut:'cut',from:{kind:'aggregate',id:'north'},to:{kind:'aggregate',id:'north'}};
+ render(()=> <PixelWorldWorldViewExplorer locale="en" state={{view:{source_cut:'cut',entities:[],aggregates:[{aggregate_id:'north',label:'North',member_count:'3'}],relations:[relation]}}}/>);
+ expect(screen.queryByRole('button',{name:'Forged runtime route'})).toBeNull();
+});

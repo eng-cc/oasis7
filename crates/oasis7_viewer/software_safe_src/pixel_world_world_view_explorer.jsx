@@ -1,3 +1,4 @@
+import { PixelWorldEvolutionExplorer } from "./pixel_world_world_view_evolution.jsx";
 import { PixelWorldEntityInspector, PixelWorldRouteExplorer } from "./pixel_world_world_view_inspector.jsx";
 import { createEffect, createSignal, For, Show } from 'solid-js';
 import { worldViewPosition } from './pixel_world_world_view.js';
@@ -44,6 +45,10 @@ export function PixelWorldWorldViewExplorer(props) {
       <Show when={props.state?.error}> · {text('读取不可用，请重试','Read unavailable; retry')}</Show>
     </p>
     <Show when={props.state?.notice === 'target_unavailable'}><p>{text('主目标当前没有获准且可信的位置；可检查目标上下文。','The target has no authorized trusted position; inspect its context instead.')}</p></Show>
+    <Show when={props.state?.changes?.length}><p class="pixel-world-update-notice" role="status">
+      {props.state.changes.filter(value=>value.world_deleted).length} {text('个对象已确认从世界移除','objects confirmed removed from the world')} · {props.state.changes.filter(value=>!value.world_deleted).length} {text('个记录离开当前查询；不代表世界删除','records left this query; world deletion is not implied')}
+    </p></Show>
+    <Show when={props.state?.notice === 'event_feed_unavailable'}><p>{text('当前世界动态中没有此事件；未跳转到其他事件。','This event is absent from the current world feed.')}</p></Show>
     <ul aria-label={text('获准对象与重叠候选','Authorized objects and overlapping candidates')}>
       <For each={entities()}>{entity => <li>
         <button type="button" onClick={()=>select(entity)}>{entity.label || entity.entity_id}</button>
@@ -54,6 +59,7 @@ export function PixelWorldWorldViewExplorer(props) {
         <Show when={!position(entity)}><span> {text('无当前可信位置','No current trusted position')}</span></Show>
       </li>}</For>
     </ul>
+    <PixelWorldEvolutionExplorer selection={props.selection} view={view()} stale={props.state?.stale} text={text} freshnessLabel={freshnessLabel} onSelect={props.onSelect} onLocate={props.onLocate} onDrilldown={props.onDrilldown} onEventFeed={props.onEventFeed}/>
     <PixelWorldEntityInspector view={view()} selection={props.selection || inspected()} stale={props.state?.stale}
       text={text} geometryLabel={geometryLabel} freshnessLabel={freshnessLabel}/>
     <PixelWorldRouteExplorer view={view()} stale={props.state?.stale} text={text} freshnessLabel={freshnessLabel}

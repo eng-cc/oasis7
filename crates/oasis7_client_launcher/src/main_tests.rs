@@ -1,4 +1,3 @@
-use super::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
     ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND,
@@ -32,6 +31,7 @@ use super::{
 };
 use eframe::egui;
 use oasis7_client_api::default_chain_replication_bootstrap_peers_csv;
+use oasis7_launcher_config::parse_chain_replication_bootstrap_peers;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
