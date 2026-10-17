@@ -787,7 +787,23 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     )?;
     case.scenario_deadline
         .report_stage("before cold original retry after restart")?;
-    wait_for_published_position(&reopened, reopened_cut.anchor.head().record().position + 1)?;
+    let retry_position = reopened_cut.anchor.head().record().position + 1;
+    if case.long_history {
+        let now = Instant::now();
+        let remaining = case
+            .scenario_deadline
+            .expires_at
+            .checked_duration_since(now)
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or("cold original retry exceeded the original scenario deadline")?;
+        wait_for_published_position_until(
+            &reopened,
+            retry_position,
+            now + remaining.min(LONG_HISTORY_REQUEST_WAIT),
+        )?;
+    } else {
+        wait_for_published_position(&reopened, retry_position)?;
+    }
     let after_duplicate = reopened.published.current()?;
     let duplicate_commit = lookup_original_commit(&reopened_owner, &case.owner_request)?;
     // Complete the necessary signed HTTP read before closing ingress, then
