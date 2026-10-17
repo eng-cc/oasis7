@@ -18,6 +18,7 @@ fn protected_endpoint_children_sigkill_runtime_durable_phases_resume_original_on
                 "primary_published",
                 "dual_qualified",
                 "publication_saved",
+                "attempt_output_unlinked",
                 "read_published",
             ]
             .contains(&selected.as_str()),
@@ -32,6 +33,7 @@ fn protected_endpoint_children_sigkill_runtime_durable_phases_resume_original_on
         "primary_published",
         "dual_qualified",
         "publication_saved",
+        "attempt_output_unlinked",
         "read_published",
     ] {
         if selected_phase
@@ -90,7 +92,14 @@ impl Drop for RuntimeChild {
     }
 }
 fn wait_marker(child: &mut RuntimeChild, marker: &Path, expected: &[u8]) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // The attempt retire phase is reached by genuine idle-tick maintenance:
+    // full native/environment and sparse-tree verification spans bounded pages.
+    let seconds = if expected == b"attempt_output_unlinked" {
+        180
+    } else {
+        30
+    };
+    let deadline = Instant::now() + Duration::from_secs(seconds);
     loop {
         if marker.exists() {
             let bytes = crate::controlled_history_cli::read_bounded(marker, 1024)?;

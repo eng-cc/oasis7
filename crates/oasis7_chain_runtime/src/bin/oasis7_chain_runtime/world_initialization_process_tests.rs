@@ -74,6 +74,11 @@ fn finish_cli(mut child: CliChild, success: bool) -> Result<Vec<u8>, String> {
             String::from_utf8_lossy(&stderr)
         ));
     }
+    if !success {
+        // The shipping tracing subscriber may write diagnostics to stdout.
+        // Keep both streams when asserting the explicit refusal cause.
+        stdout.extend_from_slice(&stderr);
+    }
     Ok(stdout)
 }
 fn p(path: &Path) -> Result<&str, String> {
@@ -193,7 +198,7 @@ fn run_initialization() -> Result<(), String> {
     oracle_support::write_private(&snapshot_path, &snapshot)?;
     oracle_support::write_private(&journal_path, &journal)?;
     let config = root.join("world-init.json");
-    let mut config_value = serde_json::json!({"schema_version":1,"mode":"genesis","world":identity,
+    let mut config_value = serde_json::json!({"schema_version":2,"mode":"genesis","world":identity,
         "snapshot_file":snapshot_path,"journal_file":journal_path,"trusted_issuer_public_key":fixtures::public(9),
         "node_bootstrap":{"height":0,"consensus_block_hash":fixtures::h(81),"execution_block_hash":fixtures::h(82),"execution_state_root":blake3_hex(&snapshot)},
         "authority":definition,"recovery_policy":seed.authority().policy()});
@@ -218,6 +223,17 @@ fn run_initialization() -> Result<(), String> {
         "--request",
         p(&request)?,
     ];
+    if !cfg!(target_os = "linux") {
+        let error = execute(&binary, &prepare_args, false)?;
+        if !String::from_utf8_lossy(&error).contains("Unavailable") || request.exists() {
+            return Err(format!(
+                "unsupported native platform did not reject preparation without creating a request (request_exists={}): {}",
+                request.exists(),
+                String::from_utf8_lossy(&error),
+            ));
+        }
+        return Ok(());
+    }
     execute(&binary, &prepare_args, true)?;
     let request_bytes = std::fs::read(&request).map_err(|e| e.to_string())?;
     execute(&binary, &prepare_args, true)?;
@@ -569,7 +585,7 @@ fn write_frame(stream: &mut TcpStream, bytes: &[u8]) -> Result<(), String> {
 }
 #[test]
 #[ignore = "requires shipping runtime + protected endpoint binaries; real CLI SIGKILL activation"]
-fn formal_world_initialization_cli_repeated_and_interrupted_activation_reconciles_original() {
+fn formal_world_initialization_cli_native_platform_and_original_activation() {
     thread::Builder::new()
         .name("formal-world-init-cli".into())
         .stack_size(32 * 1024 * 1024)

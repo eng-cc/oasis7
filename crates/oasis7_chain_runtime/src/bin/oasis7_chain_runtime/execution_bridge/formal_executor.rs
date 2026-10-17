@@ -114,6 +114,7 @@ fn execute_with_business_reader(
         return Err("formal attempt identity collision".into());
     }
     super::controlled_live::private_directory(&attempt)?;
+    let _attempt_pin = super::formal_attempt_lifecycle::active(&attempt, frozen)?;
     let world_dir = attempt.join("world");
     super::controlled_live::private_directory(&world_dir)?;
     let identity = oasis7::world_service::WorldIdentity {
@@ -237,7 +238,7 @@ fn execute_with_business_reader(
     } else {
         None
     };
-    formal_package::candidate_with_business_reader(
+    let candidate = formal_package::candidate_with_business_reader(
         frozen,
         authority,
         parent,
@@ -248,5 +249,18 @@ fn execute_with_business_reader(
         &reader,
         retained_outputs.as_ref(),
         recovery,
-    )
+    )?;
+    // The local executor has no serving reader; drop its private store handles
+    // before publishing the immutable duplicate-output delete list.
+    let outputs = [
+        record.snapshot_ref,
+        record.journal_ref,
+        record.external_effect_ref,
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    drop(executor);
+    super::formal_attempt_lifecycle::awaiting(&attempt, &candidate, &outputs)?;
+    Ok(candidate)
 }

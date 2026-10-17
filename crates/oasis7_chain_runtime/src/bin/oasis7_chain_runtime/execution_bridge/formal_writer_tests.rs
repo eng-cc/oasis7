@@ -12,6 +12,7 @@ struct Memory {
     role: EndpointRole,
     entries: BTreeMap<String, FormalRequestStateV1>,
     lose_decide: bool,
+    closure_readback: bool,
 }
 #[derive(Clone)]
 struct Endpoint(Arc<Mutex<Memory>>);
@@ -48,6 +49,38 @@ impl Memory {
     }
 }
 impl FormalDurabilityEndpoint for Endpoint {
+    // Fault fixtures model an explicit independent-reader result. They do not
+    // claim filesystem or cross-fault-domain durability.
+    fn verify_published_closure(
+        &mut self,
+        request: &str,
+        digest: &str,
+    ) -> Result<
+        oasis7_distfs::controlled_authority::formal::coordinator::FormalPublishedClosureReceiptV1,
+        FormalError,
+    > {
+        let memory = self.0.lock().unwrap();
+        if !memory.closure_readback {
+            return invalid();
+        }
+        let Some(FormalRequestStateV1::Qualified { candidate, proof }) =
+            memory.entries.get(request)
+        else {
+            return invalid();
+        };
+        verify_record_material(&candidate.candidate.record, &candidate.material)?;
+        if super::super::formal_attempt_lifecycle::candidate_digest(candidate)
+            .map_err(FormalError::Invalid)?
+            != digest
+        {
+            return invalid();
+        }
+        Ok(oasis7_distfs::controlled_authority::formal::coordinator::FormalPublishedClosureReceiptV1 {
+            candidate_digest: digest.into(), qualified_proof_digest: blake3::hash(&serde_cbor::to_vec(proof).unwrap()).to_hex().to_string(), inventory_digest: digest.into(),
+            logical_objects: candidate.material.objects.len() as u64,
+            logical_bytes: candidate.material.objects.iter().map(|o| o.bytes.len() as u64).sum(),
+        })
+    }
     fn head(&mut self) -> Result<FormalHeadRefV1, FormalError> {
         Ok(self.0.lock().unwrap().parent.head())
     }
@@ -266,6 +299,7 @@ fn endpoint(
         role,
         entries: BTreeMap::new(),
         lose_decide,
+        closure_readback: false,
     })))
 }
 fn continuation(world: &World) -> NodeLocalExecutionContinuation {
@@ -574,3 +608,6 @@ mod recovery_tests;
 
 #[path = "formal_writer_saved_candidate_tests.rs"]
 mod saved_candidate_tests;
+
+#[path = "formal_writer_attempt_tests.rs"]
+mod attempt_tests;

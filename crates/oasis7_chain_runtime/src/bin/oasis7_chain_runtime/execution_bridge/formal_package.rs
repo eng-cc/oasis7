@@ -28,6 +28,8 @@ pub(super) struct FormalExecutionManifestV1 {
     pub continuation: NodeLocalExecutionContinuation,
     pub release_security_policy: ReleaseSecurityPolicy,
     pub executable_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_environment_ref: Option<String>,
     pub execution_policy_cbor: Vec<u8>,
     pub execution_policy_digest: String,
     /// Only current input dependencies; never recursive parent proof closures.
@@ -78,29 +80,6 @@ pub(super) fn freeze_material(
         None,
         None,
         None,
-    )
-}
-pub(super) fn freeze_material_with_business(
-    authority: &VerifiedAuthorityV1,
-    parent: &VerifiedFormalCommitV1,
-    continuation: &NodeLocalExecutionContinuation,
-    world: &World,
-    release_policy: &ReleaseSecurityPolicy,
-    business_tree: oasis7::world_service::formal_result::FormalBusinessResultTreeV1,
-    parent_qualified: FormalQualifiedCommitProofV1,
-) -> Result<(FormalFrozenBodyV1, ClosedRecord), String> {
-    business_tree.validate_world_boundary(world, parent.record())?;
-    if &parent_qualified.decision.record != parent.record() {
-        return Err("formal frozen parent proof differs from qualified predecessor".into());
-    }
-    freeze_material_inner(
-        authority,
-        parent,
-        continuation,
-        world,
-        release_policy,
-        Some(business_tree),
-        Some(parent_qualified),
         None,
     )
 }
@@ -121,13 +100,16 @@ pub(super) fn freeze_material_with_durable_set_transition(
         None,
         None,
         Some(transition.clone()),
+        None,
     )
 }
+/// Fresh profile-2 writers reuse the qualified predecessor's exact bounded
+/// Snapshot artifact chain, avoiding a full prestate checkpoint every commit.
 #[expect(
     clippy::too_many_arguments,
-    reason = "Frozen input construction keeps independently verified transition and predecessor evidence explicit."
+    reason = "Distinct authenticated inputs remain explicit."
 )]
-pub(super) fn freeze_material_with_business_and_durable_set_transition(
+pub(super) fn freeze_material_from_parent(
     authority: &VerifiedAuthorityV1,
     parent: &VerifiedFormalCommitV1,
     continuation: &NodeLocalExecutionContinuation,
@@ -135,12 +117,11 @@ pub(super) fn freeze_material_with_business_and_durable_set_transition(
     release_policy: &ReleaseSecurityPolicy,
     business_tree: oasis7::world_service::formal_result::FormalBusinessResultTreeV1,
     parent_qualified: FormalQualifiedCommitProofV1,
-    transition: &SignedNormalDurableSetTransitionV1,
+    transition: Option<SignedNormalDurableSetTransitionV1>,
+    parent_material: &ClosedRecord,
 ) -> Result<(FormalFrozenBodyV1, ClosedRecord), String> {
     business_tree.validate_world_boundary(world, parent.record())?;
-    if &parent_qualified.decision.record != parent.record() {
-        return Err("formal frozen parent proof differs from qualified predecessor".into());
-    }
+    verify_record_material(parent.record(), parent_material).map_err(|e| e.to_string())?;
     freeze_material_inner(
         authority,
         parent,
@@ -149,9 +130,11 @@ pub(super) fn freeze_material_with_business_and_durable_set_transition(
         release_policy,
         Some(business_tree),
         Some(parent_qualified),
-        Some(transition.clone()),
+        transition,
+        Some(parent_material),
     )
 }
+
 #[expect(
     clippy::too_many_arguments,
     reason = "This private encoder assembles the exact signed Frozen closure from distinct typed inputs."
@@ -165,6 +148,7 @@ fn freeze_material_inner(
     business_tree: Option<oasis7::world_service::formal_result::FormalBusinessResultTreeV1>,
     parent_qualified: Option<FormalQualifiedCommitProofV1>,
     durable_set_transition: Option<SignedNormalDurableSetTransitionV1>,
+    parent_material: Option<&ClosedRecord>,
 ) -> Result<(FormalFrozenBodyV1, ClosedRecord), String> {
     if authority.definition().profile_version == 2
         && (business_tree.is_none() || parent_qualified.is_none())
@@ -250,7 +234,11 @@ fn freeze_material_inner(
     }
     let mut objects = BTreeMap::new();
     let input = insert(&mut objects, to_cbor(&c.committed_actions)?, vec![]);
-    let snapshot_ref = insert(&mut objects, snapshot_bytes, vec![]);
+    let snapshot_ref = if let Some(parent_material) = parent_material {
+        super::formal_snapshot::inherit(&mut objects, parent_material, &snapshot_bytes)?
+    } else {
+        insert(&mut objects, snapshot_bytes, vec![])
+    };
     let journal_ref = insert(&mut objects, to_cbor(&journal)?, vec![]);
     let result = insert(
         &mut objects,
@@ -307,6 +295,7 @@ fn freeze_material_inner(
         continuation: continuation.clone(),
         release_security_policy: release_policy.clone(),
         executable_digest,
+        native_environment_ref: None,
         execution_policy_cbor: policy_cbor,
         execution_policy_digest: execution_policy_digest.clone(),
         artifact_roots: roots.clone(),
@@ -330,7 +319,7 @@ fn freeze_material_inner(
     material.validate().map_err(|e| e.to_string())?;
     capture::validate_package_budget(&to_cbor(&material)?)?;
     let body = FormalFrozenBodyV1 {
-        schema_version: 1,
+        schema_version: if parent_material.is_some() { 2 } else { 1 },
         world: formal_world.clone(),
         authority_id: manifest.authority_id,
         epoch: authority.definition().epoch,
@@ -459,9 +448,10 @@ pub(super) fn restore_executable(
         .map_err(|e| e.to_string())?;
     let manifest: FormalExecutionManifestV1 =
         capture::decode_role(material, ArtifactRole::ExecutionManifest)?;
-    if manifest.schema_version != 1
-        || manifest.domain != "oasis7.formal.execution_input.v1"
-        || manifest.parent != parent.head()
+    if !matches!(
+        (manifest.schema_version, manifest.domain.as_str()),
+        (1, "oasis7.formal.execution_input.v1") | (2, "oasis7.formal.execution_input.v2")
+    ) || manifest.parent != parent.head()
         || manifest.authority_id
             != original_authority
                 .authority_id()
@@ -472,6 +462,7 @@ pub(super) fn restore_executable(
     {
         return Err("formal frozen original execution artifact/context mismatch".into());
     }
+    super::formal_native_environment::verify_current(material, &manifest)?;
     if let Some(transition) = &manifest.durable_set_transition {
         verify_durable_set_transition_arm(transition, original_authority, parent)?;
     }
@@ -501,7 +492,7 @@ pub(super) fn restore_executable(
     if let Some(tree) = &manifest.business_tree {
         tree.validate_world_boundary(&world, parent.record())?;
     }
-    let (expected, rebuilt) = freeze_material_inner(
+    let (mut expected, mut rebuilt) = freeze_material_inner(
         original_authority,
         parent,
         &manifest.continuation,
@@ -510,7 +501,11 @@ pub(super) fn restore_executable(
         manifest.business_tree.clone(),
         manifest.parent_qualified.clone(),
         manifest.durable_set_transition.clone(),
+        (frozen.input().body.schema_version >= 2).then_some(material),
     )?;
+    if let Some(descriptor) = super::formal_native_environment::descriptor(material)? {
+        super::formal_native_environment::attach_frozen(&mut expected, &mut rebuilt, &descriptor)?;
+    }
     if &rebuilt != material || expected != frozen.input().body {
         return Err("formal frozen exact typed execution closure mismatch".into());
     }
@@ -646,7 +641,14 @@ pub(super) fn candidate_with_business_reader(
         .map(|object| (object.content_hash.clone(), object.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut roots = frozen.material().roots.clone();
-    let snapshot = insert(&mut objects, after_bytes, vec![]);
+    let state_root = blake3_hex(&after_bytes);
+    let snapshot = super::formal_snapshot::append(
+        &mut objects,
+        frozen.material(),
+        &before_world.snapshot(),
+        &after_world.snapshot(),
+        after_bytes,
+    )?;
     let journal = insert(&mut objects, after_journal_bytes, vec![]);
     let effect_ref = insert(&mut objects, to_cbor(effect)?, vec![]);
     let result = insert(
@@ -706,7 +708,7 @@ pub(super) fn candidate_with_business_reader(
     let mut material = ClosedRecord {
         payload_digest: frozen.material().payload_digest.clone(),
         before_state_root: frozen.input().body.pre_state_root.clone(),
-        after_state_root: snapshot.clone(),
+        after_state_root: state_root.clone(),
         roots: roots.clone(),
         objects: objects.into_values().collect(),
     };
@@ -722,7 +724,15 @@ pub(super) fn candidate_with_business_reader(
         .to_owned();
     let body = &frozen.input().body;
     let mut canonical = CanonicalRecordV1 {
-        schema_version: if transition_digest.is_some() { 2 } else { 1 },
+        schema_version: match (
+            manifest.native_environment_ref.is_some(),
+            transition_digest.is_some(),
+        ) {
+            (true, false) => 5,
+            (true, true) => 6,
+            (false, false) => 3,
+            (false, true) => 4,
+        },
         durable_set_transition_digest: transition_digest,
         kind: FormalRecordKindV1::Execution,
         world: body.world.clone(),
@@ -738,7 +748,7 @@ pub(super) fn candidate_with_business_reader(
         governing_manifest_digest: governing,
         execution_policy_digest: body.execution_policy_digest.clone(),
         before_state_root: body.pre_state_root.clone(),
-        after_state_root: snapshot,
+        after_state_root: state_root,
         action_root: continuation.context.action_root.clone(),
         event_root: match retained_outputs {
             Some(outputs) => outputs.event_root.clone(),
@@ -794,7 +804,7 @@ pub(super) fn candidate_with_business_reader(
         )?;
         canonical.result_root = update.tree.root()?;
         let mut references = vec![
-            canonical.after_state_root.clone(),
+            material.roots[&ArtifactRole::Snapshot].clone(),
             material.roots[&ArtifactRole::Journal].clone(),
             material.roots[&ArtifactRole::Result].clone(),
         ];

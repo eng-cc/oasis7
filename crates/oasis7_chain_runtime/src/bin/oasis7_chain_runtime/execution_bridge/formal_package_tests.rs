@@ -345,6 +345,82 @@ fn formal_initial_existing_world_has_complete_approved_material_and_stable_ident
 }
 
 #[test]
+fn native_initial_approval_binds_external_descriptor_without_claiming_missing_bytes() {
+    use oasis7_formal_protocol::native_environment::{
+        NativeEnvironmentChunkV1, NativeEnvironmentComponentV1, NativeEnvironmentRole,
+        NativeExecutionEnvironmentV1,
+    };
+    let (world, trust, anchor, _) = fixtures::actual_world_initial_fixture();
+    let release = ReleaseSecurityPolicy::default();
+    let executable_digest = crate::controlled_execution_policy::executable_digest().unwrap();
+    // A declared external image is deliberately absent. These are protocol
+    // fixture commitments, not a captured Linux/macOS execution environment.
+    let native = NativeExecutionEnvironmentV1 {
+        schema_version: 1,
+        target: "protocol-fixture".into(),
+        os: "fixture".into(),
+        arch: "fixture".into(),
+        components: [
+            NativeEnvironmentRole::Executable,
+            NativeEnvironmentRole::BuildMetadata,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, role)| NativeEnvironmentComponentV1 {
+            role,
+            name: format!("fixture-{index}"),
+            byte_len: 1,
+            content_digest: if index == 0 {
+                executable_digest.clone()
+            } else {
+                fixtures::h(44)
+            },
+            chunks: vec![NativeEnvironmentChunkV1 {
+                digest: fixtures::h(44),
+                byte_len: 1,
+            }],
+        })
+        .collect(),
+    };
+    let draft = || {
+        super::super::formal_initial::InitialWorldClosure::from_existing_world(
+            &world,
+            &anchor.authority().definition().world,
+            &release,
+        )
+        .unwrap()
+        .with_native_environment(&native)
+        .unwrap()
+    };
+    let body = draft()
+        .activation_body(
+            anchor.authority().definition().clone(),
+            anchor.authority().policy().clone(),
+        )
+        .unwrap();
+    assert_eq!(body.schema_version, 2);
+    let certificate = SignedInitialActivationV1 {
+        signature_hex: fixtures::sign(initial_activation_signing_bytes(&body).unwrap(), 9),
+        body,
+    };
+    let (_, candidate) = draft()
+        .authorize(&certificate, &trust, &fixtures::key(4))
+        .unwrap();
+    assert_eq!(candidate.candidate.record.schema_version, 5);
+    assert_eq!(candidate.material.roots.len(), 10);
+    verify_record_material(&candidate.candidate.record, &candidate.material).unwrap();
+    assert_eq!(
+        super::super::formal_native_environment::descriptor(&candidate.material).unwrap(),
+        Some(native.clone())
+    );
+    assert!(
+        native
+            .verify(|_| Err("fixture external bytes unavailable".into()))
+            .is_err()
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
     let (world, anchor) = wasm_fixture::world_and_anchor();
@@ -445,3 +521,7 @@ fn formal_actual_wasm_execution_replays_the_identical_closed_candidate() {
     );
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(unix)]
+#[path = "formal_storage_benchmark.rs"]
+mod storage_benchmark;
