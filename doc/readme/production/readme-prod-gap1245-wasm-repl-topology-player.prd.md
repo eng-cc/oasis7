@@ -44,8 +44,8 @@
   - `crates/oasis7_node/src/libp2p_replication_network.rs`
     - gossipsub + request_response 双通道行为。
     - `request` 与 `register_handler` 的真实实现与错误映射。
-  - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-  - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
+  - `crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_live.rs`
+  - `crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_live.rs`
     - 新增跨主机 triad 拓扑模式（单进程单节点角色，三角色静态组网）。
     - 保持现有 `triad`（本机嵌入式）与 `single`（手工）兼容。
   - `crates/oasis7_node/src/types.rs`

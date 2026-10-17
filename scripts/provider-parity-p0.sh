@@ -155,7 +155,7 @@ run_sample() {
   local sample_dir="$OUT_DIR/samples/$provider/sample_$sample_index"
   mkdir -p "$sample_dir"
 
-  local cmd=(oasis7_cargo_dev run -p oasis7 --bin oasis7_provider_parity_bench --
+  local cmd=(oasis7_cargo_dev run -p oasis7_provider_tools --bin oasis7_provider_parity_bench --
     --provider "$provider"
     --scenario "$SCENARIO"
     --scenario-id "$SCENARIO_ID"

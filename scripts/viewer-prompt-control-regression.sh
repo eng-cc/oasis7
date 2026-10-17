@@ -397,7 +397,9 @@ build_test_tier_binaries() {
   local host_triple
   local -a build_args=(
     build
-    -p oasis7
+    -p oasis7_provider_tools
+    -p oasis7_launcher_backend
+    -p oasis7_viewer_runtime
     --features test_tier_required
     --locked
     --bin oasis7_llm_provider_probe

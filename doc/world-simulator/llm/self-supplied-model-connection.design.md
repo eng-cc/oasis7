@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Harness | [`oasis7_agent_harness`](../../../crates/oasis7_agent_harness/src/lib.rs) 已导出 ModelProvider、TurnEngine 等，不依赖 World 实现 | 使用其 provider 边界，不把账号、Key 表单和 HTTP 服务塞进通用 Harness |
 | 内置模型路径 | [`llm_agent.rs`](../../../crates/oasis7/src/simulator/llm_agent.rs) 与 [`openai_payload.rs`](../../../crates/oasis7/src/simulator/llm_agent/openai_payload.rs) 是现有 Responses 接线入口 | provider-neutral 配置、能力适配与请求级凭证注入；不能由类名推定协议 |
-| 本地 Bridge | [`letai_direct.rs`](../../../crates/oasis7/src/bin/oasis7_provider_local_bridge/letai_direct.rs) 是 Chat Completions 与 LetAI 平台逻辑的既有入口 | 可复用传输/诊断；充值、平台凭证与 LetAI 标识必须留在专属适配器 |
+| 本地 Bridge | [`letai_direct.rs`](../../../crates/oasis7_provider_local_bridge/src/bin/oasis7_provider_local_bridge/letai_direct.rs) 是 Chat Completions 与 LetAI 平台逻辑的既有入口 | 可复用传输/诊断；充值、平台凭证与 LetAI 标识必须留在专属适配器 |
 | 游戏客户端 | [AGC 当前/目标差距](agent-game-client-boundary.design.md#des-agc-006)保留全量迁移与能力边界 | 本专题不证明 HTTP 写目录全部上线，也不以旧 callback 冒充新统一客户端 |
 | Web 接入 | [执行方体验](../../product/agents-world-simulation/provider-agent-experience-continuity.design.md)已有配置、预算、委托分开的目标 | 本专题所需短期凭证会话、网页表单、连接检查和两家 E2E 尚无完整验收证据 |
 

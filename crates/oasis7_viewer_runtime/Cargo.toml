@@ -1,0 +1,24 @@
+[package]
+name = "oasis7_viewer_runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+oasis7 = { version = "0.1.0", path = "../oasis7", default-features = false }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
+hex = "0.4"
+oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }
+serde_json = "1"
+tracing = "0.1"
+
+[features]
+default = ["wasmtime", "node-libp2p"]
+node-libp2p = ["oasis7/node-libp2p"]
+wasmtime = ["oasis7/wasmtime"]
+viewer_live_integration = ["oasis7/viewer_live_integration"]
+test_tier_required = ["oasis7/test_tier_required"]
+test_tier_full = ["test_tier_required", "oasis7/test_tier_full"]
+
+[dev-dependencies]
+oasis7 = { version = "0.1.0", path = "../oasis7", default-features = false, features = ["test_tier_required"] }

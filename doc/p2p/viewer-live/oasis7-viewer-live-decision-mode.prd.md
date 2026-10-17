@@ -48,7 +48,7 @@
 
 ## 追溯
 
-- 当前实现与参数测试：`crates/oasis7/src/bin/oasis7_viewer_live.rs`。
+- 当前实现与参数测试：`crates/oasis7_viewer_runtime/src/bin/oasis7_viewer_live.rs`。
 - 操作与证据边界：`doc/world-simulator/viewer/viewer-manual.manual.md`、`scripts/worktree-harness.sh`。
 - P2P observer/chain 控制面边界：`doc/p2p/prd.md`。
 

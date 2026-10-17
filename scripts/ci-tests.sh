@@ -122,7 +122,7 @@ run_oasis7_required_tier_tests() {
   fi
   local viewer_manifest viewer_binary
   viewer_manifest="$(mktemp)"
-  run_cargo build -p oasis7 --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
+  run_cargo build -p oasis7_viewer_runtime --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
   viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
 import json, pathlib, sys
 artifacts = []
@@ -138,19 +138,19 @@ print(artifacts[0])
 PY_VIEWER
 )"
   rm -f "$viewer_manifest"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime --tests --features test_tier_required
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features test_tier_required
 }
 
 run_scenario_regression_tests() {
-  run_cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_
+  run_cargo test -p oasis7_ops_tools --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_
 }
 
 run_oasis7_required_tier_clippy() {
-  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime --tests --features test_tier_required
+  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features test_tier_required
 }
 
 run_oasis7_full_tier_tests() {
-  run_cargo test -p oasis7 -p oasis7_chain_runtime --tests --features "test_tier_full,wasmtime,viewer_live_integration"
+  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features "test_tier_full,wasmtime,viewer_live_integration"
 }
 
 run_oasis7_consensus_tests() {
@@ -317,6 +317,7 @@ run_doc_checker_contract_tests() {
 }
 
 run_cargo_tooling_baseline_contract_tests() {
+  run python3 ./scripts/ci-bin-ownership.test.py
   run bash ./scripts/cargo-dev-windows-toolchain.test.sh
   run bash ./scripts/cargo-dev-worktree-isolation.test.sh
   run bash ./scripts/new-task-worktree.test.sh
@@ -436,7 +437,7 @@ run_provider_bridge_live_gate() {
 
 run_newapi_bridge_service_accounting_tests() {
   prepare_local_cargo_target
-  run env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture
+  run env -u RUSTC_WRAPPER cargo test -p oasis7_newapi_bridge_service --bin oasis7_newapi_bridge_service -- --nocapture
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
@@ -632,7 +633,7 @@ run_full_support_tier_tests() {
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
-  run_cargo test -p oasis7 -p oasis7_chain_runtime --features wasmtime --lib --bins
+  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --features wasmtime --lib --bins
 }
 
 run_full_required_superset() {
@@ -706,7 +707,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 -p oasis7_chain_runtime --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
+    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac

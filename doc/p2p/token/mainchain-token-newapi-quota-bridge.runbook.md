@@ -25,7 +25,7 @@
 每次部署或演练前，必须先固定：
 
 - bridge-service 二进制来源
-  - 当前入口: `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`
+  - 当前入口: `crates/oasis7_newapi_bridge_service/src/bin/oasis7_newapi_bridge_service.rs`
 - 状态文件路径
   - 建议单独目录，例如 `output/newapi-bridge/bridge-state.json`
 - 链侧只读输入
@@ -70,7 +70,7 @@ pricing_rules="$(
     scripts/newapi-bridge-service/pricing-rules.example.env
 )"
 
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
+env -u RUSTC_WRAPPER cargo run -p oasis7_newapi_bridge_service --bin oasis7_newapi_bridge_service -- \
   --bind-addr 127.0.0.1:5852 \
   --state-path output/newapi-bridge/bridge-state.json \
   --route-ttl-seconds 900 \
@@ -92,7 +92,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_newapi_bridge_service -- \
 
 ## 5. 首次部署检查
 1. 先跑定向测试：
-   - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture`
+   - `env -u RUSTC_WRAPPER cargo test -p oasis7_newapi_bridge_service --bin oasis7_newapi_bridge_service -- --nocapture`
 2. 再确认文档/行数门禁：
    - `./scripts/check-rust-file-size.sh`
    - `./scripts/doc-governance-check.sh`
@@ -353,7 +353,7 @@ export TEST_ROUTE_EXPIRES_AT_UNIX_MS="$(printf '%s' "${ROUTE_RESPONSE}" | jq -r 
 公开 transfer submit API 的请求体必须包含签名字段，不要用未签名 `curl` 伪造链上入账。默认使用 repo-owned signed transfer client：
 
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_chain_transfer_submit_client -- \
+env -u RUSTC_WRAPPER cargo run -p oasis7_client_cli --bin oasis7_chain_transfer_submit_client -- \
   submit \
   --keys-file ~/Documents/keys/test_keys.txt \
   --persona happy_path \

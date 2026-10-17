@@ -377,6 +377,70 @@ fn transport_retry_keeps_request_model_budget_consumed() {
     );
 }
 
+// The listener polls accept, but request framing must be read in blocking mode:
+// Darwin inherits O_NONBLOCK, and responding before draining a large request
+// can reset the connection instead of delivering the intended SDK error event.
+fn read_budget_provider_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+    stream
+        .set_nonblocking(false)
+        .expect("set blocking request stream");
+    stream
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .expect("set budget fixture read timeout");
+    let mut header = Vec::new();
+    while !header.ends_with(b"\r\n\r\n") {
+        assert!(header.len() < 16 * 1024, "budget fixture header too large");
+        let mut byte = [0];
+        stream
+            .read_exact(&mut byte)
+            .expect("read budget fixture header");
+        header.push(byte[0]);
+    }
+    let header = std::str::from_utf8(&header).expect("budget fixture header utf8");
+    let lengths: Vec<usize> = header
+        .lines()
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse().expect("budget fixture content length"))
+        })
+        .collect();
+    assert_eq!(lengths.len(), 1, "one budget fixture content length");
+    assert!(lengths[0] <= 1024 * 1024, "budget fixture body too large");
+    let mut body = vec![0; lengths[0]];
+    stream
+        .read_exact(&mut body)
+        .expect("read complete budget fixture body");
+    body
+}
+
+#[test]
+fn budget_provider_fixture_drains_fragmented_large_request() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (mut stream, _) = listener.accept().unwrap();
+    // Reproduce the inherited Darwin mode on every platform.
+    stream.set_nonblocking(true).unwrap();
+    let body = vec![b'x'; 16 * 1024];
+    let expected = body.clone();
+    let sender = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        write!(
+            client,
+            "POST /v1/responses HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .unwrap();
+        client.write_all(&body[..4096]).unwrap();
+        thread::sleep(Duration::from_millis(20));
+        client.write_all(&body[4096..]).unwrap();
+    });
+    let received = read_budget_provider_request(&mut stream);
+    assert_eq!(received.len(), expected.len(), "complete request body");
+    assert_eq!(received, expected);
+    sender.join().unwrap();
+}
+
 #[test]
 fn native_model_budget_caps_openai_internal_concurrency_retry() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind budgeted openai server");
@@ -394,9 +458,7 @@ fn native_model_budget_caps_openai_internal_concurrency_retry() {
                 continue;
             };
             let attempt = server_calls.fetch_add(1, Ordering::SeqCst);
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
-            let mut buffer = [0_u8; 4096];
-            let _ = stream.read(&mut buffer);
+            let _request = read_budget_provider_request(&mut stream);
             let event_payload = if attempt == 0 {
                 serde_json::json!({
                     "error": {

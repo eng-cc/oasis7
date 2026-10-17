@@ -78,7 +78,7 @@
 <a id="lfo-metrics-source"></a>
 
 ### 2) 报告动作触发率指标（TODO-2）
-- 位置：`crates/oasis7/src/bin/oasis7_llm_agent_demo.rs`（及其 report 结构）
+- 位置：`crates/oasis7_provider_tools/src/bin/oasis7_llm_agent_demo.rs`（及其 report 结构）
 - 新增字段（JSON）：
   - `action_kind_counts: { "<action_kind>": <u64> }`
   - `action_kind_success_counts: { "<action_kind>": <u64> }`

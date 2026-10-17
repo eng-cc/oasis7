@@ -78,7 +78,7 @@ summary_md="$run_dir/summary.md"
 
 declare -a cargo_args=(
   run
-  -p oasis7
+  -p oasis7_ops_tools
   --bin oasis7_runtime_module_routing_perf
 )
 if [[ "$profile" == "release" ]]; then

@@ -66,7 +66,7 @@ Attempt 3: 6 passed, 6 failed, 2 ignored. Passing focused cases: lost-response g
 D3 configuration checks (not yet executed at this checkpoint):
 
 ```sh
-rtk proxy ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required world_service_bootstrap -- --nocapture
+rtk proxy ./scripts/cargo-dev.sh test -p oasis7_viewer_runtime --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required world_service_bootstrap -- --nocapture
 rtk proxy ./scripts/cargo-dev.sh test -p oasis7 --lib --no-default-features --features node-libp2p,test_tier_required agent_signer_requires_explicit_complete_valid_delegation_configuration -- --nocapture
 ```
 

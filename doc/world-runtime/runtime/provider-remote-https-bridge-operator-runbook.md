@@ -302,7 +302,7 @@ OASIS7_REMOTE_LLM_USER_AGENT=curl/8.5.0
 ## Runtime 接入
 
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
+env -u RUSTC_WRAPPER cargo run -p oasis7_launcher_backend --bin oasis7_game_launcher -- \
   --scenario llm_bootstrap \
   --with-llm \
   --agent-provider-mode provider_backed \

@@ -94,7 +94,7 @@
   - `crates/oasis7/src/simulator/memory.rs`
   - `crates/oasis7_proto/src/viewer.rs`
   - `crates/oasis7_client_launcher/src/*`
-  - `crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_web_launcher/gui_agent_api.rs`
 - Local HTTP Endpoints:
   - `GET /v1/provider/info`
     - 返回 `provider_id/name/version/protocol_version/capabilities/supported_action_sets`。
