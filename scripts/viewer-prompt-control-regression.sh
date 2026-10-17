@@ -405,7 +405,7 @@ build_test_tier_binaries() {
     --bin oasis7_viewer_live
   )
   if (( FULL_GAMEPLAY == 1 || HOSTED_LOCAL_MOCK == 1 )); then
-    build_args+=(--bin oasis7_chain_runtime)
+    build_args+=(-p oasis7_chain_runtime --bin oasis7_chain_runtime)
   fi
 
   build_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

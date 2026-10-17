@@ -1,476 +1,222 @@
 # Viewer Visual Design Specification (2026-06-05)
 
-- Professional owner: `game_visual_interaction_designer`
-- Integration owner: `tpm`
-- Source task uid: `task_a25bf76359be45719edfcda1759626d1` / GitHub issue #1385; execution evidence is in GitHub task issue evidence comments and `.pm/github-project-sync/task-archive.jsonl`.
-- Related entrypoints:
-  - `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
-  - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
-  - `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md`
-  - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`
+- Professional owner: `game_visual_interaction_designer`; integration owner: `tpm`.
+- Historical source: `task_a25bf76359be45719edfcda1759626d1` / #1385; original execution evidence remains in Git/Task history.
+- Contract revision reviewed against `a2389f437e6cedc3b870a91d33a1cdf40a00a8da`, 2026-10-16. This document does not assert that independent visual review or current browser acceptance has run.
+- Companions: [brand system](viewer-brand-system-2026-06-05.design.md), [page/module design](viewer-page-module-design-2026-06-18.design.md), [terminal shell](viewer-gameplay-release-experience-overhaul.prd.md), [player-readable rendering](viewer-pixel-world-player-readable-rendering.prd.md).
 
 ## 1. Purpose
-This document is the canonical visual design specification for Viewer and
-player-facing world-simulator screens. It consolidates the current visual
-direction that was previously spread across release experience, Viewer Web,
-pixel-world, 2D readability, and visual review SOP documents.
 
-The professional visual direction in this document is owned by the
-`game_visual_interaction_designer` slice recorded under
-`task_a25bf76359be45719edfcda1759626d1` / GitHub issue #1385. TPM integrated
-that slice into the repository docs and does not replace the professional role's
-visual judgment.
+This is the canonical visual specification for Viewer/player-facing world-simulator surfaces: first-read hierarchy, world/command/context/diagnostics, truthful states and visual evidence. The visual owner retains judgment; documentation integration does not replace that role or imply a review was performed.
 
-The specification answers:
-- what a player should notice first;
-- how world, agent, action, diagnostics, and command surfaces are layered;
-- which visual rules are non-negotiable for new Viewer work;
-- what evidence is required before a visual change can be considered ready.
-
-For executable brand-system details, token taxonomy, icon/status vocabulary,
-asset-language rules, and the expanded screenshot matrix, use
-`viewer-brand-system-2026-06-05.design.md` as the companion specification.
+It consolidates durable directions without turning historical modes, screenshots or implementation slices into current capabilities. Product obligations come from [the world-stage PRD](../../product/agents-world-simulation/player-readable-world-stage.prd.md); this specification owns their visual realization and the existing review gate, not runtime truth.
 
 ## 2. Scope
-In scope:
-- Viewer Web and `software_safe` player-facing screens.
-- Pixel-world stage, rendered DOM world surfaces, 2D map/readability overlays,
-  contextual command surfaces, chat/prompt panels, receipts, blockers, empty
-  states, loading states, and diagnostics disclosure.
-- Site or documentation screenshots only when they represent the current Viewer
-  experience.
 
-Out of scope:
-- Runtime rules, economy balance, networking, auth, chain state, or WASM ABI
-  semantics.
-- New large art packs, marketing campaign visuals, launcher/explorer redesigns,
-  or public brand identity outside Viewer. Viewer-specific brand-system rules
-  are in `viewer-brand-system-2026-06-05.design.md`.
-- Real-player retention claims, external messaging, release approval, or
-  GitHub required review.
+In scope: canonical Viewer Web and its software_safe alias, the pixel-world stage, explicitly supported Rust-derived semantic/auxiliary DOM surfaces, contextual commands, chat/Prompt, receipts, blockers, empty/loading/error/recovery states and diagnostic disclosure. Site/document screenshots must follow this specification when they claim to represent the current Viewer.
+
+Out of scope: runtime/economy/auth/chain rules, WASM ABI, large art packs, unrelated launcher/explorer/marketing redesigns, retention/public-support claims or release/required-review approval. The world-view system design owns technical platform/capacity and recovery contracts.
 
 ## 3. Source Documents Consolidated
-This specification consolidates the durable visual semantics from:
-- `viewer-gameplay-release-experience-overhaul.prd.md`: Player mode,
-  Director mode, world-first release experience, and command discoverability.
-- the retired Viewer Web entry redesign scope: industrial world command-table
-  direction, stage-first layout, diagnostics demotion, one-step command
-  discovery, honest unavailable states, and the `World / Targets / Command`
-  mobile route. The historical PRD/project are no longer current authorities;
-  implementation and runtime contracts remain with their topic owners.
-- `viewer-pixel-world-semantic-positioning.prd.md`: sparse snapshot
-  semantic positioning, `location_derived` honesty, and relationship-line
-  readability.
-- `viewer-pixel-world-player-readable-rendering.prd.md`:
-  commercial HUD, player leverage, route readability, and diagnostics collapse.
-- `doc/product/agents-world-simulation/player-readable-world-stage.design.md`:
-  durable object, relationship, scale-honesty, and diagnostic-demotion product
-  semantics distilled from the retired 2D/EGUI readability topics.
-- `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`:
-  screenshot-based visual review gate, model review rubric, and escalation
-  boundaries.
 
-Runtime, QA, release, LiveOps, and GitHub governance authority remains with the
-corresponding role/process. This document defines visual direction and review
-expectations.
+Durable sources are the terminal-shell PRD (Player/Director, command discovery, current-versus-target), page/module design, brand system (tokens/assets/status vocabulary), semantic positioning (independent coordinate and relation authority), player-readable rendering (HUD/causality), [world-stage product design](../../product/agents-world-simulation/player-readable-world-stage.design.md) and [visual-review SOP](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md).
+
+Retired Viewer redesign and 2D/EGUI topics contribute historical intent only. They do not restore a second Viewer, independent JS world renderer, 3D mode or old map controls. Runtime, QA, security and release authority remains with those domains.
 
 ## 4. Product Visual North Star
-The Viewer must feel like an industrial world command table, not a generic dark
-diagnostics dashboard.
 
-The player should read the screen in this order:
-1. What world or stage am I looking at?
-2. Which agent, location, objective, blocker, or route matters now?
-3. What can I do next?
-4. What happened because of the latest player or agent action?
-5. Where can I open deeper diagnostics if I need them?
+The Viewer should feel like an industrial world command table, not a generic dark diagnostics dashboard. The player should identify the world, the relevant objective/actor/blocker/route, the next decision and the original action's outcome before opening diagnostics.
 
-This order is more important than any single color, card shape, or layout
-variant. When space is constrained, preserve the reading order and remove
-secondary detail before shrinking the main subject.
+Preserve reading order before decoration or density. A busy world is not evidence of player progress. Viewing an object is not controlling it, and the currently viewed object need not be the subject of an outstanding action.
 
 ## 5. Terminal shell visual summary (2026-08-14)
-The paired [`viewer-gameplay-release-experience-overhaul.prd.md`](viewer-gameplay-release-experience-overhaul.prd.md)
-is the single Viewer-domain authority for Player/Director, dock, Search/Quote,
-contextual console, receipt/feed causality, and current-versus-target truth.
-This visual specification contributes only the visual reading order and review
-criteria below; it does not duplicate the terminal contract or claim it shipped.
 
-Visual acceptance keeps the world board first, command/receipt legible within one
-step, diagnostics demoted, and the implemented World Feed v1 visually separate
-from Action Receipt. Its `receipt_ref` is rendered only for explicit runtime
-identity; in fullscreen Player it is a compact collapsed top-right edge overlay/
-ambient chip that opens on demand. Focus/right-panel hooks and `#entity-search` remain current
-implementation references, not product modes. Responsive, keyboard, CJK,
-long-text, empty and unavailable checks remain mandatory downstream evidence.
+The [terminal-shell contract](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) owns Player/Director, dock, Search/Quote, contextual console and current implementation. Keep one world-first stage, command/receipt within one explicit step, and diagnostics secondary.
+
+World Feed v1 remains ambient and separate from Action Receipt: a compact collapsed top-right edge overlay/chip in fullscreen Player, opened on demand. receipt_ref appears only for explicit Runtime identity. Focus/right-panel hooks and entity-search are compatibility references, not new product modes. No permanent three-column Player layout or three peer HUD cards is introduced here.
 
 ## 6. Non-Negotiable Principles
+
 ### 6.1 World First
-- The world stage is the primary visual surface in Player mode.
-- Diagnostics, raw JSON, renderer badges, provider checks, and governance labels
-  must never compete with the world stage on first load.
-- If a renderer is degraded or missing, the unavailable diagnostic must show the
-  honest reason without constructing a second JS world.
+
+The stage is the primary Player surface. Raw JSON, renderer/provider/governance badges and test controls never compete on first load. Unavailable graphics must have an honest cause and a safe route; they must not silently construct a second JS world.
 
 ### 6.2 Player Leverage Before Ambient Activity
-- The UI must distinguish player-caused progress from ambient simulation
-  movement.
-- A busy world is not automatically a successful player action.
-- Receipts must answer: what was attempted, what changed, what is blocked, and
-  what the next step is.
+
+Distinguish original player-caused progress, Agent autonomous activity and ambient simulation movement. Receipts answer what was attempted, what changed or did not change, why and what comes next. Selecting B while A's operation is pending cannot relabel A's result as B's progress, pull focus automatically or create another effect.
 
 ### 6.3 Diagnostics Are Available, Not Dominant
-- Director and QA capabilities remain reachable.
-- In Player mode, advanced controls and diagnostics are demoted to drawers,
-  collapsible panels, secondary tabs, or explicit mode switches.
-- Hiding diagnostics is acceptable only when the route back to them remains
-  discoverable and scriptable.
+
+Director/QA tools remain discoverable and scriptable through secondary drawers/tabs/mode boundaries. Hiding them is acceptable only with a clear route back. Explicit Director use does not grant gameplay permissions or relax data honesty.
 
 ### 6.4 Data Honesty
-- Derived visual positions, unavailable states, inferred routes, and missing
-  runtime fields must be labelled or visually scoped so they cannot be mistaken
-  for authoritative runtime truth.
-- Visual hierarchy must not imply progress, causality, health, or ownership
-  that the DTO/state does not support.
+
+Geometry provenance and freshness are distinct. A recently refreshed relationship layout is not an exact coordinate; an old authoritative coordinate is not current observation. Derived, last-known, unknown, conflict, partial and unavailable states need legible text/shape/context, not only a hidden diagnostic field.
+
+Marker/halo enlargement improves readability but is not physical geometry. Visual emphasis, adjacency, labels, inferred routes and default framing do not imply ownership, capability, causality or health unsupported by authority. Revoked private information must disappear, not remain under a last-known label.
 
 ### 6.5 One Obvious Command Path
-- Player mode must keep the primary command route one explicit step away from
-  the world stage.
-- Advanced layouts, debug presets, and secondary prompt tools may exist, but
-  they must not hide the first command path.
-- If the primary command is disabled, blocked, or waiting on data, the reason
-  and recovery path must be visible.
+
+Keep primary command/chat one explicit step from the stage. A disabled or unbound action explains the reason and recovery in context; never make it executable by borrowing the first visible Agent. Observation may continue while unsupported action is blocked. Authorized stop/revocation/original-result lookup follow their own server contracts rather than a blanket renderer/freshness disable.
 
 ### 6.6 Sparse Worlds Still Communicate Relationships
-- Sparse snapshots must still read as a world, not as isolated dots.
-- Agent-location links, route lines, hotspots, semantic badges, and textual
-  summaries are mandatory tools for sparse-state readability.
-- Fallback DOM views should preserve relationships whenever canvas/wasm surfaces
-  are degraded.
+
+Sparse snapshots must remain understandable through readable identities, location provenance, valid context and truthful text. Relationship/route lines appear only when their independent current authority is complete. A snapshot with only location_id may derive a display position but must not manufacture an assignment/route line.
+
+“No confirmed relationship” is a legitimate outcome. Absence of a line is not a visual-review failure when the input lacks that relationship. Renderer failure uses the explicit text/Targets/receipt recovery contract, not a second DOM world; existing Rust-derived DOM fixtures prove only their declared semantic/auxiliary scope.
 
 ### 6.7 Readability Beats Decorative Density
-- Avoid adding decorative panels, badges, grids, particles, or status chips when
-  they reduce scan speed.
-- Fragment terrain, location anchors, and background world texture support the
-  active agent/action read; they do not become the first visual subject unless a
-  task specifically makes them the subject.
+
+Remove secondary labels, texture and decoration before shrinking the main decision surface. Terrain/Location anchors support, not overpower, Agent/goal/blocker/receipt. Dense/overlapping objects need a reliable accessible candidate-selection route; deterministic spatial scattering alone is not acceptance.
 
 ## 7. Visual Language
-The durable brand-system companion for this section is
-`viewer-brand-system-2026-06-05.design.md`. New visible Viewer work must use the
-token taxonomy, icon/status vocabulary, asset-language rules, and screenshot
-matrix defined there.
+
+Use the [brand-system companion](viewer-brand-system-2026-06-05.design.md) for executable tokens, icon/status vocabulary, asset admission and screenshot matrix. This revision does not replace those values or introduce a parallel brand book.
 
 ### 7.1 Tone
-- Industrial, precise, command-oriented, and playable.
-- The interface can feel technical, but it should not feel like an internal log
-  viewer by default.
-- Avoid one-note dark dashboard language where every surface has the same weight.
+
+Industrial, precise, command-oriented and playable. Technical content can exist without making the default surface a log viewer. Avoid equal-weight dark cards everywhere.
 
 ### 7.2 Surface Hierarchy
-Use four surface levels:
 
-| Level | Purpose | Examples | Default prominence |
+| Level | Purpose | Examples | Prominence |
 | --- | --- | --- | --- |
-| Stage | Primary world comprehension | Pixel-world canvas, 2D map, selected target overlay | Highest |
-| Command | Player decision and action | objective, next action, chat command, action receipt | High |
-| Context | Helpful state and explanation | target details, recent events, route counts, lightweight summaries | Medium |
-| Diagnostics | Engineering and QA visibility | renderer status, raw DTO, provider checks, governance lanes | Low / collapsed |
+| Stage | World comprehension | World canvas, selected-object context | Highest |
+| Command | Decision and original feedback | Next Move, goal, command, receipt | High |
+| Context | Explanation and orientation | Targets, details, relevant activity | Medium |
+| Diagnostics | Engineering/QA | Raw DTO, renderer/provider state, tests | Low/collapsed |
 
 ### 7.3 Color Semantics
-Color is semantic, not ornamental:
-- `world-background`: low-distraction stage base.
-- `terrain-subdued`: background Fragment and world-body detail.
-- `agent-primary`: player-relevant active actor.
-- `route-active`: current or selected relationship/action path.
-- `objective-accent`: current goal and recommended next step.
-- `blocker-danger`: blocked/error/missing requirement.
-- `receipt-success`: applied/completed feedback.
-- `diagnostic-muted`: technical or QA-only metadata.
-- `panel-surface`: command/context tool surfaces.
-- `focus-ring`: keyboard and selection focus.
 
-Do not encode critical state only by color; pair color with label, icon, shape,
-or placement.
+Retain world-background, terrain-subdued, agent-primary, route-active, objective-accent, blocker-danger, receipt-success, diagnostic-muted, panel-surface and focus-ring token roles. Color is semantic, not ornament. Critical meaning also has text, shape, icon or placement; receipt-success must never be attached to merely accepted/queued/ambient outcomes.
 
 ### 7.4 Typography and Copy Density
-- `world-title`: stage identity.
-- `objective-title`: current goal.
-- `action-label`: executable or recommended next step.
-- `receipt-body`: result feedback and cause/effect text.
-- `diagnostic-caption`: engineering/status metadata.
 
-- Player-facing headings should be short and action-oriented.
-- Compact panels should use compact headings; reserve large type for true stage
-  or route-level focus.
-- Diagnostic labels may be terse, but player receipts and blockers must be
-  understandable without reading raw state names.
-- CJK text must remain readable and must not fallback to missing glyph boxes.
+Retain world-title, objective-title, action-label, receipt-body and diagnostic-caption roles. Player headings are short and action-oriented; reserve large type for genuine primary subjects. Explain blockers and receipts without requiring raw state names. CJK glyphs must render; long labels use an accessible detail route rather than unreadably small text.
 
 ### 7.5 Shape and Layout
-- Use strong alignment, consistent spacing, and clear grouping instead of nested
-  card walls.
-- Cards are for repeated items, modal-like surfaces, or true framed tools, not
-  for wrapping every page section.
-- Stable stage, toolbar, grid, and panel dimensions are required so hover,
-  status text, labels, and loading states do not shift the layout.
+
+Strong alignment, consistent spacing and grouping are preferable to nested card walls. Reserve stable stage/toolbar/panel dimensions so loading, hover and errors do not move primary actions. Tooltips/callouts avoid the main command and receipt; when space is exhausted use adjacent accessible details instead of clipping the only explanation.
 
 ### 7.6 Status Vocabulary
-The following states need stable visual and text equivalents:
-- selected;
-- target;
-- blocker;
-- active route;
-- accepted intent;
-- executing;
-- completed;
-- no receipt;
-- derived position;
-- unavailable or degraded renderer.
+
+Provide stable visual/text equivalents for selected, target, blocker, active route, accepted intent, executing, completed, completed-without-progress, no receipt, result awaiting recovery, derived position, last-known/conflict/unknown, partial coverage and unavailable/degraded renderer. These are presentation meanings, not a new runtime enum or permission system.
 
 ## 8. Information Architecture
-### 8.1 Player Shell Default
-The Player shell must show:
-- world/stage;
-- current objective or selected target;
-- next action or blocker;
-- latest receipt or current action feedback;
-- a clear route into command/chat.
 
-The Player shell must demote:
-- raw runtime JSON;
-- renderer implementation status;
-- provider/auth/governance detail;
-- test controls;
-- long event lists.
+### 8.1 Player Shell Default
+
+Show world/stage, applicable objective/selected context, next action or blocker, original receipt/current operation feedback and command/chat discovery. Demote raw runtime data, renderer internals, provider/auth/governance, tests and long event lists. Empty/unbound contexts remain explicit rather than populated with another Agent's data.
 
 ### 8.2 Director Mode
-Director is an explicit operator/debug choice. It may expose denser diagnostics
-and three-column tools, but it still follows data honesty and hierarchy rules.
-Director is not the default and is not permission to make every surface equal.
+
+Director is an explicit server-capability-bound operator/debug choice. Dense three-column tools may appear only there; no new permission, player progress or alternate world authority follows from the layout.
 
 ### 8.3 HUD, Dock, and Contextual Console Hierarchy
-- HUD placement follows the [shell's current implementation boundary](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary):
-  one primary Next Move region and subordinate Objective / Player Leverage context.
-  Narrow screens place Next Move first and supporting context second; blocker and
-  receipt remain readable. The former three-peer-card layout is not a current requirement.
-- Edge dock: `World / Targets / Command` first; Search remains inside Targets,
-  while `Diagnostics` is secondary.
-- Contextual console: primary command/chat, selected target context, gameplay
-  details, then diagnostics/raw state.
-- Diagnostics panel: runtime status, renderer status, provider/auth/governance,
-  raw DTO, test controls.
+
+Follow the shell's single primary Next Move region and subordinate Objective/Player Leverage. Narrow screens place Next Move first and context second; blocker/receipt remain legible. World/Targets/Command are primary dock routes; Search stays inside Targets, Diagnostics secondary. Console order is command/chat, selected context, gameplay details, then raw diagnostics. The former three-peer-card HUD is not a current requirement.
 
 ### 8.4 Empty, Loading, Error, and Fallback Hierarchy
-- First: state name and whether player action is possible.
-- Second: reason or missing dependency.
-- Third: recovery path or next observable signal.
-- Fourth: diagnostic detail, collapsed unless it is the recovery path.
+
+First show state and whether the relevant action is possible; then cause/missing dependency; then recovery/next observable signal; finally optional diagnostics. Distinguish no snapshot, no authorized objects, filter-empty, partially loaded and genuinely empty scope. Unknown is not zero inventory or nonexistent world.
 
 ### 8.5 Mobile and Narrow Screens
-Mobile and tablet must preserve the same conceptual route as desktop:
-- `World`
-- `Targets`
-- `Command`
-- optional `Diagnostics`
 
-Do not rely on one long single-column stack when that makes the player scroll
-past the world before finding the command path.
+Preserve World/Targets/Command and optional Diagnostics without forcing the player to scroll past the whole world to find commands. Low-height/landscape, CJK, zoomed text and touch tooltips need explicit coverage. Layer/filter/selection changes do not alter task or original receipt identity.
 
 ## 9. Pixel-World Layering
-Pixel-world surfaces use this priority order:
-1. World Command Board: objective, next action, player leverage.
-2. Action Receipt / Blocker: latest meaningful feedback.
-3. Active Agent and selected target.
-4. Routes, relationships, hotspots, and goal callouts.
-5. Locations and logical anchors.
-6. Fragment terrain and ambient background.
-7. Renderer diagnostics and raw DTO controls.
 
-Fragment terrain should make the world feel physically present, but the active
-agent, route, objective, and receipt must remain easier to identify.
+Priority is decision context and original receipt/blocker, active/selected Agent, valid routes/relationships/hotspots/goal callouts, logical Location anchors, terrain/background, then diagnostics. This is reading priority, not a requirement that every item occupy a permanent panel.
 
-When exact coordinates are missing:
-- derived positions may be used for readability;
-- the source must remain inspectable as `location_derived`, `missing`, or
-  equivalent;
-- derived visuals must not claim runtime authority.
+Derived/missing/stale positions need visible scope and accessible explanation. Scale/LOD hides secondary detail first. If an old renderer cannot distinguish a stale coordinate from a current one, suppress that misleading dynamic visual and keep authorized text rather than silently upgrading it.
 
 ## 10. 2D Map Rules
-- 2D mode may introduce high-contrast Location and Agent symbols that are not
-  shown in 3D mode.
-- Label LOD must prioritize selected/active Agent, current objective, blocker,
-  and route labels before ambient Location labels.
-- Flow overlays should use direction arrows or equivalent marks when they
-  clarify current movement, logistics, or command effect.
-- 2D overlays must not leak into 3D mode after camera mode changes.
-- Dense map labels should degrade by hiding secondary labels, not by shrinking
-  all text below readability.
+
+These are target spatial-readability rules, not restoration of retired 2D/3D modes. The long-term top-down/orthographic industrial stage uses distinguishable entity symbols, progressive labels, valid flow direction and stable selected/goal/blocker context across scales.
+
+Do not assume a current 2D/3D toggle, introduce cross-mode leakage requirements for nonexistent surfaces, or claim historical semantic zoom is shipped. Overview/local transitions, manual pan exiting follow, overlap selection and return-to-goal follow the [world-stage experience](../../product/agents-world-simulation/player-readable-world-stage.design.md#exploration-transitions). Flow arrows require supported authority, not adjacency or guessed motion.
 
 ## 11. Interaction and Feedback
+
 ### 11.1 Selection
-- Selecting an entity must produce a visible focus state and a readable details
-  surface.
-- Selection should not hide the current objective or next step.
-- If an entity is decorative/background-only, do not make it look selectable.
+
+Selection yields visible focus and readable context, preserves objective/next step, and never executes. Decorative terrain must not look actionable. Offscreen, filtered, not-loaded, stale, revoked and deleted objects have different explanations. Revoked details disappear; an unavailable target is not replaced with another Agent.
 
 ### 11.2 Command
-- The command route must be visible within one player-facing step from the main
-  stage.
-- Chat/prompt controls must not be buried behind diagnostics.
-- Disabled or unavailable commands require a clear reason.
+
+Command/chat is discoverable without diagnostics. Unavailable commands explain why; original submitted subject stays fixed despite selection/recommendation changes. Browsing/following/zooming/terrain clicks remain read-only, while legal high-level guidance follows the same owner/Runtime contract.
 
 ### 11.3 Receipt
-Every action feedback surface should answer:
-- action: what was attempted;
-- result: what changed or did not change;
-- reason: why it succeeded, stalled, or failed;
-- next: what the player can do now.
+
+Each receipt explains action, result, reason and next. Preserve original operation/subject association; an authorized player-scoped result may have no Agent. Accepted/submitted/queued is pending, completed-no-progress is not progress, and unknown outcome requires original-operation lookup, not a new request. No current selection or ambient Feed can fill missing identity/effect fields.
 
 ### 11.4 Loading, Empty, Error, and Fallback States
-- Loading states must reserve layout space and avoid stage jumps.
-- Empty states must explain whether the world is empty, still loading, filtered,
-  or degraded.
-- Error states must distinguish player-fixable blockers from system failures.
-- Fallback rendering must be explicit; silent renderer substitution is not a
-  valid player-facing state.
+
+Reserve layout space and separate query/network/task/renderer failures. Startup GPU absence and loss after genuine ready are distinct tests. After graphical failure stop stale hit targets/animation, identify stale imagery, retain authorized text/Targets/receipt/safe control and provide bounded retry. Restore the current authorized view, not old private canvas contents or world actions.
+
+Production world graphics remain WASM-owned. Rust-derived DOM tests/auxiliary views are explicitly scoped; renderer unavailable is not permission to implement independent JS terrain/routes. Detailed behavior follows [recovery](external-agent-world-view.design.md#view-recovery).
 
 ## 12. Accessibility and Robustness
-- Critical text must remain readable on desktop and mobile viewports.
-- Primary controls must be keyboard reachable where the surface supports DOM
-  interaction.
-- Focus states must be visible.
-- Color contrast must be sufficient for objective, blocker, receipt, and command
-  labels.
-- Motion and animation should clarify cause/effect; do not depend on motion as
-  the only indicator of progress.
-- Avoid horizontal overflow, clipped button text, overlapping labels, and hidden
-  main actions.
+
+Critical text remains readable on supported desktop/tablet/narrow/low-height surfaces. Keyboard focus is visible and restored to the invoker; non-drag single-pointer alternatives reach the same authorized observation targets. Touch does not depend on hover. Stage shortcuts do not consume text input/chat/IME.
+
+Escape closes the innermost drawer before Focus; during composition the IME consumes it. Follow exit has an explicit accessible control, and manual exploration must not be continuously overridden. Reduced motion retains all essential meaning; refresh must not steal focus or announce every entity update as a new success.
+
+Contrast, no horizontal overflow, no clipped primary buttons, no obscured feedback and correct CJK are mandatory. Treat world labels as text, not executable markup. Specific combinations/methods are in [PW-ACCESSIBILITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-accessibility); this is not a blanket certification claim.
 
 ## 13. Visual Review Gate
-Any change that affects visible output must trigger screenshot-based visual
-review under `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`.
 
-Minimum evidence:
-- desktop screenshot of the target surface;
-- mobile screenshot when the change touches first screen, responsive behavior,
-  navigation, stage layout, command route, or text density;
-- automated summary such as DOM/UI tests, console/state probe, visual smoke, or
-  explicit reason when an automated check is not available;
-- expected visual contract for the change.
+Visible output changes require screenshot-based review under the existing SOP. Minimum evidence is a desktop capture, mobile when first-screen/responsive/navigation/layout/text density is affected, automated state/console/UI evidence or explicit unavailable reason, and the expected contract. Large visual-system changes also use the brand-system expanded matrix.
 
-For visual-system or large surface changes, also apply the expanded matrix in
-`viewer-brand-system-2026-06-05.design.md#6-screenshot-and-visual-evidence-matrix`.
-
-Must-pass checks:
-- first visual focus matches the task goal;
-- stage, objective, command, receipt, and diagnostics are ordered correctly;
-- no blocking overlap, clipping, horizontal overflow, or illegible text;
-- UI does not imply unsupported causality or progress;
-- mobile preserves the same main route as desktop;
-- diagnostics do not dominate Player mode.
+Must pass: correct first subject and hierarchy, no blocking clipping/overlap/illegibility, no unsupported causality, equivalent mobile route, and secondary diagnostics. A sparse fixture without relation authority must not fail merely for lacking a route; it must fail if the UI invents one or hides provenance.
 
 <a id="visual-review-escalation-design"></a>
+Apply the [canonical verdict/confidence table](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract). Only pass + high with no independent escalation condition can replace routine human visual review. Escalate disputed direction/interaction/flow, medium/low confidence, missing key viewport, public/release promises, watch (including the first watch), block or human_escalation. Preserve prior cards and owner decisions. This does not satisfy required review, L5, release or public approval.
 
-Apply the [canonical verdict/confidence table](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract). Only `pass + high` without an independent escalation condition can replace routine human visual review. Escalate to human or owner review when:
-- visual direction, interaction feel, or player screen flow is disputed;
-- model confidence is `medium` or `low`;
-- screenshot evidence lacks a key viewport;
-- the verdict affects release notes, public claims, or user promises;
-- the verdict is `watch`, `block`, or `human_escalation`, including the first `watch`.
-
-Record the owner decision and preserve prior cards. Public/release approval, direction decisions, required review, and L5 remain separate obligations; a model visual pass does not fulfill them.
-
-Pixel-world specific blockers:
-- Agent is less visible than Fragment terrain.
-- Renderer diagnostics are louder than the command board or action receipt.
-- Location markers dominate as main entities when the task is agent/action
-  focused.
-- Derived or missing positions lack an honest source marker.
-- Sparse snapshots do not show relationships, route, or readable world state.
-
-The screenshots and probes recorded for task
-`task_a25bf76359be45719edfcda1759626d1` are historical visual-review evidence
-only and remain traceable through Git history and GitHub task evidence. Their
-past verdict does not satisfy a future review, QA or release approval,
-real-player comprehension, runtime or authentication truth, or a public claim.
-Every later visible change requires fresh evidence under the current SOP.
+Pixel-world blockers include terrain overpowering Agent/goal, diagnostics overpowering command/receipt, misleading coordinate/freshness, invented relationships or causality, unselectable overlapping targets, and missing authorized recovery. Historical #1385 screenshots/cards only prove their original candidates; later visible changes need current evidence. Five-second comprehension requires the distinct [PW-READABILITY method](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-readability), not a screenshot verdict alone.
 
 ## 14. Implementation Brief for Viewer Work
-Viewer implementation tasks that change visible surfaces should include:
-- target mode: Player, Director, or both;
-- primary first-read subject;
-- affected stage/command/context/diagnostics level;
-- expected receipt/blocker/empty/unavailable behavior;
-- desktop and mobile screenshot plan;
-- DOM or semantic test anchors that must remain stable;
-- explicit non-goals, especially protocol, runtime, and art-pipeline boundaries.
 
-For a structural or visual change with material information-architecture,
-layout, or state-presentation trade-offs, prepare two or three bounded compare
-artifacts before implementation. Record the recommended direction, rejected
-directions and reasons, and the inherited decision in GitHub task evidence.
-This is an ideation and implementation-planning input; it is never a visual-pass
-or release-readiness claim.
+State Player/Director scope, first-read subject, affected stage/command/context/diagnostics, subject/provenance/receipt/empty/recovery behavior, desktop/mobile/input matrix, stable hooks and non-goals. Structural/visual changes with material layout or interaction alternatives still require two or three bounded comparison artifacts and inherited decisions under the existing workflow; routine fixes must not become an excuse for a new Shell redesign.
+
+A documentation-only contract revision does not supply screenshots or pretend those comparisons/reviews have run. Implementation and visible changes obtain the corresponding actual evidence.
 
 ## 15. Acceptance Criteria for Future Visual Changes
-- The change preserves world-first reading order.
-- Player leverage is more prominent than ambient simulation activity.
-- Diagnostics remain reachable but demoted.
-- Visual states map honestly to current DTO/runtime truth.
-- Pixel-world layers follow the priority order in this spec.
-- Responsive layouts preserve `World / Targets / Command`.
-- Screenshot review and automated evidence are attached before completion claims.
+
+World-first hierarchy, player/ambient separation, fixed original causality, discoverable command, accessible diagnosis/recovery, truthful source/partial/unknown and progressive density remain mandatory. Supported Web/native combinations are verified independently. Build/DOM/probe, software raster, real GPU, real interaction and real-player understanding are different evidence levels; missing levels stay unverified.
 
 ## 16. Governance
-- This document is the canonical visual design specification for Viewer and
-  player-facing world-simulator surfaces.
-- Topic-specific PRDs may add stricter rules for their own scope, but they should
-  not weaken this document's hierarchy, data honesty, or review-gate rules.
-- If a future task changes the default visual direction, update this document and
-  link the decision from `doc/world-simulator/viewer/README.md`.
+
+This file is the canonical visual direction; brand tokens and shell contracts remain with their owners. Topic PRDs may refine but not weaken source honesty, hierarchy or the review gate. Direction changes update the Viewer landing navigation and affected product/system contracts; current capabilities still require implementation and evidence.
 
 ## 17. Residual Risks
-- The final Viewer brand book, token taxonomy, icon/status vocabulary,
-  asset-language rules, and expanded screenshot matrix now live in
-  `viewer-brand-system-2026-06-05.design.md`.
-- The brand-system companion does not create a new runtime feature, public
-  marketing identity, or external art-production pipeline.
-- It does not replace `viewer_engineer` feasibility judgment, `qa_engineer`
-  release-blocking judgment, or `liveops_community` public messaging ownership.
 
+Final asset language and token values stay in the brand companion; they do not establish runtime features, marketing identity or release readiness. Upstream original-operation binding, dense-world data and geometry/freshness support can block truthful visuals. Text degradation is preferable to fabricated world state; real user comprehension, native compatibility and quality budgets remain separately measured.
 
 ## 目标、范围与设计边界
 
-本轮只整理既有阅读顺序与视觉证据合同，不新增布局、交互、状态或产品承诺。
-产品阅读义务来自 [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001)；
-具体 shell 布局继续由 [当前实现边界](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
-拥有，终态/后续目标不得替代当前实现。品牌 token、固定 CSS 数值与完整状态字典仍是专业设计选择，
-不从该产品 REQ 推导；下面的产品映射只适用于明确列出的局部条款。
+本修订统一已有视觉方向，并细化世界舞台的主体/来源/探索/恢复义务；不改变Shell布局、世界规则、权限或WASM ABI。产品要求与专业机制按下表明确分配，设计不自报实现或运行验收。
 
-## 风险与未覆盖范围
+## 决策、风险与未决范围
 
-本次仅建立文档与静态源码的局部关系，不能证明产品 AC 已完成。相关 Agent/地点/路线的完整
-呈现、所有正式 surface、密度变化后的可读性、完整继续/纠正/中断/恢复路径及真实玩家理解
-仍需对应专业实现与验收证据。静态 JSX/CSS 不证明浏览器视觉、输入、a11y、renderer、
-生产 Director 成功路径或发布通过；历史截图和 visual cards 不升级为本候选证据。
+选择复用现有品牌与Shell、按权威信息绘制、失败时保留合法文本，而非新增第二渲染器或从装饰补事实。代价是某些数据不足时不能提供完整空间画面。原操作关联、来源时效支持、密集世界可用性和原生兼容仍待对应实现与实际验证；视觉规范本身不能关闭这些风险。
 
 ## Visual review traceability
 
 ### 2.1 需求承接与分配表
 
-| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| 上游 requirement / product AC / professional acceptance | 具体 obligation 与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；仅承接当前目的、blocker 与下一步的首读层级：单一 Next Move 主区、Objective / Player Leverage 从属；具体布局沿专业 shell authority，窄屏主区优先 | [本设计布局条款](#83-hud-dock-and-contextual-console-hierarchy) | viewer_engineer；game_visual_interaction_designer | 仅阅读顺序局部承接；不证明相关对象/路线全覆盖、密度变化可读性、完整恢复路径或产品 AC 完成；不扩展 target 合同 |
-| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 四入口 verdict/confidence 一致；首轮 watch、medium/low 及独立条件升级 | [本设计条款](#visual-review-escalation-design) | QA 与视觉 owner；产品 N/A：理由=本行只规定专业截图取证与评审处置机制，不新增玩家舞台义务；范围=本行 visual-review 机制，不能排除上述真实产品阅读关系 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
-| [REQ-AGENT-STAGE-001：玩家结果与环境活动分离](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；环境活动、装饰与诊断不能代签玩家因果；仅承接 §6.2 的 player-caused / ambient 区分，沿 §6.1/§6.3 的诊断次级边界 | [玩家因果与环境活动](#62-player-leverage-before-ambient-activity) | viewer_engineer / runtime_engineer；因果真值来自权威 receipt | 不从世界繁忙、renderer 正常或诊断可见推断成功；不证明所有 surface 的真实理解与产品 AC 完成 |
-| [REQ-AGENT-STAGE-001：已接受行动主要结果的解释](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；已接受行动主要结果须可理解：仅承接 action/result/reason/next 解释；accepted 不等于 completed | [回执解释](#113-receipt) | viewer_engineer / runtime_engineer；沿 terminal receipt authority | next 文案不等于完整继续/纠正/中断/恢复已实现；不证明 runtime 接受或实际世界变化 |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | 当前目的/blocker/下一步首读、单一主区和窄屏从属。 | [HUD层级](#83-hud-dock-and-contextual-console-hierarchy) | Viewer/visual及Shell authority。 | 局部层级不证明完整探索或真人理解。 |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | verdict/confidence和升级条件一致。 | [评审升级](#visual-review-escalation-design) | QA/visual；产品N/A：理由=本行仅规定专业取证与评审机制；范围=不新增玩家产品义务，不排除其他行。 | 不代签required review/L5/发行。 |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | 玩家因果与ambient分开，选择不改原结果。 | [玩家影响](#62-player-leverage-before-ambient-activity) | Runtime因果、Viewer/visual。 | renderer健康/世界繁忙不是玩家成功。 |
+| Trace refs: O7-REQ-24cbdd98-cf69-4f7b-8342-6216b1b91616；[REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | 原行动/结果/原因/下一步可解释。 | [回执](#113-receipt) | 原operation/receipt authority。 | 文字不证明原世界效果。 |
 
 ### 11.1 验证映射表
 
-| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation 与条件 | 验证方法 / source / scenario / candidate | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-AGENT-STAGE-001：目的、blocker 与下一步的阅读顺序](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [本设计布局条款](#83-hud-dock-and-contextual-console-hierarchy) | 逐句核对产品目的/blocker/下一步子义务与专业主合同；不恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`、`crates/oasis7_viewer/viewer_terminal_shell.css` 做静态对照；未来可见改动另按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md) 的视觉矩阵取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
-| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-review-escalation-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |
-| [REQ-AGENT-STAGE-001：玩家结果与环境活动分离](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [玩家因果与环境活动](#62-player-leverage-before-ambient-activity) | 逐句审读仅有 ambient activity、无 receipt、diagnostics 可见的负例不得表达玩家结果 | 本次核对文档与 `pixel_world_host.jsx` 的独立 `commercial_surface.action_receipt` 读取、CSS receipt/feed 独立区域；后续按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md#最小通过标准) 对同候选、指定 surface/renderer 取得页面 state、截图和 console，并以权威结果对账 | 本次 source/diff 静态记录；未来另留同候选因果/无回执负例 | 未执行浏览器；host 接线不证明上游因果生成正确、环境投影全链路或真实玩家理解 |
-| [REQ-AGENT-STAGE-001：已接受行动主要结果的解释](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [回执解释](#113-receipt) | 对 action/result/reason/next 逐项核对解释合同；未接受、等待、已完成无进展与无回执不互相代签 | 本次静态审读回执字段消费与条款；未来按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md#qa-infrastructure-receiver-evidence-boundary) 固定候选/world/window，用 before/action/pending/final 页面证据 join 权威结果；文案相似不足以证明世界结果 | 文档字段对应与未覆盖列表；未来同候选接受/阻断/结果记录 | 未验证 runtime 因果、密度变化、全 surface 或完整继续/纠正/中断/恢复路径 |
+| [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [HUD层级](#83-hud-dock-and-contextual-console-hierarchy) | 主区/从属/窄屏无退化。 | [PW-ACCESSIBILITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-accessibility)，当前release/S6、desktop/narrow、键盘/CJK。 | 状态、截图、焦点及实际步骤。 | 静态CSS/JSX不代签浏览器。 |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [评审升级](#visual-review-escalation-design) | 同证据下升级条件一致。 | [SOP](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)；无截图/缺视口/watch/medium/low/public/dispute判据，同候选。 | 实际card及owner处置，未执行标明。 | 不制造截图/发行通过。 |
+| [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [玩家影响](#62-player-leverage-before-ambient-activity) | ambient/他人结果/选中变化不冒充玩家进展。 | [PW-IDENTITY](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-identity)和PW-READABILITY，同候选及原结果。 | 原主体/操作、UI、答案与误归因。 | 单张图/模型不证明真人理解。 |
+| [REQ-AGENT-STAGE-001](../../product/agents-world-simulation/player-readable-world-stage.prd.md#req-agent-stage-001) | [回执](#113-receipt) | pending/no-progress/unknown/无Agent结果解释正确。 | [PW-FRESHNESS](../../testing/manual/pixel-world-visualization-validation.manual.md#pw-freshness)与现有S6，实际受权原操作。 | 状态、原因、原结果及恢复路径。 | 页面标签不证明服务器授权/世界成功。 |

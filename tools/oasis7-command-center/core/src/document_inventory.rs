@@ -30,6 +30,16 @@ pub struct IndexedDocument {
     /// Explicit body allocation tables; None in older caches/unread or non-design files.
     #[serde(default)]
     pub allocations: Option<DocumentAllocations>,
+    /// Explicit navigation parsed from the original source; absent in older caches.
+    #[serde(default)]
+    pub navigation: Option<DocumentNavigation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentNavigation {
+    pub relationships: DocumentPairings,
+    pub labels: Vec<String>,
 }
 
 /// Bounded source-declared rows; does not establish implementation acceptance.
@@ -114,6 +124,7 @@ impl IndexedDocument {
             pairings: None,
             upstream: None,
             allocations: None,
+            navigation: None,
         }
     }
     pub(crate) fn matches_filter(&self, text: &str, read_filter: &str) -> bool {
@@ -315,7 +326,7 @@ impl CommandCenter {
                 "unsupported cached document inventory schema; refresh local facts".into(),
             ));
         }
-        let inventory: Inventory = serde_json::from_value(cached)?;
+        let mut inventory: Inventory = serde_json::from_value(cached)?;
         let source = self.current.sources.iter().find(|s| s.kind == "local");
         if source.is_none_or(|s| {
             s.source_revision.as_deref() != Some(inventory.baseline_oid.as_str())
@@ -335,6 +346,17 @@ impl CommandCenter {
             return Err(Error::Invalid(
                 "document inventory expired; reload the first page".into(),
             ));
+        }
+        // navigation was introduced with product identity pairing support. Earlier
+        // inventory caches cannot prove that a product identity section was parsed.
+        // This is a response projection only; the stored cache and snapshot stay intact.
+        for file in &mut inventory.files {
+            if file.kind == "prd"
+                && file.path.starts_with("doc/product/")
+                && file.navigation.is_none()
+            {
+                file.pairings = None;
+            }
         }
         Ok(inventory)
     }

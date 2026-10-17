@@ -12,12 +12,12 @@
 
 ## 范围
 - 覆盖 headless-runtime（原 nonviewer）模块当前能力设计、接口边界、测试口径与演进路线。
-- 覆盖 PRD-ID 到 `doc/headless-runtime/prd.md` 的任务映射。
+- 覆盖稳定 headless-runtime 要求及验证方法；本次要求与执行证据的关联由对应 PR/已有 Task 承接。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/headless-runtime/prd.md`
-- 项目管理入口: `doc/headless-runtime/prd.md`
+- 项目管理入口: 对应 PR、实际 CI 与评审记录（Issue 按需）；分工见[开发流程规范](../engineering/workflow/source-of-truth.md#information-record-placement)
 - 文件级索引: `doc/headless-runtime/prd.index.md`
 - 追踪主键: `PRD-NONVIEWER-xxx`
 - 测试与发布参考: `testing-manual.md`
@@ -65,7 +65,7 @@
 | 归档追溯 | 时间戳、链路ID、错误签名、恢复动作 | 失败时自动归档并可检索 | `captured -> indexed -> replayed` | 按事故等级优先检索 | 仅授权人员可读取完整归档 |
 - Acceptance Criteria:
   - AC-1: headless-runtime PRD 定义生命周期、鉴权、归档三条主线。
-  - AC-2: headless-runtime project 文档维护对应任务拆解与状态。
+  - AC-2: 对应 PR/已有 Task 记录本次范围、适用要求、验证版本与结果；Issue/Project 按需，长期 PRD 不承载可变任务状态。
   - AC-3: 鉴权、防重放、恢复与归档语义与当前协议、runtime storage authority 及定向回归一致。
   - AC-4: 对外行为变更时同步补齐测试证据，并在对应 PR、实际 CI 与评审记录（Issue 按需） 记录任务执行证据。
 - Non-Goals:

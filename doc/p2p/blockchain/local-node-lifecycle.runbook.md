@@ -1,16 +1,18 @@
 # Local Node Lifecycle Runbook
 
 - 对应项目文档: GitHub Issue / GitHub Project
-- 实现入口: `crates/oasis7/src/bin/oasis7_chain_runtime/node_lifecycle.rs`
+- 实现入口: `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/node_lifecycle.rs`
 - 整体计划与未完成项: [Persistent World Node Lifecycle](persistent-world-node-lifecycle.runbook.md)
 
 审计轮次: 1
 
-## Candidate availability gate
+## Source availability and deployed-binary gate
 
-This runbook describes the candidate implementation in [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683). It is not an operating procedure supported by current main. Do not run the commands below until #4683 has merged, the deployed binary has been built from that implementation, and its `--help` plus the relevant subcommand `--help` confirm `node` / `op` and the required options. Referenced implementation files and test scripts belong to that candidate and may be absent on main. A documentation merge alone does not make these commands available.
+[Code PR #4683](https://github.com/nil-studio/oasis7/pull/4683) is merged as `da890a9125a435969b82f5a14ab3c9143cc0690e`. At the fixed main baseline `b5476a616dd3d4dbc29f332ee42ed848903c1f60`, [command routing](https://github.com/nil-studio/oasis7/blob/b5476a616dd3d4dbc29f332ee42ed848903c1f60/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/cli_contract.rs), [dispatch](https://github.com/nil-studio/oasis7/blob/b5476a616dd3d4dbc29f332ee42ed848903c1f60/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/identity_receipt.rs), and the `node_lifecycle.rs` / `node_operations.rs` implementations are present. Waiting for #4683 to merge is no longer a prerequisite.
 
-## Candidate local capability
+Before operating a deployed instance, verify that its binary was built from a source version containing these commands, and inspect its `--help` plus the relevant subcommand `--help` for `node` / `op` and every required option. Source availability and a documentation merge do not establish the installed binary's version, successful lifecycle execution, synchronization readiness or production acceptance. Keep the lifecycle regression and role-specific readiness checks below as separate verification obligations.
+
+## Local capability and verification boundary
 
 `node init/start/status/stop` manages one owner's local Unix process and its persistent identity. On Unix, the supported profiles are `compatibility_observer_v1`, `formal_public_observer_v1`, and `formal_full_state_sync_read_only_v1`; each has a separate trust and readiness contract. The compatibility observer uses the existing public-testnet v1 runtime. The formal public observer verifies and serves a public projection only. The formal full-state sync profile downloads and cold-restores the latest qualified full state under an issuer-signed node grant; it is read-only and does not grant proposal, validator, archive, or BFT membership rights. A public projection never means the node has the owner's private Snapshot or Journal.
 

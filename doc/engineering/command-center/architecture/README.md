@@ -67,7 +67,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 | 主题 | 关键边界 | 需人关注时机 | 权威入口 |
 | --- | --- | --- | --- |
 | ARCH-04 · 单权威到 BFT | 首次开放采用受控单权威持久世界；BFT 并行研发，后续在同世界 H/H+1 交接激活写权 | 决定首次开放、切换 signer/epoch、扩展权威集合或改变保留承诺 | [当前阶段](../../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[权威 profiles](../../../p2p/design.md#des-p2p-authority-profiles) |
-| ARCH-05 · 服务分工 | P2P 维护合法提交证明，runtime 确定性执行，game/Agent/Viewer 提交意图和消费已提交状态；Web Viewer 不承担完整节点职责 | 拆服务/进程、加网关、改模块归属或引入第二条执行路径 | [执行分层](../../../world-runtime/design.md#3-目标设计结构)、[P2P 边界](../../../p2p/design.md#4-边界与结构)、[高层架构](../../../../README.md#高层架构) |
+| ARCH-05 · 服务分工 | P2P 维护合法提交证明，runtime 确定性执行，game/Agent/Viewer 提交意图和消费已提交状态；链进程入口位于独立 `oasis7_chain_runtime`，纯投影证明位于 `oasis7_client_api`，世界执行适配仍归 `oasis7`，Web Viewer 不承担完整节点职责（2026-10-16 源码核对；未核对部署） | 拆服务/进程、加网关、改模块归属或引入第二条执行路径 | [执行分层](../../../world-runtime/design.md#3-目标设计结构)、[P2P 边界](../../../p2p/design.md#4-边界与结构)、[高层架构](../../../../README.md#高层架构) |
 | ARCH-06 · 写入与持久 | accepted、prepare、committed 分开；正式确认依赖完整记录和决定跨独立故障域持久，未知提交先查原请求 | 改存储、超时重试、写者隔离，或决定故障期间是否继续写入 | [双端持久前置](../../../p2p/design.md#des-p2p-replicated-durability-prerequisite)、[runtime 提交与恢复](../../../world-runtime/design.md#runtime-authority-commit-recovery-target) |
 | ARCH-07 · 保留与恢复 | replay log、checkpoint、snapshot 分工；GC 不破坏保留范围的重建，同世界只读恢复不自动恢复写服务 | 调保留/磁盘预算、清理迁移数据、选择归档方案或灾备切换 | [存储层次](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#4-technical-specifications)、[重新服务边界](../../../product/world-infrastructure/prd.md#恢复后的重新服务闸门) |
 
@@ -148,7 +148,7 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 - [PR #4563](https://github.com/eng-cc/oasis7/pull/4563)：固定 Codex CLI 0.137.0 的可选实验执行、原请求身份、未知结果与退出管理；真实握手/receipt 有记录，但没有成功模型输出证明。
 - [PR #4572](https://github.com/eng-cc/oasis7/pull/4572)：读取显式规范后继、保留历史版本和来源理由；记录了原生界面与重启恢复验证。
 - 首页的[来源阅读降级入口](../../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)复用既有文档索引和来源详情，分别提示缺失摘要；不新增后台来源、执行动作或聚合判断。四区首页及完整用户任务仍未验收。
-- 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#3-des-cc-tree-001文件关系与树投影)。类别不推导实现状态，完整文档树与生命周期筛选仍待实施。
+- 生命周期解析将原始声明和文档类别分开，可选派生字段兼容旧阅读版本；详见[专题设计](../document-tree.design.md#3-des-cc-tree-001文件关系与树投影)。类别不推导实现状态，目录生命周期、类型和显式配对缺口筛选沿已发布清单投影，不改变源声明。
 - 2026-10-15 候选源码核对：[文件清单](../../../../tools/oasis7-command-center/core/src/document_inventory.rs)沿现有有界扫描保留逐文件读取/遗漏记录，使用独立版本化 cache key，与章节/搜索同事务发布；原 Snapshot shape 和数据库 schema 版本不变。有限 DTO 查询核对项目、来源版本/代次、章节摘要及分页筛选，规范视图可查阅缺口。独立树快照/attempt、固定提交及关系投影仍待实施，见[实施范围](../document-tree.design.md#111-验证映射表)；真实宿主与交互验证范围归实现 PR。
 - 个人决定、阅读记录和未决操作与可重建缓存分开；启用连接不代表授权任务，恢复不自动重发未知副作用。
 
@@ -165,4 +165,4 @@ L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fe
 
 ### 文档全局树阅读设计
 
-2026-10-13：基于 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 源码核对，[文档树设计](../document-tree.design.md)采用既有 Rust 索引与有限 DTO，分离导航树和显式配对关系，快照绑定来源版本并保留部分覆盖。四产品域与专业域分别展示，读取不启动模型或写源文档。仅方案已补齐，树投影、专用 UI 与真实桌面表现未验证。
+2026-10-13：基于 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 源码核对，[文档树设计](../document-tree.design.md)采用既有 Rust 索引与有限 DTO，分离导航树和显式配对关系，快照绑定来源版本并保留部分覆盖。四产品域与专业域分别展示，读取不启动模型或写源文档。当前目录及产品/专业导航投影的实现边界见[专题设计](../document-tree.design.md#111-验证映射表)；两树展开与个人阅读恢复沿独立版本记录提供；独立树快照和固定提交仍待实施，实际桌面验证范围归实现 PR。

@@ -81,9 +81,18 @@
           <li><code>./scripts/viewer-software-safe-step-regression.sh --headed</code></li>
           <li><code>./scripts/viewer-software-safe-chat-regression.sh --headed</code></li>
         </ul>
-        <p>若要手工采样，可执行：</p>
+        <p>默认采证使用上方 release/UI 服务：即使带 <code>test_api=1</code>，也不安装 <code>__AW_TEST__</code>。需要语义测试 API 时，先准备 Viewer 的 Node/Rust/WASM 构建依赖，另在独立终端构建并服务隔离测试产物：</p>
+        <pre><code>npm --prefix crates/oasis7_viewer run build:viewer:visual-test &amp;&amp; \
+python3 -m http.server 4174 --bind 127.0.0.1 --directory crates/oasis7_viewer/.viewer-test-dist</code></pre>
+        <p>下方脚本默认 <code>release</code>；测试服务就绪后，才在采证终端设置 <code>export VIEWER_CAPTURE_MODE=visual-test</code>。不要用 <code>run-viewer-web.sh</code> 代替测试产物服务，也不要将 <code>.viewer-test-dist</code> 当 release 发布。<code>test_api=1</code> 只是测试构建的额外 opt-in，不会改变 release 构建、授予玩家权限或提供正式接入凭证。记录所选 profile、source/build 身份与 URL。</p>
         <p>使用并通过 <code>agent-browser 0.37.1</code> 的 <code>--version</code> 验证，先运行 <code>doctor --offline --quick --json</code>；每轮创建 worktree-scoped named session，必要时用 <code>session info/list --json</code> 记录诊断，并只关闭本轮自有 session。</p>
         <pre><code>set -euo pipefail
+VIEWER_CAPTURE_MODE="${VIEWER_CAPTURE_MODE:-release}"
+case "$VIEWER_CAPTURE_MODE" in
+  release) VIEWER_CAPTURE_PORT=4173 ;;
+  visual-test) VIEWER_CAPTURE_PORT=4174 ;;
+  *) echo "unknown VIEWER_CAPTURE_MODE: $VIEWER_CAPTURE_MODE" &gt;&amp;2; exit 2 ;;
+esac
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 agent-browser --version
 agent-browser doctor --offline --quick --json
@@ -114,16 +123,22 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:${VIEWER_CAPTURE_PORT}/viewer.html?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
 agent-browser --session "$AB_SESSION" wait --load domcontentloaded
-agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+if [[ "$VIEWER_CAPTURE_MODE" == "visual-test" ]]; then
+  agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+else
+  agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'undefined'"
+fi
 agent-browser --session "$AB_SESSION" session info --json | tee "$VIEWER_EVIDENCE_DIR/session-info.json"
 agent-browser --session "$AB_SESSION" snapshot -i
-agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
+if [[ "$VIEWER_CAPTURE_MODE" == "visual-test" ]]; then
+  agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__.getState())" | tee "$VIEWER_EVIDENCE_DIR/state.json"
+fi
 agent-browser --session "$AB_SESSION" console | tee "$VIEWER_EVIDENCE_DIR/console.log"
 agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-web.png"</code></pre>
         <p>保留采样原失败码；采样成功但 close 失败则返回非零。当前目录的 close.log / cleanup.status 保存 cleanup blocker 诊断；close 非零不代表进程必然仍活着，只回收本轮 session。</p>
-        <p>最小通过标准：页面加载成功、<code>__AW_TEST__</code> 可用、<code>renderMode=viewer</code>（或兼容 alias <code>software_safe</code>）、并产出截图与日志。</p>
+        <p>最小采证标准：release/UI 页面可加载、<code>__AW_TEST__</code> 不存在，并保留可见连接状态或明确 blocker 的截图与 console。visual-test 另要求显式构建及 opt-in 后 API 可用、<code>getState().renderMode=viewer</code>（或兼容 alias <code>software_safe</code>）并保留 state。页面加载或测试 API 可用不证明 renderer-ready、真实输入或正式玩法通过。</p>
       </section>
 
       <section class="section" data-reveal>
@@ -132,7 +147,7 @@ agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-we
           <li>支持中英文切换、实时观察、formal gameplay summary、最小 prompt/chat 控制面。</li>
           <li>不再提供第二 Viewer 跳转。</li>
           <li>不再维护退役抓帧、theme pack、texture inspector 或视觉专项检视脚本。</li>
-          <li>历史 Standard-3D / egui 的 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板均已退役，不属于当前 <code>viewer</code> Web 能力；当前边界以实时观察、当前选中对象、prompt/chat、<code>__AW_TEST__</code> 和三条回归脚本为准。</li>
+          <li>历史 Standard-3D / egui 的 auto select、右侧模块显隐及本地缓存、选中详情、Agent 快速定位、2D 全览图分层缩放和可复制文本面板均已退役，不属于当前 <code>viewer</code> Web 能力；当前边界为实时观察、当前选中对象与 prompt/chat；<code>__AW_TEST__</code> 仅在显式 visual-test 构建且 opt-in 时可用，三条回归脚本的结果按各自构建与场景解释。</li>
         </ul>
       </section>
 

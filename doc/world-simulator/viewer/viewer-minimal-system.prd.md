@@ -35,7 +35,7 @@
   - `out = .data/world_viewer_data`
 
 ### Output
-- `snapshot.json`: `WorldSnapshot` (time 0 + model after demo actions).
+- `snapshot.json`: `WorldSnapshot` containing the kernel’s current logical time and model after demo actions have been processed; it is not a time-0 reset.
 - `journal.json`: `WorldJournal` (events from demo actions).
 
 ### Demo Script Strategy

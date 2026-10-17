@@ -14,8 +14,8 @@
 | landing | `doc/scripts/README.md` | 按读者意图选择权威入口 |
 | requirements | `doc/scripts/prd.md` | 定义模块边界、能力需求和验收标准 |
 | architecture | `doc/scripts/design.md` | 解释模块结构与文档分层 |
-| inventory | `doc/scripts/prd.index.md` | 提供专题三件套的精确文件索引 |
-| topic truth | `precommit/`、`wasm/` | 仅在需要独立专业权威时承载当前规范；通用治理语义归入模块稳定文档 |
+| inventory | `doc/scripts/prd.index.md` | 提供仍独立维护专题的精确文件索引 |
+| topic truth | `precommit/`；WASM 发布进入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` | 仅在需要独立专业权威时承载当前规范；通用治理语义归入模块稳定文档，旧 nightly/build-std 只从 world-runtime WASM evidence 追溯 |
 
 工程任务生命周期不属于 scripts 模块的第二套设计层；它统一引用
 `doc/engineering/workflow/source-of-truth.md`。
@@ -30,8 +30,8 @@
 ## 阅读顺序
 
 1. 从 `doc/scripts/README.md` 按目标选择入口。
-3. 需要通用治理规则时读模块 PRD/design；只有 pre-commit、WASM 等仍独立维护的专业专题才进入专题文档。
-4. 已知独立专题文件名时使用 `doc/scripts/prd.index.md` 精确定位。
+2. 需要通用治理规则时读模块 PRD/design；pre-commit 进入本模块专题，WASM 发布进入 world-runtime canonical pipeline，历史背景按 README 分流。
+3. 已知独立专题文件名时使用 `doc/scripts/prd.index.md` 精确定位。
 
 ## 稳定脚本契约
 

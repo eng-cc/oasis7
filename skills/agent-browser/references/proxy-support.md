@@ -2,10 +2,23 @@
 
 Proxy configuration for geo-testing, rate limiting avoidance, and corporate environments.
 
-All examples assume an owned named session exported through
-`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Create a fresh
-session when changing launch-affecting proxy options; never use the default
-session or global multi-session cleanup.
+Use the owned-session setup and cleanup from [session-management.md](session-management.md)
+in the same shell before these examples (also inside any standalone script):
+
+```bash
+AB_SESSION="$(agent-browser session id --scope worktree --prefix proxy)" || exit $?
+: "${AB_SESSION:?Session creation returned an empty id}"
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+```
+
+Install the scoped `EXIT INT TERM` cleanup from that reference after setup.
+Every `ab` invocation passes the owned id explicitly; an ambient
+`AGENT_BROWSER_SESSION` alone is not sufficient. Never use the default session
+or global multi-session cleanup. This follows the repository's 0.37.1 session
+contract; if the installed CLI differs, read `agent-browser skills get core --full`
+before adapting these examples.
+
+Create a fresh owned session whenever launch-affecting proxy options change.
 
 **Related**: [commands.md](commands.md) for global options, [SKILL.md](../SKILL.md) for quick start.
 
@@ -26,20 +39,20 @@ Use the `--proxy` flag or set proxy via environment variable:
 
 ```bash
 # Via CLI flag
-agent-browser --proxy "http://proxy.example.com:8080" open https://example.com
+ab --proxy "http://proxy.example.com:8080" open https://example.com
 
 # Via environment variable
 export HTTP_PROXY="http://proxy.example.com:8080"
-agent-browser open https://example.com
+ab open https://example.com
 
 # HTTPS proxy
 export HTTPS_PROXY="https://proxy.example.com:8080"
-agent-browser open https://example.com
+ab open https://example.com
 
 # Both
 export HTTP_PROXY="http://proxy.example.com:8080"
 export HTTPS_PROXY="http://proxy.example.com:8080"
-agent-browser open https://example.com
+ab open https://example.com
 ```
 
 ## Authenticated Proxy
@@ -49,7 +62,7 @@ For proxies requiring authentication:
 ```bash
 # Include credentials in URL
 export HTTP_PROXY="http://username:password@proxy.example.com:8080"
-agent-browser open https://example.com
+ab open https://example.com
 ```
 
 ## SOCKS Proxy
@@ -57,11 +70,11 @@ agent-browser open https://example.com
 ```bash
 # SOCKS5 proxy
 export ALL_PROXY="socks5://proxy.example.com:1080"
-agent-browser open https://example.com
+ab open https://example.com
 
 # SOCKS5 with auth
 export ALL_PROXY="socks5://user:pass@proxy.example.com:1080"
-agent-browser open https://example.com
+ab open https://example.com
 ```
 
 ## Proxy Bypass
@@ -70,12 +83,12 @@ Skip proxy for specific domains using `--proxy-bypass` or `NO_PROXY`:
 
 ```bash
 # Via CLI flag
-agent-browser --proxy "http://proxy.example.com:8080" --proxy-bypass "localhost,*.internal.com" open https://example.com
+ab --proxy "http://proxy.example.com:8080" --proxy-bypass "localhost,*.internal.com" open https://example.com
 
 # Via environment variable
 export NO_PROXY="localhost,127.0.0.1,.internal.company.com"
-agent-browser open https://internal.company.com  # Direct connection
-agent-browser open https://external.com          # Via proxy
+ab open https://internal.company.com  # Direct connection
+ab open https://external.com          # Via proxy
 ```
 
 ## Common Use Cases
@@ -92,16 +105,33 @@ PROXIES=(
     "http://asia-proxy.example.com:8080"
 )
 
-for proxy in "${PROXIES[@]}"; do
+mkdir -p ./screenshots || exit $?
+for proxy in "${PROXIES[@]}"; do (
+    AB_SESSION="$(agent-browser session id --scope worktree --prefix geo-proxy)" || exit $?
+    : "${AB_SESSION:?Session creation returned an empty id}"
+    ab() { agent-browser --session "$AB_SESSION" "$@"; }
+    cleanup() {
+        status=$?
+        trap - EXIT INT TERM
+        close_status=0
+        ab close || close_status=$?
+        if (( status != 0 )); then exit "$status"; fi
+        exit "$close_status"
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     export HTTP_PROXY="$proxy"
     export HTTPS_PROXY="$proxy"
 
-    region=$(echo "$proxy" | grep -oP '^\w+-\w+')
+    host="${proxy#*://}"
+    region="${host%%-proxy.*}"
+    : "${region:?Proxy region must not be empty}"
     echo "Testing from: $region"
 
-    agent-browser --session "$region" open https://example.com
-    agent-browser --session "$region" screenshot "./screenshots/$region.png"
-    agent-browser --session "$region" close
+    ab --proxy "$proxy" open https://example.com || exit $?
+    ab screenshot "./screenshots/$region.png" || exit $?
+) || exit $?
 done
 ```
 
@@ -123,16 +153,29 @@ URLS=(
     "https://site.com/page3"
 )
 
-for i in "${!URLS[@]}"; do
+for i in "${!URLS[@]}"; do (
+    AB_SESSION="$(agent-browser session id --scope worktree --prefix rotating-proxy)" || exit $?
+    : "${AB_SESSION:?Session creation returned an empty id}"
+    ab() { agent-browser --session "$AB_SESSION" "$@"; }
+    cleanup() {
+        status=$?
+        trap - EXIT INT TERM
+        close_status=0
+        ab close || close_status=$?
+        if (( status != 0 )); then exit "$status"; fi
+        exit "$close_status"
+    }
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     proxy_index=$((i % ${#PROXY_LIST[@]}))
     export HTTP_PROXY="${PROXY_LIST[$proxy_index]}"
     export HTTPS_PROXY="${PROXY_LIST[$proxy_index]}"
 
-    agent-browser open "${URLS[$i]}"
-    agent-browser get text body > "output-$i.txt"
-    agent-browser close
-
+    ab --proxy "${PROXY_LIST[$proxy_index]}" open "${URLS[$i]}" || exit $?
+    ab get text body > "output-$i.txt" || exit $?
     sleep 1  # Polite delay
+) || exit $?
 done
 ```
 
@@ -147,18 +190,18 @@ export HTTPS_PROXY="http://corpproxy.company.com:8080"
 export NO_PROXY="localhost,127.0.0.1,.company.com"
 
 # External sites go through proxy
-agent-browser open https://external-vendor.com
+ab open https://external-vendor.com
 
 # Internal sites bypass proxy
-agent-browser open https://intranet.company.com
+ab open https://intranet.company.com
 ```
 
 ## Verifying Proxy Connection
 
 ```bash
 # Check your apparent IP
-agent-browser open https://httpbin.org/ip
-agent-browser get text body
+ab open https://httpbin.org/ip
+ab get text body
 # Should show proxy's IP, not your real IP
 ```
 
@@ -180,7 +223,7 @@ Some proxies perform SSL inspection. If you encounter certificate errors:
 
 ```bash
 # For testing only - not recommended for production
-agent-browser open https://example.com --ignore-https-errors
+ab open https://example.com --ignore-https-errors
 ```
 
 ### Slow Performance

@@ -27,6 +27,19 @@
 ## 风险
 - 模块边界演进快，文档同步可能滞后。
 - 指标口径不稳定会降低验收一致性。
+
+### 历史重号条款的兼容定位
+
+本文保留历史 `AC-15` 与 `DEC-RM-039` 编号及各条原义务，不将同号条款合并，也不重排其他编号。旧编号仅作兼容标签，不能单独作为唯一条款定位；引用这些条款时使用下列“文档路径 + 主题锚点”，并按对应主题判定。旧引用若未给主题或原文范围，须先核实目标，不能默认指向同号第一项。
+
+| 历史编号 | 原条款主题 | 唯一定位 |
+| --- | --- | --- |
+| AC-15 | PR intake 导入 | [PR intake 导入](#ac-15-reward-pr-intake) |
+| AC-15 | 第四帖玩家控制边界 | [第四帖玩家控制边界](#ac-15-xiaohongshu-player-boundary) |
+| AC-15 | 第三帖游戏介绍 | [第三帖游戏介绍](#ac-15-xiaohongshu-game-intro) |
+| DEC-RM-039 | Reward Account 字段 | [Reward Account 字段](#dec-rm-039-reward-account) |
+| DEC-RM-039 | 宣传激励范围与档位 | [宣传激励范围与档位](#dec-rm-039-channel-incentive) |
+
 ## 1. Executive Summary
 - Problem Statement: README 与相关入口文档长期承载架构、运行、规则、发布口径，历史上容易出现口径漂移与链接失效。
 - Proposed Solution: 将 readme 模块定义为“对外口径主控层”，统一入口信息、跨文档引用、术语定义与更新策略。
@@ -157,8 +170,8 @@
 - AC-12: 若团队进入 `limited playable technical preview` 的 invite-only 执行阶段，必须补齐受控执行包，明确 callout 文案、巡检窗口、信号分桶、claim drift 纠偏与 producer 摘要字段。
 - AC-13: 若团队决定在 limited preview 阶段使用 early contributor reward，必须补齐独立操作包，明确 `Reward Account` 作为执行字段、评分模板、证据字段、审阅链、禁语与“无固定 token/point 汇率”边界；若贡献来源是 GitHub PR，则必须提供可选 intake block 收集 `Reward Account`。
 - AC-14: 若团队开始记录真实贡献奖励轮次，必须补齐 round-based ledger，明确 round meta、`Reward Account`、逐条 row 状态、producer 审批引用、distribution ref 与 archive note；PR 来源行必须能追溯到 PR intake 中的 `Reward Account` 或显式补录记录。
-- AC-15: 若 GitHub PR intake 已成为重复使用的贡献入口，仓库必须提供脚本化导入路径，将 PR body 中的 reward intake block 解析为 ledger-ready 结构化字段，并显式区分 `ready / deferred / no_reward_review_requested / invalid_intake`，不得把 raw `public_key` 重新引回用户面命名。
-- AC-15: 若小红书内容链路进入第四篇，必须补齐“玩家控制边界”素材包，明确标题、正文、轮播结构、互动问题，并把“玩家不能直接控制角色，但能给方向”的正式口径收进人类开发者叙事。
+- AC-15: <a id="ac-15-reward-pr-intake"></a>若 GitHub PR intake 已成为重复使用的贡献入口，仓库必须提供脚本化导入路径，将 PR body 中的 reward intake block 解析为 ledger-ready 结构化字段，并显式区分 `ready / deferred / no_reward_review_requested / invalid_intake`，不得把 raw `public_key` 重新引回用户面命名。
+- AC-15: <a id="ac-15-xiaohongshu-player-boundary"></a>若小红书内容链路进入第四篇，必须补齐“玩家控制边界”素材包，明确标题、正文、轮播结构、互动问题，并把“玩家不能直接控制角色，但能给方向”的正式口径收进人类开发者叙事。
 - AC-16: 若小红书内容链路进入第五篇，必须补齐“AI时代，你变"懒"了么”素材包，明确如何从 AI 使用习惯切到游戏模式讨论，并保持人类开发者视角与 `limited playable technical preview` 边界。
 - AC-17: 若小红书内容链路进入第六篇，必须补齐“作为游戏工作室主理人，今年的春招视角”素材包，明确标题、正文、封面、互动问题、关键词与禁滑坡边界，并把春招热点收口到团队判断、完成度、AI 使用方式与玩家感觉；若平台标题长度受限，最终发布标题必须优先保留“游戏工作室主理人”和“春招”识别点。
 - AC-18: 若第六篇需要轮播版，必须补齐独立轮播素材包，明确页数、逐页文案、HTML、逐页 PNG 与评论区收束页分工，并保持与长文版标题、边界和互动问题一致。
@@ -179,10 +192,10 @@
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
 - AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `doc/product/world-rules-core-gameplay/prd.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
 - AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
-- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`doc/product/world-rules-core-gameplay/prd.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
+- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`viewer / pure_api`；`software_safe` 仅为 `viewer` 的兼容 alias，不增加模式或证据等级）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`doc/product/world-rules-core-gameplay/prd.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
 - AC-38: 若白皮书式项目总览已经形成正式入口，必须同步更新 `site/index.html`、`site/en/index.html` 与 `site/doc/cn/index.html`、`site/doc/en/index.html`，让站点首页和文档中心至少能表达“两阶段路径”“当前仍是技术预览”的边界，并给出可直接进入该总览的公开入口。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
-- AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
+- AC-15: <a id="ac-15-xiaohongshu-game-intro"></a>若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
   - 不在 readme PRD 中替代各模块详细设计。
   - 不在 readme PRD 中定义测试用例细节。
@@ -320,7 +333,7 @@
 | DEC-RM-020 | 小红书首帖采用“人类开发者自我介绍”而非“项目功能介绍” | 首帖直接解释完整世界观或产品能力 | 小红书面向人，首帖更需要建立创作者身份与协作关系，而不是先堆产品信息。 |
 | DEC-RM-021 | 第二篇采用“团队 roster 轮播卡”而非长文解释 | 继续用长文解释 agent 协作或直接贴角色职责原文 | 用户第二篇更需要快速理解“有哪些队友、为什么重要”，轮播卡比长文更适合这一层信息。 |
 | DEC-RM-022 | 用 round-based reward ledger 承接真实贡献奖励结算 | 继续靠 issue 评论、聊天记录或零散表格临场结算 | 真实发放前必须把评分、审批、执行引用和归档收进统一模板，才能保持可审计性。 |
-| DEC-RM-039 | reward intake 与台账执行层统一只要求 `Reward Account` | 在领取模板里继续要求额外 claimant 字段 | 这条链路要先保证可执行收款，review 名称层已有 contributor/public handle，可不再额外要求 PR 作者维护独立 claimant 字段。 |
+| DEC-RM-039 | <a id="dec-rm-039-reward-account"></a>reward intake 与台账执行层统一只要求 `Reward Account` | 在领取模板里继续要求额外 claimant 字段 | 这条链路要先保证可执行收款，review 名称层已有 contributor/public handle，可不再额外要求 PR 作者维护独立 claimant 字段。 |
 | DEC-RM-040 | GitHub PR 作为贡献证据入口时，使用可选 reward intake block 收集 `Reward Account` | 继续让 PR 作者在评论或私聊里零散补账户字段，或在 PR 模板里直接索要 raw `public_key` | PR 已是公开贡献入口；把 payout 字段收进同一模板更利于 liveops/producer 复核，同时继续把底层 `public_key` 留在技术专题。 |
 | DEC-RM-041 | 为 GitHub PR reward intake 提供脚本化导入入口 | 继续让 liveops 手工抄 PR body，或在每轮 ledger 建档时重复肉眼判断 `ready/deferred/no_reward_review_requested` | PR intake 一旦进入重复使用阶段，就应收成可执行脚本；否则 contract 再清晰，也会退化回手工表格流程。 |
 | DEC-RM-042 | merged PR 的周期性奖励归集采用“时间窗扫描 + 复用现有 intake contract”的批量脚本，而不是把单 PR 导入逻辑复制成第二套规则 | 每轮靠 liveops 手工打开 merged PR 重复判断；或为 round scan 单独发明另一套字段/状态 contract | 模板既然已经固定在 PR body，就应把周期性归集也收口到同一 contract 上；否则一旦单 PR 和 batch scan 判定不同，ledger 会再次退回人工表格。 |
@@ -347,4 +360,4 @@
 | DEC-RM-036 | 第十二篇采用“岗位内容分层 + 穿越周期动作”的切口，而不是把帖子写成宏观 AI 趋势判断或泛职业焦虑安慰 | 直接做“哪些岗位会被取代”的宏大预言；或写成“别焦虑、持续学习就好”的鸡汤帖 | 这篇真正有传播力的不是再重复“AI 来得很快”这句共识，而是把焦虑落到更具体的问题上: 岗位里哪些部分先被压缩、什么能力层更值得往上挪。把讨论收回到问题定义、流程重构和结果负责，更符合账号持续输出“判断”而不是“喊口号”的主线。 |
 | DEC-RM-037 | 第十二篇封面采用“editorial 判断海报 + 层级抬升构图 + 穿越周期题签”方向，而不是直接把主标题做成泛 AI 焦虑口号或科幻灾难画面 | 直接做机器人 / 电路 / 岗位被吞掉的直白 AI 隐喻；或只保留“穿越周期”四个字做抽象励志封面 | 这篇真正需要放大的不是恐慌，而是判断: 哪层工作先被压缩，人要往哪层上挪。封面既要保留 `穿越周期` 这个主题锚点，也要把“岗位 vs 那层工作”的分层判断一眼说清，才和正文主线一致。 |
 | DEC-RM-038 | 第十二篇轮播版采用“warm editorial diagnosis / work-layer ladder”方向，而不是把 4 张图做成重复封面、蓝紫科技卡或信息过满的长文截图 | 4 张都重复封面主钩子；或做成密密麻麻的文字截图；或回退到机器人吞岗位的 panic 视觉 | 轮播版的价值不在于再重复一次封面，而在于把判断拆成 4 个停顿点: 先停住、再诊断、再给动作、最后把问题抛回给读者。用暖纸面和诊断卡结构，更符合第十二篇“判断比情绪更重要”的主线，也更接近小红书原生滑读体验。 |
-| DEC-RM-039 | 当前先把宣传激励收窄到“小红书博主 + 微信公众号”，并采用“内容深度 + 事实准确 + 讨论转化 + 生态回流”的绿洲币审核模型，固定映射 `300 / 800 / 1500 OC` 档位，而不是泛化到所有媒体对象或按流量做 flat buyout | 一次覆盖所有媒体/KOL/搬运号；或直接按 CPM/播放量发币 | 用户已明确当前版本“先精简和具体化”，并进一步要求直接写明不同价值内容获得多少绿洲币。先收口到两类最清晰的对象，再给固定档位金额，更利于执行、举证和对外解释。 |
+| DEC-RM-039 | <a id="dec-rm-039-channel-incentive"></a>当前先把宣传激励收窄到“小红书博主 + 微信公众号”，并采用“内容深度 + 事实准确 + 讨论转化 + 生态回流”的绿洲币审核模型，固定映射 `300 / 800 / 1500 OC` 档位，而不是泛化到所有媒体对象或按流量做 flat buyout | 一次覆盖所有媒体/KOL/搬运号；或直接按 CPM/播放量发币 | 用户已明确当前版本“先精简和具体化”，并进一步要求直接写明不同价值内容获得多少绿洲币。先收口到两类最清晰的对象，再给固定档位金额，更利于执行、举证和对外解释。 |

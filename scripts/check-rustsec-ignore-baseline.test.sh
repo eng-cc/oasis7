@@ -161,14 +161,17 @@ python3 - deny.toml "$extra_local_crate" <<'PY'
 from pathlib import Path
 import sys
 
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-Path(sys.argv[2]).write_text(
-    text.replace(
-        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
-        "local_crates=oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
-    ),
-    encoding="utf-8",
-)
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+mutated = False
+for index, line in enumerate(lines):
+    if "rustsec-ignore:" in line and "crate=serde_cbor;" in line:
+        prefix, scopes = line.split("local_crates=", 1)
+        crates = scopes.split(",")
+        assert "oasis7" in crates, "fixture must remove an actual approved consumer"
+        lines[index] = prefix + "local_crates=" + ",".join(crate for crate in crates if crate != "oasis7")
+        mutated = True
+assert mutated, "serde_cbor scope fixture was not mutated"
+Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 if run_check "$extra_local_crate" >"$tmp_dir/extra-local-crate.out" 2>&1; then
   echo "expected unapproved local crate scope case to fail" >&2
@@ -181,14 +184,16 @@ python3 - deny.toml "$missing_local_crate" <<'PY'
 from pathlib import Path
 import sys
 
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-Path(sys.argv[2]).write_text(
-    text.replace(
-        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
-        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk,oasis7_fake_scope",
-    ),
-    encoding="utf-8",
-)
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+mutated = False
+for index, line in enumerate(lines):
+    if "rustsec-ignore:" in line and "crate=serde_cbor;" in line:
+        assert "local_crates=" in line
+        assert "oasis7_fake_scope" not in line
+        lines[index] = line + ",oasis7_fake_scope"
+        mutated = True
+assert mutated, "serde_cbor scope fixture was not mutated"
+Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 if run_check "$missing_local_crate" >"$tmp_dir/missing-local-crate.out" 2>&1; then
   echo "expected missing approved local crate scope case to fail" >&2
@@ -238,11 +243,17 @@ python3 - deny.toml "$paste_scope_deny" <<'PY'
 from pathlib import Path
 import sys
 
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-text = text.replace(
-    "local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node",
-    "local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node,wasm_build_suite,wasm_module_observe",
-)
+lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+mutated = False
+for index, line in enumerate(lines):
+    if "rustsec-ignore:" in line and "crate=paste;" in line:
+        prefix, scopes = line.split("local_crates=", 1)
+        crates = scopes.split(",")
+        assert not {"wasm_build_suite", "wasm_module_observe"}.intersection(crates)
+        lines[index] = prefix + "local_crates=" + ",".join([*crates, "wasm_build_suite", "wasm_module_observe"])
+        mutated = True
+assert mutated, "paste scope fixture was not mutated"
+text = "\n".join(lines) + "\n"
 # These mutation fixtures add a real manifest dependency without updating the
 # checked-in lockfile. Let only the temporary checker copy resolve that fixture
 # so it can reach the direct-manifest ratchet assertion.

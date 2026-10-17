@@ -150,8 +150,8 @@ Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4
     - `Orphan / Unpinned Data`: 不再被任一有效 generation / retention class 引用的数据，允许 GC。
 - Integration Points:
   - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
-  - `crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs`
-  - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+  - `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs`
+  - `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime.rs`
   - `crates/oasis7/src/runtime/world/persistence.rs`
   - `crates/oasis7/src/runtime/snapshot.rs`
   - `crates/oasis7_node/src/replication.rs`

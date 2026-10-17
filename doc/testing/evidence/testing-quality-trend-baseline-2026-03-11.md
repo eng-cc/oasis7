@@ -53,3 +53,9 @@
 - `producer_system_designer`：当前 trend baseline 已可作为 `TASK-GAME-033` 的输入，但阶段是否升级仍需结合 claim envelope 与 liveops 节奏单独决策。
 - `qa_engineer`：继续按最近 7 天窗口追加样本；若后续 fresh rerun 出现非首次通过，需立即把 baseline 与 unified gate 一并回退。
 - 模块 owner：维持“先在 owner 侧跑最小 evidence，再交 QA”策略，避免阶段内逃逸率重新抬头。
+
+## 2026-10-16 解释性勘误：选样与阈值边界
+
+原七行样本、计数、红黄绿表、历史解读及建议动作全部保留。`7/7` 是所选 run 的正确计数，不是所有任务、首次开发尝试或整个交付流程的分母；不能从这些最终交付前的成功复跑样本推出 QA 已从“下游复验兜底”转为“owner 自检”，也不能据此证明流程改善或全窗口无返工。同日 [runtime S10 原始证据](closed-beta-runtime-s10-2026-03-22.md) 中 A/C 的失败、cleanup 修复与其后 G 的 600s 候选复验均仍有效，不能用选入 G 覆盖之前失败。
+
+若需跨窗口趋势结论，须另行明确可比较的任务/样本分母、首次观察点与选样规则，同时保留失败和修复样本；不得回写旧数字制造新的趋势结果。本表阈值仅保留为所注明历史窗口的判定口径，不因被当前专题引用而自动成为现行阈值。当前采用状态见 [趋势 PRD](../governance/testing-quality-trend-tracking-2026-03-11.prd.md#current-threshold-status)。

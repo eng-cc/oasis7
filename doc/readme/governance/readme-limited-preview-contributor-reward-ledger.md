@@ -14,7 +14,7 @@
 
 ## 1. Intake Rules
 - Only record contribution-based rows.
-- Use the scoring rules from `readme-limited-preview-contributor-reward-pack.md`.
+- Use the contribution base scores, quality modifiers, and recommendation bands in [reward-pack PRD §7](readme-limited-preview-contributor-reward-pack.prd.md#7-执行模板执行版); the operation pack is a worksheet, not a separate scoring authority.
 - Use `Contributor` and `Public Handle / GitHub` for review identity; keep `Reward Account` as the execution field.
 - If `Source Type=PR`, first read the optional reward intake block from `.github/pull_request_template.md`.
 - Do not include signup, login, casual play, online time, AFK, or vague praise as rewardable rows.
@@ -105,7 +105,7 @@ Planned grant amounts remain provisional until producer finishes the final actua
 ## 4.1 Producer Amount Guardrails
 - Recommendation bands are review labels, not a public amount table.
 - For ordinary merged PR rows (`Source Type=PR` and `Contribution Type=C-03`), the default producer approval ceiling is `150 OC`.
-- Any merged PR row above `150 OC` must include an exceptional-case note in the row notes or approval summary before it can stay approved.
+- Any merged PR row above `150 OC` must include an exceptional-case note in both the row notes and approval summary before it can stay approved.
 - `1500 OC` is reserved for rare exceptional rows and must be recorded as a round-specific decision, not as the default meaning of `eligible-large`.
 
 ## 5. Approval Summary

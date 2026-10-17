@@ -6,7 +6,7 @@
 
 
 ## 目标
-- 普通本地提交不执行格式化、编译、测试、lint 或治理检查；验证由 CI required gate 与 frozen-head Pre-PR Ready 承担。
+- 普通本地提交不执行格式化、编译、测试、lint 或治理检查；验证按[开发流程规范](../../engineering/workflow/source-of-truth.md)先取得最小有效本地反馈，再由 CI 执行必要检查；适用评审与实际保护设置继续约束合入。
 - 将普通提交的兼容入口与操作者显式触发的修复/诊断分开，避免把本地便利脚本误报为 lifecycle proof。
 
 ## 范围
@@ -21,7 +21,7 @@
 - `./scripts/ci-tests.sh commit` 保留为显式诊断/开发命令，但不由普通 commit 调用，也不是 lifecycle proof。
 - `./scripts/fix-precommit.sh` 依次运行 `env -u RUSTC_WRAPPER cargo fmt --all`、`git add -u` 和 `./scripts/ci-tests.sh commit`；它会更新已跟踪文件的暂存状态，执行前后均应检查 diff。
 - 需要重门禁时由操作者另行显式运行 `./scripts/ci-tests.sh required`；不应通过修复脚本或 legacy hook 隐式触发。
-- CI required gate 与 `claim-ready --verification-profile repository_required` 的 frozen-head Pre-PR Ready 验证保持不变。
+- 不另设 frozen-head Pre-PR Ready 或 `claim-ready` 通用准入；实际 required CI 与适用评审要求以开发流程规范和当前保护设置为准，本文不解除任何现行必需检查。
 - 规则归属：
   - 普通 commit no-op 定义：canonical workflow、本文件与 `scripts/pre-commit.sh`
   - required/full 覆盖命令矩阵：`doc/testing/ci/ci-test-coverage.prd.md` 与 `scripts/ci-tests.sh`
@@ -63,5 +63,5 @@ test -x .git/hooks/pre-commit && echo "pre-commit hook installed"
 - **当前态**：legacy pre-commit 保持静默 no-op，显式格式修复与 `commit` tier 诊断由 `scripts/fix-precommit.sh` 承载，CI tier 定义留在 `doc/testing/ci/`。
 
 ## 风险
-- **覆盖时延**：所有回归都可能延后到 frozen-head Pre-PR Ready 或 CI required gate 暴露；不得据此重新把检查塞回普通 commit。
+- **覆盖时延**：未做最小有效本地验证时，回归可能延后到 CI required gate 才暴露；不得据此重新把检查塞回普通 commit。
 - **环境差异**：本地与 CI 依赖不同可能造成结果不一致。

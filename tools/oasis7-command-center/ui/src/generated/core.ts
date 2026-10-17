@@ -32,6 +32,36 @@ rawStatus?: string, category?: string,
  */
 status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
 export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
+export type DocumentNavigation = { relationships: DocumentPairings, labels: Array<string>, };
+export type DocumentTreeRouteStep = { path: string | null, sourcePath: string | null, destination: string | null, group: string | null, duplicateIndex: number, duplicateCount: number, };
+export type DocumentTreeReadingScope = { schemaVersion: number, projectId: string, baselineMode: string,
+/**
+ * Current source provenance, not personal record identity.
+ */
+baselineOid: string, };
+export type DocumentTreeReadingKey = { schemaVersion: number, projectId: string, baselineMode: string, baselineOid: string, view: string, };
+export type DocumentTreeReadingFilters = { query: string, readFilter: string, lifecycleFilter: string, kindFilter: string, pairingFilter: string, };
+export type DocumentTreeReadingSelection = { route: Array<DocumentTreeRouteStep>, path: string, sectionPath: string | null, sectionId: string | null, sectionRevision: string | null, };
+export type DocumentTreeReadingState = { filters: DocumentTreeReadingFilters, expandedRoutes: Array<Array<DocumentTreeRouteStep>>, parentRoute: Array<DocumentTreeRouteStep>, selection: DocumentTreeReadingSelection | null, treeScrollTop: number, detailScrollTop: number, };
+export type DocumentTreeReadingSaveRequest = { key: DocumentTreeReadingKey, state: DocumentTreeReadingState, };
+export type DocumentTreeReadingLoadResult = { schemaVersion: number, key: DocumentTreeReadingKey,
+/**
+ * missing / ready / corrupt / unsupported
+ */
+status: string, state: DocumentTreeReadingState | null, notice: string | null, sourceBaselineOid: string | null, resolvedSectionId: string | null, };
+export type DocumentTreeLastView = { schemaVersion: number, status: string, view: string | null, notice: string | null, };
+export type DocumentSemanticTreeQuery = { inventory: DocumentInventoryQuery, view: string, parentOccurrence: string, parentRoute?: Array<DocumentTreeRouteStep>, lifecycleFilter?: string, kindFilter?: string, pairingFilter?: string, };
+export type DocumentSemanticTreeEntry = { occurrenceId: string, stableRoute: Array<DocumentTreeRouteStep>, label: string, path: string | null, kind: string, matchingFiles: number,
+/**
+ * Current-view historical placeholder evidence; at most 20 sorted source paths.
+ */
+historicalReferenceFiles: number, historicalReferencePaths: Array<string>, cycle: boolean,
+/**
+ * Cross-domain navigation is a reference leaf, never ownership.
+ */
+boundary: string | null, depthLimited: boolean, sourcePath: string | null, sourceLine: number | null, relationship: DocumentPairing | null, file: IndexedDocument | null, hasChildren: boolean, };
+export type DocumentSemanticTreePage = { schemaVersion: number, projectId: string, snapshotId: string, baselineOid: string, generatedAt: string, view: string, parentOccurrence: string, breadcrumbs: Array<DocumentSemanticBreadcrumb>, parentRoute: Array<DocumentTreeRouteStep>, routeNotice: string | null, candidates: number, read: number, omitted: number, stale: boolean, error: string | null, eligibleFiles: number, matchingFiles: number, hiddenHistoryFiles: number, lifecycleFilter: string, kindFilter: string, pairingFilter: string, totalChildren: number, entries: Array<DocumentSemanticTreeEntry>, nextCursor: string | null, issues: Array<string>, };
+export type DocumentSemanticBreadcrumb = { occurrenceId: string, stableRoute: Array<DocumentTreeRouteStep>, label: string, };
 export type DocumentPairing = { declarationLine: number, destination: string, target: string | null,
 /**
  * resolved / fragment_unchecked (legacy) / missing / missing_fragment / ambiguous / unread / outside_scope
@@ -73,7 +103,11 @@ upstream: DocumentPairings | null,
 /**
  * Explicit body allocation tables; None in older caches/unread or non-design files.
  */
-allocations: DocumentAllocations | null, };
+allocations: DocumentAllocations | null,
+/**
+ * Explicit navigation parsed from the original source; absent in older caches.
+ */
+navigation: DocumentNavigation | null, };
 export type DocumentInventoryQuery = { schemaVersion: number, projectId: string, snapshotId: string | null, query: string,
 /**
  * all / read / omitted

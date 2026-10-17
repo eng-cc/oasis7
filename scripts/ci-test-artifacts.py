@@ -73,8 +73,8 @@ def build(bundle):
     # Separate variants preserve the old snapshot regressions' default features.
     variants = [
         ('viewer', ['build', '-p', 'oasis7', '--bin', 'oasis7_viewer_live', '--features', 'test_tier_required'], required_features),
-        ('required', ['test', '-p', 'oasis7', '--tests', '--features', 'test_tier_required', '--no-run'], required_features),
-        ('runtime', ['build', '-p', 'oasis7', '--bin', 'oasis7_chain_runtime', '--features', 'test_tier_required'], required_features),
+        ('required', ['test', '-p', 'oasis7', '-p', 'oasis7_chain_runtime', '--tests', '--features', 'test_tier_required', '--no-run'], required_features),
+        ('runtime', ['build', '-p', 'oasis7_chain_runtime', '--bin', 'oasis7_chain_runtime', '--features', 'test_tier_required'], required_features),
         ('endpoint', ['build', '-p', 'oasis7_distfs', '--bin', 'oasis7_durability_endpoint', '--release'], []),
         ('distfs-tests', ['test', '-p', 'oasis7_distfs', '--lib', '--no-run'], []),
         ('snapshot-tests', ['test', '-p', 'oasis7', '--lib', '--no-run'], []),

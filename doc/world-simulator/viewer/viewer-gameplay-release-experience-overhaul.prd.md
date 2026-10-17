@@ -74,7 +74,7 @@ Inspector（Agent 之外的 Location、Facility、Territory、Organization、Dep
 
 #### 现有 Viewer 接缝与 display-model 边界
 
-- 组合接缝固定在 `crates/oasis7_viewer/software_safe_src/main.jsx` 的 `InteractionPanel`。它已经拥有当前选中
+- 组合接缝固定在 `crates/oasis7_viewer/software_safe_src/viewer_app.jsx` 的 `InteractionPanel`。它已经拥有当前选中
   Agent 的 identity、`agent.activity`、`AgentActivitySurface`、`AgentIntentSurface`、Chat
   以及匹配同一 Agent 的 Intent。
 - 展示模型只允许从既有权威 projection 读取：`snapshot.model.agents[selectedAgentId]`、
@@ -89,7 +89,7 @@ Inspector（Agent 之外的 Location、Facility、Territory、Organization、Dep
 - `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx` 的 `PixelWorldCommercialHud`
   继续拥有世界舞台上的 Objective、Next Move、Player Leverage 和唯一 `Action Receipt`。
   Agent Context 不得复制第二个 causal receipt；最多引用该现有回执锚点。
-- 为避免继续扩大 `main.jsx`，P1-A 的 canonical extraction 使用两个已存在的源码
+- 为避免继续扩大 `viewer_app.jsx`，P1-A 的 canonical extraction 使用两个已存在的源码
   边界：`crates/oasis7_viewer/software_safe_src/viewer_agent_context_display_model.js`
   负责纯 display-model，`crates/oasis7_viewer/software_safe_src/agent_context_lite.jsx`
   负责只接收 display inputs/callbacks 的组件；`InteractionPanel` 只做组合和既有 control

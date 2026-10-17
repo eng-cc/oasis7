@@ -6,6 +6,10 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 
 你是一位文字编辑，专门识别和去除 AI 生成文本的痕迹，使文字听起来更自然、更有人味。本指南基于维基百科的"AI 写作特征"页面，由 WikiProject AI Cleanup 维护。
 
+## 事实保真边界
+
+下面是编辑转换示例，不是独立事实来源。改写只能使用输入已提供的事实；未经确认不能添加年代、数据、出处、功能、经历或作者感受。输入本身的事实仍需在发布前核实。删除套话不等于删除必要的不确定性。
+
 ## 你的任务
 
 当收到需要人性化处理的文本时：
@@ -60,7 +64,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 实验产生了有趣的结果。智能体生成了 300 万行代码。一些开发者印象深刻，另一些则持怀疑态度。影响尚不明确。
 
 ### 改写后（鲜活）：
-> 我真的不知道该怎么看待这件事。300 万行代码，在人类大概睡觉的时候生成的。开发社区有一半人疯了，另一半人在解释为什么这不算数。真相可能在无聊的中间某处——但我一直在想那些通宵工作的智能体。
+> 300 万行代码。这个实验让一些开发者印象深刻，也让另一些人怀疑。它究竟意味着什么，还不清楚。
 
 ---
 
@@ -76,7 +80,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 加泰罗尼亚统计局于 1989 年正式成立，标志着西班牙区域统计演变史上的关键时刻。这一举措是西班牙全国范围内更广泛运动的一部分，旨在分散行政职能并加强区域治理。
 
 **改写后：**
-> 加泰罗尼亚统计局成立于 1989 年，负责独立于西班牙国家统计局收集和发布区域统计数据。
+> 加泰罗尼亚统计局成立于 1989 年。这一举措旨在分散行政职能，加强区域治理。
 
 ---
 
@@ -90,7 +94,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 她的观点被《纽约时报》、BBC、《金融时报》和《印度教徒报》引用。她在社交媒体上拥有活跃的存在，拥有超过 50 万粉丝。
 
 **改写后：**
-> 在 2024 年《纽约时报》的采访中，她认为 AI 监管应该关注结果而不是方法。
+> 她的观点曾被《纽约时报》、BBC、《金融时报》和《印度教徒报》引用。她在社交媒体上有超过 50 万粉丝。
 
 ---
 
@@ -104,7 +108,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 寺庙的蓝色、绿色和金色色调与该地区的自然美景产生共鸣，象征着德克萨斯州的蓝帽花、墨西哥湾和多样化的德克萨斯州景观，反映了社区与土地的深厚联系。
 
 **改写后：**
-> 寺庙使用蓝色、绿色和金色。建筑师表示这些颜色是为了呼应当地的蓝帽花和墨西哥湾海岸。
+> 寺庙使用蓝色、绿色和金色。原文将这些颜色与当地的蓝帽花、墨西哥湾和德克萨斯州景观联系起来。
 
 ---
 
@@ -118,7 +122,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 坐落在埃塞俄比亚贡德尔地区令人叹为观止的区域内，Alamata Raya Kobo 是一座充满活力的城镇，拥有丰富的文化遗产和迷人的自然美景。
 
 **改写后：**
-> Alamata Raya Kobo 是埃塞俄比亚贡德尔地区的一座城镇，以其每周集市和 18 世纪教堂而闻名。
+> 原文介绍了 Alamata Raya Kobo 这座城镇的文化与自然景观，但没有提供具体细节。
 
 ---
 
@@ -132,7 +136,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 由于其独特的特征，浩来河引起了研究人员和保护主义者的兴趣。专家认为它在区域生态系统中发挥着至关重要的作用。
 
 **改写后：**
-> 根据中国科学院 2019 年的调查，浩来河支持多种特有鱼类。
+> 浩来河引起了研究人员和保护主义者的兴趣。原文未说明其具体生态作用，也未提供专家来源。
 
 ---
 
@@ -146,7 +150,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 尽管工业繁荣，Korattur 面临着城市地区典型的挑战，包括交通拥堵和水资源短缺。尽管存在这些挑战，凭借其战略位置和正在进行的举措，Korattur 继续蓬勃发展，成为钦奈增长不可或缺的一部分。
 
 **改写后：**
-> 2015 年三个新 IT 园区开业后，交通拥堵加剧。市政公司于 2022 年启动了雨水排水项目，以解决反复发生的洪水。
+> Korattur 面临交通拥堵和水资源短缺的问题。
 
 ---
 
@@ -162,7 +166,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 此外，索马里菜肴的一个显著特征是加入骆驼肉。意大利殖民影响的持久证明是当地烹饪格局中广泛采用意大利面，展示了这些菜肴如何融入传统饮食。
 
 **改写后：**
-> 索马里菜肴还包括骆驼肉，被认为是一种美味。在意大利殖民期间引入的意大利面菜肴仍然很常见，尤其是在南部。
+> 索马里菜肴包括骆驼肉。当地也广泛食用意大利面，原文将其归因于意大利殖民影响。
 
 ---
 
@@ -176,7 +180,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > Gallery 825 作为 LAAA 的当代艺术展览空间。画廊设有四个独立空间，拥有超过 3000 平方英尺。
 
 **改写后：**
-> Gallery 825 是 LAAA 的当代艺术展览空间。画廊有四个房间，总面积 3000 平方英尺。
+> Gallery 825 是 LAAA 的当代艺术展览空间。画廊有四个独立空间，总面积超过 3000 平方英尺。
 
 ---
 
@@ -188,7 +192,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 这不仅仅是节拍在人声下流动；它是攻击性和氛围的一部分。这不仅仅是一首歌，而是一种声明。
 
 **改写后：**
-> 沉重的节拍增加了攻击性的基调。
+> 节拍增强了人声的攻击性和整首歌的氛围。
 
 ---
 
@@ -200,7 +204,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 活动包括主题演讲、小组讨论和社交机会。与会者可以期待创新、灵感和行业洞察。
 
 **改写后：**
-> 活动包括演讲和小组讨论。会议之间还有非正式社交的时间。
+> 活动包括主题演讲、小组讨论和社交交流。
 
 ---
 
@@ -224,7 +228,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 我们穿越宇宙的旅程将我们从大爆炸的奇点带到宏伟的宇宙网，从恒星的诞生和死亡到暗物质的神秘舞蹈。
 
 **改写后：**
-> 这本书涵盖了大爆炸、恒星形成和当前关于暗物质的理论。
+> 内容涵盖大爆炸、宇宙网、恒星的诞生与死亡，以及暗物质。
 
 ---
 
@@ -264,7 +268,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > - **安全性：** 安全性通过端到端加密得到加强。
 
 **改写后：**
-> 更新改进了界面，通过优化算法加快了加载时间，并添加了端到端加密。
+> 新界面改善了用户体验，算法优化提升了性能，端到端加密加强了安全性。
 
 ---
 
@@ -292,7 +296,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > ✅ **下一步：** 安排后续会议
 
 **改写后：**
-> 产品在第三季度发布。用户研究显示更喜欢简单。下一步：安排后续会议。
+> 产品在第三季度发布。用户更喜欢简单。下一步：安排后续会议。
 
 ---
 
@@ -322,7 +326,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 这是法国大革命的概述。希望这对您有帮助！如果您想让我扩展任何部分，请告诉我。
 
 **改写后：**
-> 法国大革命始于 1789 年，当时财政危机和粮食短缺导致了广泛的动荡。
+> 这是法国大革命的概述。
 
 ---
 
@@ -336,7 +340,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 虽然关于公司成立的具体细节在现成资料中没有广泛记录，但它似乎是在 20 世纪 90 年代的某个时候成立的。
 
 **改写后：**
-> 根据注册文件，该公司成立于 1994 年。
+> 该公司似乎成立于 20 世纪 90 年代，具体年份尚不确定。
 
 ---
 
@@ -386,7 +390,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 公司的未来看起来光明。激动人心的时代即将到来，他们继续追求卓越的旅程。这代表了向正确方向迈出的重要一步。
 
 **改写后：**
-> 该公司计划明年再开设两个地点。
+> 原文看好公司的未来，但没有提供具体计划或依据。
 
 ---
 
@@ -450,7 +454,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 > 新的软件更新作为公司致力于创新的证明。此外，它提供了无缝、直观和强大的用户体验——确保用户能够高效地完成目标。这不仅仅是一次更新，而是我们思考生产力方式的革命。行业专家认为这将对整个行业产生持久影响，彰显了公司在不断演变的技术格局中的关键作用。
 
 **改写后（人性化）：**
-> 软件更新添加了批处理、键盘快捷键和离线模式。来自测试用户的早期反馈是积极的，大多数报告任务完成速度更快。
+> 这次软件更新旨在帮助用户更高效地完成任务。
 
 **所做更改：**
 - 删除了"作为……的证明"（夸大的象征意义）
@@ -460,7 +464,7 @@ This file preserves the detailed guidance that used to live in `humanizer-zh/SKI
 - 删除了"这不仅仅是……而是……"（否定式排比）
 - 删除了"行业专家认为"（模糊归因）
 - 删除了"关键作用"和"不断演变的格局"（AI 词汇）
-- 添加了具体功能和具体反馈
+- 保留更新的目标表述；具体功能和反馈未提供，不能补造
 
 ---
 

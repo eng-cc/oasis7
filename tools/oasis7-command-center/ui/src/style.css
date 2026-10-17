@@ -90,3 +90,19 @@ footer { color: #647990; font-size: 10px; margin-top: 24px; }
 .inventory-detail { margin-top: 16px; border-top: 1px solid #293143; padding-top: 16px; overflow-wrap: anywhere; }
 .inventory-list { max-height: 480px; overflow: auto; }
 .inventory-list:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.semantic-tree, .semantic-tree * { min-width: 0; overflow-wrap: anywhere; }
+.semantic-tree-list { padding-inline-start: 20px; }
+.semantic-tree-list > li { padding-block: 12px; border-bottom: 1px solid #293143; }
+.semantic-tree-list p { margin-block: 6px; }
+.semantic-tree-list:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.semantic-tree-list[role="tree"] { max-height: 65vh; overflow: auto; padding: 4px; }
+.semantic-tree-list [role="treeitem"] { margin-inline-start: calc(var(--tree-level) * 18px); padding: 10px; border-bottom: 1px solid #293143; }
+.semantic-tree-list [role="treeitem"]:focus { outline: 2px solid #8bb7ff; outline-offset: -2px; }
+.semantic-tree-list [aria-selected="true"] { background: #1a2943; }
+@media (max-width: 760px) {
+  .tree-reader-active > .semantic-tree { display: none; }
+  .tree-reader-active .inventory-detail { margin-top: 0; border-top: 0; }
+  .semantic-tree-list [role="treeitem"] { margin-inline-start: calc(min(var(--tree-level), 4) * 10px); }
+}

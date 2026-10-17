@@ -91,7 +91,8 @@ MAGIC SPELL EFFECT:
 ## Unity Particle System Setup
 
 ```csharp
-// ✅ Production-Ready: Particle Effect Controller
+// Illustrative controller: serialized references must be configured.
+// This example owns its coroutines and resets only the mutable state shown.
 public class ParticleEffectController : MonoBehaviour
 {
     [Header("Effect Settings")]
@@ -106,14 +107,22 @@ public class ParticleEffectController : MonoBehaviour
 
     private ParticleSystem.MainModule _mainModule;
     private float _originalLightIntensity;
+    private Color _originalLightColor;
+    private ParticleSystem.MinMaxGradient _originalStartColor;
+    private Vector3 _originalScale;
 
     public event Action OnEffectComplete;
 
     private void Awake()
     {
         _mainModule = mainEffect.main;
+        _originalStartColor = _mainModule.startColor;
+        _originalScale = transform.localScale;
         if (effectLight != null)
+        {
             _originalLightIntensity = effectLight.intensity;
+            _originalLightColor = effectLight.color;
+        }
     }
 
     public void Play(Vector3 position, Quaternion rotation)
@@ -172,14 +181,26 @@ public class ParticleEffectController : MonoBehaviour
     {
         yield return new WaitForSeconds(autoReturnDelay);
 
+        // Reset before notifying the pool; a subscriber may immediately reuse it.
+        ResetForReuse();
         OnEffectComplete?.Invoke();
+    }
 
-        // Reset for reuse
-        Stop();
+    public void ResetForReuse()
+    {
+        StopAllCoroutines();
+        mainEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        foreach (var effect in subEffects)
+            effect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        if (audioSource != null)
+            audioSource.Stop();
+        _mainModule.startColor = _originalStartColor;
+        transform.localScale = _originalScale;
         if (effectLight != null)
         {
             effectLight.enabled = false;
             effectLight.intensity = _originalLightIntensity;
+            effectLight.color = _originalLightColor;
         }
     }
 
@@ -310,7 +331,8 @@ OPTIMIZATION TECHNIQUES:
 ## Effect Pooling System
 
 ```csharp
-// ✅ Production-Ready: VFX Pool Manager
+// Illustrative pool: unique effect names, auto-return enabled, no external
+// destruction, and exactly one completion per spawn. maxSize caps all created instances.
 public class VFXPoolManager : MonoBehaviour
 {
     public static VFXPoolManager Instance { get; private set; }
@@ -328,6 +350,7 @@ public class VFXPoolManager : MonoBehaviour
 
     private Dictionary<string, Queue<ParticleEffectController>> _pools;
     private Dictionary<string, EffectPool> _poolConfigs;
+    private Dictionary<string, int> _createdCounts;
 
     private void Awake()
     {
@@ -339,11 +362,15 @@ public class VFXPoolManager : MonoBehaviour
     {
         _pools = new Dictionary<string, Queue<ParticleEffectController>>();
         _poolConfigs = new Dictionary<string, EffectPool>();
+        _createdCounts = new Dictionary<string, int>();
 
         foreach (var pool in effectPools)
         {
             _pools[pool.effectName] = new Queue<ParticleEffectController>();
             _poolConfigs[pool.effectName] = pool;
+            _createdCounts[pool.effectName] = 0;
+            if (pool.maxSize < 1 || pool.initialSize < 0 || pool.initialSize > pool.maxSize)
+                throw new ArgumentException("Require 0 <= initialSize <= maxSize and maxSize > 0");
 
             // Pre-warm pool
             for (int i = 0; i < pool.initialSize; i++)
@@ -357,6 +384,7 @@ public class VFXPoolManager : MonoBehaviour
     private ParticleEffectController CreateEffect(EffectPool pool)
     {
         var effect = Instantiate(pool.prefab, transform);
+        _createdCounts[pool.effectName]++;
         effect.gameObject.SetActive(false);
         effect.OnEffectComplete += () => ReturnToPool(pool.effectName, effect);
         return effect;
@@ -380,7 +408,7 @@ public class VFXPoolManager : MonoBehaviour
         {
             effect = pool.Dequeue();
         }
-        else if (_poolConfigs[effectName].maxSize > pool.Count)
+        else if (_createdCounts[effectName] < _poolConfigs[effectName].maxSize)
         {
             effect = CreateEffect(_poolConfigs[effectName]);
         }

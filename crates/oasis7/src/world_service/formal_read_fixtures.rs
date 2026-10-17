@@ -7,9 +7,7 @@
 )]
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7::runtime::{World, blake3_hex};
-use oasis7::world_service::{
-    authority, formal_projection::ProjectionCommitmentsV1, projection::WorldServiceProjection,
-};
+use oasis7::world_service::{authority, projection::WorldServiceProjection};
 use oasis7_distfs::controlled_authority::{
     fencing::EndpointInstanceBindingV1,
     formal::*,
@@ -222,7 +220,7 @@ pub(crate) fn actual_world_initial_fixture_with_execution_policy(
     let authority = verify_initial_activation(&certificate, &trust).unwrap();
     let input = blake3_hex(&initial_activation_input_bytes(&certificate).unwrap());
     roots.insert(ArtifactRole::Input, input.clone());
-    let projection_root = ProjectionCommitmentsV1::for_world(&world)
+    let projection_root = oasis7::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -351,10 +349,11 @@ pub(crate) fn actual_world_successor_fixture(
         ArtifactRole::ExecutionManifest,
         record.runtime_manifest_digest.clone(),
     );
-    record.projection_root = ProjectionCommitmentsV1::for_world(&world)
-        .unwrap()
-        .root()
-        .unwrap();
+    record.projection_root =
+        oasis7::world_service::formal_projection::commitments_for_world(&world)
+            .unwrap()
+            .root()
+            .unwrap();
     let proof = qualified_proof(
         record,
         Some(frozen),
