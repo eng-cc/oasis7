@@ -76,14 +76,14 @@ Lifecycle: dated window evidence only. 本文保留 2026-03-17 各批次的历�
   - 主观评分卡细化到更多场景。
 
 ## 9. 后续修复追踪（2026-03-17 / fix2）
-- 修复内容：`agent_engineer` 已在 `crates/oasis7/src/bin/oasis7_provider_parity_bench.rs` 为 builtin parity lane 增加 `P0-001` 巡游 guardrail，并将 `oasis7_provider_parity_bench` / `scripts/provider-parity-p0.sh` 默认 connect-timeout 对齐到 `15000ms`。
+- 修复内容：`agent_engineer` 已在 `crates/oasis7_provider_tools/src/bin/oasis7_provider_parity_bench.rs` 为 builtin parity lane 增加 `P0-001` 巡游 guardrail，并将 `oasis7_provider_parity_bench` / `scripts/provider-parity-p0.sh` 默认 connect-timeout 对齐到 `15000ms`。
 - 复验批次：`provider_builtin_parity_20260317_fix2`。
 - 复验结果：builtin `completion_rate=1.0`、`move_agent=4`、`timeout_rate=0.0`；Local Provider `completion_rate=0.0`、`timeout_rate=1.0`、`timeout=4`。
 - 结论变化：builtin 基线退化问题已收口，但正式 T4 双签结论暂不改写；当前剩余阻断已收敛为真实 `Local Provider(Local HTTP)` 连续 timeout。
 - 后续建议：继续排查 bridge / local_http provider / runtime agent 的请求链路超时来源，待真实 Local Provider 样本恢复可行动作后，再发起新的 parity 结论批次。
 
 ## 10. timeout 修复追踪（2026-03-17 / fix3）
-- 修复内容：`agent_engineer` 已在 `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs` 增加 `provider gateway call agent` timeout 时的 `provider agent --local` fallback，并用 `sha256(session_key)` 生成稳定 `session_id`，避免 gateway RPC 卡死时整轮样本降级为 `timeout`。
+- 修复内容：`agent_engineer` 已在 `crates/oasis7_provider_local_bridge/src/bin/oasis7_provider_local_bridge.rs` 增加 `provider gateway call agent` timeout 时的 `provider agent --local` fallback，并用 `sha256(session_key)` 生成稳定 `session_id`，避免 gateway RPC 卡死时整轮样本降级为 `timeout`。
 - 复验批次：`output/provider_parity/provider_builtin_parity_20260317_fix3`。
 - 复验结果：builtin `completion_rate=1.0`、`timeout_rate=0.0`、`move_agent=4`；Local Provider `completion_rate=1.0`、`timeout_rate=0.0`、`move_agent=4`。
 - 仍未达线项：builtin `median_extra_wait_ms=9900`、`p95_extra_wait_ms=10597`；Local Provider `median_extra_wait_ms=13957`、`p95_extra_wait_ms=14062`，两侧都显著高于 `P0` 通过线 `median<=500 / p95<=1500`。

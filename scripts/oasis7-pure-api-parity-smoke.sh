@@ -205,7 +205,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7 --bin oasis7_pure_api_client
+OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7_client_cli --bin oasis7_pure_api_client
 client_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_pure_api_client"
 [[ -x "$client_bin" ]] || {
   echo "error: expected pure API client binary at $client_bin" >&2

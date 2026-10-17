@@ -70,5 +70,5 @@ native 本地保存成功后返回本次实际文件路径。固定时钟下连�
 ## 验收与追溯
 
 - 确定性合同：`npm --prefix crates/oasis7_viewer run test:feedback-contract` 只覆盖 Viewer feedback mapping，不替代 launcher native/Web 闭环。
-- launcher 行为回归按受影响实现路径执行 `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture` 与 wasm check；可见变更另按 `testing-manual.md` S6 采集浏览器证据。
+- launcher 行为回归按受影响实现路径执行 `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_web_launcher -- --nocapture` 与 wasm check；可见变更另按 `testing-manual.md` S6 采集浏览器证据。
 - 迁移追溯：三个 2026-03 源三件套已删除；使用 Git 与 `.pm` task evidence。Web parity 的现有专业专题仍按其当前路径维护。

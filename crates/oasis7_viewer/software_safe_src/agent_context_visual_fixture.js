@@ -160,6 +160,7 @@ export function installAgentContextVisualFixture(
   { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot },
 ) {
   fixtures.agent_context = () => {
+    setFixturePlayerAuth();
     const state = buildAgentContextFixtureState();
     const params = new URLSearchParams(window.location.search || "");
     const locale = params.get("locale") || "en";
@@ -168,7 +169,6 @@ export function installAgentContextVisualFixture(
     core.state.connectionStatus = "connected";
     core.state.lastError = null;
     core.applySelection({ kind: "agent", id: "agent-0" });
-    setFixturePlayerAuth();
     document.body.setAttribute("data-agent-context-fixture", state.mode);
     document.body.setAttribute("data-agent-context-fixture-state", state.state);
     document.body.setAttribute("data-agent-context-fixture-copy", state.copy);

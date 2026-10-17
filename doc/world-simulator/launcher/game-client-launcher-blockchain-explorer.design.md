@@ -27,7 +27,7 @@
 
 ## 查询一致性补充（目标设计）
 
-本次采用小型兼容编辑卡：只补充现有查询的可见状态、参数传递和结果一致性；原有七视图结构及控制边界继续有效。下列要求待 [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450) 的对应实现与验证承接，不表示当前客户端或后端已经通过验收。
+本次采用小型兼容编辑卡：只补充现有查询的可见状态、参数传递和结果一致性；原有七视图结构及控制边界继续有效。[Issue #4450](https://github.com/eng-cc/oasis7/issues/4450#issuecomment-6126251006) 已以 `not_planned` 停止独立跟踪，仅作历史来源；H1～H4 原义务仍有效，运行时实现与行为验收仍待落实，后续结果记在对应实现 PR，不表示当前客户端或后端已经通过验收。
 
 - 受影响条款：表现结构中的状态层、代码与协议接点，以及下列三个查询条款。
 - 外部依赖：`runtime_engineer` 拥有后端事实；`viewer_engineer` 承接 native/Web 参数与呈现；适用 QA 负责同候选接口及表面验证。
@@ -70,9 +70,9 @@ Txs 构造请求时同时保留有效的 `action_id`、`account_id`、`status` �
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确 test/manual source、scenario/layer 与环境 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [已确认事实与观察超时](game-client-launcher-blockchain-explorer.prd.md#explorer-query-lifecycle) | [可见生命周期](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-lifecycle) | 确认、块关联及唯一条目按后端事实呈现；迟到确认纠正观察超时 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选隔离后端构造已确认后迟到登记、超时后确认及已保存索引重载，核对 native/Web 实际响应、可见状态和条目，planned；后端双 store barrier 单独验证 | #4450 H2 与实现 PR 的接口/表面证据 | 本次未运行；截图不证明后台幂等、持久化或执行最终性 |
-| [独立查询与一致展示](game-client-launcher-blockchain-explorer.prd.md#explorer-query-independent) | [独立查询接点](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-independent) | P0 独立调用、结构化失败透传、空态与错误有别 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选禁止 overview/status/history 后，核四类查询的 native/Web 代理请求与结果，并注入同步失败核错误，planned | #4450 H3 与实现 PR 的请求/响应及表面证据 | 本次未运行；默认页面顺序不证明 P0-only，无数值 SLA |
-| [组合过滤与分页](game-client-launcher-blockchain-explorer.prd.md#explorer-query-filters) | [条件与结果传递](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-filters) | 组合参数不丢失，空结果、计数、排序、分页和回显一致 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选 native/Web 分别覆盖账户错、状态错、全匹配、仅 action ID、清空和分页，采集实际 query 与返回并核呈现，planned | #4450 H4 与实现 PR 的参数矩阵和表面证据 | 本次未运行；单 status 测试或前端 fixture 不证明真实组合查询 |
+| [已确认事实与观察超时](game-client-launcher-blockchain-explorer.prd.md#explorer-query-lifecycle) | [可见生命周期](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-lifecycle) | 确认、块关联及唯一条目按后端事实呈现；迟到确认纠正观察超时 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选隔离后端构造已确认后迟到登记、超时后确认及已保存索引重载，核对 native/Web 实际响应、可见状态和条目，planned；后端双 store barrier 单独验证 | #4450 H2 历史来源与后续实现 PR 的接口/表面证据 | 本次未运行；截图不证明后台幂等、持久化或执行最终性 |
+| [独立查询与一致展示](game-client-launcher-blockchain-explorer.prd.md#explorer-query-independent) | [独立查询接点](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-independent) | P0 独立调用、结构化失败透传、空态与错误有别 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选禁止 overview/status/history 后，核四类查询的 native/Web 代理请求与结果，并注入同步失败核错误，planned | #4450 H3 历史来源与后续实现 PR 的请求/响应及表面证据 | 本次未运行；默认页面顺序不证明 P0-only，无数值 SLA |
+| [组合过滤与分页](game-client-launcher-blockchain-explorer.prd.md#explorer-query-filters) | [条件与结果传递](game-client-launcher-blockchain-explorer.design.md#des-explorer-query-filters) | 组合参数不丢失，空结果、计数、排序、分页和回显一致 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选 native/Web 分别覆盖账户错、状态错、全匹配、仅 action ID、清空和分页，采集实际 query 与返回并核呈现，planned | #4450 H4 历史来源与后续实现 PR 的参数矩阵和表面证据 | 本次未运行；单 status 测试或前端 fixture 不证明真实组合查询 |
 | [刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity) | [E1 空态](game-client-launcher-blockchain-explorer.design.md#des-explorer-e1-empty) | 已加载空结果不重新安排非活动列表，当前查询实际推进 | [测试手册](../../../testing-manual.md) S6；`explorer_window.rs`、`explorer_window_view.rs` 与受控 transport；成功空 Blocks 转 Search/Address；非空 Blocks 加空 filtered Txs 转 Search/P1，native/Web；planned | 实现 PR 的完整消费链：接收→清 in-flight→下一帧→实际请求；保留正常空态和显式/周期刷新 | 本次未运行；不证明后端一致性或世界结果 |
 | [刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity) | [E2 慢概览](game-client-launcher-blockchain-explorer.design.md#des-explorer-e2-overview) | overview 到期或完成不吞掉当前 tab 待办 | [测试手册](../../../testing-manual.md) S6；`explorer_window.rs`、`explorer_window_view.rs` 与受控 transport；非空已加载列表，连续约 1100ms overview；点击至空闲帧不足/超过一秒及快响应对照，native/Web；planned | 实现 PR 的完整消费链：有限轮次发出当前 tab 请求，不只检查 pending/last_poll | 本次未运行；不证明后端一致性或世界结果 |
 | [刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity) | [E3 详情](game-client-launcher-blockchain-explorer.design.md#des-explorer-e3-detail) | 周期列表缺少选中对象不等于权威删除 | [测试手册](../../../testing-manual.md) S6；`explorer_window.rs`、`explorer_window_view.rs` 与受控 transport；detail→周期调度→快速非空头页；Search 页外 block、过滤外 tx、页内同对象及明确清空/换选/not_found，native/Web；planned | 实现 PR 的完整消费链：页外详情保留，页内更新；直接 detail 失败不伪造 not_found；新筛选不保留假命中 | 本次未运行；不证明后端一致性或世界结果 |
@@ -82,7 +82,7 @@ Txs 构造请求时同时保留有效的 `action_id`、`account_id`、`status` �
 <a id="des-explorer-client-refresh-continuity"></a>
 ## 客户端调度与详情保留
 
-本节承接[刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity)，针对 [#4406 E1–E3](https://github.com/eng-cc/oasis7/issues/4406) 的客户端消费，不替代 #4450 的后端一致性设计。
+本节承接[刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity)，针对 [#4406 E1–E3](https://github.com/eng-cc/oasis7/issues/4406) 的客户端消费，不替代 #4450 历史来源所承接的后端一致性设计。
 
 <a id="des-explorer-e1-empty"></a>
 ### 调度状态

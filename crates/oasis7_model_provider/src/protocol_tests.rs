@@ -98,7 +98,7 @@ fn malformed_unsupported_truncated_or_missing_terminal_never_become_actions() {
     }
     assert!(matches!(
         decode_response(&p, b"data: [DONE]", "text/event-stream", &[]),
-        Err(ProviderFailure::CapabilityUnsupported)
+        Err(ProviderFailure::UnexpectedStreaming)
     ));
     let p = preset(ProviderId::DeepSeek, Protocol::Responses);
     assert!(decode(&p, json!({"status":"incomplete","output":[]})).is_err());
@@ -175,4 +175,90 @@ fn malformed_partial_or_inconsistent_usage_retains_unknown_total() {
         valid[output] = json!(3);
         assert_eq!(usage(&valid, input, output).total_tokens, Some(5));
     }
+}
+
+#[test]
+fn protocol_rejections_have_fixed_non_sensitive_codes() {
+    let p = preset(ProviderId::DeepSeek, Protocol::ChatCompletions);
+    let tool =
+        json!({"id":"valid","type":"function","function":{"name":"observe","arguments":"{}"}});
+    let reply = |reason: &str, calls: Value| json!({"model":"configured-model","choices":[{"finish_reason":reason,"message":{"role":"assistant","content":null,"tool_calls":calls}}]});
+    let failure = |value| decode(&p, value).err().unwrap().to_string();
+    assert_eq!(
+        failure(reply("length", json!([tool.clone()]))),
+        "output_limit"
+    );
+    for reason in ["content_filter", "private-supplier-terminal"] {
+        assert_eq!(
+            failure(reply(reason, json!([tool.clone()]))),
+            "unsupported_finish_reason"
+        );
+    }
+    let mut mismatch = reply("tool_calls", json!([tool.clone()]));
+    mismatch["model"] = json!("private-provider-model");
+    assert_eq!(failure(mismatch), "model_identity_mismatch");
+    let mut unknown = tool.clone();
+    unknown["function"]["name"] = json!("private-tool");
+    assert_eq!(
+        failure(reply("tool_calls", json!([unknown]))),
+        "unsupported_tool"
+    );
+    for id in [String::new(), "x".repeat(257)] {
+        let mut invalid = tool.clone();
+        invalid["id"] = json!(id);
+        assert_eq!(
+            failure(reply("tool_calls", json!([invalid]))),
+            "invalid_tool_identity"
+        );
+    }
+    assert_eq!(
+        failure(reply("tool_calls", json!([tool.clone(), tool]))),
+        "invalid_tool_identity"
+    );
+    assert_eq!(
+        decode_response(
+            &p,
+            b"data: private",
+            "text/event-stream; charset=utf-8",
+            &[]
+        )
+        .err()
+        .unwrap()
+        .to_string(),
+        "unexpected_streaming"
+    );
+    let p = preset(ProviderId::DeepSeek, Protocol::Responses);
+    assert_eq!(decode(&p, json!({"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"private"}]}]})).err().unwrap().to_string(), "unsupported_content");
+}
+
+#[test]
+fn responses_tool_identity_and_unknown_tools_remain_rejected() {
+    let p = preset(ProviderId::DeepSeek, Protocol::Responses);
+    let call = json!({"type":"function_call","call_id":"valid","name":"observe","arguments":"{}"});
+    let failure = |items| {
+        decode(&p, json!({"status":"completed","output":items}))
+            .err()
+            .unwrap()
+    };
+    for id in [json!(""), json!("x".repeat(257)), json!(null), json!(42)] {
+        let mut invalid = call.clone();
+        invalid["call_id"] = id;
+        assert_eq!(
+            failure(json!([invalid])),
+            ProviderFailure::InvalidToolIdentity
+        );
+    }
+    assert_eq!(
+        failure(json!([call.clone(), call.clone()])),
+        ProviderFailure::InvalidToolIdentity
+    );
+    let mut unknown = call.clone();
+    unknown["name"] = json!("not-declared");
+    assert_eq!(failure(json!([unknown])), ProviderFailure::UnsupportedTool);
+    let mut malformed = call;
+    malformed["arguments"] = json!("partial {");
+    assert_eq!(
+        failure(json!([malformed])),
+        ProviderFailure::InvalidResponse
+    );
 }

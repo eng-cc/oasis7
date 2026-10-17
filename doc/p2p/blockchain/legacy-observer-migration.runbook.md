@@ -6,9 +6,9 @@
 
 审计轮次: 1
 
-## Candidate availability gate
+## Source availability and deployed-binary gate
 
-This runbook describes the candidate implementation in [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683). It is not an operating procedure supported by current main. Do not run the commands below until #4683 has merged, the deployed binary has been built from that implementation, and its `--help` plus the relevant subcommand `--help` confirm `legacy-migrate` / `legacy-run` and the required options. Referenced implementation files and test scripts belong to that candidate and may be absent on main. A documentation merge alone does not make these commands available.
+The implementation from [code PR #4683](https://github.com/eng-cc/oasis7/pull/4683) is merged and available in main. Source availability does not establish deployed-binary compatibility or a successful migration. Before running the commands below, verify that the deployed binary includes that implementation and that its `--help` plus the relevant subcommand `--help` confirm `legacy-migrate` / `legacy-run` and the required options. Retain the source, backup, verification and stopped-observer restrictions below; a documentation or code merge alone does not prove an actual migration.
 
 ## Source contract and supported boundary
 

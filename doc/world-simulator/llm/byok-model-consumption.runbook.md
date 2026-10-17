@@ -68,9 +68,11 @@ device_config_path = "/absolute/private/device.json"
 
 诊断 `input_limit` 先核对历史模式与实际编码大小。SessionModelProvider 自持结构化历史，同一 Context 的后续输入不得再次嵌入累计 transcript，工具结果仅沿原 supplier call ID 交付一次；新 Context 首轮仍需完整当前输入。完整候选请求的无副作用预检先于持久物理调用预留，纯本地拒绝不增加物理请求数或 unknown usage。已预留后的竞态/结果不明仍保守计入，不能据此退款。不得记录完整 prompt/Key 来排障。
 
-必要输入真实超限时保持明确阻塞，保留 Context、运行身份、工具结果及原 operation；不自动 retry、新 slot、清空必要历史、扩大限额或重置预算。先查未知原件，独立确认 Stop；重启不能作为绕过容量或预算的恢复方式。修复重复编码后仍须重验当前授权与 fence，普通离线多轮通过不代签真实模型续玩。
+目标恢复合同：必要输入真实超限时保持明确阻塞，保留 Context、运行身份、工具结果及原 operation；不自动 retry、新 slot、清空必要历史、扩大限额或重置预算。先查未知原件，独立确认 Stop；重启不能作为绕过容量或预算的恢复方式。修复重复编码后仍须重验当前授权与 fence，普通离线多轮通过不代签真实模型续玩。
 
-内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求；只有 SDK 校验的 canonical `stale_base` 终结反馈允许新 slot 重新读取上下文和决策，不替换或重签原件。
+当前实现边界：`SessionModelProvider` 的结构化 conversation 只保存在该适配器实例内；`NativeTaskRunner::run(self)` 消耗 runner/provider，Launcher 后续重新开始会构造新的 provider（`conversation: None`）。因此同一存活适配器的 input-limit/preflight 测试只证明实例内历史保持，不证明 runner 退出、Stop/重新开始后所需 conversation/工具历史可恢复。跨此生命周期的必要历史恢复仍有实现与验证缺口，不能把重新开始当成容量恢复办法或宣称上述目标已全量满足。原世界 operation 的持久恢复与稳定 run 预算是独立合同，仍按下段执行；此缺口不意味着预算可绕过，也不允许暴露私有历史。
+
+内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求，不替换或重签原件。SDK 校验的 canonical `stale_base` 终结反馈可按既有合同进入新 slot；另在完整任务 fence 与当前执行许可仍有效、全部原件已扫描、原 prefix 已 committed 且无竞争 action/outcome、Context 严格过期时，可按[过期 Context 恢复合同](agent-game-client-boundary.design.md#des-agc-004)提交原身份 `context_expired`。只有该终止 outcome committed 后才取得新 Context，继续使用原 run 身份与剩余持久预算，且不计成功业务 turn。其他 aborted、Unknown/Pending、清理 Rejected、Stop、撤权或 fence 变化均不因此允许继续。
 
 设备登记固定账号和 SDK 设备边界，不把启动时的活动任务永久缓存为权限。任务暂时停止、尚无有效目标或该设备只是备用执行器时，Launcher 仍可启动，但当前执行能力关闭。任务/目标或执行器 fence 更新后，旧运行代继续失效；玩家须重新确认开始，由服务端读取当前签名任务视图并核对账号玩家归属，创建携带完整 fence 摘要的新代绑定，无需重启 Launcher。该摘要只由受控执行端生成，网页仅提交 Agent 引用；不能用新代复活旧输出或跳过仍占用设备的旧 worker。相同完整 fence 继续复用原 run 身份与预算；不同合法 fence 才形成新的 run 身份，历史原件仍保留。
 
@@ -83,10 +85,15 @@ device_config_path = "/absolute/private/device.json"
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7_model_provider --lib
 env -u RUSTC_WRAPPER cargo clippy -p oasis7_model_provider -p oasis7_agent_harness --all-targets -- -D warnings
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_model_client
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher model_session
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher hosted_model_client
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher model_session
 npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/viewer_model_connection_client.test.js software_safe_src/model_connection_panel.test.jsx
 npm --prefix crates/oasis7_viewer run build:viewer
 ```
 
 自动化分别验证协议、预算、身份权威与 HTTP 路由；Chrome 桌面/窄屏使用无价值 canary 和受控 UI fixture，不能代签真实供应商、生产部署、整段 TCP 登录流程或自主游戏。实际 source/CI、独立安全评审及每项结果由实现 PR 记录，未覆盖的 BYOK-04/08 不预填 PASS。
+
+
+模型失败诊断：执行状态中的可选 `model_failure` 只承载本地固定枚举；旧报告缺字段仍可读取，未知代码投影为 `other`。`output_limit` 表示生成触顶、整份回复未获准执行，不等同于不支持模型；模型身份不符、未支持工具、工具ID错误和意外协议类型分别诊断。不得从分类反推已遗失旧回复的具体原因，也不记录原始回复/推理。停止后先核对原世界操作；若证实是容量或组合配置问题，由部署方在已确认的有限预算内修订配置并重新验证，不能以自动重试、切协议或默认提高预算恢复。
+
+执行器重启后若尚未发生新的模型决策、原 operation 查询即失败，先检查 World Service 原结果及历史材料，不把它归因于模型能力或通过提高 token 上限解决。`HistoryUnavailable` 保留原身份和预算、阻塞新副作用；记录头存在不等于 snapshot／journal／proof 仍可用。宿主先恢复可验证材料，再按原任务／围栏继续核对，不能重置任务或用新世界代签原世界恢复。

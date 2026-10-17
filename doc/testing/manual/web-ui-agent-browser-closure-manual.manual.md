@@ -51,7 +51,7 @@ ROOT_DIR="$(pwd)"
 LOCAL_PROVIDER_DIR="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider"
 test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm"
 test -f "$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json"
-env -u RUSTC_WRAPPER cargo build -p oasis7 \
+env -u RUSTC_WRAPPER cargo build -p oasis7_launcher_backend -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_chain_runtime \
   --bin oasis7_llm_provider_probe \
   --bin oasis7_game_launcher \
   --bin oasis7_viewer_live \
@@ -144,12 +144,12 @@ signatures, or expiry values.
 
 ### 1. 启动 live server
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer_runtime --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
 无 LLM 场景：
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer_runtime --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
 ### 2. 启动 Web Viewer

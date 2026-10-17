@@ -12,6 +12,8 @@ use std::{
 #[derive(Default)]
 struct State {
     spent: u32,
+    expired_contexts: BTreeMap<String, NativeTaskRecovery>,
+    stop_after_retirement: bool,
     binding: Option<Value>,
     corrupt: bool,
     recover: BTreeMap<String, NativeTaskRecovery>,
@@ -111,7 +113,29 @@ impl NativeTaskHost for FakeHost {
         }
         Ok(result)
     }
+    fn retire_expired_context(&self, op: &str) -> Result<Option<NativeTaskRecovery>, String> {
+        let mut s = self.state.lock().unwrap();
+        let Some(result) = s.expired_contexts.get(op).copied() else {
+            return Ok(None);
+        };
+        s.events.push(format!("retire:{op}:context_expired"));
+        if s.stop_after_retirement {
+            self.started.store(true, Ordering::SeqCst);
+        }
+        let result = if result == NativeTaskRecovery::Settled {
+            s.expired_contexts.remove(op);
+            s.recover
+                .insert(op.into(), NativeTaskRecovery::ContextRetired);
+            NativeTaskRecovery::ContextRetired
+        } else {
+            result
+        };
+        Ok(Some(result))
+    }
     fn prepare(&self, op: &str) -> Result<NativeTaskContext, String> {
+        if self.state.lock().unwrap().expired_contexts.contains_key(op) {
+            return Err("expired private context cannot be read".into());
+        }
         self.state
             .lock()
             .unwrap()
@@ -614,3 +638,12 @@ mod protocol;
 
 #[path = "native_task_history_tests.rs"]
 mod history;
+
+#[path = "native_task_diagnostic_tests.rs"]
+mod diagnostics;
+
+#[path = "native_task_baseline_diagnostic_tests.rs"]
+mod baseline_diagnostics;
+
+#[path = "native_task_expiry_tests.rs"]
+mod expiry;

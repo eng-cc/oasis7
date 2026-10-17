@@ -156,7 +156,7 @@ grep -Fq 'managed triad startup requires DEPLOYMENT_INVENTORY_PATH' "$TMP_DIR/ma
 
 # These focused tests exercise both supported launcher argument builders. They
 # remain intentionally narrower than a complete launcher/gameplay integration.
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher observer_registry_launcher_tests -- --test-threads=1
-env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher observer_registry_launcher_tests -- --test-threads=1
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_game_launcher observer_registry_launcher_tests -- --test-threads=1
+env -u RUSTC_WRAPPER cargo test -p oasis7_launcher_backend --bin oasis7_web_launcher observer_registry_launcher_tests -- --test-threads=1
 
 printf '%s\n' 'ok: launcher authority, generated non-managed stage binding, and managed fail-closed preflight'

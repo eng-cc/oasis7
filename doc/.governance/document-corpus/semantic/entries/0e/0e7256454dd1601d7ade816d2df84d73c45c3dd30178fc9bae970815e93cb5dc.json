@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "f3d196ad3a053fc32e79b50a273918ef0daae11aa9c1094449be6d0158c8c62a",
+    "content_sha256": "8c169d8f02dee9152b293735896955084daa8e33636388fefd77501f9a6b40bc",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_procedure",
-    "note": "current HTTPS provider bridge procedure; no provider or release readiness claim",
+    "note": "current HTTPS provider bridge procedure; no provider or release readiness claim Scoped executable ownership review: updated Cargo package selectors and source anchors for the bin extraction; existing behavior, authority, disposition and evidence limits are retained. The runtime design additionally records seven executable owners and shared policy/observability/credit libraries; this is ownership documentation, not gameplay or deployment acceptance.",
     "path": "doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

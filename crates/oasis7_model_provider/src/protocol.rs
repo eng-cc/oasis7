@@ -66,6 +66,13 @@ pub enum ProviderFailure {
     RateLimited,
     ModelUnavailable,
     CapabilityUnsupported,
+    UnexpectedStreaming,
+    ModelIdentityMismatch,
+    OutputLimit,
+    UnsupportedFinishReason,
+    UnsupportedTool,
+    InvalidToolIdentity,
+    UnsupportedContent,
     TransportFailed,
     InvalidResponse,
     InputLimit,
@@ -81,6 +88,13 @@ impl std::fmt::Display for ProviderFailure {
             Self::RateLimited => "rate_limited",
             Self::ModelUnavailable => "model_unavailable",
             Self::CapabilityUnsupported => "capability_unsupported",
+            Self::UnexpectedStreaming => "unexpected_streaming",
+            Self::ModelIdentityMismatch => "model_identity_mismatch",
+            Self::OutputLimit => "output_limit",
+            Self::UnsupportedFinishReason => "unsupported_finish_reason",
+            Self::UnsupportedTool => "unsupported_tool",
+            Self::InvalidToolIdentity => "invalid_tool_identity",
+            Self::UnsupportedContent => "unsupported_content",
             Self::TransportFailed => "transport_failed",
             Self::InvalidResponse => "invalid_response",
             Self::InputLimit => "input_limit",
@@ -235,9 +249,17 @@ fn parse_arguments(value: &Value) -> Result<Value, ProviderFailure> {
     }
     Ok(args)
 }
+fn tool_identity(value: &Value, key: &str) -> Result<String, ProviderFailure> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty() && id.len() <= 256)
+        .map(str::to_owned)
+        .ok_or(ProviderFailure::InvalidToolIdentity)
+}
 fn parse_response_call(v: &Value) -> Result<ToolCall, ProviderFailure> {
     Ok(ToolCall {
-        id: string(v, "call_id")?.into(),
+        id: tool_identity(v, "call_id")?,
         name: string(v, "name")?.into(),
         arguments: parse_arguments(&v["arguments"])?,
     })
@@ -292,7 +314,7 @@ pub fn decode_response(
         .next()
         .is_some_and(|s| s.trim() == "text/event-stream")
     {
-        return Err(ProviderFailure::CapabilityUnsupported);
+        return Err(ProviderFailure::UnexpectedStreaming);
     }
     let value: Value = serde_json::from_slice(bytes).map_err(|_| bad())?;
     if value.get("error").is_some() {
@@ -303,7 +325,7 @@ pub fn decode_response(
         .and_then(Value::as_str)
         .is_some_and(|m| m != preset.model)
     {
-        return Err(ProviderFailure::CapabilityUnsupported);
+        return Err(ProviderFailure::ModelIdentityMismatch);
     }
     let (text, calls, replay, usage) = match preset.protocol {
         Protocol::ChatCompletions => {
@@ -313,8 +335,10 @@ pub fn decode_response(
                 .ok_or_else(bad)?;
             let choice = &choices[0];
             let reason = string(choice, "finish_reason")?;
-            if !["stop", "tool_calls"].contains(&reason) {
-                return Err(ProviderFailure::CapabilityUnsupported);
+            match reason {
+                "stop" | "tool_calls" => {}
+                "length" => return Err(ProviderFailure::OutputLimit),
+                _ => return Err(ProviderFailure::UnsupportedFinishReason),
             }
             let message = &choice["message"];
             if message["role"] != "assistant" {
@@ -328,7 +352,7 @@ pub fn decode_response(
                         return Err(bad());
                     }
                     calls.push(ToolCall {
-                        id: string(item, "id")?.into(),
+                        id: tool_identity(item, "id")?,
                         name: string(&item["function"], "name")?.into(),
                         arguments: parse_arguments(&item["function"]["arguments"])?,
                     });
@@ -366,7 +390,7 @@ pub fn decode_response(
                 } else if item["type"] == "message" {
                     for c in item["content"].as_array().ok_or_else(bad)? {
                         if c["type"] != "output_text" {
-                            return Err(ProviderFailure::CapabilityUnsupported);
+                            return Err(ProviderFailure::UnsupportedContent);
                         }
                         text.push_str(c["text"].as_str().ok_or_else(bad)?);
                     }
@@ -391,9 +415,11 @@ pub fn decode_response(
         .collect::<BTreeSet<_>>();
     let mut ids = BTreeMap::new();
     for c in &calls {
-        if !allowed.contains(c.name.as_str()) || c.id.len() > 256 || ids.insert(&c.id, ()).is_some()
-        {
-            return Err(ProviderFailure::CapabilityUnsupported);
+        if !allowed.contains(c.name.as_str()) {
+            return Err(ProviderFailure::UnsupportedTool);
+        }
+        if c.id.is_empty() || c.id.len() > 256 || ids.insert(&c.id, ()).is_some() {
+            return Err(ProviderFailure::InvalidToolIdentity);
         }
     }
     Ok(ProviderResponse {

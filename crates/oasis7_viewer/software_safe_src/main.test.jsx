@@ -1,3 +1,4 @@
+import { bindLocalTestAgent, bindFirstSnapshotAgentForTest, bindUnboundLocalPlayerForTest } from "./test_support/viewer_player_auth_fixture.js";
 import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
@@ -180,27 +181,6 @@ function sampleAgentClaimSnapshot() {
       },
     },
   });
-}
-function bindLocalTestAgent(core, agentId = "agent-0", playerId = "local-test-player-bound") {
-  core.state.auth = {
-    ...core.state.auth,
-    available: true,
-    playerId,
-    publicKey: "ab".repeat(32),
-    privateKey: "07".repeat(32),
-    source: "local_test_api_ephemeral",
-    registrationStatus: "registered",
-    runtimeStatus: "registered", syncInFlight: false,
-    boundAgentId: agentId,
-  };
-}
-function bindFirstSnapshotAgentForTest(core, snapshot) {
-  const agentId = Object.keys(snapshot?.model?.agents || {})[0];
-  const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
-  if (!agentId || !playerId) {
-    return;
-  }
-  bindLocalTestAgent(core, agentId, playerId);
 }
 function sampleHostedPublicJoinAccess(overrides = {}) {
   return {
@@ -1016,6 +996,7 @@ describe("viewer web ui automation baseline", () => {
 
   it("routes the empty-world Claim First Agent button into gameplay action feedback", async () => {
     const { core, container } = await renderViewerApp({
+      setupCore: bindUnboundLocalPlayerForTest,
       snapshot: sampleSnapshot({
         model: {
           agents: {},

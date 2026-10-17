@@ -1014,7 +1014,7 @@ run_scenario_to_log() {
   local scenario_report_path=$2
   local scenario_run_log_path=$3
   local -a cmd=(
-    oasis7_cargo_dev run -p oasis7 --bin oasis7_llm_agent_demo --
+    oasis7_cargo_dev run -p oasis7_provider_tools --bin oasis7_llm_agent_demo --
     "$scenario_name"
     --ticks "$ticks"
     --report-json "$scenario_report_path"
@@ -1662,7 +1662,7 @@ for scenario in "${scenarios[@]}"; do
 
   if (( parallel_mode == 0 )); then
     cmd=(
-      oasis7_cargo_dev run -p oasis7 --bin oasis7_llm_agent_demo --
+      oasis7_cargo_dev run -p oasis7_provider_tools --bin oasis7_llm_agent_demo --
       "$scenario"
       --ticks "$ticks"
       --report-json "$scenario_report_json"

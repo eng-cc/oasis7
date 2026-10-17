@@ -15,7 +15,7 @@ Usage:
 Description:
   Thin liveops wrapper around `oasis7_liveops_grant_cli`.
   It keeps the same runtime/governance boundary, but removes the need to type
-  the full `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- ...` command.
+  the full `cargo run -p oasis7_ops_tools --bin oasis7_liveops_grant_cli -- ...` command.
 
 Options:
   --world-dir <dir>   World directory. Falls back to $OASIS7_WORLD_DIR.
@@ -170,7 +170,7 @@ fi
 if [[ -n "$CLI_BIN" ]]; then
   CMD=("$CLI_BIN" "${CLI_ARGS[@]}")
 else
-  CMD=(oasis7_cargo_dev run -q -p oasis7 --bin oasis7_liveops_grant_cli -- "${CLI_ARGS[@]}")
+  CMD=(oasis7_cargo_dev run -q -p oasis7_ops_tools --bin oasis7_liveops_grant_cli -- "${CLI_ARGS[@]}")
 fi
 
 if [[ "$PRINT_CMD" == "1" ]]; then

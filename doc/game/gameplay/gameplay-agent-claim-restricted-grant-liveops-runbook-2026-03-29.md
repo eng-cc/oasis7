@@ -92,9 +92,9 @@ Lifecycle: current controlled operator procedure; the date is its establishment 
 ```
 
 3. 导入全量治理 manifest：
-   `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json>`
+   `env -u RUSTC_WRAPPER cargo run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json>`
 4. 立刻审计导入结果，不要跳过：
-   `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json> --strict-manifest-match --require-single-failure-tolerance`
+   `env -u RUSTC_WRAPPER cargo run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json> --strict-manifest-match --require-single-failure-tolerance`
 5. 让当前 `ecosystem_pool` treasury controller slot 对应的治理操作者提交一次 `UpdateRestrictedStarterClaimAdminRegistry`，把 `liveops` 放回 admin allowlist。payload 最少应包含：
 
 ```json

@@ -3,7 +3,7 @@
     "authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "765d07b2c494f207adb713c2eab894d41da77e907fb63de1be49336e272e8d3f",
+    "content_sha256": "d83c7af8a79efca70dd61bf15ea7d5702f6e6bd3f744c4a17d8088fdb8bbf836",
     "disposition": "retain",
     "domain_owner": "blockchain_ops_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

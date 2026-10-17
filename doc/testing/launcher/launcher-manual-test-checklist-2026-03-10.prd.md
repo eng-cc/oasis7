@@ -62,9 +62,9 @@
 ## 4. Technical Specifications
 - Architecture Overview: 清单以 `oasis7_game_launcher` 与 `oasis7_client_launcher` 为主要被测对象，辅以 `oasis7_web_launcher` 控制面、`testing-manual.md` 分层口径和现有 Playwright/Web 审查结论，形成“人工体验验收 + 自动化补充”的双轨门禁；其中 Web 闭环默认优先使用 GUI Agent 驱动产品动作，再由浏览器校验状态与展示结果。
 - Integration Points:
-  - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-  - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
-  - `crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_web_launcher.rs`
+  - `crates/oasis7_launcher_backend/src/bin/oasis7_web_launcher/gui_agent_api.rs`
   - `crates/oasis7_client_launcher/src/main.rs`
   - PR、实际 CI 与评审记录（Issue 按需） and git history for retired launcher full-usability closure audit samples
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`

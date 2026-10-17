@@ -6,10 +6,11 @@ export class ModelConnectionError extends Error {
 }
 const text = (value, max = 256) => typeof value === "string" && value.length <= max ? value : "";
 const number = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
-const RUN_REASONS = new Set(["completed", "budget_exhausted", "pending_original", "rejected_original", "expired_original", "control_changed", "context_expired", "model_failed", "model_timeout", "invalid_model_output", "aborted", "host_failure"]);
+const RUN_REASONS = new Set(["completed", "budget_exhausted", "pending_original", "rejected_original", "expired_original", "control_changed", "context_expired", "model_failed", "input_limit", "model_timeout", "invalid_model_output", "aborted", "host_failure"]);
+const MODEL_FAILURES = new Set(["input_limit", "output_limit", "model_identity_mismatch", "unexpected_streaming", "unsupported_finish_reason", "unsupported_tool", "invalid_tool_identity", "unsupported_content", "capability_unsupported", "other"]);
 function executionSnapshot(value) {
   if (!value || !["running", "finished", "stopped"].includes(value.phase)) return null;
-  return { phase: value.phase, reason: RUN_REASONS.has(value.reason) ? value.reason : null, successful_effects: number(value.successful_effects), model_calls_spent: number(value.model_calls_spent) };
+  return { phase: value.phase, reason: RUN_REASONS.has(value.reason) ? value.reason : null, model_failure: MODEL_FAILURES.has(value.model_failure) ? value.model_failure : null, successful_effects: number(value.successful_effects), model_calls_spent: number(value.model_calls_spent) };
 }
 export function modelConnectionSnapshot(value) {
   if (!value || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.id || "") || !Number.isSafeInteger(value.version) || value.version < 1) throw new ModelConnectionError("request_failed");

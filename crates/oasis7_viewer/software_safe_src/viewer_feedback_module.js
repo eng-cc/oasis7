@@ -1,3 +1,5 @@
+import { feedbackForScope } from "./viewer_feedback_scope.js";
+import { projectGameplayReceiptFeedback } from "./viewer_gameplay_receipt_feedback.js";
 import { normalizeIndustrialStarterProfile } from "./industrial_starter_outcome.js";
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
@@ -43,6 +45,7 @@ export function createViewerFeedbackModule({
     };
   }
   function snapshotSemanticFeedback(feedback) {
+    feedback = feedbackForScope(feedback,state);
     if (!feedback) return null;
     const response = promptFeedback.redactPromptControlResponse(feedback.response);
     return {
@@ -327,6 +330,7 @@ export function createViewerFeedbackModule({
   }
 
   function buildGameplaySummary(locale = state.uiLocale) {
+    const lastGameplayActionFeedback = feedbackForScope(state.lastGameplayActionFeedback,state);
     const gameplay = state.snapshot?.player_gameplay;
     if (!gameplay || typeof gameplay !== "object") {
       return null;
@@ -382,9 +386,9 @@ export function createViewerFeedbackModule({
     const resumeNextStep = gameplay.resume_next_step || null;
     const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
     const firstAgentClaimSyncPending = emptyEntityBlocker
-      && state.lastGameplayActionFeedback?.action === "claim_first_agent"
-      && state.lastGameplayActionFeedback?.accepted !== false
-      && state.lastGameplayActionFeedback?.stage !== "error";
+      && lastGameplayActionFeedback?.action === "claim_first_agent"
+      && lastGameplayActionFeedback?.accepted !== false
+      && lastGameplayActionFeedback?.stage !== "error";
     let availableActions = normalizeViewerAvailableActions({
       gameplay,
       locale,
@@ -393,31 +397,7 @@ export function createViewerFeedbackModule({
       emptyEntityBlocker,
       firstAgentClaimSyncPending,
     });
-    const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
-      ? {
-          source: "runtime",
-          action: gameplay.recent_feedback.action || null,
-          stage: gameplay.recent_feedback.stage || null,
-          effect: gameplay.recent_feedback.effect || null,
-          reason: gameplay.recent_feedback.reason || null,
-          hint: gameplay.recent_feedback.hint || null,
-          deltaLogicalTime: Number(gameplay.recent_feedback.delta_logical_time || 0),
-          deltaEventSeq: Number(gameplay.recent_feedback.delta_event_seq || 0),
-        }
-      : null;
-    const localGameplayFeedback = state.lastGameplayActionFeedback?.kind === "gameplay_action"
-      ? {
-          source: "local_gameplay_action",
-          action: state.lastGameplayActionFeedback.action || null,
-          stage: state.lastGameplayActionFeedback.stage || null,
-          effect: state.lastGameplayActionFeedback.effect || null,
-          reason: state.lastGameplayActionFeedback.reason || null,
-          hint: state.lastGameplayActionFeedback.response?.hint || null,
-          deltaLogicalTime: Number(state.lastGameplayActionFeedback.deltaLogicalTime || 0),
-          deltaEventSeq: Number(state.lastGameplayActionFeedback.deltaEventSeq || 0),
-        }
-      : null;
-    const recentFeedback = localGameplayFeedback || runtimeRecentFeedback;
+    const {localGameplayFeedback,recentFeedback} = projectGameplayReceiptFeedback(gameplay,lastGameplayActionFeedback,intentTarget);
     const runtimeBlockerKind = gameplay.blocker_kind || null;
     const runtimeBlockerDetail = gameplay.blocker_detail || null;
     const runtimeAlreadyPublishedEmptyEntityBlocker =
@@ -1128,6 +1108,7 @@ export function createViewerFeedbackModule({
       acceptedIntentSummary,
       acceptedIntentScope: intentScope,
       acceptedIntentTarget: intentTarget,
+      receiptTargetAgentId: localGameplayFeedback ? localGameplayFeedback.agentId : intentTarget,
       acceptedIntentDetail,
       statusReason,
       lastWorldChange,

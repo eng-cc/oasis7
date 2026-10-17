@@ -258,7 +258,7 @@ if [[ -z "$viewer_live_bin" ]]; then
 fi
 
 if [[ "$skip_build" != "1" ]]; then
-  OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7 --bin oasis7_game_launcher --bin oasis7_viewer_live
+  OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -q -p oasis7_launcher_backend -p oasis7_viewer_runtime --bin oasis7_game_launcher --bin oasis7_viewer_live
 fi
 
 [[ -x "$launcher_bin" ]] || {

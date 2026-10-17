@@ -138,6 +138,8 @@ SDK 统一严格编码、签名、世界/主体/服务绑定验证、有限响�
 
 原 action 结果未知时只查原结果或按合同重投完全相同请求，不重新报价、换 action 或捕获新身份来替代该副作用。明确拒绝不必然释放活动 Context；原 outcome 也可能拒绝，按既有终结/租期条件收口后才取新 Context。查询权限被撤销时保持未知，不擅自恢复旧授权。
 
+过期 Context 的外部 CLI 恢复必须显式收口活动 turn，不能假设新建 Context 会自动清理。先查询原 prefix/action/outcome：prefix 必须已权威提交，且本地无竞争 action 或其他 outcome 原件；未知或 pending 先恢复原件。原 Context 严格超过 `valid_until_tick`、当前已验签任务仍 Active 且完整 fence 与原 Context 一致时，CLI 才可用缓存公共 prefix 身份和当前已验签 Runtime base 首次生成 `outcome --reason context_expired`，不解密过期私有正文，不续租或恢复过期业务授权。该 outcome 发送前持久化；后续只查询或重投完全相同原件，换 reason／base／nonce 均不能覆盖。只有该终止结果已 committed，当前任务仍授权，才捕获新 Context；拒绝、未知或 Stop 不代表可继续。Runtime 仍最终校验过期、fence 和终止准入。
+
 只读恢复保留原身份与权限边界：原结果轮询只查询缓存请求；准备阶段只可重投已持久化的同一签名。传输失败、HTTP 503 和已分类的有界 cooldown 可在调用窗口内恢复，普通 403/409/429、签名或主体验证失败不自动重试。context read 仅在服务端重验当前权限、fence 与 TTL 后确认交付切点变化时返回 `task_context_read_delivery_drift`；factory/recipe quote 仅用 `task_quote_base_drift` / `task_quote_delivery_drift` 区分已知只读基准竞态。SDK 对这些固定路由/状态/代码的有限重读不续期、不换 Context/nonce、不改变业务选择；已有 action/outcome 时优先恢复原件，不再次报价。此机制不能消除响应返回到行动准入之间的世界变化，权威 `stale_base` 拒绝仍按原结果处理，后续新决策由执行方策略负责。
 
 切换先经现有 task executor 控制使旧 epoch 失效，并围栏旧入口；当前授权下最多一个活动 turn。两个 Harness 的进程锁、不同 session ID 或启动顺序不能取代世界侧互斥。目标变化后旧计算可被丢弃，但新世界效果只接收当前许可；已提交原结果按原关联保留。原结果查询与新行动资格分别校验。

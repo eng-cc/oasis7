@@ -313,10 +313,10 @@ case "$mode" in
     tmp_merged_manifest="$tmp_root/merged-public-manifest-entries.json"
 
     merge_manifest_from_genesis "$genesis_path" "$tmp_merged_manifest"
-    ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_governance_registry_import -- \
+    ./scripts/cargo-dev.sh run -p oasis7_ops_tools --bin oasis7_governance_registry_import -- \
       --world-dir "$tmp_world_dir" \
       --public-manifest "$tmp_merged_manifest"
-    ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_governance_registry_audit -- \
+    ./scripts/cargo-dev.sh run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
       --world-dir "$tmp_world_dir" \
       --public-manifest "$tmp_merged_manifest" \
       --strict-manifest-match
@@ -325,7 +325,7 @@ case "$mode" in
     mkdir -p "$out_dir"
     canonicalize_world "$tmp_world_dir" "$out_dir/world"
     if [[ -n "$world_scenario" ]]; then
-      ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_generate_world_artifact -- \
+      ./scripts/cargo-dev.sh run -p oasis7_ops_tools --bin oasis7_generate_world_artifact -- \
         --scenario "$world_scenario" \
         --world-dir "$out_dir/generated-scenario-world" \
         --provenance-out "$out_dir/world-generation-provenance.json" \
@@ -356,7 +356,7 @@ updated_at = payload.get("updated_at")
 if updated_at != 0:
     raise SystemExit(f"module_registry.updated_at must be 0 for canonical artifact, got {updated_at}")
 PY
-    ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_governance_registry_audit -- \
+    ./scripts/cargo-dev.sh run -p oasis7_ops_tools --bin oasis7_governance_registry_audit -- \
       --world-dir "$world_dir" \
       --public-manifest "$merged_public_manifest" \
       --strict-manifest-match

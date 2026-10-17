@@ -463,7 +463,7 @@ fi
 
 if [[ "$ENABLE_LLM" != "1" ]]; then
   echo "error: ./scripts/run-launcher-stack.sh now wraps oasis7_game_launcher, which requires active LLM access" >&2
-  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --no-llm ... only for direct observer/debug diagnostics" >&2
+  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7_viewer_runtime --bin oasis7_viewer_live -- llm_bootstrap --allow-debug-scenario --no-llm ... only for direct observer/debug diagnostics" >&2
   exit 1
 fi
 
@@ -1145,8 +1145,9 @@ else
   SOURCE_MODE_CHAIN_RUNTIME_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_chain_runtime"
   SOURCE_BUILD_ARGS=(
     build
-    -p
-    oasis7
+    -p oasis7_provider_tools
+    -p oasis7_launcher_backend
+    -p oasis7_viewer_runtime
     --bin
     oasis7_llm_provider_probe
     --bin

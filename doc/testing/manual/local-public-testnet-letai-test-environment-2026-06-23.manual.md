@@ -195,7 +195,7 @@ rtk curl -sS http://127.0.0.1:19083/v1/chain/status | jq '{
 
 ```bash
 rtk ./scripts/cargo-dev.sh build \
-  -p oasis7 \
+  -p oasis7_client_cli -p oasis7_newapi_bridge_service \
   --bin oasis7_newapi_bridge_service \
   --bin oasis7_chain_transfer_submit_client
 ```
@@ -663,7 +663,7 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
 先构建 viewer live：
 
 ```bash
-rtk ./scripts/cargo-dev.sh build -p oasis7 --bin oasis7_viewer_live
+rtk ./scripts/cargo-dev.sh build -p oasis7_viewer_runtime --bin oasis7_viewer_live
 ```
 
 启动 live 服务，显式绑定已同步节点：

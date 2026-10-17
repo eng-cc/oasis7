@@ -208,6 +208,38 @@
     "oasis7_chain_runtime": [
       "oasis7_required",
       "formal_process"
+    ],
+    "oasis7_client_cli": [
+      "oasis7_required"
+    ],
+    "oasis7_launcher_backend": [
+      "oasis7_required",
+      "launcher_web"
+    ],
+    "oasis7_newapi_bridge_service": [
+      "oasis7_required"
+    ],
+    "oasis7_ops_tools": [
+      "oasis7_required"
+    ],
+    "oasis7_provider_local_bridge": [
+      "oasis7_required"
+    ],
+    "oasis7_provider_tools": [
+      "oasis7_required"
+    ],
+    "oasis7_viewer_runtime": [
+      "oasis7_required"
+    ],
+    "oasis7_observability": [
+      "oasis7_required"
+    ],
+    "oasis7_hosted_access": [
+      "oasis7_required",
+      "launcher_web"
+    ],
+    "oasis7_letai_credit_adapter": [
+      "oasis7_required"
     ]
   },
   "rules": [
@@ -220,6 +252,30 @@
       ],
       "groups": [],
       "reason": "documents"
+    },
+    {
+      "match": [
+        "scripts/oasis7-pure-api-parity-smoke.sh",
+        "scripts/governance-registry-drill.sh",
+        "scripts/governed-rollback-v2-drill.sh",
+        "scripts/hosted-account-staging-smoke.sh",
+        "scripts/llm-baseline-fixture-smoke.sh",
+        "scripts/llm-longrun-stress.sh",
+        "scripts/public-testnet-faucet/package-public-testnet-faucet.sh",
+        "scripts/check-active-llm-provider.sh",
+        "scripts/governance-registry-live-drill.sh",
+        "scripts/run-local-letai-provider-bridge.sh",
+        "scripts/provider-parity-p0.sh",
+        "scripts/oasis7-liveops-grant.sh",
+        "scripts/newapi-bridge-service/package-newapi-bridge-service.sh",
+        "scripts/run-local-public-testnet-letai-test-environment.sh",
+        "scripts/runtime-module-routing-perf-harness.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "operational_contracts"
+      ],
+      "reason": "independent_bin_runtime_callers"
     },
     {
       "match": [
@@ -275,7 +331,7 @@
         "doc/world-simulator/scenario/**",
         "crates/oasis7/scenarios/**",
         "crates/oasis7/src/simulator/scenario.rs",
-        "crates/oasis7/tests/oasis7_init_demo.rs"
+        "crates/oasis7_ops_tools/tests/oasis7_init_demo.rs"
       ],
       "groups": [
         "scenario_regression"

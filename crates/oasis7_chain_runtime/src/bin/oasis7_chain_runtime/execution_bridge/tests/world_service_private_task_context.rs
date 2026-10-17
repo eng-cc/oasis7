@@ -997,6 +997,47 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         driver.execution_world.state().agents["agent-a"].state.pos,
         oasis7::GeoPos::new(3, 0, 0)
     );
+    // Settled and expired contexts no longer authorize writes, but their exact
+    // receipts remain recoverable for the current live task fence beyond hot history.
+    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+        &dir.join("records"),
+        &cas,
+        1,
+    )
+    .unwrap();
+    let retained = [
+        AGE + 10,
+        AGE + 11,
+        AGE + 12,
+        AGE + 13,
+        expiry_height + 1,
+        expiry_height + 2,
+        expiry_height + 3,
+    ];
+    let shards = cas
+        .list_pin_scope_shards("execution_bridge_live_tasks_v1")
+        .unwrap();
+    assert_eq!(
+        shards.len(),
+        retained.len(),
+        "only current full-fence receipts are owned"
+    );
+    for height in retained {
+        assert!(
+            shards.contains(&format!("record-{height:020}")),
+            "live task receipt at {height} lost after context settlement or expiry"
+        );
+        assert!(
+            super::super::super::world_service_read::pin_at_height(
+                &dir.join("records"),
+                &dir.join("store"),
+                &world,
+                height,
+            )
+            .is_ok(),
+            "live task historical receipt {height} must remain readable"
+        );
+    }
     // Truly absent historical full evidence is a recovery error, not an unavailable retry.
     let activation = g2_context
         .snapshot
@@ -1109,6 +1150,12 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     assert!(status == 403 || status == 409);
     assert!(body.get("payload").is_none());
     assert!(!body.to_string().contains(&goal.request.content.goal_text));
+    assert_eq!(
+        cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap(),
+        vec![format!("record-{:020}", AGE + 10)],
+        "Stop releases retired executor receipts; the active goal retains its publication"
+    );
     drop(store);
     let bytes = std::fs::read_dir(&private)
         .unwrap()

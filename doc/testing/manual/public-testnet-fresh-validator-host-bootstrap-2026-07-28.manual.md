@@ -129,9 +129,13 @@ systemd unit disabled and inactive; do not treat the receipt as a readiness or r
 
 Review the receipt's runtime hash, root/finality/libp2p public identities and
 the rendered unit before any topology stage. To abandon a failed bootstrap,
-do not start the service; preserve the public receipt and package input for
-investigation. A failed post-materialization bootstrap safely removes only the
-exact root it created during that invocation. The production receipt path is
+do not start the service; preserve the approved package input and any available
+public-only diagnostics outside the root being cleaned, without copying private
+identity material. The script emits the success receipt only at the end; it does
+not guarantee a public failure receipt. A failed post-materialization bootstrap
+removes only the exact root it created during that invocation, so an in-root
+receipt may never exist or may be removed. Record that missing failure evidence
+explicitly; do not infer a success or fabricate a failure receipt. The production receipt path is
 fixed at `/opt/oasis7/p2p-testnet/evidence/fresh-validator-host-bootstrap-receipt.json`
 and contains public identities and hashes only.
 

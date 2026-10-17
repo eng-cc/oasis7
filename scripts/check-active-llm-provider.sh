@@ -9,6 +9,6 @@ PROBE_BIN="$TARGET_DIR/oasis7_llm_provider_probe"
 
 (
   cd "$ROOT_DIR"
-  oasis7_cargo_dev build -q -p oasis7 --bin oasis7_llm_provider_probe >&2
+  oasis7_cargo_dev build -q -p oasis7_provider_tools --bin oasis7_llm_provider_probe >&2
 )
 exec "$PROBE_BIN" "$@"

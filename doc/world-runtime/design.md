@@ -12,6 +12,9 @@
 
 链节点进程组合由 `oasis7_chain_runtime` crate 拥有，世界执行与授权投影适配保留在 `oasis7`。纯投影承诺、规范编码和包含证明由 `oasis7_client_api::formal_projection` 提供；世界适配函数 `world_service::formal_projection::commitments_for_world` 只枚举当前合法 audience、生成已提交投影并调用共享算法。客户端协议层不得反向依赖世界或节点；编码、hash domain、Merkle 结构和预算保持同一协议。端点持久化与恢复仍由 `oasis7_distfs` / `oasis7_node` 负责，进程入口消费这些接口，不形成第二套存储或恢复实现。
 
+`oasis7` owns the shared world library and no executable targets. `oasis7_launcher_backend` owns game/Web launcher backends; `oasis7_viewer_runtime` owns viewer processes; `oasis7_client_cli` and `oasis7_ops_tools` own client commands and world operations. Newapi service, local provider bridge and provider diagnostics/benchmarks have separate package ownership. Observability, hosted-access policy and LetAI credit adaptation are shared libraries; libraries and executables must not borrow another binary's source. Client CLI production defaults exclude Wasmtime/libp2p. Entrypoints that execute local worlds, resolve authoritative simulator configuration or serve viewers retain explicit world-library dependencies instead of duplicating protocol, authorization or recovery logic. Executable names, CLI, serialized formats and persistence behavior remain unchanged.
+
+
 ## 2. 阅读顺序
 1. `doc/world-runtime/prd.md`
 2. `doc/world-runtime/design.md`
@@ -618,7 +621,7 @@ Fixtures must retain the existing signed stable C→T rollback path where specif
 | --- | --- | --- |
 | J1-CONTINUE | After C, settle recipe k by T; recover and complete another legal recipe once with the same next ID/era as control, without reusing k. | [Persistence recovery](../../crates/oasis7/src/runtime/tests/persistence_recovery_tests.rs) and [signed rollback v2](../../crates/oasis7/src/viewer/runtime_live/tests/authoritative_rollback_v2_exact_retry_tests.rs); local deterministic fixture, including supported signed C→T. |
 | J1-BOUNDARIES | Independently cover multi-event action, business rejection, explicit/preallocated ID, rollover and checkpoint pending IDs; no lost/double cursor advancement. | [Numeric validation](runtime/runtime-numeric-safety.design.md#numeric-action-allocator-validation); required targeted cases. |
-| J1-REPAIR | Rebuild from source journal, save, load again and submit a legal action; cursor and next outcome remain equal to control. | [Repair source-journal path](../../crates/oasis7/src/bin/oasis7_world_repair_rebuild.rs); no generated-bootstrap claim. |
+| J1-REPAIR | Rebuild from source journal, save, load again and submit a legal action; cursor and next outcome remain equal to control. | [Repair source-journal path](../../crates/oasis7_ops_tools/src/bin/oasis7_world_repair_rebuild.rs); no generated-bootstrap claim. |
 | J2-WAKE/CLEAR | Real WASM returns WakeAfterTicks, Suspend and omitted directive in separate runs; compare restored schedule and subsequent calls/state/fees. | [Tick regressions](../../crates/oasis7/src/runtime/tests/module_tick_routing_transaction_regressions.rs) and supported signed C→T fixture; retain post-route checkpoint rejection/roundtrip coverage. |
 | J2-INSTANCE | Cover Pure/no-new-state success and two instances with only one due; only the correct instance runs at the expected next tick. | [Host tick verification](runtime/runtime-integration.md#module-tick-journal-replay-validation); required targeted cases. |
 | J-COMPAT/ATOMIC | Exercise each compatibility-matrix row, incomplete groups and existing precommit publication failures; replay guest/dispatcher invocation count is zero and no new charge is computed. Durable publication retains the G1 outcome classification. | Existing persistence/rollback/tick negatives plus new record cases; preserve event/intent allocator and signature/artifact/finality rejection assertions. |

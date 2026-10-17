@@ -38,7 +38,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 脚本入口 | `--duration-secs`、`--scenario`、`--llm/--no-llm`、`--base-port`、`--out-dir` | 生成 run 配置并启动/停止五节点 | `planned -> running -> completed/failed` | 默认 `duration=1800`、`scenario=llm_bootstrap`、`--no-llm` | 测试维护者可配置 |
+| 脚本入口 | `--duration-secs`、`--scenario`、`--llm/--no-llm`、`--base-port`、`--out-dir` | 生成 run 配置并启动/停止五节点 | `planned -> running -> completed/failed` | 默认 `duration=1800`、`scenario=llm_bootstrap`；scenario 用于派生 world id，`--llm/--no-llm` 仅记录兼容字段 | 测试维护者可配置 |
 | 奖励/结算配置 | `--reward-runtime-epoch-duration-secs`、`--reward-points-per-credit` | 调整 epoch 节奏与 minted 触发概率 | `configured -> observed` | 短 epoch（默认 60s）提升短窗可观测性 | 发布/测试可审阅 |
 | 节点行为策略 | `--node-auto-attest-all`、`--node-no-auto-attest-all`、`--node-auto-attest-sequencer-only`、`--preserve-node-state` | 控制投票策略与状态隔离 | `isolated -> progressed` | 默认 `sequencer_only` + 隔离旧状态 | 脚本维护者控制 |
 | 门禁判定 | `max_stall`、`max_lag_p95`、`max_distfs_failure_ratio`、`max_settlement_apply_failure_ratio` | 根据指标阈值给出 pass/fail | `collecting -> gated` | failure_ratio 以 attempts 为分母，需 `attempts>0` | 发布门禁消费 |
@@ -46,6 +46,8 @@
 | DistFS probe bootstrap | `storage_root/blobs`、seed result、`distfs_total_checks` | 仅空集时写入最小非敏感 seed；非空跳过；失败记录错误并继续 | `checked -> seeded/skipped/error_recorded -> sampled` | 幂等、不得无界重复写入；seed 只提供样本，不改变阈值 | runtime 自动执行，QA解释结果 |
 
 ### Reward-runtime metric source and classification
+
+下列为目标验收合同；当前脚本仍有 mint 兼容计数、逐节点缺样本、HTTP 回退和 invariant 读取/分类差距，具体见 [S9/S10 手册](../../../testing-manual.md#s9p2p存储共识在线长跑技术套件)。脚本绿灯不代表这些合同已全部实现；本次仅校正编排入口，不修改指标、seed、五节点或非 readiness 边界。
 
 - S10 直接消费 `oasis7_chain_runtime` 的
   `/v1/chain/status.reward_runtime` 快照；`metrics_available` 与 mint、DistFS、
@@ -77,13 +79,13 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 基于 `oasis7_viewer_live --topology single` 多进程编排 5 节点，脚本统一构建 validator/peer 配置、采集每节点状态报告，并在 S10 门禁中联合判定共识推进、网络追平、存储挑战、结算应用与资产一致性。
+- Architecture Overview: 基于 `oasis7_chain_runtime` 直接 headless 多进程编排 5 节点（1 sequencer + 2 storage + 2 observer），脚本统一构建 validator/peer 配置、采集每节点状态报告，并在 S10 门禁中联合判定共识推进、网络追平、存储挑战、结算应用与资产一致性。
 - Integration Points:
   - `scripts/s10-five-node-game-soak.sh`
-  - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
+  - `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime.rs`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
-  - no-LLM stall：仅 sequencer 启用执行 hook，避免非 sequencer contiguous-height 冲突导致停摆。
+  - 历史 no-LLM stall 处置：旧 Viewer 路径曾以仅 sequencer 执行 hook 避免 contiguous-height 冲突。当前脚本直接运行各节点 `oasis7_chain_runtime dev node --config`，以节点 role 和 attest 参数配置；`--llm/--no-llm` 仅写入 `llm_enabled_compat`，不切换 runtime 行为，不能据此声称当前仍使用旧 hook 开关。
   - 跨 run 污染：默认隔离旧 `output/node-distfs/s10-*` 状态目录。
   - 非连续 committed 高度：execution bridge 记录告警后容错续跑，避免直接卡死。
   - 结算验签失败：统一按 `node_id` 派生 signer key + CBOR 编码，解码兼容 JSON 回退。
@@ -108,7 +110,7 @@
   - v2.2 (S10REAL-11): strict schema 文档迁移与命名统一。
 - Technical Risks:
   - 风险-1: 单机五进程竞争导致指标抖动。
-  - 风险-2: LLM 外部依赖引入非确定性（默认 no-LLM 缓解）。
+  - 风险-2: provider-backed 场景仍有 LLM 外部非确定性，但当前 S10 的 `--llm/--no-llm` 为无行为效果的兼容参数，不构成真实 LLM 覆盖或开关；需要该覆盖时必须使用适用的真实 provider 验收入口，不能以本套件通过代签。
   - 风险-3: 无 chaos 场景下恢复能力覆盖有限（由 S9 chaos 兜底）。
   - 风险-4: auto-attest 策略配置不当影响真实投票覆盖。
 

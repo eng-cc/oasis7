@@ -6312,58 +6312,44 @@ dependencies = [
 name = "oasis7"
 version = "0.1.0"
 dependencies = [
- "aliyun-tablestore-rs",
  "async-openai",
- "base64 0.22.1",
  "blake3",
  "cap-fs-ext",
  "cap-std",
  "chacha20poly1305 0.11.0",
- "chrono",
  "ctrlc",
  "ed25519-dalek",
- "eventsource-stream",
- "futures-util",
  "getrandom 0.4.3",
  "hex",
- "hmac 0.12.1",
  "hmac 0.13.0",
- "lettre",
  "libc",
- "md5",
  "multiaddr 0.18.2",
  "oasis7_agent_api",
  "oasis7_agent_harness",
  "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_game_client",
- "oasis7_launcher_ui",
+ "oasis7_hosted_access",
  "oasis7_model_provider",
  "oasis7_node",
+ "oasis7_observability",
  "oasis7_proto",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
  "oasis7_wasm_router",
  "oasis7_wasm_store",
- "prost 0.13.5",
  "rand_core 0.10.1",
  "reqwest 0.13.5",
- "rusqlite",
  "serde",
  "serde_cbor",
  "serde_ignored",
  "serde_json",
- "sha1 0.10.7",
  "sha2 0.11.0",
- "tokio",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "tungstenite",
  "unicode-normalization",
- "url",
- "uuid",
- "webauthn-rs-core",
  "windows-sys 0.61.2",
  "zeroize",
 ]
@@ -6438,6 +6424,22 @@ dependencies = [
  "serde",
  "serde_json",
  "zeroize",
+]
+
+[[package]]
+name = "oasis7_client_cli"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "oasis7",
+ "oasis7_client_api",
+ "oasis7_proto",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6536,10 +6538,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_hosted_access"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+]
+
+[[package]]
+name = "oasis7_launcher_backend"
+version = "0.1.0"
+dependencies = [
+ "aliyun-tablestore-rs",
+ "base64 0.22.1",
+ "blake3",
+ "chacha20poly1305 0.11.0",
+ "chrono",
+ "ctrlc",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "hex",
+ "hmac 0.12.1",
+ "lettre",
+ "libc",
+ "md5",
+ "oasis7",
+ "oasis7_agent_api",
+ "oasis7_agent_harness",
+ "oasis7_client_api",
+ "oasis7_game_client",
+ "oasis7_hosted_access",
+ "oasis7_launcher_ui",
+ "oasis7_model_provider",
+ "oasis7_proto",
+ "prost 0.13.5",
+ "reqwest 0.13.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1 0.10.7",
+ "sha2 0.11.0",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "url",
+ "uuid",
+ "webauthn-rs-core",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "oasis7_launcher_ui"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "oasis7_letai_credit_adapter"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6601,6 +6663,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_newapi_bridge_service"
+version = "0.1.0"
+dependencies = [
+ "oasis7_letai_credit_adapter",
+ "oasis7_observability",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "oasis7_node"
 version = "0.1.0"
 dependencies = [
@@ -6619,6 +6693,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_observability"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "oasis7_ops_tools"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "oasis7",
+ "oasis7_proto",
+ "oasis7_wasm_abi",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "oasis7_proto"
 version = "0.1.0"
 dependencies = [
@@ -6627,6 +6724,32 @@ dependencies = [
  "hex",
  "serde",
  "serde_cbor",
+ "serde_json",
+]
+
+[[package]]
+name = "oasis7_provider_local_bridge"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "oasis7",
+ "oasis7_letai_credit_adapter",
+ "oasis7_observability",
+ "oasis7_wasm_abi",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tracing",
+]
+
+[[package]]
+name = "oasis7_provider_tools"
+version = "0.1.0"
+dependencies = [
+ "oasis7",
+ "oasis7_wasm_abi",
+ "serde",
  "serde_json",
 ]
 
@@ -6641,6 +6764,18 @@ dependencies = [
  "serde",
  "serde_json",
  "zeroize",
+]
+
+[[package]]
+name = "oasis7_viewer_runtime"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "oasis7",
+ "oasis7_client_api",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

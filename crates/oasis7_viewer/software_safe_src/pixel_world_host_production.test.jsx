@@ -11,6 +11,56 @@ import {
 } from "./pixel_world_host_test_support.jsx";
 
 describe("pixel world host production refresh", () => {
+  it("clears hit targets after ready context loss and retries only on explicit request", async () => {
+    runtimeMock.deriveRenderState = vi.fn(buildTestRustRenderState);
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?connect=0&locale=en", "en", {injectionSearch:"?test_api=1&connect=0&locale=en"});
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("ready"));
+    const canvas = document.getElementById("pixel-world-embedded-runtime-canvas");
+    const mounted = runtimeMock.mountCalls;
+    fireEvent(canvas, new Event("webglcontextlost", {cancelable:true}));
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable"));
+    expect(document.querySelector(".pixel-world-canvas__selection")).not.toBeInTheDocument();
+    expect(runtimeMock.mountCalls).toBe(mounted);
+    runtimeMock.mountError = new Error("still unavailable");
+    fireEvent.click(screen.getByRole("button", {name:/retry renderer/i}));
+    await waitFor(() => expect(runtimeMock.mountCalls).toBe(mounted + 1));
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable"));
+    expect(document.querySelector(".pixel-world-action-receipt")).toBeInTheDocument();
+    runtimeMock.mountError = null;
+    fireEvent.click(screen.getByRole("button", {name:/retry renderer/i}));
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("ready"));
+    expect(runtimeMock.mountCalls).toBe(mounted + 2);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+  it("clears private graphics and retained text on account change and rejects late callbacks", async () => {
+    runtimeMock.deriveRenderState = vi.fn(buildTestRustRenderState);
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?connect=0&locale=en", "en", {injectionSearch:"?test_api=1&connect=0&locale=en"});
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("ready"));
+    core.state.lastGameplayActionFeedback = {kind:"gameplay_action",agentId:"private-agent-A",effect:"private owner A result",stage:"completed"};
+    core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback);
+    const oldEvents = runtimeMock.onEvent;
+    core.state.auth.playerId = "different-player";
+    core.requestRender();
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable"));
+    expect(document.querySelector(".pixel-world-command-strip")).not.toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-action-receipt")).not.toBeInTheDocument();
+    expect(core.state.lastGameplayActionFeedback).not.toBeNull();
+    expect(core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback)).toBeNull();
+    const selected = core.state.selectedId;
+    oldEvents({type:"select_entity",selection:{kind:"agent",id:"late-private"}});
+    expect(core.state.selectedId).toBe(selected);
+    fireEvent.click(screen.getByRole("button", {name:/retry renderer/i}));
+    expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+  it("retains authorized receipt text when Rust derivation fails during a ready update", async () => {
+    runtimeMock.deriveRenderState = vi.fn(buildTestRustRenderState);
+    const { core } = await renderPixelWorldHost(sampleSnapshot(), "?connect=0&locale=en", "en", {injectionSearch:"?test_api=1&connect=0&locale=en"});
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("ready"));
+    runtimeMock.deriveRenderState.mockImplementation(() => {throw new Error("derivation interrupted");});
+    core.requestRender();
+    await waitFor(() => expect(core.state.pixelWorldRuntimeStatus).toBe("unavailable"));
+    expect(document.querySelector(".pixel-world-action-receipt")).toBeInTheDocument();
+    expect(document.querySelector(".pixel-world-canvas__selection")).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
   it.each([
     ["test_api=false", "?test_api=false&connect=0&locale=en"],
     ["test_api omitted", "?connect=0&locale=en"],
