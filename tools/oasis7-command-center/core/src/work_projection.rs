@@ -3,7 +3,7 @@ use crate::{
     Error, Result,
     codex::RuntimeSnapshot,
     domain::*,
-    github::{Check, GitHubSnapshot},
+    github::{Check, GitHubSnapshot, PullChecksSource},
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -69,6 +69,9 @@ pub struct WorkItem {
     pub source_url: Option<String>,
     pub goals: Vec<WorkGoal>,
     pub checks: Vec<Check>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub checks_source: Option<PullChecksSource>,
     pub runs: Vec<WorkRun>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -159,6 +162,7 @@ pub fn project_work(
                 source_url: Some(pull.url.clone()),
                 goals,
                 checks: pull.checks.clone(),
+                checks_source: pull.checks_source.clone(),
                 runs: vec![],
             });
         }
@@ -211,6 +215,7 @@ pub fn project_work(
                 source_url: None,
                 goals: vec![],
                 checks: vec![],
+                checks_source: None,
                 runs: vec![run],
             });
         }

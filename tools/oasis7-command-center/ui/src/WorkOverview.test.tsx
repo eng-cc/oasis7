@@ -5,7 +5,7 @@ import WorkOverview from './WorkOverview';
 import { bridge } from './bridge';
 import type { Snapshot } from './types';
 import type { WorkProjection } from './generated/core';
-vi.mock('./bridge', async () => ({...await vi.importActual('./bridge'), bridge: {workProjection: vi.fn(), openSource: vi.fn()}, subscribeRuntime: async () => () => {}}));
+vi.mock('./bridge', async () => ({...await vi.importActual('./bridge'), bridge: {workProjection: vi.fn(), openSource: vi.fn(), refreshWorkChecks: vi.fn()}, subscribeRuntime: async () => () => {}}));
 afterEach(() => {cleanup(); vi.clearAllMocks();});
 const snapshot = (id='p') => ({project:{id,environment:'local'}, associations:[]}) as unknown as Snapshot;
 function projection(id='p'): WorkProjection {
@@ -70,4 +70,19 @@ it('restores focus to the current source row after a background projection repla
   await waitFor(() => expect(screen.getByRole('button',{name:'修复本地工具'})).not.toBe(original));
   fireEvent.click(screen.getByRole('button',{name:'返回工作列表'}));
   expect(screen.getByRole('button',{name:'修复本地工具'})).toHaveFocus();
+});
+
+it('reads only explicitly selected PR checks and separates unread from successful empty CI', async () => {
+  const before=projection(); before.items[0].checks=[];
+  const after=projection(); after.items[0].checks=[]; after.items[0].checksSource={state:'partial',observedAt:'50',coverage:'REST first pages only',error:null};
+  vi.mocked(bridge.workProjection).mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+  vi.mocked(bridge.refreshWorkChecks).mockResolvedValue({} as never);
+  render(() => <WorkOverview snapshot={snapshot()} view="direction" sourceGeneration={0} onExecution={() => {}}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'修复本地工具'}));
+  expect(bridge.refreshWorkChecks).not.toHaveBeenCalled();
+  expect(screen.getByText(/CI 尚未单独读取/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'只读刷新该 PR 的 CI'}));
+  await screen.findByText(/已读取的 CI 页面为空/);
+  expect(bridge.refreshWorkChecks).toHaveBeenCalledExactlyOnceWith('1',null);
+  expect(screen.getByText('REST first pages only')).toBeInTheDocument();
 });

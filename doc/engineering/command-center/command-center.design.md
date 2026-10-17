@@ -171,7 +171,7 @@ Trace refs: O7-REQ-eb004bfb-41c7-4e8f-aa5b-1f52cec6cf08；承接 [REQ-CC-004](co
 
 Git 采用 [status](https://git-scm.com/docs/git-status) 的 `--porcelain=v2 -z --branch`、[worktree](https://git-scm.com/docs/git-worktree) 的 `list --porcelain -z` 等机器输出。Rust 用参数数组、明确 cwd、超时和输出上限调用，处理空格/换行路径与 detached HEAD。读取不隐含 fetch、切分支、reset、提交或清理；本地远端引用只是最近所知状态。
 
-GitHub 先复用当前固定只读参数的 gh adapter；扩展分页或改用共享 reqwest Client 时仍按 host/account 绑定，并遵循[条件请求、分页和退避建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)。桌面首版没有公网 webhook 接收服务，使用克制轮询，优先当前可见与显式关联的 PR/检查；Issue/Project 按需。近期列表没有包含某个已知 PR 时，详情可在该来源获准且有能力的条件下按其真实身份补读；列表截断、404 和未读取分别保留，不能由缺席推断未合入或删除。
+GitHub 优先经 `gh api --method GET` 调用 REST，不使用 `gh repo view`、`gh pr list` 等隐式 GraphQL 查询。仓库定位读取选中工作树的 GitHub origin 并用 REST 仓库身份核实；默认仅取 PR 列表第 1 页、最多 100 项，不批量展开所有 PR 的检查或评审。用户在工作详情明确读取某个 PR 的 CI 时，才对其原 HEAD 有界读取 check-runs 与 combined statuses 各第 1 页、每页最多 100 项，保存各自真实 tested SHA、读取时间和截断范围；未读取不作成功空或评审通过。PR HEAD 或项目/来源 generation 变化时，丢弃迟到的 CI。触及限额时保留旧事实并明确提示，不自动重试或回退 GraphQL。继续复用固定只读参数的 gh adapter；扩展分页或改用共享 reqwest Client 时仍按 host/account 绑定，并遵循[条件请求、分页和退避建议](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)。桌面首版没有公网 webhook 接收服务，使用克制轮询，优先当前可见与显式关联的 PR/检查；Issue/Project 按需。近期列表没有包含某个已知 PR 时，详情可在该来源获准且有能力的条件下按其真实身份补读；列表截断、404 和未读取分别保留，不能由缺席推断未合入或删除。
 
 初始刷新预算：每个 Git/gh 子进程或 HTTP 请求最多 10 秒，单来源刷新总期限 30 秒；列表每页最多 100 项、一次最多 10 页，已知对象补读一次最多 20 个且计入同一总期限。当前 gh 仅最近 100 PR 的能力不因此扩大为已实现分页。到达页数/时间预算返回已读范围和剩余 cursor/原因；用户明确“继续读取”开启有界新尝试，不能在后台无限追页。限额按来源返回的 retry-after 显示下次可重读时间，不在截止后持续等待或忙重试；分页期间来源变化保留各页实际版本/时间，不宣称原子快照。
 
