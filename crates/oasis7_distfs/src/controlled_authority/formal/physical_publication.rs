@@ -372,10 +372,7 @@ mod frame_batch_tests {
         let item = object((0..300000).map(|value| (value % 251) as u8).collect());
         let source = fixture.0.join("retained-input-source");
         fs::write(&source, &item.1).unwrap();
-        File::open(&source)
-            .unwrap()
-            .sync_all()
-            .unwrap();
+        File::open(&source).unwrap().sync_all().unwrap();
         fail_at(8);
         assert!(persist(&fixture.0, std::slice::from_ref(&item)).is_err());
         assert!(
