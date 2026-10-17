@@ -773,7 +773,7 @@ impl World {
         })
     }
 
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
     pub(super) fn apply_module_changes(
         &mut self,
         proposal_id: super::super::ProposalId,
@@ -783,7 +783,7 @@ impl World {
         self.apply_prepared_module_change_batch(proposal_id, changes, actor)
     }
 
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
     pub(crate) fn apply_module_changes_for_test(
         &mut self,
         proposal_id: super::super::ProposalId,

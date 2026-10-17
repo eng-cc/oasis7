@@ -7,7 +7,7 @@ use super::super::{
 };
 use super::World;
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
 struct PreparedModuleChangeBatch {
     module_registry: ModuleRegistry,
     module_artifacts: BTreeSet<String>,
@@ -20,7 +20,7 @@ struct PreparedModuleChangeBatch {
     consensus_record: TickConsensusRecord,
 }
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
 impl PreparedModuleChangeBatch {
     fn install(self, world: &mut World) -> Result<(), WorldError> {
         world.install_prepared_tick_consensus_record(self.consensus_record)?;
@@ -46,7 +46,7 @@ impl PreparedModuleChangeBatch {
 }
 
 impl World {
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
     pub(super) fn apply_prepared_module_change_batch(
         &mut self,
         proposal_id: ProposalId,

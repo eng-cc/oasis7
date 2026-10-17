@@ -42,7 +42,7 @@ mod capability_authorization_transaction;
 mod capability_authorization_validation;
 mod capability_catalog;
 mod capability_effect_receipt_projection;
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
 mod capability_test_fixture;
 mod cognition_command;
 mod cognition_economy;
@@ -135,7 +135,7 @@ mod local_test_provider_bootstrap;
 mod main_token_economy_audit;
 mod module_actions;
 mod module_artifact_retirement;
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(any(test, feature = "test_tier_required", feature = "test-support"))]
 mod module_change_batch_publication;
 mod module_marketplace_publication;
 mod module_release_publication;
