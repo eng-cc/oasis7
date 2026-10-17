@@ -866,7 +866,7 @@ fn reward_asset_redeem_power_action_updates_balances_and_reserve() {
     });
     world.step().expect("register target agent");
     let initial_electricity = world
-        .agent_resource_balance("agent-1", crate::simulator::ResourceKind::Electricity)
+        .agent_resource_balance("agent-1", oasis7_agent_api::world_action::ResourceKind::Electricity)
         .expect("query target electricity");
 
     world.set_reward_asset_config(RewardAssetConfig {
@@ -893,7 +893,7 @@ fn reward_asset_redeem_power_action_updates_balances_and_reserve() {
     assert_eq!(world.node_power_credit_balance("node-a"), 11);
     assert_eq!(
         world
-            .agent_resource_balance("agent-1", crate::simulator::ResourceKind::Electricity)
+            .agent_resource_balance("agent-1", oasis7_agent_api::world_action::ResourceKind::Electricity)
             .expect("query target electricity after redeem"),
         initial_electricity + 2
     );
@@ -933,7 +933,7 @@ fn reward_asset_redeem_power_overflow_keeps_state_atomic() {
     world
         .set_agent_resource_balance(
             "agent-1",
-            crate::simulator::ResourceKind::Electricity,
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
             i64::MAX,
         )
         .expect("seed target electricity at boundary");
@@ -969,7 +969,7 @@ fn reward_asset_redeem_power_overflow_keeps_state_atomic() {
     assert_eq!(world.node_last_redeem_nonce("node-a"), None);
     assert_eq!(
         world
-            .agent_resource_balance("agent-1", crate::simulator::ResourceKind::Electricity)
+            .agent_resource_balance("agent-1", oasis7_agent_api::world_action::ResourceKind::Electricity)
             .expect("query target electricity"),
         i64::MAX
     );

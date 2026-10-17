@@ -3,7 +3,7 @@ use super::*;
 use crate::runtime::{
     Action, AgentDecisionCausalContextV1, DomainEvent, WorldEventBody, builtin_factory_spec,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 pub use oasis7_agent_api::world_quote::{BuiltinFactoryStartPreview, NativeBuiltinFactoryQuote};
 

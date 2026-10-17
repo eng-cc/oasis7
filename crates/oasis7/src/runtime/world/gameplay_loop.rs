@@ -10,7 +10,7 @@ use super::super::{
     WorldEventBody,
 };
 use super::World;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 const CRISIS_AUTO_INTERVAL_TICKS: u64 = 8;
 const CRISIS_DEFAULT_DURATION_TICKS: u64 = 6;

@@ -5,7 +5,7 @@
 //! second `WorldState`.
 
 use super::super::agent_cell::AgentCell;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use serde::Serialize;
 use serde::ser::SerializeMap;
 use std::collections::BTreeMap;

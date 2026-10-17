@@ -1,6 +1,6 @@
 use super::pos;
 use crate::runtime::*;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn register(world: &mut World, id: &str) {
     world.submit_action(Action::RegisterAgent {

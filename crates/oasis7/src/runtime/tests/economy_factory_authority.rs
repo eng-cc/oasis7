@@ -4,7 +4,7 @@ use crate::runtime::{
     FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
     MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody, WorldState,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 #[test]
 fn legacy_snapshot_without_location_anchor_registry_remains_decodable() {

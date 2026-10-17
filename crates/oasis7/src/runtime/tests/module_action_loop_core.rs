@@ -1,6 +1,7 @@
 use super::super::*;
 use super::pos;
-use crate::simulator::{ModuleInstallTarget, ResourceKind};
+use oasis7_agent_api::world_action::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ResourceKind;
 use ed25519_dalek::{Signer, SigningKey};
 use std::collections::BTreeMap;
 use std::fs;

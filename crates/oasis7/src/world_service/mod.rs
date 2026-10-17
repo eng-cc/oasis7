@@ -24,7 +24,6 @@ pub mod private_goal_prepare;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod private_goal_store;
 pub mod projection;
-mod retained_queries;
 pub mod verified_view;
 pub mod wire;
 pub use authority::*;

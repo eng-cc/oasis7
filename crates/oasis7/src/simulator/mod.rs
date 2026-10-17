@@ -258,3 +258,5 @@ pub use kernel::{
     compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
     merge_kernel_rule_decisions,
 };
+
+pub mod chain_resource;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 const KIND: &str = "factory.smelter.mk1";
 const FACTORY: &str = "registered.factory";
 

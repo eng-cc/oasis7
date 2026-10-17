@@ -11,7 +11,8 @@ use crate::runtime::cognition_recovery::{
 };
 use crate::runtime::error::WorldError;
 use crate::runtime::world::cognition_persistence_validation::append_cognition_event;
-use crate::simulator::{Digest32, FeedbackEnvelopeV1};
+use crate::simulator::FeedbackEnvelopeV1;
+use oasis7_agent_api::Digest32;
 use serde_json::{Value as JsonValue, json};
 use std::collections::BTreeMap;
 

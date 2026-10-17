@@ -7,7 +7,7 @@
 
 use super::super::*;
 use crate::geometry::GeoPos;
-use crate::models::AgentState;
+use crate::runtime::agent_state::AgentState;
 use crate::runtime::cognition::world_state_binding_digest_v1;
 use crate::runtime::cognition_recovery::cognition_digest_v1;
 use crate::runtime::util::hash_json;

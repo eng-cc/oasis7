@@ -4,7 +4,8 @@ use super::super::{
 };
 use super::{World, WorldError};
 use crate::runtime::{FactoryProfileV1, ModuleProfileChanges, ProductProfileV1, RecipeProfileV1};
-use crate::simulator::{ModuleInstallTarget, ResourceKind};
+use oasis7_agent_api::world_action::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::*;
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {

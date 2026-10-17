@@ -21,7 +21,8 @@ use super::super::{
 };
 use super::World;
 use super::prepared_base_head::WorldPreparedBaseHead;
-use crate::simulator::{ModuleVisualEntity, ResourceKind};
+use oasis7_agent_api::world_action::ResourceKind;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 
 const MODULE_RUNTIME_FEE_BYTES_PER_UNIT: u64 = 1_024;
 

@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum BodyOverlayMutation {
     Body {
-        body_view: crate::models::BodyKernelView,
+        body_view: crate::runtime::agent_state::BodyKernelView,
         last_active: super::WorldTime,
     },
     RouteOnly,
@@ -26,7 +26,7 @@ pub struct BodyOverlay {
 impl BodyOverlay {
     pub fn new(
         agent_id: impl Into<String>,
-        body_view: crate::models::BodyKernelView,
+        body_view: crate::runtime::agent_state::BodyKernelView,
         last_active: super::WorldTime,
     ) -> Self {
         Self {
@@ -149,8 +149,8 @@ impl Serialize for MailboxProjection<'_> {
 }
 
 struct AgentStateProjection<'a> {
-    state: &'a crate::models::AgentState,
-    body_view: &'a crate::models::BodyKernelView,
+    state: &'a crate::runtime::agent_state::AgentState,
+    body_view: &'a crate::runtime::agent_state::BodyKernelView,
 }
 
 impl Serialize for AgentStateProjection<'_> {

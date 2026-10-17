@@ -1,6 +1,6 @@
 use super::super::{Action, ActionEnvelope, CausedBy, DomainEvent, WorldEventBody};
 use super::{World, WorldError};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 const OWNER: &str = "retirement-owner";
 const BIDDER: &str = "retirement-bidder";

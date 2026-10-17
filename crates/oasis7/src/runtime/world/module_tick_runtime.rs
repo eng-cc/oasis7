@@ -12,7 +12,7 @@ use super::capability_authorization_command_stage::TrustedCommandStage;
 use super::module_runtime_labels::{
     module_kind_label, module_role_label, subscription_stage_label,
 };
-use crate::simulator::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ModuleInstallTarget;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModuleTickRoutingDurationBuckets {

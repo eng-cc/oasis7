@@ -8,7 +8,7 @@ fn reward_asset_redeem_power_rejected_when_reserve_insufficient() {
     });
     world.step().expect("register target agent");
     let initial_electricity = world
-        .agent_resource_balance("agent-1", crate::simulator::ResourceKind::Electricity)
+        .agent_resource_balance("agent-1", oasis7_agent_api::world_action::ResourceKind::Electricity)
         .expect("query target electricity");
 
     world.set_reward_asset_config(RewardAssetConfig {
@@ -35,7 +35,7 @@ fn reward_asset_redeem_power_rejected_when_reserve_insufficient() {
     assert_eq!(world.node_power_credit_balance("node-a"), 5);
     assert_eq!(
         world
-            .agent_resource_balance("agent-1", crate::simulator::ResourceKind::Electricity)
+            .agent_resource_balance("agent-1", oasis7_agent_api::world_action::ResourceKind::Electricity)
             .expect("query target electricity after reject"),
         initial_electricity
     );

@@ -1,6 +1,7 @@
 use super::super::cognition::{MAX_EXPECTED_VALUE_BYTES, MAX_IDENTIFIER_BYTES};
 use super::{WorldError, WorldState};
-use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
+use oasis7_agent_api::world_entity::ModuleVisualAnchor;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use oasis7_wasm_abi::ModuleEmitEvent;
 use serde::Deserialize;
 use std::collections::BTreeMap;

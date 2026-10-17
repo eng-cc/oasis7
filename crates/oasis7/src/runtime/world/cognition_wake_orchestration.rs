@@ -9,7 +9,7 @@ use crate::runtime::cognition_wake::{
     WakeConditionV1, WakeConditionValidator, WakeEvaluation, WakeEvaluationContext,
 };
 use crate::runtime::error::WorldError;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use serde_json::Value as JsonValue;
 
 impl World {

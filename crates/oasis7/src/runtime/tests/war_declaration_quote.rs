@@ -1,6 +1,6 @@
 use super::pos;
 use crate::runtime::{Action, World};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn register_agents(world: &mut World, agent_ids: &[&str]) {
     for (index, agent_id) in agent_ids.iter().enumerate() {

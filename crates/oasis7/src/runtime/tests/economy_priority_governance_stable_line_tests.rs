@@ -1,5 +1,5 @@
 use crate::runtime::WorldError;
-use crate::models::AgentState;
+use crate::runtime::agent_state::AgentState;
 use crate::runtime::state::FactoryProductionSnapshot;
 use crate::runtime::{
     AgentCell, FactoryProductionState, FactoryState, MaterialLedgerId, WorldState,

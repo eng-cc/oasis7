@@ -1,6 +1,6 @@
 use super::*;
-use crate::models::BodyModuleSlot;
 use crate::runtime::AgentActivityV1;
+use crate::runtime::agent_state::BodyModuleSlot;
 use serde::Serialize;
 use serde::ser::{SerializeMap, SerializeStruct};
 

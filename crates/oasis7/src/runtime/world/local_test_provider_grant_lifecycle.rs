@@ -212,7 +212,7 @@ fn validate_local_test_provider_grant(
     grant: &CapabilityGrantV2,
     identity: &CapabilityAgentIdentity,
     config: &LocalTestProviderAuthorityConfig,
-    binding: &crate::simulator::RuntimeBindingV1,
+    binding: &oasis7_agent_api::RuntimeBindingV1,
     authority: &CapabilityAuthorityRecord,
 ) -> Result<(), WorldError> {
     grant
@@ -300,7 +300,7 @@ fn validate_local_test_provider_grant(
 pub(super) fn local_test_provider_grant(
     identity: &CapabilityAgentIdentity,
     agent_id: &str,
-    binding: &crate::simulator::RuntimeBindingV1,
+    binding: &oasis7_agent_api::RuntimeBindingV1,
     authority: &CapabilityAuthorityRecord,
     issued_at_tick: u64,
     grant_nonce: &str,

@@ -1243,9 +1243,11 @@ name = "oasis7_agent_api"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "hex",
  "oasis7_wasm_abi",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

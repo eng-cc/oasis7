@@ -4,7 +4,7 @@ use crate::runtime::{
     Action, CausedBy, DomainEvent, MaterialLedgerId, ProtocolPowerReserve, RewardAssetConfig,
     WorldEventBody,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn register(world: &mut World, id: &str) {
     world.submit_action(Action::RegisterAgent {

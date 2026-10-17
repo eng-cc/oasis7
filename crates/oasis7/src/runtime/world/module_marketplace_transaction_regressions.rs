@@ -1,6 +1,6 @@
 use super::super::{Action, ActionEnvelope, DomainEvent};
 use super::World;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn fixture() -> World {
     let mut world = World::new();

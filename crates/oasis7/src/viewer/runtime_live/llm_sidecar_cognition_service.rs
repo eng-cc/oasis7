@@ -325,29 +325,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         cognition.response.request_digest = request.request_digest.clone();
         serde_json::to_value(cognition).map_err(|error| error.to_string())
     }
-    /// Read-only authorized projection from the exact service-pinned World.
-    /// No sidecar cache, signer material, or grant registry is transported.
     pub fn canonical_agent_service_context(
         world: &RuntimeWorld,
         agent_id: &str,
-    ) -> Result<crate::world_service::projection::WorldServiceAgentContext, String> {
-        let binding = world
-            .current_cognition_runtime_binding()
-            .map_err(|error| format!("{error:?}"))?;
-        let context = provider_capability_context(world, &binding, agent_id, 0)?;
-        let CapabilitySubject::Agent { owner_binding, .. } = &context.invocation.subject else {
-            return Err("canonical provider subject is not an Agent".into());
-        };
-        let root = world.capability_authorization_root().to_string();
-        Ok(crate::world_service::projection::WorldServiceAgentContext {
-            agent_id: agent_id.into(),
-            capability_authorization_root: root.clone(),
-            capability_snapshot_hash: h_v1("oasis7.runtime.manifest.v1", &root).to_string(),
-            authority_context_hash: h_v1("oasis7.runtime.authority-context.v1", &root).to_string(),
-            payer_binding: serde_json::json!({"owner_binding":owner_binding}),
-            capability_catalog: context.catalog,
-            capability_invocation_context: context.invocation,
-        })
+    ) -> Result<oasis7_agent_api::world_context::WorldServiceAgentContext, String> {
+        world.canonical_agent_service_context(agent_id)
     }
 }
 

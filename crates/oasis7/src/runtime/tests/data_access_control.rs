@@ -3,8 +3,8 @@ use crate::runtime::{
     Action, DomainEvent, EconomicContractFulfillmentKind, EconomicContractStatus, RejectReason,
     World, WorldEventBody,
 };
-use crate::simulator::ResourceKind;
 use ed25519_dalek::SigningKey;
+use oasis7_agent_api::world_action::ResourceKind;
 
 #[path = "data_access_control/raw_resource_publication_transaction_regressions.rs"]
 mod raw_resource_publication_transaction_regressions;

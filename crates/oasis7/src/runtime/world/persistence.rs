@@ -337,7 +337,7 @@ impl World {
             generation_algorithm_hash,
         );
         let latest_chain_resource_delta = Some(
-            super::super::ChainResourceDelta::latest_from_runtime_manifest(
+            crate::runtime::chain_resource::latest_from_runtime_manifest(
                 super::super::ChainResourceDerivationContext {
                     world_id: chain_resource_manifest.world_id.as_str(),
                     chain_id: chain_resource_manifest.chain_id.as_str(),
@@ -431,7 +431,7 @@ impl World {
         world_config_hash: impl Into<String>,
         generation_algorithm_hash: impl Into<String>,
     ) -> super::super::ChainResourceManifest {
-        super::super::ChainResourceManifest::from_runtime_state(
+        crate::runtime::chain_resource::from_runtime_state(
             context,
             world_config_hash,
             generation_algorithm_hash,
@@ -827,7 +827,7 @@ impl World {
         // Result receipts are excluded from the authorization root; validate
         // their immutable signed identities before accepting a checkpoint.
         for (key, result) in &world.capability_revocation_state.world_service_results {
-            crate::world_service::correlation::validate_result(key, result)
+            crate::runtime::service_admission::correlation::validate_result(key, result)
                 .map_err(|reason| super::capability_authorization::deny(&reason))?;
         }
         world.capability_nonce_records = snapshot.capability_nonce_records;
@@ -900,7 +900,7 @@ impl World {
                 .attach_verified_formal_history(parent, reader)
                 .map_err(|reason| WorldError::DistributedValidationFailed { reason })?;
         }
-        crate::world_service::game_task::validate_history(&world)
+        crate::runtime::service_admission::game_task::validate_history(&world)
             .map_err(|reason| super::capability_authorization::deny(&reason))?;
         if observer {
             let limits = &world.runtime_memory_limits;
@@ -924,7 +924,7 @@ impl World {
                 // or already-consumed task predecessor. Validate the replayed
                 // chain before publishing the recovered world or trimming its
                 // journal. With no tail, the pre-replay history is unchanged.
-                crate::world_service::game_task::validate_history(&world)
+                crate::runtime::service_admission::game_task::validate_history(&world)
                     .map_err(|reason| super::capability_authorization::deny(&reason))?;
             }
             world.enforce_journal_event_limit();

@@ -17,8 +17,8 @@ use super::super::{
     RewardAssetInvariantViolation, RewardSignatureGovernancePolicy, SystemOrderPoolBudget,
 };
 use super::World;
-use crate::simulator::ResourceKind;
-use crate::simulator::StockError;
+use oasis7_agent_api::world_action::ResourceKind;
+use oasis7_agent_api::world_resource::StockError;
 use std::collections::BTreeMap;
 
 impl World {

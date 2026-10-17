@@ -1,7 +1,7 @@
 use super::super::*;
 use super::pos;
-use crate::models::AgentState;
-use crate::simulator::ResourceKind;
+use crate::runtime::agent_state::AgentState;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn test_agent_cell(agent_id: &str) -> AgentCell {
     AgentCell::new(AgentState::new(agent_id, pos(0, 0)), 0)

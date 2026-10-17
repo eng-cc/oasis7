@@ -492,7 +492,7 @@ mod tests {
         DomainEvent, ModuleRuntimeChargeEvent, ProductValidationAttemptV1, WorldEvent,
         WorldEventBody,
     };
-    use crate::simulator::ResourceKind;
+    use oasis7_agent_api::world_action::ResourceKind;
 
     #[test]
     fn old_era_charge_with_same_event_id_does_not_suppress_new_era_validation() {

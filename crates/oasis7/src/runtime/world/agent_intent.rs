@@ -4,7 +4,7 @@ use super::super::{
     AgentIntentV2, DomainEvent, WorldError, WorldEventBody, WorldEventId,
 };
 use super::World;
-use crate::simulator::canonical_agent_intent_summary;
+use oasis7_agent_api::intent_summary::canonical_agent_intent_summary;
 
 const AGENT_CHAT_INTENT_KIND: &str = "agent_chat";
 const AGENT_CHAT_INTENT_SOURCE: &str = "player";
