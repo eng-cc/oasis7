@@ -38,23 +38,14 @@ impl SignedIssuerGrantQueryV1 {
             &self.body.issuer_public_key,
         )
     }
-    pub(super) fn new(
+    /// Caller must supply a fresh unpredictable observation nonce for each query.
+    pub fn new_with_nonce(
         policy: &RecoveryPolicyV1,
         key: &SigningKey,
         predecessor: String,
         minimum: IssuerAnchorV1,
+        nonce: [u8; 32],
     ) -> Result<Self, FormalError> {
-        let mut nonce = [0u8; 32];
-        #[cfg(unix)]
-        {
-            File::open("/dev/urandom")
-                .and_then(|mut f| f.read_exact(&mut nonce))
-                .map_err(io)?;
-        }
-        #[cfg(not(unix))]
-        {
-            return Err(FormalError::IssuerUnproven);
-        }
         let body = IssuerGrantQueryBodyV1 {
             schema_version: 1,
             issuer_public_key: policy.recovery_issuer_public_key.clone(),
@@ -100,7 +91,7 @@ impl SignedIssuerGrantQueryResultV1 {
             signature_hex,
         })
     }
-    pub(super) fn verify(
+    pub fn verify(
         &self,
         query: &SignedIssuerGrantQueryV1,
         policy: &RecoveryPolicyV1,

@@ -9,7 +9,7 @@ use std::process::Command;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
-use oasis7_distfs::{BlobStore, HashAlgorithm, LocalCasStore};
+use oasis7_cas::{BlobStore, HashAlgorithm, LocalCasStore};
 use sha2::{Digest, Sha256};
 
 /// Materialization failures; the runtime maps these to its public error contract.

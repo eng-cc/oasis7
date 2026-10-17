@@ -1,4 +1,5 @@
 use super::*;
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 use crate::controlled_authority::fencing::{
     EndpointCheckpointBindingV1, EndpointInstanceBindingV1, EpochSealBodyV1, EpochSealReceiptV1,
     FencingError, MonotonicEndpointGuard, MonotonicEndpointProvider, SealedTailKindV1,

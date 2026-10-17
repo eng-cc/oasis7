@@ -337,7 +337,7 @@ fn formal_effect_retry_revalidates_persisted_not_found_against_exact_query() {
 }
 
 #[test]
-fn formal_effect_http_slow_fragmented_response_obeys_one_absolute_deadline() {
+fn formal_effect_slow_fragmented_response_retains_unknown_delivery_state() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let sender = SigningKey::from_bytes(&[48; 32]);
@@ -348,7 +348,7 @@ fn formal_effect_http_slow_fragmented_response_obeys_one_absolute_deadline() {
     let server_contract = contract.clone();
     let server_receiver = receiver.clone();
     let server = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let mut stream = accept_deadline_test_stream(&listener);
         let request_bytes = read_test_http_request(&mut stream).unwrap();
         let request: SignedEffectRequestV1 = serde_cbor::from_slice(&request_bytes).unwrap();
         let rpc_digest = request_digest(&request.body, &request.sender_public_key_hex).unwrap();
@@ -380,18 +380,99 @@ fn formal_effect_http_slow_fragmented_response_obeys_one_absolute_deadline() {
     });
     let root = PrivateTestRoot::new();
     let store = Arc::new(FormalEffectDeliveryStore::open(&root.store_path()).unwrap());
-    let transport = FormalEffectDeliveryTransport::new(vec![contract], sender, store).unwrap();
-    let started = Instant::now();
+    let transport =
+        FormalEffectDeliveryTransport::new(vec![contract], sender, store.clone()).unwrap();
     assert!(matches!(
         transport.drive_qualified_obligation(&effect),
         EffectDeliveryDriveResultV1::Unknown { .. }
     ));
-    assert!(
-        started.elapsed() < Duration::from_millis(230),
-        "HTTP exchange exceeded one bounded operation deadline: {:?}",
-        started.elapsed()
-    );
+    // The durable drive includes store/fsync work outside the HTTP deadline.
+    // Its safety contract is Unknown with the original identity retained.
+    assert!(matches!(
+        store.read(&effect.identity).unwrap().unwrap().phase,
+        DeliveryPhaseV1::Unknown { .. }
+    ));
     server.join().unwrap();
+}
+
+fn accept_deadline_test_stream(listener: &TcpListener) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                return stream;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    Instant::now() < deadline,
+                    "deadline-test receiver never accepted a request"
+                );
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) => panic!("deadline-test accept failed: {error}"),
+        }
+    }
+}
+
+#[test]
+fn formal_effect_http_slow_fragmented_response_obeys_one_absolute_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let sender = SigningKey::from_bytes(&[48; 32]);
+    let receiver = SigningKey::from_bytes(&[49; 32]);
+    let mut contract = route(listener.local_addr().unwrap(), &sender, &receiver);
+    contract.timeout_ms = 170;
+    let body = b"actual bounded HTTP request";
+    let server = thread::spawn(move || {
+        let mut stream = accept_deadline_test_stream(&listener);
+        let received =
+            read_test_http_request(&mut stream).expect("receive complete actual request");
+        assert_eq!(received, body);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n")
+            .unwrap();
+        let mut fragments_written = 0;
+        for byte in b"abc" {
+            thread::sleep(Duration::from_millis(90));
+            // A correctly timed-out client may have closed before a late write.
+            if stream.write_all(std::slice::from_ref(byte)).is_err() {
+                break;
+            }
+            fragments_written += 1;
+        }
+        // Never send the fourth byte: resetting 170 ms on each fragment would
+        // reach this EOF around 270 ms instead of the absolute deadline.
+        (received, fragments_written)
+    });
+    let started = Instant::now();
+    let result = http_post_bytes(&contract, "/v1/effects/query", body);
+    let elapsed = started.elapsed();
+    let (received, fragments_written) = server.join().expect("bounded HTTP receiver finished");
+    assert_eq!(
+        received, body,
+        "deadline regression must reach the actual receiver"
+    );
+    assert!(
+        fragments_written > 0,
+        "receiver must exercise a fragmented response"
+    );
+    let error = result.expect_err("incomplete fragmented response cannot succeed");
+    let lower = error.to_ascii_lowercase();
+    assert!(
+        lower.contains("operation deadline expired while reading")
+            || (lower.contains("read effect http response body failed")
+                && (lower.contains("timed out")
+                    || lower.contains("temporarily unavailable")
+                    || lower.contains("operation would block"))),
+        "expected an actual read deadline/timeout, never EOF or disconnect: {error}; elapsed={elapsed:?}; fragments={fragments_written}"
+    );
 }
 
 #[test]

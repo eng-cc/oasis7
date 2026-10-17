@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "owner": "repository_health_engineer",
-  "reviewed_at": "2026-10-16",
+  "reviewed_at": "2026-10-17",
   "expires": "2026-10-31",
-  "rationale": "Ratchet exact direct Cargo manifest declarations for the three remaining RustSec ignore crates; the 30-day review window requires revalidation of dependency scope and direct manifests by 2026-10-31, with no automatic renewal or scope expansion. The shared native client retains the existing serde_cbor wire/cache codec extracted from oasis7 for format compatibility; only that exact direct manifest and its first-party consumers are added, without renewing the expiry or approving a new advisory. The chain runtime retains the existing serde_cbor codec extracted from oasis7; register its exact manifest and dependency closure without renewing expiry or adding an advisory.",
+  "rationale": "Ratchet exact direct Cargo manifest declarations for the three remaining RustSec ignore crates; the 30-day review window requires revalidation of dependency scope and direct manifests by 2026-10-31, with no automatic renewal or scope expansion. The shared native client retains the existing serde_cbor wire/cache codec extracted from oasis7 for format compatibility; only that exact direct manifest and its first-party consumers are added, without renewing the expiry or approving a new advisory. The chain runtime retains the existing serde_cbor codec extracted from oasis7; register its exact manifest and dependency closure without renewing expiry or adding an advisory. The local CAS and pure formal protocol retain serde_cbor implementations extracted from oasis7_distfs for unchanged on-disk and wire formats; register only those two direct manifests with the existing advisory and expiry. The client production graph now excludes distfs/CAS/zstd, and neither lockfile changes a third-party version.",
   "ignored_direct_manifests": {
     "paste": [],
     "ttf-parser": [],
@@ -47,9 +47,11 @@
       "crates/oasis7_builtin_wasm_modules/m5_gameplay_governance_council/Cargo.toml",
       "crates/oasis7_builtin_wasm_modules/m5_gameplay_meta_progression/Cargo.toml",
       "crates/oasis7_builtin_wasm_modules/m5_gameplay_war_core/Cargo.toml",
+      "crates/oasis7_cas/Cargo.toml",
       "crates/oasis7_chain_runtime/Cargo.toml",
       "crates/oasis7_consensus/Cargo.toml",
       "crates/oasis7_distfs/Cargo.toml",
+      "crates/oasis7_formal_protocol/Cargo.toml",
       "crates/oasis7_game_client/Cargo.toml",
       "crates/oasis7_net/Cargo.toml",
       "crates/oasis7_node/Cargo.toml",

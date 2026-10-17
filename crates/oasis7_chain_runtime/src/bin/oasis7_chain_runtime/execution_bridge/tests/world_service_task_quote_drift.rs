@@ -1,6 +1,6 @@
 //! Deterministic real-handler classification of read-only quote races.
 //! These status codes do not grant admission or extend the captured lease.
-use super::super::private_goal_tests::{http, http_with_hook};
+use super::super::private_goal_tests::{http, http_with_diagnostic_hook, http_with_hook};
 use super::*;
 use oasis7::world_service::{private_task_context::*, task_factory_quote::*, task_recipe_quote::*};
 use oasis7_client_api::world_service::task_context::TASK_CONTEXT_READ_DELIVERY_DRIFT;
@@ -17,6 +17,47 @@ struct Fixture {
     get: SignedReadRequest<TaskContextGetV1>,
     create: SubmitIntentRequest<WorldServicePayloadV1>,
     height: u64,
+}
+fn advance_one(driver: &mut NodeRuntimeExecutionDriver, height: &mut u64) {
+    // Administrative intent receipts (including duplicate creates) do not
+    // advance simulation time. Use the canonical empty-block path.
+    let block_height = *height;
+    let before = driver.execution_world.state().time;
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".into(),
+            node_id: "node-a".into(),
+            proposer_id: "node-a".into(),
+            height: block_height,
+            slot: block_height,
+            epoch: 0,
+            node_block_hash: format!("node-h{block_height}"),
+            action_root: compute_consensus_action_root(&[]).unwrap(),
+            committed_actions: vec![],
+            committed_at_unix_ms: block_height as i64 * 1000,
+        })
+        .unwrap();
+    *height += 1;
+    assert!(
+        driver.execution_world.state().time > before,
+        "empty canonical simulation block must advance the real clock"
+    );
+}
+fn expire_context_until(
+    driver: &mut NodeRuntimeExecutionDriver,
+    height: &mut u64,
+    valid_until_tick: u64,
+) {
+    for _ in 0..=TASK_CONTEXT_LEASE_TICKS {
+        if driver.execution_world.state().time > valid_until_tick {
+            break;
+        }
+        advance_one(driver, height);
+    }
+    assert!(
+        driver.execution_world.state().time > valid_until_tick,
+        "captured context did not expire within its actual bounded lease"
+    );
 }
 fn fixture(recipe: bool) -> Fixture {
     let (dir, mut driver, world, owner, owner_public) = production_playtest::fixture_kind(!recipe);
@@ -251,30 +292,7 @@ impl Fixture {
         }
     }
     fn advance(&mut self) {
-        // Administrative intent receipts (including duplicate creates) do not
-        // advance simulation time. Use the established empty simulation block
-        // path, rather than fabricating a clock or extending the lease.
-        let height = self.height;
-        let before = self.driver.execution_world.state().time;
-        self.driver
-            .on_commit(NodeExecutionCommitContext {
-                world_id: "w1".into(),
-                node_id: "node-a".into(),
-                proposer_id: "node-a".into(),
-                height,
-                slot: height,
-                epoch: 0,
-                node_block_hash: format!("node-h{height}"),
-                action_root: compute_consensus_action_root(&[]).unwrap(),
-                committed_actions: vec![],
-                committed_at_unix_ms: height as i64 * 1000,
-            })
-            .unwrap();
-        self.height += 1;
-        assert!(
-            self.driver.execution_world.state().time > before,
-            "empty canonical simulation block must advance the real clock"
-        );
+        advance_one(&mut self.driver, &mut self.height);
     }
 }
 #[test]
@@ -406,6 +424,63 @@ fn task_factory_and_recipe_quote_classify_only_base_and_delivery_drift() {
             drop(f.store);
             std::fs::remove_dir_all(f.dir).unwrap();
         }
+    }
+}
+
+#[test]
+fn task_factory_and_recipe_quote_expiry_precedes_retriable_base_and_delivery_drift() {
+    for recipe in [false, true] {
+        let mut initial = fixture(recipe);
+        let valid_until_tick = initial.get.request.context.valid_until_tick.0;
+        expire_context_until(&mut initial.driver, &mut initial.height, valid_until_tick);
+        let (path, stale_base) = initial.quote(recipe, true);
+        let (status, body, stage) = http_with_diagnostic_hook(
+            &initial.dir,
+            &initial.runtime,
+            &initial.signer,
+            Some(&initial.store),
+            path,
+            &stale_base,
+            "",
+            || {},
+        );
+        assert_eq!(status, 409, "{path}: [response payload omitted]");
+        assert_eq!(
+            body,
+            serde_json::json!({"error":"private_goal_conflict"}),
+            "expired initial capture must not be classified as retriable quote drift"
+        );
+        assert_eq!(stage, Some("initial_capture_expired"));
+        drop(initial.store);
+        std::fs::remove_dir_all(initial.dir).unwrap();
+
+        let mut delivery = fixture(recipe);
+        let (path, proof) = delivery.quote(recipe, false);
+        let valid_until_tick = delivery.get.request.context.valid_until_tick.0;
+        let delivered = std::cell::Cell::new(false);
+        let (status, body, stage) = http_with_diagnostic_hook(
+            &delivery.dir,
+            &delivery.runtime,
+            &delivery.signer,
+            Some(&delivery.store),
+            path,
+            &proof,
+            "",
+            || {
+                delivered.set(true);
+                expire_context_until(&mut delivery.driver, &mut delivery.height, valid_until_tick);
+            },
+        );
+        assert!(delivered.get(), "quote did not reach delivery: {path}");
+        assert_eq!(status, 409, "{path}: [response payload omitted]");
+        assert_eq!(
+            body,
+            serde_json::json!({"error":"private_goal_conflict"}),
+            "expired delivery capture must not be classified as retriable quote drift"
+        );
+        assert_eq!(stage, Some("delivery_capture_expired"));
+        drop(delivery.store);
+        std::fs::remove_dir_all(delivery.dir).unwrap();
     }
 }
 

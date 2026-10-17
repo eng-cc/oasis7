@@ -79,13 +79,15 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 
 ## 4. 边界与结构
 
-net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；distfs 拥有CAS/replication/challenge；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
+代码归属按消费者需要分层：`oasis7_cas` 拥有本地内容寻址存储、编码、pin、文件索引及其存储探针；`oasis7_formal_protocol` 拥有可离线验证的 formal 协议类型、签名、证明和信任锚算法，不依赖本地 CAS、压缩或端点服务。`oasis7_distfs` 保留持久化协调、复制、端点、传输与恢复接线，并重导出同一份类型保持消费者兼容。客户端证明消费者直接依赖纯协议库，纯 CAS 消费者直接依赖 CAS 库。拆分不改变编码、hash domain、落盘路径、回退顺序或权威接纳规则；native 恢复证据仍由实际恢复校验产生，不能用公开的未校验构造器替代。
+
+net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；存储域由 cas/distfs 分担本地 CAS/challenge 与分布式 replication；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
 
 ### des-p2p-ordered-commit
 
 下一committed height、有序序列/root/decode及journal绑定；错误不推进。
 
-net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；distfs 拥有CAS/replication/challenge；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
+net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；存储域由 cas/distfs 分担本地 CAS/challenge 与分布式 replication；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
 
 ### des-p2p-receipt-finality
 
@@ -111,7 +113,7 @@ Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height
 
 治理validator与permissionless服务、light/archive角色隔离；验证材料而非operator身份；prune重建+archive条件。
 
-net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；distfs 拥有CAS/replication/challenge；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
+net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；存储域由 cas/distfs 分担本地 CAS/challenge 与分布式 replication；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
 
 ### des-p2p-target-service-gate
 
@@ -128,7 +130,7 @@ verified-serving→stale/catching-up→readonly→serving；proof冲突→isolat
 
 writer/epoch从seq1及guard不污染；权威恢复错误与qualified storage-challenge fallback区分。
 
-net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；distfs 拥有CAS/replication/challenge；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
+net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；存储域由 cas/distfs 分担本地 CAS/challenge 与分布式 replication；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
 
 ### des-p2p-authority-profiles
 

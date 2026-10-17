@@ -1083,20 +1083,30 @@ pub(super) fn stop_with_action(
 #[cfg(test)]
 pub(super) fn run_test_receiver(
     config: &NodeConfig,
+    intent: ActionRecord,
+    command: Command,
+    ready: std::sync::mpsc::Sender<()>,
+) -> Result<(), String> {
+    run_test_receiver_with_stop_signal(
+        config,
+        intent,
+        command,
+        ready,
+        Arc::new(AtomicBool::new(false)),
+    )
+}
+#[cfg(test)]
+pub(super) fn run_test_receiver_with_stop_signal(
+    config: &NodeConfig,
     mut intent: ActionRecord,
     command: Command,
     ready: std::sync::mpsc::Sender<()>,
+    signal_stop: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let ownership = lock(&config.identity.data_dir)?;
     write_instance(&config.identity.data_dir, &intent.target)?;
     ready.send(()).map_err(|e| e.to_string())?;
-    supervise_command(
-        config,
-        &mut intent,
-        ownership,
-        command,
-        Arc::new(AtomicBool::new(false)),
-    )
+    supervise_command(config, &mut intent, ownership, command, signal_stop)
 }
 #[cfg(test)]
 pub(super) fn test_intent(config: &NodeConfig) -> Result<ActionRecord, String> {

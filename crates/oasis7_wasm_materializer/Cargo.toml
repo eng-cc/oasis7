@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-oasis7_distfs = { path = "../oasis7_distfs" }
+oasis7_cas = { path = "../oasis7_cas" }
 oasis7_proto = { path = "../oasis7_proto" }
 sha2 = "0.11"
 hex = "0.4"

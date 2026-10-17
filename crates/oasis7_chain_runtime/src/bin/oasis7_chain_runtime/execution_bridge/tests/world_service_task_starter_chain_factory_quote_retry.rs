@@ -57,7 +57,10 @@ fn accept_until(
             ));
         }
         match listener.accept() {
-            Ok((stream, _)) => return Ok(stream),
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false)?;
+                return Ok(stream);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(Duration::from_millis(5));
             }
@@ -124,9 +127,9 @@ pub(super) fn assert_delayed_factory_quote_retry_reuses_original(
         requests
     });
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key,
-        formal_read_trust: None,
         expected_world,
         scope_id,
         read_private_key_hex: delegate.into(),

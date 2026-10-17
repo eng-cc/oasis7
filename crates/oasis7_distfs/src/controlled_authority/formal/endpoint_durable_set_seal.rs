@@ -32,7 +32,7 @@ impl FileFormalEndpoint {
         signed: &SignedNormalDurableSetTransitionV1,
     ) -> Result<VerifiedNormalDurableSetTransitionV1, FormalError> {
         let _guard = self.guard()?;
-        self.reload_parent()?;
+        self.reload_parent(&_guard.evidence().map_err(fencing_error)?)?;
         let boundary = self
             .parent
             .as_ref()
@@ -89,12 +89,33 @@ impl FileFormalEndpoint {
             } else {
                 self.store.body.base_parent.clone()
             };
-            let verdict = NativeCheckpointVerdictV1 {
-                proof,
-                parent,
-                head: previous.head,
-                authority_id: self.authority.authority_id()?,
+            let bytes = self.store.checkpoint_bytes()?;
+            let instance = match self.role {
+                EndpointRole::Primary => &self.authority.definition().primary.instance,
+                EndpointRole::Replica => &self.authority.definition().replica.instance,
             };
+            let verdict = NativeCheckpointVerdictV1::verify(
+                &bytes,
+                &self.authority,
+                &instance.endpoint_public_key,
+                &self.store.checkpoint,
+                &_guard.evidence().map_err(fencing_error)?,
+                &previous.head,
+                &previous.head,
+                &self.authority.authority_id()?,
+                |id| {
+                    self.store
+                        .raw_object(id)?
+                        .ok_or_else(|| invalid("healthy predecessor object missing"))
+                },
+            )?;
+            if verdict.proof() != &proof
+                || verdict.verified_parent_record() != parent.as_ref().map(|p| &p.record)
+                || verdict.verified_parent_finalizing_authority_id()
+                    != parent.as_ref().map(|p| p.finalizing_authority_id.as_str())
+            {
+                return Err(invalid("healthy checked checkpoint exact parent/proof"));
+            }
             restore_formal_commit_from_checkpoint(verdict.proof(), &self.authority, None, &verdict)?
         } else {
             return Err(invalid(
@@ -106,10 +127,12 @@ impl FileFormalEndpoint {
     fn check_durable_set_boundary(
         &mut self,
         transition: &VerifiedNormalDurableSetTransitionV1,
+        provider: &fencing::MonotonicProviderEvidenceV1,
     ) -> Result<(), FormalError> {
-        self.reload_parent()?;
+        self.reload_parent(provider)?;
         let boundary = transition.boundary();
-        if self.authority.context_digest()? != transition.old.context_digest()?
+        if self.authority.context_digest()?
+            != transition.predecessor_authority().context_digest()?
             || self.store.body.head != boundary.head()
             || self.store.body.pending.is_some()
             || self.store.body.decision_head.is_some()
@@ -155,7 +178,7 @@ impl FileFormalEndpoint {
         expected: &fencing::EndpointCheckpointBindingV1,
     ) -> Result<fencing::EpochSealReceiptV1, FormalError> {
         let mut guard = self.guard()?;
-        self.check_durable_set_boundary(transition)?;
+        self.check_durable_set_boundary(transition, &guard.evidence().map_err(fencing_error)?)?;
         if let Some(body) = self.store.body.seal.clone() {
             self.check_durable_set_seal(&body, transition)?;
             return self.signed_seal(body, guard.as_mut());
@@ -197,7 +220,7 @@ impl FileFormalEndpoint {
         transition: &VerifiedNormalDurableSetTransitionV1,
     ) -> Result<Option<fencing::EpochSealReceiptV1>, FormalError> {
         let mut guard = self.guard()?;
-        self.check_durable_set_boundary(transition)?;
+        self.check_durable_set_boundary(transition, &guard.evidence().map_err(fencing_error)?)?;
         let Some(body) = self.store.body.seal.clone() else {
             return Ok(None);
         };
