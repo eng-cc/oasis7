@@ -12,6 +12,8 @@ mod relation_projection;
 mod resource_summary_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
+#[path = "host_spatial_overlays.rs"]
+mod spatial_overlays;
 #[path = "host_spatial_routes.rs"]
 mod spatial_routes;
 #[path = "host_world_bounds.rs"]
@@ -453,46 +455,6 @@ fn build_module_visual_entities(
         .collect::<Vec<_>>();
     projected.sort_by(|left, right| str_key(left, "id").cmp(&str_key(right, "id")));
     projected
-}
-
-fn build_recent_event_hotspots(events: &[Value]) -> Vec<Value> {
-    events
-        .iter()
-        .filter(|event| !is_world_scoped_crisis_recent_event(event))
-        .take(4)
-        .enumerate()
-        .map(|(index, event)| {
-            json!({
-                "id": str_key(event, "eventId")
-                    .or_else(|| str_key(event, "event_id"))
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| format!("recent-{index}")),
-                "title": str_key(event, "title")
-                    .or_else(|| str_key(event, "summary"))
-                    .or_else(|| str_key(event, "kind"))
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| format!("event-{index}")),
-                "kind": str_key(event, "kind").unwrap_or("recent_event"),
-            })
-        })
-        .collect()
-}
-
-fn is_world_scoped_crisis_recent_event(event: &Value) -> bool {
-    if str_key(event.get("major_event").unwrap_or(&Value::Null), "category") == Some("crisis") {
-        return true;
-    }
-    let kind = event.get("kind").unwrap_or(&Value::Null);
-    let structured_kind = kind.get("data").and_then(|data| str_key(data, "kind"));
-    let kind = kind.as_str().or(structured_kind);
-    matches!(
-        kind,
-        Some(
-            "runtime.gameplay.crisis_spawned"
-                | "runtime.gameplay.crisis_resolved"
-                | "runtime.gameplay.crisis_timed_out"
-        )
-    )
 }
 
 fn offset_world_position(
@@ -1077,8 +1039,15 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         (Some(kind), Some(id)) => json!({ "kind": kind, "id": id }),
         _ => Value::Null,
     };
+    let (industry_aggregates, world_events) = spatial_overlays::project(input, &world_bounds);
     let links = if input.get("worldView").is_some() {
-        spatial_routes::project(input, &agents, &locations, &module_visual_entities)
+        spatial_routes::project(
+            input,
+            &agents,
+            &locations,
+            &module_visual_entities,
+            &industry_aggregates,
+        )
     } else {
         relation_projection::build_pixel_world_links(&agents, &location_by_id)
     };
@@ -1113,7 +1082,7 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
     } else {
         Value::Null
     };
-    let recent_event_hotspots = build_recent_event_hotspots(arr(input, "recentEvents"));
+    let recent_event_hotspots: Vec<Value> = Vec::new();
     let visual_hotspots = build_visual_hotspots(
         &world_bounds,
         anchor,
@@ -1179,6 +1148,8 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         "goal_highlight": goal_highlight,
         "blocker_highlight": blocker_highlight,
         "recent_event_hotspots": recent_event_hotspots,
+        "industry_aggregates": industry_aggregates,
+        "world_events": world_events,
         "visual_hotspots": visual_hotspots,
         "receipt_target": receipt_target,
         "recommended_target": recommended_target,

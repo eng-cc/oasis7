@@ -8,6 +8,7 @@ pub(super) fn project(
     agents: &[Value],
     locations: &[Value],
     facilities: &[Value],
+    aggregates: &[Value],
 ) -> Vec<Value> {
     let view = obj(input, "worldView");
     if input.get("worldViewStale").and_then(Value::as_bool) == Some(true) {
@@ -19,6 +20,7 @@ pub(super) fn project(
             "agent" => agents,
             "location" => locations,
             "factory" | "module_visual" => facilities,
+            "aggregate" => aggregates,
             _ => return None,
         };
         list.iter()
@@ -31,19 +33,42 @@ pub(super) fn project(
     };
     arr(view,"relations").iter().filter_map(|relation| {
         let kind = str_key(relation,"kind")?;
-        if !matches!(kind,"route"|"logistics_route"|"supply_route"|"delivery_route")
+        let source = str_key(relation,"source_class")?;
+        let aggregation = kind=="industry_route" && source=="display_aggregation";
+        let runtime = matches!(kind,"route"|"logistics_route"|"supply_route"|"delivery_route") && source=="runtime_projection";
+        if (!aggregation && !runtime)
             || str_key(relation,"status") != Some("active")
-            || str_key(relation,"source_class") != Some("runtime_projection")
             || str_key(relation,"freshness") != Some("current")
             || relation.get("valid_at_source_cut").filter(|cut|cut.is_string()) != view.get("source_cut") { return None; }
+        // Raw routes cannot acquire aggregate endpoints through a forged kind.
+        if runtime && ["from","to"].iter().any(|key|str_key(obj(relation,key),"kind")==Some("aggregate")) {return None;}
+        let label=if aggregation {
+            let count=relation["route_count"].as_str().filter(|s|!s.is_empty() && s.bytes().all(|b|b.is_ascii_digit()))?;
+            Some(format!("{} · {}",str_key(relation,"label").unwrap_or(""),count))
+        } else {str_key(relation,"label").map(str::to_string)};
         Some(json!({"id":str_key(relation,"relation_id")?,"kind":kind,"from":endpoint(obj(relation,"from"))?,"to":endpoint(obj(relation,"to"))?,
-            "status":"active","source_class":"runtime_projection","freshness":"current","emphasis":0.72,"label":relation.get("label")}))
+            "status":"active","source_class":source,"freshness":"current","emphasis":0.72,"label":label}))
     }).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn industry_routes_keep_display_authority_and_require_validated_aggregate_endpoints() {
+        let aggregates = vec![json!({"id":"region","pos":{"x_cm":10,"y_cm":20,"z_cm":0}})];
+        let agents = vec![json!({"id":"A","pos":{"x_cm":30,"y_cm":40,"z_cm":0}})];
+        let mut input = json!({"worldView":{"source_cut":"C","relations":[{"relation_id":"group-route","kind":"industry_route","source_class":"display_aggregation","route_count":"4","status":"active","freshness":"current","valid_at_source_cut":"C","from":{"kind":"aggregate","id":"region"},"to":{"kind":"agent","id":"A"}}]}});
+        let projected = project(&input, &agents, &[], &[], &aggregates);
+        assert_eq!(projected[0]["source_class"], "display_aggregation");
+        assert_eq!(projected[0]["from"]["x_cm"], 10);
+        assert!(projected[0]["label"].as_str().unwrap().contains('4'));
+        assert!(project(&input, &agents, &[], &[], &[]).is_empty());
+        input["worldView"]["relations"][0]["kind"] = json!("logistics_route");
+        input["worldView"]["relations"][0]["source_class"] = json!("runtime_projection");
+        assert!(project(&input, &agents, &[], &[], &aggregates).is_empty());
+    }
+
     #[test]
     fn render_state_projects_factory_selection_and_explicit_factory_route() {
         let provenance = json!({"geometry_source":"authoritative","freshness":"current","valid_at_source_cut":"C"});
@@ -66,8 +91,8 @@ mod tests {
         let agents = vec![json!({"id":"A","pos":{"x_cm":10,"y_cm":20,"z_cm":0}})];
         let facilities = vec![json!({"id":"F","pos":{"x_cm":30,"y_cm":40,"z_cm":0}})];
         let input = json!({"worldView":{"source_cut":"C","relations":[{"relation_id":"R","kind":"route","status":"active","source_class":"runtime_projection","freshness":"current","valid_at_source_cut":"C","from":{"kind":"agent","id":"A"},"to":{"kind":"factory","id":"F"}}]}});
-        assert_eq!(project(&input, &agents, &[], &facilities).len(), 1);
-        assert!(project(&input, &agents, &[], &[]).is_empty());
+        assert_eq!(project(&input, &agents, &[], &facilities, &[]).len(), 1);
+        assert!(project(&input, &agents, &[], &[], &[]).is_empty());
         for (field, value) in [
             ("valid_at_source_cut", json!("old")),
             ("freshness", json!("expired")),
@@ -76,14 +101,15 @@ mod tests {
         ] {
             let mut invalid = input.clone();
             invalid["worldView"]["relations"][0][field] = value;
-            assert!(project(&invalid, &agents, &[], &facilities).is_empty());
+            assert!(project(&invalid, &agents, &[], &facilities, &[]).is_empty());
         }
         assert!(
             project(
                 &json!({"worldView":{"source_cut":"C"}}),
                 &agents,
                 &[],
-                &facilities
+                &facilities,
+                &[]
             )
             .is_empty()
         );

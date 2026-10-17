@@ -1,5 +1,6 @@
 #![cfg(any(feature = "test_tier_required", feature = "test_tier_full"))]
 
+use oasis7_viewer_runtime::{ViewerServer, ViewerServerConfig};
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
@@ -9,8 +10,8 @@ use std::time::{Duration, Instant};
 
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerRequest, ViewerResponse, ViewerServer,
-    ViewerServerConfig, ViewerStream, generate_viewer_demo,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerRequest, ViewerResponse, ViewerStream,
+    generate_viewer_demo,
 };
 
 #[cfg(feature = "test_tier_required")]

@@ -17,7 +17,7 @@ use super::{
     snapshot_from_state, stop_chain_process, stop_process, validate_chain_config,
     validate_game_config, validate_game_config_with_launcher_bin,
 };
-use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
+use oasis7_launcher_config::default_chain_replication_bootstrap_peers_csv;
 use oasis7_proto::storage_profile::StorageProfile;
 
 fn contains_issue(issues: &[String], text: &str) -> bool {

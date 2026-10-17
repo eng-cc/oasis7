@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 mod fragment_visuals;
 #[path = "render_grounding.rs"]
 mod grounding;
+#[path = "render_spatial_overlays.rs"]
+mod spatial_overlays;
 use fragment_visuals::reconcile_fragments;
 #[path = "render_micro_depot_facilities.rs"]
 mod micro_depot_facilities;
@@ -204,64 +206,12 @@ pub(crate) struct PixelWorldAgentVisual {
 pub(crate) struct PixelWorldHotspotVisual {
     id: String,
 }
-fn selection_focus_position(
-    render_state: &RenderState,
-    focus_target: &FocusTarget,
-) -> Option<Position> {
-    match focus_target.kind.as_str() {
-        "agent" => render_state
-            .agents
-            .iter()
-            .find(|agent| agent.id == focus_target.id)
-            .and_then(|agent| agent.pos.clone()),
-        "location" => render_state
-            .locations
-            .iter()
-            .find(|location| location.id == focus_target.id)
-            .map(|location| location.pos.clone()),
-        "module_visual" => render_state
-            .module_visual_entities
-            .iter()
-            .find(|entity| entity.id == focus_target.id)
-            .map(|entity| entity.pos.clone()),
-        _ => None,
-    }
-}
-fn maybe_focus_selected_entity(runtime: &mut BevyRuntimeState, width: f64, height: f64) {
-    let Some(focus_target) = runtime.pending_focus_target.clone() else {
-        return;
-    };
-    let Some(render_state) = runtime.render_state.as_ref() else {
-        runtime.pending_focus_target = None;
-        return;
-    };
-    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
-        runtime.pending_focus_target = None;
-        return;
-    };
-    let Some(position) = selection_focus_position(render_state, &focus_target) else {
-        runtime.pending_focus_target = None;
-        return;
-    };
-    let Some((selected_x, selected_y)) = to_canvas_point(
-        &position,
-        world_bounds,
-        width,
-        height,
-        &CameraState::default(),
-    ) else {
-        runtime.pending_focus_target = None;
-        return;
-    };
-    let centered_x = selected_x - (width / 2.0);
-    let centered_y = selected_y - (height / 2.0);
-    runtime.camera.pan_x_px = -(centered_x * runtime.camera.zoom.max(0.5));
-    runtime.camera.pan_y_px = -(centered_y * runtime.camera.zoom.max(0.5));
-    runtime.camera_user_override = true;
-    runtime.camera_fit_version = runtime.render_version;
-    runtime.pending_focus_target = None;
-    let _ = camera_viewport::emit(runtime);
-}
+#[path = "render_camera_focus.rs"]
+mod camera_focus;
+use camera_focus::maybe_focus_selected_entity;
+#[cfg(test)]
+use camera_focus::selection_focus_position;
+
 pub(crate) fn build_grid_layout(camera: &CameraState, width: f64, height: f64) -> GridLayoutKey {
     let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
     let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
@@ -728,6 +678,7 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
 #[derive(SystemParam)]
 pub(crate) struct RenderSceneQueries<'w, 's> {
     windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    spatial_overlays: Query<'w, 's, (Entity, &'static spatial_overlays::SpatialOverlayVisual)>,
     current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
     grounding: Query<'w, 's, (Entity, &'static grounding::PixelWorldGroundingVisual)>,
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
@@ -770,6 +721,7 @@ pub(crate) fn render_scene(
     time: Res<Time>,
 ) {
     if !runtime.mounted {
+        spatial_overlays::clear(&mut commands, &queries.spatial_overlays);
         grounding::clear(&mut commands, &queries.grounding);
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
@@ -958,6 +910,7 @@ pub(crate) fn render_scene(
     if static_reconcile {
         canvas_resize::requeue_follow_target_after_resize(&mut runtime, width, height);
         maybe_auto_fit_camera(&mut runtime, width, height);
+        navigation::apply_pending_fit_bounds(&mut runtime, width, height);
         maybe_focus_selected_entity(&mut runtime, width, height);
         let next_hit_region_cache_key = HitRegionCacheKey::new(&runtime, width, height);
         rebuild_hit_regions = runtime.hit_regions_dirty
@@ -969,6 +922,14 @@ pub(crate) fn render_scene(
         }
     }
     if static_reconcile {
+        spatial_overlays::reconcile(
+            &mut commands,
+            &mut runtime,
+            &queries.spatial_overlays,
+            width,
+            height,
+            rebuild_hit_regions,
+        );
         reconcile_grid(
             &mut commands,
             &mut runtime,

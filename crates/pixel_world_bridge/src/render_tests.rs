@@ -113,6 +113,8 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
         links: vec![],
         social_links: vec![],
         visual_hotspots: vec![],
+        industry_aggregates: vec![],
+        world_events: vec![],
         selection: Some(Selection {
             kind: "agent".to_string(),
             id: "agent-0".to_string(),
@@ -1175,3 +1177,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
         );
     }
 }
+
+#[path = "render_spatial_overlay_tests.rs"]
+mod spatial_overlay_tests;

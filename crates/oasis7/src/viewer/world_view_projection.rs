@@ -3,8 +3,12 @@ use super::index::{Rect, SpatialIndex};
 use crate::simulator::{ModuleVisualAnchor, WorldSnapshot};
 use crate::viewer::world_view_authority::SourceAuthority;
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+#[path = "world_view_aggregation.rs"]
+mod aggregation;
+pub(super) use aggregation::query_objects;
 
+#[derive(Clone)]
 pub(super) struct Object {
     pub key: String,
     pub value: Value,
@@ -18,6 +22,10 @@ pub(super) struct Prepared {
     pub index: SpatialIndex,
     pub identities: BTreeMap<(String, String), usize>,
     pub source_binding: Option<Value>,
+    pub epoch: String,
+    pub observed_at_tick: String,
+    pub space: crate::simulator::SpaceConfig,
+    pub deleted_factories: BTreeSet<String>,
 }
 fn decimal(value: Value) -> Value {
     match value {
@@ -115,6 +123,7 @@ pub(super) fn prepare(
         .saturating_add(snapshot.model.locations.len())
         .saturating_add(snapshot.model.factories.len())
         .saturating_add(route_count)
+        .saturating_add(authority.events().len())
         > 50_000
     {
         return None;
@@ -238,6 +247,60 @@ pub(super) fn prepare(
             });
         }
     }
+    if authority.current() {
+        for event in authority.events() {
+            if event["logical_time"]
+                .as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .is_none_or(|time| time > snapshot.time)
+            {
+                continue;
+            }
+            let reference = &event["visibility_ref"];
+            let Some(id) = reference["id"].as_str() else {
+                continue;
+            };
+            let visible = match reference["kind"].as_str() {
+                Some("agent") => identities.contains_key(&("agent".into(), id.into())),
+                Some("module_visual") => snapshot
+                    .runtime_snapshot
+                    .as_ref()
+                    .is_some_and(|r| r.state.module_visual_entities.contains_key(id)),
+                _ => false,
+            };
+            if !visible {
+                continue;
+            }
+            let mut value = event.clone();
+            value.as_object_mut()?.remove("visibility_ref");
+            if reference["kind"] == "agent" {
+                value["target"] = json!({"kind":"agent","id":id});
+            } else if identities.contains_key(&("factory".into(), id.into())) {
+                value["target"] = json!({"kind":"factory","id":id});
+            }
+            objects.push(Object {
+                key: format!("event:{}", value["event_id"].as_str()?),
+                bounds: point(&value["position"]).map(|(x, y)| Rect(x, x, y, y)),
+                relation: false,
+                value,
+            });
+        }
+    }
+    let deleted_factories = if authority.is_local() && authority.current() {
+        snapshot
+            .runtime_snapshot
+            .as_ref()
+            .map(|r| {
+                authority
+                    .retirement_candidates()
+                    .intersection(&r.state.retired_factory_ids)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        BTreeSet::new()
+    };
     let source_binding = authority.binding().cloned();
     let cut_material = json!([
         world,
@@ -246,13 +309,17 @@ pub(super) fn prepare(
         snapshot.time.to_string(),
         &snapshot.config.space,
         &source_binding,
-        objects.iter().map(|o| &o.value).collect::<Vec<_>>()
+        objects.iter().map(|o| &o.value).collect::<Vec<_>>(),
+        &deleted_factories
     ]);
     let cut = blake3::hash(cut_material.to_string().as_bytes())
         .to_hex()
         .to_string();
     for object in &mut objects {
-        if object.relation {
+        if object.value.get("event_id").is_some() {
+            object.value["valid_at_source_cut"] = json!(&cut);
+            object.value["source_cut"] = json!(&cut);
+        } else if object.relation {
             object.value["valid_at_source_cut"] = json!(&cut);
         } else {
             object.value["provenance"]["valid_at_source_cut"] = json!(&cut);
@@ -262,6 +329,12 @@ pub(super) fn prepare(
         .iter()
         .map(|o| o.value.to_string().len())
         .sum::<usize>()
+        .saturating_add(serde_json::to_vec(&deleted_factories).ok()?.len())
+        .saturating_add(
+            source_binding
+                .as_ref()
+                .map_or(0, |value| value.to_string().len()),
+        )
         > 8 * 1024 * 1024
     {
         return None;
@@ -280,5 +353,9 @@ pub(super) fn prepare(
         index,
         identities,
         source_binding,
+        epoch: epoch.to_string(),
+        observed_at_tick: snapshot.time.to_string(),
+        space: snapshot.config.space.clone(),
+        deleted_factories,
     })
 }

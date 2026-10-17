@@ -9,8 +9,9 @@ use oasis7::runtime::MajorWorldEventVisibilityPermission;
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
     ChainLinkPolicy, ProviderBackedBootstrapAuthorityV1, ViewerLiveDecisionMode,
-    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerWebBridge, ViewerWebBridgeConfig,
+    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig,
 };
+use oasis7_viewer_runtime::{ViewerWebBridge, ViewerWebBridgeConfig};
 use tracing::{error, info, warn};
 #[path = "oasis7_viewer_live/world_service_bootstrap.rs"]
 mod world_service_bootstrap;

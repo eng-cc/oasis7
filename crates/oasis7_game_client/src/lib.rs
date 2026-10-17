@@ -432,3 +432,5 @@ fn quote_error_category(path: &str, status: u16, reader: &mut impl Read) -> Opti
         _ => None,
     }
 }
+
+pub mod formal_read;

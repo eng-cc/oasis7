@@ -245,6 +245,9 @@ struct WorldBounds {
     height_cm: f64,
 }
 
+#[path = "spatial_display.rs"]
+mod spatial_display;
+
 #[derive(Clone, Debug, Deserialize)]
 struct RenderState {
     #[serde(default)]
@@ -266,6 +269,10 @@ struct RenderState {
     #[serde(default)]
     social_links: Vec<SocialLink>,
     visual_hotspots: Vec<VisualHotspot>,
+    #[serde(default)]
+    industry_aggregates: Vec<spatial_display::SpatialVisual>,
+    #[serde(default)]
+    world_events: Vec<spatial_display::SpatialVisual>,
     selection: Option<Selection>,
     #[serde(default)]
     receipt_target: Option<ReceiptTarget>,
@@ -393,6 +400,7 @@ struct BevyRuntimeState {
     last_canvas_size: Option<(u32, u32)>,
     camera_user_override: bool,
     pending_focus_target: Option<FocusTarget>,
+    pending_fit_bounds: Option<Value>,
     active_follow_target: Option<FocusTarget>,
     drag_state: Option<DragState>,
     hit_regions: Vec<HitRegion>,
@@ -844,6 +852,7 @@ fn render_signature(render_state: Option<&RenderState>, mode: RenderSignatureMod
         facility_signature::hash_visuals(&mut hasher, &render_state.micro_depot_facilities);
     }
 
+    spatial_display::hash(&mut hasher, render_state, include_agent_labels);
     render_state.visual_hotspots.len().hash(&mut hasher);
     for hotspot in &render_state.visual_hotspots {
         hotspot.id.hash(&mut hasher);
@@ -906,6 +915,9 @@ fn apply_external_render_snapshot(
         return;
     };
 
+    if render_state.is_none() {
+        runtime.pending_fit_bounds = None;
+    }
     let previous_focus_target = focus_target_from_render_state(runtime.render_state.as_ref());
     let next_focus_target = focus_target_from_render_state(render_state.as_deref());
     let navigation_changed =
@@ -1033,6 +1045,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
                 runtime.camera_user_override = true;
                 runtime.active_follow_target = None;
                 runtime.pending_focus_target = None;
+                runtime.pending_fit_bounds = None;
                 runtime.hit_regions_dirty = true;
                 let _ = camera_viewport::emit(&runtime);
                 return;
@@ -1070,10 +1083,20 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
         }
         InputEvent::Wheel { delta_y } => {
             let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
-            runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, 3.5);
+            let max_zoom = if runtime
+                .render_state
+                .as_ref()
+                .is_some_and(|state| state.exploration_mode)
+            {
+                navigation::MAX_EXPLORATION_ZOOM
+            } else {
+                3.5
+            };
+            runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, max_zoom);
             runtime.camera_user_override = true;
             runtime.active_follow_target = None;
             runtime.pending_focus_target = None;
+            runtime.pending_fit_bounds = None;
             runtime.hit_regions_dirty = true;
             let _ = camera_viewport::emit(&runtime);
         }
