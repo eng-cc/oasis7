@@ -260,3 +260,8 @@ pub use kernel::{
 };
 
 pub mod chain_resource;
+
+mod archive;
+pub use archive::WorldSnapshotExtensions;
+mod kernel_snapshot;
+pub use kernel_snapshot::{KernelEvent, KernelJournal, KernelSnapshot};

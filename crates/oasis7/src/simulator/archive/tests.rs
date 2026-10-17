@@ -1,0 +1,100 @@
+use super::*;
+use crate::GeoPos;
+use crate::runtime::{Action, World, WorldState};
+use crate::simulator::{WorldEventKind, WorldKernel};
+
+fn runtime_fixture() -> World {
+    let mut world = World::new_with_state(WorldState::default());
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "archive-agent".into(),
+        pos: GeoPos::new(10, 20, 30),
+    });
+    world.step().unwrap();
+    world
+}
+
+#[test]
+fn snapshot_split_rejoin_preserves_nonempty_host_extensions_and_exact_codecs() {
+    let mut original = WorldKernel::new().snapshot();
+    original.runtime_snapshot = Some(runtime_fixture().snapshot());
+    original.player_gameplay = Some(
+        serde_json::from_value(serde_json::json!({
+            "stage_id": "first_session_loop", "stage_status": "active",
+            "execution_state": "accepted", "goal_id": "archive-goal",
+            "goal_kind": "create_first_world_feedback", "goal_title": "Goal",
+            "objective": "Keep this objective", "progress_detail": "Recorded progress",
+            "next_step_hint": "Resume original goal"
+        }))
+        .unwrap(),
+    );
+    original.chain_resource_manifest.world_id = "archive-world".into();
+    original.chain_resource_manifest.genesis_ref = Some("archive-genesis".into());
+    original.chain_resource_manifest.refresh_hashes();
+    original.latest_chain_resource_delta = ChainResourceDelta::empty_for_manifest(
+        "archive-world",
+        original.chain_resource_manifest.manifest_hash.clone(),
+        7,
+        9,
+    );
+    let json = serde_json::to_vec(&original).unwrap();
+    let cbor = serde_cbor::to_vec(&original).unwrap();
+    let (kernel, extensions) = original.clone().into_kernel_parts();
+    let native = serde_json::to_value(&kernel).unwrap();
+    for key in [
+        "runtime_snapshot",
+        "player_gameplay",
+        "chain_resource_manifest",
+        "latest_chain_resource_delta",
+    ] {
+        assert!(
+            native.get(key).is_none(),
+            "native kernel must not own {key}"
+        );
+    }
+    assert!(extensions.runtime_snapshot.is_some());
+    assert!(extensions.player_gameplay.is_some());
+    let restored = WorldSnapshot::from_kernel_parts(kernel, extensions);
+    assert_eq!(restored, original);
+    assert_eq!(serde_json::to_vec(&restored).unwrap(), json);
+    assert_eq!(serde_cbor::to_vec(&restored).unwrap(), cbor);
+}
+
+#[test]
+fn event_split_rejoin_preserves_original_runtime_event_and_exact_codecs() {
+    let world = runtime_fixture();
+    let original = WorldEvent {
+        id: 7,
+        time: 9,
+        kind: WorldEventKind::AgentRegistered {
+            agent_id: "archive-agent".into(),
+            location_id: "origin".into(),
+            pos: GeoPos::new(10, 20, 30),
+        },
+        runtime_event: Some(world.journal().events.last().unwrap().clone()),
+    };
+    let json = serde_json::to_vec(&original).unwrap();
+    let cbor = serde_cbor::to_vec(&original).unwrap();
+    let (kernel, runtime) = original.clone().into_kernel_parts();
+    assert!(
+        serde_json::to_value(&kernel)
+            .unwrap()
+            .get("runtime_event")
+            .is_none()
+    );
+    assert!(runtime.is_some());
+    let restored = WorldEvent::from_kernel_parts(kernel, runtime);
+    assert_eq!(restored, original);
+    assert_eq!(serde_json::to_vec(&restored).unwrap(), json);
+    assert_eq!(serde_cbor::to_vec(&restored).unwrap(), cbor);
+}
+
+#[test]
+fn native_exports_match_the_kernel_portion_of_the_legacy_archive() {
+    let kernel = WorldKernel::new();
+    let native = kernel.kernel_snapshot();
+    let (archived, _) = kernel.snapshot().into_kernel_parts();
+    assert_eq!(native, archived);
+    let native_journal = kernel.kernel_journal_snapshot();
+    assert_eq!(native_journal.version, kernel.journal_snapshot().version);
+    assert_eq!(native_journal.events.len(), kernel.journal().len());
+}

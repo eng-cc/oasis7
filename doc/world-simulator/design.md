@@ -6,6 +6,12 @@
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history
 - 对应文件级索引: `doc/world-simulator/prd.index.md`
 
+## 内核持久化与历史组合归档
+
+原生 `KernelSnapshot` / `KernelJournal` / `KernelEvent` 仅表达内核状态、动作队列与事件，不拥有 Runtime snapshot/event、player gameplay 或 chain manifest/delta。旧 `WorldSnapshot` / `WorldJournal` / `WorldEvent` 是宿主的历史组合归档合同，保留原字段顺序、默认值、版本和 JSON/CBOR 编码。
+
+宿主通过显式拆分、重组方法保存内核值与归档扩展；拆出原生内核状态不是删除扩展的授权。完整归档的读取、编辑和回写必须同时保留扩展，不能把原生快照或裁剪的读取视图当作完整归档。内核导出/恢复只消费自身字段，旧归档适配承担扩展所有权，持久化兼容回归覆盖非空 Runtime、player、chain 字段及关联事件。
+
 ## 共享类型与资源派生边界
 
 Simulator 原生 Action、Agent、WorldModel 与 Runtime 模型各自保持现有语义。共享库存/元素预算、机器人规格/视觉实体、chunk 几何和 player-safe intent summary 直接由 `oasis7_agent_api` 拥有，Simulator 旧路径保留兼容导出。几何派生仅接收所需空间尺寸，不依赖完整 WorldConfig。

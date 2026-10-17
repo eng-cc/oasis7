@@ -6,12 +6,13 @@ use super::super::persist::{PersistError, WorldJournal, WorldSnapshot};
 use super::super::types::{
     CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION, WorldEventId,
 };
+use super::super::{KernelEvent, KernelJournal, KernelSnapshot, WorldSnapshotExtensions};
 use super::WorldKernel;
 use crate::chain_resource_schema::ChainResourceDerivationContext;
 
 impl WorldKernel {
     fn restore_persisted_state(
-        snapshot: WorldSnapshot,
+        snapshot: KernelSnapshot,
         journal_events: Vec<super::WorldEvent>,
     ) -> Self {
         Self {
@@ -54,22 +55,46 @@ impl WorldKernel {
                 &chain_resource_manifest,
                 &self.journal,
             );
-        WorldSnapshot {
+        WorldSnapshot::from_kernel_parts(
+            self.kernel_snapshot(),
+            WorldSnapshotExtensions {
+                runtime_snapshot: None,
+                player_gameplay: None,
+                chain_resource_manifest,
+                latest_chain_resource_delta,
+            },
+        )
+    }
+
+    /// Export only native kernel state. This is not a complete host archive.
+    pub fn kernel_snapshot(&self) -> KernelSnapshot {
+        KernelSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
             time: self.time,
             config: self.config.clone(),
             model: self.model.clone(),
-            runtime_snapshot: None,
-            player_gameplay: None,
-            chain_resource_manifest,
-            latest_chain_resource_delta,
             chunk_runtime: self.chunk_runtime.clone(),
             intel_ttl_ticks: self.intel_ttl_ticks,
             next_event_id: self.next_event_id,
             next_action_id: self.next_action_id,
             pending_actions: self.pending_actions.iter().cloned().collect(),
             journal_len: self.journal.len(),
+        }
+    }
+
+    pub fn kernel_journal_snapshot(&self) -> KernelJournal {
+        KernelJournal {
+            version: JOURNAL_VERSION,
+            events: self
+                .journal
+                .iter()
+                .map(|event| KernelEvent {
+                    id: event.id,
+                    time: event.time,
+                    kind: event.kind.clone(),
+                })
+                .collect(),
         }
     }
 
@@ -93,7 +118,10 @@ impl WorldKernel {
             });
         }
         validate_journal_event_prefix(snapshot.next_event_id, &journal.events)?;
-        Ok(Self::restore_persisted_state(snapshot, journal.events))
+        Ok(Self::restore_persisted_state(
+            snapshot.into_kernel_parts().0,
+            journal.events,
+        ))
     }
 
     pub fn replay_from_snapshot(
@@ -116,7 +144,8 @@ impl WorldKernel {
 
         let journal_len = snapshot.journal_len;
         validate_journal_event_prefix(snapshot.next_event_id, &journal.events[..journal_len])?;
-        let mut kernel = Self::restore_persisted_state(snapshot, journal.events.clone());
+        let mut kernel =
+            Self::restore_persisted_state(snapshot.into_kernel_parts().0, journal.events.clone());
 
         for event in journal.events.iter().skip(journal_len) {
             kernel.apply_event(event)?;
