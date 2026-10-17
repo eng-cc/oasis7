@@ -239,6 +239,7 @@ pub use power::{
 };
 pub use runtime_perf::{
     RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,
+    unsupported_runtime_perf_snapshot,
 };
 
 // Re-export event types from kernel

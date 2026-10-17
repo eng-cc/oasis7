@@ -285,7 +285,7 @@
   - 现有 identity 生成：`crates/oasis7_distfs/src/bin/sync_builtin_wasm_identity.rs`
   - 现有对账脚本：`scripts/ci-m1-wasm-summary.sh`
   - 现有对账脚本：`scripts/ci-verify-m1-wasm-summaries.py`
-  - 现有 runtime 消费：`crates/oasis7/src/runtime/builtin_wasm_materializer.rs`
+  - 现有 runtime 消费：`crates/oasis7/src/runtime/builtin_wasm_materializer.rs`；获取/构建/缓存实现：`crates/oasis7_wasm_materializer/src/lib.rs`
   - 现有 release manifest 消费：`crates/oasis7/src/runtime/world/release_manifest.rs`
   - 计划新增：`docker/wasm-builder/Dockerfile`
   - 计划新增：`docker/wasm-builder/README.md`

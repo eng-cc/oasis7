@@ -1,6 +1,6 @@
 use oasis7::chain_pos_defaults;
-use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use oasis7::observability::init_tracing;
+use oasis7_launcher_config::default_chain_replication_bootstrap_peers_csv;
 use oasis7_launcher_ui::launcher_ui_fields_for_web;
 use oasis7_proto::storage_profile::StorageProfile;
 use serde::{Deserialize, Serialize};

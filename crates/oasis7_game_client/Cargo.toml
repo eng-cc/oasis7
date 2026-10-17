@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+oasis7_distfs = { path = "../oasis7_distfs" }
 oasis7_client_api = { path = "../oasis7_client_api" }
 oasis7_agent_api = { path = "../oasis7_agent_api" }
 serde_ignored = "0.1"
@@ -25,3 +26,6 @@ cap-std = "4"
 cap-fs-ext = "4"
 libc = "0.2"
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
+
+[dev-dependencies]
+oasis7 = { path = "../oasis7", default-features = false, features = ["test_tier_required"] }

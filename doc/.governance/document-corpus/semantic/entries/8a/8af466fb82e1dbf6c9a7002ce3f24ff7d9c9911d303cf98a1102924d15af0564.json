@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "8d964027aac29048bd24282ea111ec66cb7317a052501c86001929426227c8db",
+    "content_sha256": "2ade1298947c84b1d3952bceb4059da462259d047bd7efeaae7e13f93cbfe1d9",
     "current_authority": "doc/world-runtime/wasm/wasm-interface.md",
     "decision_owner": "wasm_platform_engineer",
     "disposition": "retain_historical_validation_index",
-    "note": "validation provenance index; evidence pass is not current ABI release or compatibility guarantee",
+    "note": "validation provenance index; evidence pass is not current ABI release or compatibility guarantee Reviewed source ownership update: artifact transport/build/cache implementation now resides in oasis7_wasm_materializer, with runtime error translation retained in oasis7. Existing historical validation limits and authority are unchanged; this is no new release acceptance.",
     "path": "doc/world-runtime/wasm/evidence.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

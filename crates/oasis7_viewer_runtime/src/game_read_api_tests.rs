@@ -1,5 +1,5 @@
 use super::*;
-use crate::world_service::{client::WorldServiceClientConfig, projection::WorldServiceProjection};
+use oasis7::world_service::{client::WorldServiceClientConfig, projection::WorldServiceProjection};
 use oasis7_client_api::world_service::*;
 use std::{net::TcpListener, thread};
 
@@ -48,15 +48,15 @@ fn request(proof: Option<&SignedReadRequest<ReadWorldViewRequest>>) -> Request {
     request.body(()).unwrap()
 }
 fn response(request: &ReadWorldViewRequest) -> ReadWorldViewResponse<WorldServiceProjection> {
-    let mut state = crate::runtime::WorldState::default();
+    let mut state = oasis7::runtime::WorldState::default();
     state.agents.insert(
         "a".into(),
-        crate::runtime::AgentCell::new(
-            crate::models::AgentState::new("a", crate::geometry::GeoPos::new(0, 0, 0)),
+        oasis7::runtime::AgentCell::new(
+            oasis7::models::AgentState::new("a", oasis7::geometry::GeoPos::new(0, 0, 0)),
             u64::MAX,
         ),
     );
-    let world = crate::runtime::World::new_with_state(state);
+    let world = oasis7::runtime::World::new_with_state(state);
     let mut view = WorldServiceProjection::from_world(&world, Some("a")).unwrap();
     view.runtime_binding = None;
     let subject = json!({"kind":"agent","agent_id":"a","owner_binding":"owner","generation":1});
@@ -278,7 +278,7 @@ fn plain_http_discovery_and_websocket_headers_share_the_port_without_consumption
 
 #[test]
 fn bootstrap_rejects_public_bind_and_plaintext_remote_backend() {
-    use crate::viewer::{ViewerWebBridge, ViewerWebBridgeConfig};
+    use crate::{ViewerWebBridge, ViewerWebBridgeConfig};
     let bridge = |bind| ViewerWebBridge::new(ViewerWebBridgeConfig::new(bind, "127.0.0.1:5023"));
     assert!(
         bridge("0.0.0.0:5011")

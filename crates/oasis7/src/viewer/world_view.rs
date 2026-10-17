@@ -72,7 +72,7 @@ fn validate(query: &Value) -> Result<(Query, Option<Rect>), &'static str> {
 fn unavailable(world: &str, query: &Value, reason: &str) -> Value {
     json!({"world_id":world,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"relations":[],"events":[],"unavailable_reasons":[reason]})
 }
-pub(super) fn build(
+pub fn build(
     snapshot: &WorldSnapshot,
     world: &str,
     epoch: u64,

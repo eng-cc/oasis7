@@ -11,7 +11,6 @@ pub mod geometry;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod governance_audit_report;
 pub mod industry_types;
-pub mod launcher_bootstrap_peers;
 pub mod models;
 pub mod network_tier_manifest;
 #[cfg(not(target_arch = "wasm32"))]

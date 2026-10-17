@@ -298,10 +298,11 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
     record.action_root = h(64);
     record.event_root = h(65);
     record.result_root = h(66);
-    record.projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
-        .unwrap()
-        .root()
-        .unwrap();
+    record.projection_root =
+        oasis7::world_service::formal_projection::commitments_for_world(&world)
+            .unwrap()
+            .root()
+            .unwrap();
     record.artifact_roots.insert(
         ArtifactRole::ExecutionManifest,
         frozen.runtime_manifest_digest.clone(),
@@ -448,7 +449,7 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
             imported.current.head(),
             position as u8,
             result_root.clone(),
-            &crate::world_service::formal_projection::commitments_for_world(&world)
+            &oasis7::world_service::formal_projection::commitments_for_world(&world)
                 .unwrap()
                 .root()
                 .unwrap(),
@@ -493,7 +494,7 @@ fn replay_frozen_origin_qualification_imports_exact_non_normal_token() {
 fn e2_normal_result_remains_readable_from_e3_current_root() {
     let (world, trust, anchor, _) = profile2_initial_fixture();
     let original = anchor.authority();
-    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
+    let projection_root = oasis7::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -621,7 +622,7 @@ fn e2_normal_result_remains_readable_from_e3_current_root() {
 fn e2_recovery_result_remains_readable_after_e2_and_e3_normal_commits() {
     let (world, trust, anchor, _) = profile2_initial_fixture();
     let original = anchor.authority();
-    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
+    let projection_root = oasis7::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -845,7 +846,7 @@ fn e2_recovery_result_remains_readable_after_e2_and_e3_normal_commits() {
 #[test]
 fn historical_normal_lookup_survives_qualification_cache_eviction() {
     let (world, trust, anchor, _initial_proof) = profile2_initial_fixture();
-    let projection_root = crate::world_service::formal_projection::commitments_for_world(&world)
+    let projection_root = oasis7::world_service::formal_projection::commitments_for_world(&world)
         .unwrap()
         .root()
         .unwrap();
@@ -1009,6 +1010,12 @@ fn historical_normal_lookup_survives_qualification_cache_eviction() {
         anchor.clone(),
     )
     .unwrap();
+    // The unit-test verifier and the core adapter's ordinary dependency are
+    // distinct crate identities. Preserve the complete portable cursor at the
+    // same serialization boundary used by a reopened external client.
+    let expected_cursor =
+        serde_json::from_value(serde_json::to_value(live.replay_cursor().unwrap()).unwrap())
+            .unwrap();
     client
         .resume_formal_history_pages(
             &origin_digest,
@@ -1018,12 +1025,13 @@ fn historical_normal_lookup_survives_qualification_cache_eviction() {
                     .map(|bytes| (digest.clone(), bytes))
                     .map_err(|error| format!("{error:?}"))
             }),
-            &live.replay_cursor().unwrap(),
+            &expected_cursor,
         )
         .unwrap();
+    assert_eq!(client.formal_replay_cursor().unwrap(), expected_cursor);
     assert_eq!(
-        client.formal_replay_cursor().unwrap(),
-        live.replay_cursor().unwrap()
+        serde_json::to_value(client.formal_replay_cursor().unwrap()).unwrap(),
+        serde_json::to_value(live.replay_cursor().unwrap()).unwrap()
     );
     std::fs::remove_dir_all(&history_store_root).unwrap();
     reader = restarted;

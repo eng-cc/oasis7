@@ -1,5 +1,5 @@
 use super::*;
-use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peer;
+use oasis7_launcher_config::parse_chain_replication_bootstrap_peer;
 use std::net::IpAddr;
 
 pub(super) fn validate_chain_node_id(id: &str) -> Result<(), String> {
