@@ -108,7 +108,7 @@ pub struct FormalFrozenCertificateV1 {
 impl FormalFrozenBodyV1 {
     pub fn validate(&self) -> Result<(), FormalError> {
         self.world.validate()?;
-        if !matches!(self.schema_version, 1 | 2 | 3)
+        if !matches!(self.schema_version, 1..=3)
             || self.epoch == 0
             || self.parent.position == 0
             || self.parent.position.checked_add(1) != Some(self.next_position)

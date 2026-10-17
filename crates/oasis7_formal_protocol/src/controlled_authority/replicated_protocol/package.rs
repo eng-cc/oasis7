@@ -104,10 +104,9 @@ impl ClosedRecord {
             }
             if let Some(artifact) =
                 crate::snapshot_delta::SnapshotArtifactV1::decode(&object.bytes)?
+                && object.references != [artifact.base_ref]
             {
-                if object.references != [artifact.base_ref] {
-                    return Err("Snapshot artifact declared base reference mismatch".into());
-                }
+                return Err("Snapshot artifact declared base reference mismatch".into());
             }
             Ok(object.bytes.clone())
         };

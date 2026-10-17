@@ -289,19 +289,17 @@ pub fn verify_record_material(
     {
         return Err(invalid("native environment root required"));
     }
-    if record.schema_version < 3 {
-        if let Some(object) = material.objects.iter().find(|object| {
+    if record.schema_version < 3
+        && let Some(object) = material.objects.iter().find(|object| {
             material.roots.get(&ArtifactRole::Snapshot) == Some(&object.content_hash)
-        }) {
-            if crate::snapshot_delta::SnapshotArtifactV1::decode(&object.bytes)
-                .map_err(invalid)?
-                .is_some()
-            {
-                return Err(invalid(
-                    "legacy formal record cannot reinterpret Snapshot delta artifacts",
-                ));
-            }
-        }
+        })
+        && crate::snapshot_delta::SnapshotArtifactV1::decode(&object.bytes)
+            .map_err(invalid)?
+            .is_some()
+    {
+        return Err(invalid(
+            "legacy formal record cannot reinterpret Snapshot delta artifacts",
+        ));
     }
     if record.schema_version >= 3 {
         let expanded = material

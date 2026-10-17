@@ -15,7 +15,8 @@ fn valid_digest(value: &str) -> bool {
 }
 // Snapshot is a definite text-keyed struct map. Preserve nested struct field order,
 // integer encoding, byte strings, floats and every otherwise unknown field verbatim.
-fn fields(bytes: &[u8]) -> Result<(Vec<u8>, Vec<(String, Vec<u8>)>), String> {
+type EncodedFields = (Vec<u8>, Vec<(String, Vec<u8>)>);
+fn fields(bytes: &[u8]) -> Result<EncodedFields, String> {
     if bytes.is_empty() || bytes.len() > MAX_SNAPSHOT_DELTA_BYTES {
         return Err("snapshot size invalid".into());
     }

@@ -30,6 +30,7 @@ pub struct FormalStorageShadowProgress {
 fn fingerprint(endpoint: &Path) -> Result<String, FormalError> {
     let source = endpoint.join("formal-objects-v1");
     let mut values = Vec::new();
+    type FileIdentity = (u64, u64, u64, i64, i64, i64, i64);
     for path in [
         source.clone(),
         source.join(".representation-v1"),
@@ -37,7 +38,7 @@ fn fingerprint(endpoint: &Path) -> Result<String, FormalError> {
         source.join(".generation-current-v1"),
         endpoint.join("formal-checkpoint-v1.cbor"),
     ] {
-        let value = match fs::symlink_metadata(&path) {
+        let value: Option<FileIdentity> = match fs::symlink_metadata(&path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => return Err(io(e)),
             Ok(metadata) => {
