@@ -311,7 +311,8 @@ pub(super) fn wait_for_published_position(
 ) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
-        if runtime.published.current()?.anchor.head().record().position >= position {
+        let published_position = runtime.published.current()?.anchor.head().record().position;
+        if published_position >= position {
             return Ok(());
         }
         let snapshot = runtime
@@ -325,9 +326,39 @@ pub(super) fn wait_for_published_position(
             ));
         }
         if Instant::now() >= deadline {
+            let pending_proposal = snapshot
+                .consensus
+                .pending_proposal
+                .as_ref()
+                .map(|proposal| {
+                    format!(
+                        "actions={},status={:?}",
+                        proposal.action_count, proposal.status
+                    )
+                })
+                .unwrap_or_else(|| "none".into());
+            let last_error = if snapshot.last_error.is_some() {
+                "present"
+            } else {
+                "none"
+            };
             return Err(format!(
-                "Node did not publish qualified formal position {position}; running={}, ticks={}",
-                snapshot.running, snapshot.tick_count,
+                "Node did not publish qualified formal position {position}; published_position={published_position}, running={}, ticks={}, last_tick_unix_ms={:?}, slot={}, height={}, committed={}, executed={}, submit_buffer_actions={}, queued_actions={}, pending_proposal={pending_proposal}, last_error={last_error}",
+                snapshot.running,
+                snapshot.tick_count,
+                snapshot.last_tick_unix_ms,
+                snapshot.consensus.slot,
+                snapshot.consensus.latest_height,
+                snapshot.consensus.committed_height,
+                snapshot.consensus.last_execution_height,
+                snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .submit_buffer_action_count,
+                snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .queued_action_count,
             ));
         }
         thread::sleep(Duration::from_millis(25));

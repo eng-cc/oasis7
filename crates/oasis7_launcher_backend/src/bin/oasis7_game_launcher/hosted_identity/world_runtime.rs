@@ -5,10 +5,53 @@ use oasis7::viewer::{
     VIEWER_PROTOCOL_VERSION, ViewerRequest,
 };
 use std::{
-    io::{BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpStream},
     time::{Duration, Instant},
 };
+
+// BufReader and write_all may perform several socket operations. Each operation
+// must consume the same absolute deadline rather than restart a socket timeout.
+struct DeadlineStream {
+    stream: TcpStream,
+    deadline: Instant,
+}
+
+impl DeadlineStream {
+    fn remaining(&self) -> io::Result<Duration> {
+        self.deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::TimedOut, "runtime control deadline expired")
+            })
+    }
+}
+
+impl Read for DeadlineStream {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.stream.set_read_timeout(Some(self.remaining()?))?;
+        let count = self.stream.read(buffer)?;
+        self.remaining()?;
+        Ok(count)
+    }
+}
+
+impl Write for DeadlineStream {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.stream.set_write_timeout(Some(self.remaining()?))?;
+        let count = self.stream.write(buffer)?;
+        self.remaining()?;
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.remaining()?;
+        self.stream.flush()?;
+        self.remaining()?;
+        Ok(())
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct RuntimeFence {
@@ -79,17 +122,19 @@ fn rpc(
     if !addr.ip().is_loopback() {
         return Err(reject("runtime_control_not_loopback"));
     }
-    let timeout = Duration::from_secs(2);
+    let timeout =
+        super::super::config::runtime_control_timeout().map_err(StoreError::Unavailable)?;
     let deadline = Instant::now() + timeout;
-    let mut stream = TcpStream::connect_timeout(&addr, timeout).map_err(|_| unavailable())?;
-    stream
-        .set_read_timeout(Some(timeout))
-        .map_err(|_| unavailable())?;
-    stream
-        .set_write_timeout(Some(timeout))
-        .map_err(|_| unavailable())?;
-    let mut reader = BufReader::new(stream.try_clone().map_err(|_| unavailable())?);
-    fn write(stream: &mut TcpStream, request: &ViewerRequest) -> Result<(), StoreError> {
+    let socket = TcpStream::connect_timeout(&addr, timeout).map_err(|_| unavailable())?;
+    let mut reader = BufReader::new(DeadlineStream {
+        stream: socket.try_clone().map_err(|_| unavailable())?,
+        deadline,
+    });
+    let mut stream = DeadlineStream {
+        stream: socket,
+        deadline,
+    };
+    fn write(stream: &mut DeadlineStream, request: &ViewerRequest) -> Result<(), StoreError> {
         let bytes = serde_json::to_vec(request).map_err(|_| StoreError::Corrupt)?;
         stream
             .write_all(&bytes)
@@ -105,13 +150,7 @@ fn rpc(
     )?;
     let mut greeted = false;
     for _ in 0..32 {
-        let remaining = deadline
-            .checked_duration_since(Instant::now())
-            .ok_or_else(&unavailable)?;
-        reader
-            .get_ref()
-            .set_read_timeout(Some(remaining))
-            .map_err(|_| unavailable())?;
+        stream.remaining().map_err(|_| unavailable())?;
         let mut line = String::new();
         (&mut reader)
             .take(2_097_153)
@@ -121,6 +160,7 @@ fn rpc(
             return Err(unavailable());
         }
         let response: Value = serde_json::from_str(&line).map_err(|_| unavailable())?;
+        stream.remaining().map_err(|_| unavailable())?;
         match response["type"].as_str() {
             Some("hello_ack") if !greeted => {
                 if response["world_id"].as_str() != Some(world_id) {

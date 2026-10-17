@@ -115,15 +115,18 @@ run_cargo_clippy() {
 
 
 
-run_oasis7_required_tier_tests() {
-  if [[ -n "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then
-    run python3 "$driver_dir/ci-test-artifacts.py" run --repo-root "$repo_root" --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
-    return
-  fi
+build_oasis7_viewer_binary() {
+  local features="$1"
   local viewer_manifest viewer_binary
   viewer_manifest="$(mktemp)"
-  run_cargo build -p oasis7_viewer_runtime --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
-  viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
+  if run_cargo build -p oasis7_viewer_runtime --bin oasis7_viewer_live --features "$features" --message-format=json > "$viewer_manifest"; then
+    :
+  else
+    local status=$?
+    rm -f "$viewer_manifest"
+    return "$status"
+  fi
+  if viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
 import json, pathlib, sys
 artifacts = []
 for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
@@ -136,9 +139,34 @@ assert len(artifacts) == 1, artifacts
 assert pathlib.Path(artifacts[0]).is_file(), artifacts
 print(artifacts[0])
 PY_VIEWER
-)"
+  )"; then
+    :
+  else
+    local status=$?
+    rm -f "$viewer_manifest"
+    return "$status"
+  fi
   rm -f "$viewer_manifest"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features test_tier_required
+  printf '%s\n' "$viewer_binary"
+}
+
+run_oasis7_test_tier_with_viewer() {
+  local features="$1"
+  shift
+  if [[ "$#" -eq 0 ]]; then
+    set -- --tests
+  fi
+  local viewer_binary
+  viewer_binary="$(build_oasis7_viewer_binary "$features")"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client "$@" --features "$features"
+}
+
+run_oasis7_required_tier_tests() {
+  if [[ -n "${OASIS7_CI_TEST_BUNDLE:-}" ]]; then
+    run python3 "$driver_dir/ci-test-artifacts.py" run --repo-root "$repo_root" --bundle "$OASIS7_CI_TEST_BUNDLE" --suite ordinary
+    return
+  fi
+  run_oasis7_test_tier_with_viewer test_tier_required
 }
 
 run_scenario_regression_tests() {
@@ -150,7 +178,26 @@ run_oasis7_required_tier_clippy() {
 }
 
 run_oasis7_full_tier_tests() {
-  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features "test_tier_full,wasmtime,viewer_live_integration"
+  run_oasis7_test_tier_with_viewer "test_tier_full,wasmtime,viewer_live_integration"
+}
+
+run_oasis7_production_mock_guard() {
+  local manifest
+  manifest="$(mktemp)"
+  if run_cargo build -p oasis7_chain_runtime -p oasis7_launcher_backend --bin oasis7_chain_runtime --bin oasis7_game_launcher --features wasmtime --message-format=json > "$manifest"; then
+    :
+  else
+    local status=$?
+    rm -f "$manifest"
+    return "$status"
+  fi
+  if "$ci_python" "$repo_root/scripts/hosted-local-mock-production-guard.py" "$manifest"; then
+    rm -f "$manifest"
+  else
+    local status=$?
+    rm -f "$manifest"
+    return "$status"
+  fi
 }
 
 run_oasis7_consensus_tests() {
@@ -707,7 +754,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
+    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_oasis7_production_mock_guard; run_oasis7_test_tier_with_viewer "test_tier_required,wasmtime" --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac

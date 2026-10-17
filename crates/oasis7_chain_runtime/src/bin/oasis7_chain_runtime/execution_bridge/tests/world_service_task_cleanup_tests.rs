@@ -1,4 +1,4 @@
-//! Cleanup authority and exact-original retry regressions.
+//! Cleanup authority, exact-original retry and scoped listener regressions.
 use super::*;
 
 #[test]
