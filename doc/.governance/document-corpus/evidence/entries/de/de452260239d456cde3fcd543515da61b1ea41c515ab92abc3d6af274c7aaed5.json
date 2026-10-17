@@ -9,7 +9,7 @@
     "evidence_window": "dated-historical-or-supporting-evidence",
     "lifecycle": "HISTORICAL_PROVENANCE",
     "path": "doc/testing/evidence/network-tier-signer-truth-binding-2026-06-05.md",
-    "rationale": "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template. Bounded documentation delta qualifies missing mainnet mirror locators against the current tree and retained operator-local provenance; historical dispositions, signer thresholds and source batches remain unchanged, with no new run or custody claim.",
+    "rationale": "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template.",
     "required_followup_roles": [
       "blockchain_ops_engineer",
       "runtime_engineer",
