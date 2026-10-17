@@ -7,7 +7,14 @@ enum AttemptReclaimProgress {
 }
 impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R> {
     pub(crate) fn advance_storage_maintenance(&mut self) {
-        match read_published_candidate_at(&self.root, self.anchor.head().record().position) {
+        let position = self.anchor.head().record().position;
+        let timing = super::super::formal_execution_timing::FormalExecutionTiming::begin(
+            "maintenance",
+            position,
+        );
+        match timing.step("read_current_publication", None, || {
+            read_published_candidate_at(&self.root, position)
+        }) {
             Ok(Some((candidate, proof))) => self.reclaim_published_attempts(&Published {
                 schema_version: 1,
                 candidate,
@@ -98,7 +105,15 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         expected: &Published,
         attempt_path: &Path,
     ) -> bool {
-        let error = match self.try_reclaim_published_attempts(expected, attempt_path) {
+        let timing = super::super::formal_execution_timing::FormalExecutionTiming::begin(
+            "reclaim_attempt",
+            expected.candidate.candidate.record.position,
+        );
+        let error = match timing.step(
+            "attempt_page",
+            Some(&expected.candidate.candidate.record.request_digest),
+            || self.try_reclaim_published_attempts(expected, attempt_path),
+        ) {
             Ok(progress) => return matches!(progress, AttemptReclaimProgress::Pending),
             Err(error) => error,
         };
@@ -123,24 +138,55 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         expected: &Published,
         attempt_path: &Path,
     ) -> Result<AttemptReclaimProgress, String> {
-        let path = self.root.join("published").join(format!(
-            "{:020}.cbor",
-            expected.candidate.candidate.record.position
-        ));
-        let bytes = crate::controlled_history_cli::read_bounded(&path, 64 * 1024 * 1024)?;
+        let position = expected.candidate.candidate.record.position;
+        let timing = super::super::formal_execution_timing::FormalExecutionTiming::begin(
+            "closure_page",
+            position,
+        );
+        let path = self
+            .root
+            .join("published")
+            .join(format!("{position:020}.cbor"));
+        let bytes = timing.step("read_publication", None, || {
+            crate::controlled_history_cli::read_bounded(&path, 64 * 1024 * 1024)
+        })?;
         // No attempt path or cached deserialization participates in this read.
-        let actual: Published = published::decode(&bytes)?;
+        let actual: Published =
+            timing.step("decode_publication", None, || published::decode(&bytes))?;
+        timing.material(
+            "published_material",
+            &actual.candidate.candidate.record.request_digest,
+            || {
+                (
+                    actual.candidate.material.objects.len(),
+                    actual
+                        .candidate
+                        .material
+                        .objects
+                        .iter()
+                        .map(|object| object.bytes.len())
+                        .sum(),
+                )
+            },
+        );
         if to_cbor(&actual)? != to_cbor(expected)?
             || actual.candidate.candidate.record.position > self.anchor.head().record().position
             || actual.proof.decision.record != actual.candidate.candidate.record
         {
             return Err("attempt destination publication identity mismatch".into());
         }
-        verify_record_material(
-            &actual.candidate.candidate.record,
-            &actual.candidate.material,
-        )
-        .map_err(|e| e.to_string())?;
+        timing
+            .step(
+                "verify_record_material",
+                Some(&actual.candidate.candidate.record.request_digest),
+                || {
+                    verify_record_material(
+                        &actual.candidate.candidate.record,
+                        &actual.candidate.material,
+                    )
+                },
+            )
+            .map_err(|e| e.to_string())?;
         let digest = super::super::formal_attempt_lifecycle::candidate_digest(&actual.candidate)?;
         let request = &actual.candidate.candidate.record.request_digest;
         super::super::formal_attempt_lifecycle::mark(
@@ -150,7 +196,9 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             "qualified proof and exact published envelope durable; P/R closure verification pending",
         )?;
         let (primary, replica) = self.coordinator.endpoints_mut();
-        let p = match primary.verify_published_closure(request, &digest) {
+        let p = match timing.step("primary_verify_closure", Some(&digest), || {
+            primary.verify_published_closure(request, &digest)
+        }) {
             Ok(receipt) => receipt,
             Err(FormalError::Conflict(reason))
                 if reason.starts_with("published closure verification pending") =>
@@ -164,7 +212,9 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             }
             Err(error) => return Err(error.to_string()),
         };
-        let r = match replica.verify_published_closure(request, &digest) {
+        let r = match timing.step("replica_verify_closure", Some(&digest), || {
+            replica.verify_published_closure(request, &digest)
+        }) {
             Ok(receipt) => receipt,
             Err(FormalError::Conflict(reason))
                 if reason.starts_with("published closure verification pending") =>
@@ -184,20 +234,26 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         {
             return Err("attempt independent destination closures differ".into());
         }
-        let complete = super::super::formal_attempt_lifecycle::reclaim(
-            attempt_path,
-            &actual.candidate,
-            blake3::hash(&bytes).to_hex().as_str(),
-            &[p.inventory_digest, r.inventory_digest],
-        )?;
+        let complete = timing.step("reclaim_files", Some(&digest), || {
+            super::super::formal_attempt_lifecycle::reclaim(
+                attempt_path,
+                &actual.candidate,
+                blake3::hash(&bytes).to_hex().as_str(),
+                &[p.inventory_digest, r.inventory_digest],
+            )
+        })?;
         if !complete {
             return Ok(AttemptReclaimProgress::Pending);
         }
-        primary
-            .release_published_closure(&digest)
+        timing
+            .step("primary_release_closure", Some(&digest), || {
+                primary.release_published_closure(&digest)
+            })
             .map_err(|e| e.to_string())?;
-        replica
-            .release_published_closure(&digest)
+        timing
+            .step("replica_release_closure", Some(&digest), || {
+                replica.release_published_closure(&digest)
+            })
             .map_err(|e| e.to_string())?;
         Ok(AttemptReclaimProgress::Complete)
     }

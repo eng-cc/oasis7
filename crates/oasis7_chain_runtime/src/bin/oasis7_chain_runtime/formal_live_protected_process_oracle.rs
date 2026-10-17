@@ -189,6 +189,9 @@ impl Drop for PrivateRoot {
 
 pub(super) struct EndpointChild(std::process::Child);
 impl EndpointChild {
+    pub(super) fn pid(&self) -> u32 {
+        self.0.id()
+    }
     pub(super) fn kill_sigkill_and_wait(&mut self) -> Result<(), String> {
         use std::os::unix::process::ExitStatusExt;
         self.0.kill().map_err(|error| error.to_string())?;

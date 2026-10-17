@@ -764,7 +764,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         original: &NodeLocalExecutionContinuation,
         transition: Option<&SignedNormalDurableSetTransitionV1>,
     ) -> Result<(), String> {
-        let _timing = super::formal_execution_timing::FormalExecutionTiming::begin(
+        let timing = super::formal_execution_timing::FormalExecutionTiming::begin(
             "freeze",
             original.context.height,
         );
@@ -821,38 +821,41 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             } else {
                 None
             };
-            let (mut body, mut material) = match (business, transition) {
-                (Some((tree, parent_qualified, parent_material)), transition) => {
-                    formal_package::freeze_material_from_parent(
-                        self.anchor.authority(),
-                        self.anchor.head(),
-                        original,
-                        &self.world,
-                        &self.release,
-                        tree,
-                        parent_qualified,
-                        transition.cloned(),
-                        &parent_material,
-                    )?
-                }
-                (None, Some(transition)) => {
-                    formal_package::freeze_material_with_durable_set_transition(
-                        self.anchor.authority(),
-                        self.anchor.head(),
-                        original,
-                        &self.world,
-                        &self.release,
-                        transition,
-                    )?
-                }
-                (None, None) => formal_package::freeze_material(
-                    self.anchor.authority(),
-                    self.anchor.head(),
-                    original,
-                    &self.world,
-                    &self.release,
-                )?,
-            };
+            let (mut body, mut material) =
+                timing.step("build_frozen", None, || -> Result<_, String> {
+                    Ok(match (business, transition) {
+                        (Some((tree, parent_qualified, parent_material)), transition) => {
+                            formal_package::freeze_material_from_parent(
+                                self.anchor.authority(),
+                                self.anchor.head(),
+                                original,
+                                &self.world,
+                                &self.release,
+                                tree,
+                                parent_qualified,
+                                transition.cloned(),
+                                &parent_material,
+                            )?
+                        }
+                        (None, Some(transition)) => {
+                            formal_package::freeze_material_with_durable_set_transition(
+                                self.anchor.authority(),
+                                self.anchor.head(),
+                                original,
+                                &self.world,
+                                &self.release,
+                                transition,
+                            )?
+                        }
+                        (None, None) => formal_package::freeze_material(
+                            self.anchor.authority(),
+                            self.anchor.head(),
+                            original,
+                            &self.world,
+                            &self.release,
+                        )?,
+                    })
+                })?;
             if self
                 .anchor
                 .head()
@@ -862,7 +865,9 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             {
                 let (primary, replica) = self.coordinator.endpoints_mut();
                 let environment =
-                    super::formal_native_environment::stage_current(primary, replica)?;
+                    timing.step("stage_native", Some(&body.request_digest), || {
+                        super::formal_native_environment::stage_current(primary, replica)
+                    })?;
                 if self
                     .anchor
                     .head()
@@ -876,12 +881,24 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                             .into(),
                     );
                 }
-                super::formal_native_environment::attach_frozen(
-                    &mut body,
-                    &mut material,
-                    &environment,
-                )?;
+                timing.step("attach_native", None, || {
+                    super::formal_native_environment::attach_frozen(
+                        &mut body,
+                        &mut material,
+                        &environment,
+                    )
+                })?;
             }
+            timing.material("frozen_material", &body.request_digest, || {
+                (
+                    material.objects.len(),
+                    material
+                        .objects
+                        .iter()
+                        .map(|object| object.bytes.len())
+                        .sum(),
+                )
+            });
             let signature_hex = hex::encode(
                 self.writer
                     .sign(&frozen_signing_bytes(&body).map_err(|e| e.to_string())?)
@@ -897,7 +914,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                 candidate: None,
                 frozen_certificate: None,
             });
-            if let Err(error) = self.persist() {
+            if let Err(error) = timing.step("persist_frozen", None, || self.persist()) {
                 self.poisoned = true;
                 return Err(error);
             }
@@ -1018,13 +1035,33 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             self.reclaim_published_attempts(&original);
             return Ok(original.proof);
         }
-        let candidate = self.candidate_for_resume()?;
+        let candidate =
+            timing.step("candidate_for_resume", None, || self.candidate_for_resume())?;
+        timing.material(
+            "candidate_material",
+            &candidate.candidate.record.request_digest,
+            || {
+                (
+                    candidate.material.objects.len(),
+                    candidate
+                        .material
+                        .objects
+                        .iter()
+                        .map(|object| object.bytes.len())
+                        .sum(),
+                )
+            },
+        );
         timing.mark("candidate");
         self.pending
             .as_mut()
             .ok_or("formal pending missing")?
             .candidate = Some(candidate.clone());
-        self.persist()?;
+        timing.step(
+            "persist_candidate",
+            Some(&candidate.candidate.record.request_digest),
+            || self.persist(),
+        )?;
         timing.mark("candidate_saved");
         #[cfg(all(test, unix))]
         super::formal_crash_test_boundary::stop_after("candidate_saved")?;
@@ -1034,9 +1071,12 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             let (primary, replica) = self.coordinator.endpoints_mut();
             super::formal_native_environment::verify_registered(primary, replica, &environment)?;
         }
-        let proof = self
-            .coordinator
-            .submit(candidate.clone())
+        let proof = timing
+            .step(
+                "submit_candidate",
+                Some(&candidate.candidate.record.request_digest),
+                || self.coordinator.submit(candidate.clone()),
+            )
             .map_err(|e| e.to_string())?;
         timing.mark("dual_qualified");
         #[cfg(all(test, unix))]
