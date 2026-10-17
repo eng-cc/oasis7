@@ -1,4 +1,3 @@
-use oasis7::node_points_observation::measure_directory_storage_bytes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::fs::Metadata;
@@ -602,6 +601,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use oasis7::node_points_observation::measure_directory_storage_bytes;
     use oasis7::runtime::World as RuntimeWorld;
     use oasis7_proto::storage_profile::StorageProfile;
 

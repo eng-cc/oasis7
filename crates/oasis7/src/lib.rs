@@ -6,6 +6,8 @@ pub mod chain_resource_schema;
 pub mod collect_data_auth;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod consensus_action_payload;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod development_node_config;
 pub mod env_mut;
 pub mod geometry;
 #[cfg(not(target_arch = "wasm32"))]

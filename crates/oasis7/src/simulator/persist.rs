@@ -622,7 +622,7 @@ pub struct PlayerStarterIndustrialSettledOutcome {
     pub settlement_job_id: u64,
     pub settled_at: WorldTime,
     pub output_ledger: crate::industry_types::MaterialLedgerId,
-    pub settlement: crate::industry_types::StarterIndustrialSettlementSummaryV1,
+    pub settlement: oasis7_agent_api::world_industry::StarterIndustrialSettlementSummaryV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

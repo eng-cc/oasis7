@@ -32,7 +32,7 @@ pub const STARTER_ASSEMBLER_FACTORY_ID: &str = "factory.assembler.mk1";
 pub const STARTER_INDUSTRIAL_COMPLETION_BOUNDARY: &str =
     "starter Smelter first settled iron_ingot production";
 
-pub use crate::industry_types::StarterIndustrialSettlementSummaryV1;
+pub use oasis7_agent_api::world_industry::StarterIndustrialSettlementSummaryV1;
 
 /// Durable identity of the first starter-chain production settlement. The
 /// profile and output-ledger bindings prevent a later recipe or a replacement

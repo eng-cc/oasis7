@@ -26,7 +26,7 @@ mod cognition_scheduler;
 mod cognition_validation;
 mod cognition_wake;
 mod consensus;
-pub mod development_node_config;
+pub use crate::development_node_config;
 mod effect;
 mod error;
 mod events;

@@ -49,3 +49,5 @@ pub mod world_resource;
 pub mod module_source;
 
 pub mod node_contribution;
+
+pub mod world_industry;

@@ -413,19 +413,6 @@ mod tests {
         NodePointsRuntimeHeuristics, NodePointsRuntimeObservation,
     };
     use crate::runtime::NodePointsConfig;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_dir(prefix: &str) -> PathBuf {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("duration")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("oasis7-node-points-{prefix}-{now}"));
-        fs::create_dir_all(&path).expect("mkdir");
-        path
-    }
 
     #[test]
     #[expect(
