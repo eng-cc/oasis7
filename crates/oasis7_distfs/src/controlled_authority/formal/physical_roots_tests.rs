@@ -9,7 +9,10 @@ impl Temp {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        directory(&path).unwrap();
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        builder.mode(0o700);
+        builder.create(&path).unwrap();
         initialize(&path).unwrap();
         Self(path)
     }

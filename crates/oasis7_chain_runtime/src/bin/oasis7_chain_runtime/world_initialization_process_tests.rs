@@ -314,7 +314,10 @@ fn run_initialization() -> Result<(), String> {
             &output,
         )?,
     )?;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    // Native activation first transfers a bounded original image closure. The
+    // fault is at Prepare, so bound inactivity during that progressing transfer
+    // rather than treating its total bytes as an idle Prepare wait. The suite's
+    // process deadline still bounds the whole test.
     while !gate.blocked.load(Ordering::Acquire) {
         if let Some(status) = interrupted.0.try_wait().map_err(|e| e.to_string())? {
             return Err(format!(
@@ -324,8 +327,16 @@ fn run_initialization() -> Result<(), String> {
         if let Some(error) = gate.error.lock().map_err(|_| "gate error lock")?.clone() {
             return Err(error);
         }
-        if Instant::now() >= deadline {
-            return Err("world-init did not reach replica Prepare boundary".into());
+        if gate
+            .last_progress
+            .lock()
+            .map_err(|_| "gate progress lock")?
+            .elapsed()
+            >= Duration::from_secs(30)
+        {
+            return Err(
+                "world-init made no RPC progress toward replica Prepare for 30 seconds".into(),
+            );
         }
         thread::sleep(Duration::from_millis(5));
     }
@@ -459,6 +470,7 @@ struct ReplicaPrepareGate {
     blocked: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     error: Arc<std::sync::Mutex<Option<String>>>,
+    last_progress: Arc<std::sync::Mutex<Instant>>,
     worker: Option<thread::JoinHandle<()>>,
 }
 impl ReplicaPrepareGate {
@@ -469,6 +481,8 @@ impl ReplicaPrepareGate {
         let blocked = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
         let error = Arc::new(std::sync::Mutex::new(None));
+        let last_progress = Arc::new(std::sync::Mutex::new(Instant::now()));
+        let progress = last_progress.clone();
         let (b, s, e) = (blocked.clone(), stop.clone(), error.clone());
         let worker = thread::spawn(move || {
             while !s.load(Ordering::Acquire) {
@@ -497,7 +511,9 @@ impl ReplicaPrepareGate {
                                 .map_err(|e| e.to_string())?;
                             write_frame(&mut outgoing, &frame)?;
                             let response = read_frame(&mut outgoing)?;
-                            write_frame(&mut incoming, &response)
+                            write_frame(&mut incoming, &response)?;
+                            *progress.lock().map_err(|_| "gate progress lock")? = Instant::now();
+                            Ok(())
                         })();
                         if let Err(reason) = outcome {
                             *e.lock().unwrap() = Some(reason);
@@ -519,6 +535,7 @@ impl ReplicaPrepareGate {
             blocked,
             stop,
             error,
+            last_progress,
             worker: Some(worker),
         })
     }

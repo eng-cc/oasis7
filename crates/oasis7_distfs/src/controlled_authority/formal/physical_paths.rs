@@ -39,6 +39,7 @@ pub(crate) fn parents(path: &Path) -> Result<(), FormalError> {
             FRAMES,
             ".generations-v1",
             ".catalog-v2",
+            ".catalog-v3",
             ".physical-staging-v1",
             ".retained-logical-v1",
         ]
@@ -79,7 +80,7 @@ mod tests {
         use std::os::unix::{fs::PermissionsExt, fs::symlink};
         let fixture = Fixture::new();
         let value = object(vec![17; 100000]);
-        persist(&fixture.0, &[value.clone()]).unwrap();
+        persist(&fixture.0, std::slice::from_ref(&value)).unwrap();
         let frames = fixture.0.join(FRAMES);
         let moved = fixture.0.join("private-original-frames");
         fs::rename(&frames, &moved).unwrap();

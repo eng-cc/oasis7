@@ -60,7 +60,7 @@ fn known(path: &Path, relative: &Path, metadata: &fs::Metadata) -> Result<(), Fo
             }
         } else if name == MANIFEST {
             let value: Manifest = serde_cbor::from_slice(&read(path, META_LIMIT)?).map_err(io)?;
-            if value.version != 2 {
+            if value.version != 3 {
                 return Err(invalid("old generation manifest version"));
             }
             catalog::validate(&value.catalogs)?;
@@ -82,13 +82,7 @@ fn known(path: &Path, relative: &Path, metadata: &fs::Metadata) -> Result<(), Fo
                 return Err(invalid("old generation stored checksum"));
             }
             if first == catalog::CATALOG {
-                let ids: Vec<String> = serde_cbor::from_slice(&bytes).map_err(io)?;
-                if ids.len() > 4096 || ids.windows(2).any(|pair| pair[0] >= pair[1]) {
-                    return Err(invalid("old catalog order/count"));
-                }
-                for id in ids {
-                    hash_hex(&id)?;
-                }
+                catalog::validate_file(path, name)?;
             }
         }
     } else if first == ".business-pack-staging-v1" {

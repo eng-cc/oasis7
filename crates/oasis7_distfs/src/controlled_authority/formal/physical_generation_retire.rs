@@ -68,27 +68,19 @@ pub(super) fn retire(
         }
         let olddir = root.join(GENERATIONS).join(previous);
         if !state.old_verified {
-            if let Some((key, reference)) = old.catalogs.iter().find(|(key, _)| {
-                state
-                    .old_checked
-                    .as_ref()
-                    .is_none_or(|checked| *key > checked)
-            }) {
-                let new = target
-                    .catalogs
-                    .get(key)
-                    .ok_or_else(|| invalid("generation old shard not covered"))?;
-                if !catalog::load(&olddir, key, reference)?
-                    .is_subset(&catalog::load(&dir, key, new)?)
-                {
+            let original =
+                catalog::page(&olddir, &old.catalogs, state.old_checked.as_deref(), 1024)?;
+            for id in &original {
+                if !catalog::contains(&dir, &target.catalogs, id)? {
                     return Err(invalid("generation old closure not covered"));
                 }
-                state.old_checked = Some(key.clone());
-                save(root, state)?;
-                return progress(root, state);
             }
-            state.old_verified = true;
+            if let Some(last) = original.last() {
+                state.old_checked = Some(last.clone());
+            }
+            state.old_verified = original.len() < 1024;
             save(root, state)?;
+            return progress(root, state);
         }
         if !cleanup::old_generation_batch(&olddir)? {
             return progress(root, state);

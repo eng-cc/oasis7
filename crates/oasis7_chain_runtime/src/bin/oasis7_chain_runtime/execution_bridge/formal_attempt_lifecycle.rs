@@ -43,15 +43,15 @@ fn save(path: &Path, value: &Attempt) -> Result<(), String> {
 pub(super) struct ExecutionPin(std::path::PathBuf);
 impl Drop for ExecutionPin {
     fn drop(&mut self) {
-        if let Ok(mut attempt) = load(&self.0) {
-            if attempt.phase == Phase::Active {
-                attempt.phase = Phase::Unknown;
-                attempt.protected_obligations = vec![
-                    "execution did not durably bind an exact candidate; original evidence retained"
-                        .into(),
-                ];
-                let _ = save(&self.0, &attempt);
-            }
+        if let Ok(mut attempt) = load(&self.0)
+            && attempt.phase == Phase::Active
+        {
+            attempt.phase = Phase::Unknown;
+            attempt.protected_obligations = vec![
+                "execution did not durably bind an exact candidate; original evidence retained"
+                    .into(),
+            ];
+            let _ = save(&self.0, &attempt);
         }
     }
 }
@@ -220,15 +220,15 @@ pub(super) fn reclaim(
         return Ok(true);
     }
     attempt.phase = Phase::QualifiedVerified;
-    save(&path, &attempt)?;
+    save(path, &attempt)?;
     attempt.publication_digest = Some(publication_digest.into());
     attempt.independent_closure_digests = independent_closure_digests.to_vec();
     attempt.phase = Phase::PublishedClosureVerified;
-    save(&path, &attempt)?;
+    save(path, &attempt)?;
     // Persist the retire fence before the first unlink. A crash leaves an
     // exact resumable delete list, and retry rechecks destination closure.
     attempt.phase = Phase::Reclaimable;
-    save(&path, &attempt)?;
+    save(path, &attempt)?;
     for directory in [path.join("storage"), path.join("storage/blobs")] {
         if !std::fs::symlink_metadata(&directory)
             .map_err(|e| e.to_string())?
@@ -303,7 +303,7 @@ pub(super) fn reclaim(
         "pending ack/outbox identities remain in pending.cbor and published material".into(),
         "attempt records/world/unknown evidence retained; no time-based sweep".into(),
     ];
-    save(&path, &attempt)?;
+    save(path, &attempt)?;
     Ok(true)
 }
 

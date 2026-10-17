@@ -59,7 +59,7 @@ fn incremental_generation_includes_late_overlay_fences_readers_and_retires_old_r
         assert_eq!(range, object.1[..7.min(object.1.len())]);
     }
     let overlay = object(vec![99; 100000]);
-    assert!(persist(&fixture.0, &[overlay.clone()]).unwrap());
+    assert!(persist(&fixture.0, std::slice::from_ref(&overlay)).unwrap());
     roots::retain(&fixture.0, std::slice::from_ref(&overlay.0)).unwrap();
     assert_eq!(logical(&fixture.0, &overlay), overlay.1);
     let next = finish(&fixture.0).selected.unwrap();
@@ -117,25 +117,6 @@ fn corrupt_selected_generation_never_falls_back_to_stale_overlay() {
     );
 }
 
-#[test]
-fn catalogs_bound_each_shard_without_a_65536_world_object_limit() {
-    let catalogs: Catalogs = (0..4096)
-        .map(|prefix| {
-            (
-                format!("{prefix:03x}"),
-                catalog::ShardRef {
-                    digest: "11".repeat(32),
-                    count: 17,
-                },
-            )
-        })
-        .collect();
-    catalog::validate(&catalogs).unwrap();
-    assert_eq!(catalog::count(&catalogs).unwrap(), 69632);
-    let mut invalid = catalogs;
-    invalid.get_mut("000").unwrap().count = 4097;
-    assert!(catalog::validate(&invalid).is_err());
-}
 #[test]
 fn interrupted_unselected_seal_accepts_later_overlay_by_reopening_its_catalog() {
     let fixture = Fixture::new();

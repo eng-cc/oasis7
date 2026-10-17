@@ -26,6 +26,7 @@ pub(crate) struct ClosureJob {
     leaves: u64,
     root: usize,
     complete: bool,
+    retiring_scratch: bool,
     started: bool,
 }
 
@@ -275,6 +276,8 @@ impl ClosureJob {
     ) -> Result<Self, FormalError> {
         let pin = super::super::physical::pin(&store.path.join("formal-objects-v1"), false)?
             .ok_or_else(|| invalid("published closure resumable representation pin unavailable"))?;
+        let seen = Seen::new(store)?;
+        let sync_markers = seen.root.join("fsync-v1");
         if !matches!(profile, 1 | 2) {
             return Err(invalid("published closure unsupported profile"));
         }
@@ -284,7 +287,7 @@ impl ClosureJob {
                 &candidate.candidate.record,
                 &candidate.material,
                 candidate.frozen_material.as_ref(),
-                &RegisteredReader(store),
+                &RegisteredReader(store, Some(&sync_markers)),
             )?;
         }
         let mut raw = BTreeMap::new();
@@ -312,7 +315,7 @@ impl ClosureJob {
                 logical_objects: 0,
                 logical_bytes: 0,
             },
-            seen: Seen::new(store)?,
+            seen,
             native: std::iter::once(&candidate.material)
                 .chain(candidate.frozen_material.iter())
                 .map(|material| {
@@ -331,10 +334,11 @@ impl ClosureJob {
             leaves: 0,
             root: 0,
             complete: false,
+            retiring_scratch: false,
             started: false,
         };
         for (id, expected) in raw {
-            let bytes = store.published_local_read(&id)?;
+            let bytes = store.published_local_read_once(&id, &sync_markers)?;
             if bytes != expected {
                 return Err(invalid("published closure exact artifact bytes differ"));
             }
@@ -373,6 +377,7 @@ impl ClosureJob {
         let mut read_bytes = 0usize;
         loop {
             if self.root == self.roots.len() {
+                self.retiring_scratch = true;
                 // Scratch reclamation is also paged. Dropping an interrupted
                 // job releases its lock; later jobs scavenge bounded pages.
                 if !self.seen.clean_page()? {
@@ -429,13 +434,24 @@ impl ClosureJob {
                 }
                 _ => return Err(invalid("published closure sparse node type/depth")),
             }
-            if nodes >= 256 || read_bytes >= 8 * 1024 * 1024 {
+            // Keep each authenticated RPC page below its existing frame deadline,
+            // including fresh object hashing and durable inventory markers.
+            if nodes >= 16 || read_bytes >= 8 * 1024 * 1024 {
+                #[cfg(test)]
+                if std::env::var_os("OASIS7_FORMAL_CLOSURE_DIAGNOSTICS").is_some() {
+                    eprintln!("published_closure_page nodes={nodes} bytes={read_bytes}");
+                }
                 return Ok(None);
             }
         }
     }
     fn account(&mut self, id: &str, bytes: &[u8]) -> Result<(), FormalError> {
         account_seen(id, bytes, &mut self.seen, &mut self.report)
+    }
+    pub(crate) fn sync_markers(&self) -> Option<PathBuf> {
+        // Cleanup may already have removed these markers. The physical pin
+        // remains live, but completed/cleaning jobs use ordinary durable reads.
+        (!self.retiring_scratch).then(|| self.seen.root.join("fsync-v1"))
     }
     pub(crate) fn complete(&self) -> bool {
         self.complete
@@ -464,29 +480,47 @@ impl ClosureJob {
 }
 
 impl Store {
+    #[cfg(test)]
     pub(crate) fn verify_published_raw_aliases(
         &self,
         candidate: &FormalCandidateMaterialV1,
     ) -> Result<(), FormalError> {
+        self.verify_published_raw_aliases_with_sync(candidate, None)
+    }
+    pub(crate) fn verify_published_raw_aliases_with_sync(
+        &self,
+        candidate: &FormalCandidateMaterialV1,
+        sync_markers: Option<&Path>,
+    ) -> Result<(), FormalError> {
         for material in std::iter::once(&candidate.material).chain(candidate.frozen_material.iter())
         {
             for object in &material.objects {
-                if self.published_local_read(&object.content_hash)? != object.bytes {
+                let bytes = match sync_markers {
+                    Some(markers) => {
+                        self.published_local_read_once(&object.content_hash, markers)?
+                    }
+                    None => self.published_local_read(&object.content_hash)?,
+                };
+                if bytes != object.bytes {
                     return Err(invalid("published closure exact artifact bytes differ"));
                 }
             }
         }
         Ok(())
     }
-    pub(crate) fn read_registered_local_request(
+    pub(crate) fn read_registered_local_request_with_sync(
         &self,
         request: &str,
+        sync_markers: Option<&Path>,
     ) -> Result<FormalRequestStateV1, FormalError> {
         hash_hex(request)?;
-        let mut load = |id: &str| self.published_local_read(id);
+        let mut load = |id: &str| match sync_markers {
+            Some(markers) => self.published_local_read_once(id, markers),
+            None => self.published_local_read(id),
+        };
         let id = Self::lookup_from_root(self.body.index.as_deref(), request, &mut load)?
             .ok_or_else(|| invalid("published local request index unavailable"))?;
-        let state: FormalRequestStateV1 = decode(&self.published_local_read(&id)?)?;
+        let state: FormalRequestStateV1 = decode(&load(&id)?)?;
         if state.request_digest() != request {
             return Err(invalid("published local request identity"));
         }
@@ -515,7 +549,7 @@ impl Store {
                 &candidate.candidate.record,
                 &candidate.material,
                 candidate.frozen_material.as_ref(),
-                &RegisteredReader(self),
+                &RegisteredReader(self, None),
             )?;
         }
 
@@ -687,13 +721,15 @@ impl Store {
         Ok(bytes)
     }
 }
-struct RegisteredReader<'a>(&'a Store);
+struct RegisteredReader<'a>(&'a Store, Option<&'a Path>);
 impl super::super::business_index::BusinessIndexNodeReader for RegisteredReader<'_> {
     fn read_node(&self, id: &str) -> Result<Option<Vec<u8>>, String> {
-        self.0
-            .published_local_read(id)
-            .map(Some)
-            .map_err(|error| error.to_string())
+        match self.1 {
+            Some(markers) => self.0.published_local_read_once(id, markers),
+            None => self.0.published_local_read(id),
+        }
+        .map(Some)
+        .map_err(|error| error.to_string())
     }
 }
 fn account(

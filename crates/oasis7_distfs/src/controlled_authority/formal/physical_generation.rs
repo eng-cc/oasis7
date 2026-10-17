@@ -12,7 +12,7 @@ use retirement::retire;
 const GENERATIONS: &str = ".generations-v1";
 const CURRENT: &str = ".generation-current-v1";
 const BUILD: &str = ".generation-build-v1.cbor";
-const MANIFEST: &str = ".manifest-v2.cbor";
+const MANIFEST: &str = ".manifest-v3.cbor";
 const BATCH: usize = 8 * 1024 * 1024;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +36,7 @@ struct Build {
     retire_after: Option<String>,
     old_checked: Option<String>,
     old_verified: bool,
+    catalog_retired: Vec<catalog::Retired>,
 }
 #[derive(Debug, Serialize)]
 pub struct FormalGenerationProgress {
@@ -67,7 +68,7 @@ fn manifest(root: &Path, id: &str) -> Result<Manifest, FormalError> {
         return Err(invalid("generation manifest checksum"));
     }
     let value: Manifest = serde_cbor::from_slice(&bytes).map_err(io)?;
-    if value.version != 2 {
+    if value.version != 3 {
         return Err(invalid("generation manifest schema"));
     }
     hash_hex(&value.nonce)?;
@@ -168,11 +169,7 @@ pub(crate) fn visit_ids(
     if let Some(id) = current(root)? {
         let selected = manifest(root, &id)?;
         let dir = root.join(GENERATIONS).join(id);
-        for (key, reference) in &selected.catalogs {
-            for id in catalog::load(&dir, key, reference)? {
-                visitor(id)?;
-            }
-        }
+        catalog::visit(&dir, &selected.catalogs, &mut visitor)?;
     }
     visit_aliases(root, &mut visitor)
 }
@@ -210,18 +207,14 @@ fn save(root: &Path, state: &Build) -> Result<(), FormalError> {
 fn load(root: &Path) -> Result<Build, FormalError> {
     let value: Build =
         super::super::maintenance_encoding::decode(&read(&root.join(BUILD), META_LIMIT)?)?;
-    if value.version != 2 {
+    if value.version != 3 {
         return Err(invalid("generation build version"));
     }
     hash_hex(&value.nonce)?;
-    if value.old_checked.as_ref().is_some_and(|prefix| {
-        prefix.len() != 3
-            || !prefix
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    }) {
-        return Err(invalid("generation retirement prefix"));
+    if let Some(id) = &value.old_checked {
+        hash_hex(id)?;
     }
+    catalog::validate_retired(&value.catalog_retired)?;
     catalog::validate(&value.objects)?;
     catalog::validate(&value.completed)?;
     for id in [
@@ -274,7 +267,7 @@ pub(crate) fn advance(root: &Path) -> Result<FormalGenerationProgress, FormalErr
         let previous = current(root)?;
         let previous_manifest = previous.as_ref().map(|id| manifest(root, id)).transpose()?;
         let state = Build {
-            version: 2,
+            version: 3,
             nonce: super::super::fencing::fresh_challenge().map_err(io)?,
             previous,
             previous_manifest,
@@ -286,6 +279,7 @@ pub(crate) fn advance(root: &Path) -> Result<FormalGenerationProgress, FormalErr
             retire_after: None,
             old_checked: None,
             old_verified: false,
+            catalog_retired: Vec::new(),
         };
         save(root, &state)?;
         state
@@ -306,9 +300,21 @@ pub(crate) fn advance(root: &Path) -> Result<FormalGenerationProgress, FormalErr
     let dir = building(root, &state);
     directory(&dir)?;
     initialize(&dir)?;
+    if !state.catalog_retired.is_empty() {
+        catalog::prune(
+            &dir,
+            [&state.objects, &state.completed],
+            &mut state.catalog_retired,
+        )?;
+        save(root, &state)?;
+        return progress(root, &state);
+    }
     if state.sealed.is_none() {
         let (ids, next, complete) = roots::page(root, &state.cursor, 1024)?;
-        catalog::add(&dir, &mut state.objects, &ids)?;
+        catalog::merge_retired(
+            &mut state.catalog_retired,
+            catalog::add(&dir, &mut state.objects, &ids)?,
+        );
         state.cursor = next;
         let pending = catalog::pending(&dir, &state.objects, &state.completed, 1024)?;
         let mut batch = Vec::new();
@@ -358,22 +364,28 @@ pub(crate) fn advance(root: &Path) -> Result<FormalGenerationProgress, FormalErr
                 }
                 done.push(id);
             }
-            catalog::add(&dir, &mut state.completed, &done)?;
+            catalog::merge_retired(
+                &mut state.catalog_retired,
+                catalog::add(&dir, &mut state.completed, &done)?,
+            );
         }
         save(root, &state)?;
-        if !complete || state.objects != state.completed {
+        if !complete || state.objects != state.completed || !state.catalog_retired.is_empty() {
             return progress(root, &state);
         }
         let _fence = pin(root, true)?;
         let (late, next, complete) = roots::page(root, &state.cursor, 1024)?;
         if !late.is_empty() || !complete {
-            catalog::add(&dir, &mut state.objects, &late)?;
+            catalog::merge_retired(
+                &mut state.catalog_retired,
+                catalog::add(&dir, &mut state.objects, &late)?,
+            );
             state.cursor = next;
             save(root, &state)?;
             return progress(root, &state);
         }
         let encoded = serde_cbor::to_vec(&Manifest {
-            version: 2,
+            version: 3,
             nonce: state.nonce.clone(),
             catalogs: state.completed.clone(),
         })

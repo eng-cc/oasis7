@@ -68,8 +68,8 @@ pub(super) fn decode_recipe(bytes: &[u8]) -> Result<Recipe, FormalError> {
     }
     Ok(recipe)
 }
-const CACHE_BYTES: usize = 16 * 1024 * 1024;
-const CACHE_COUNT: usize = 32;
+const CACHE_BYTES: usize = 12 * 1024 * 1024;
+const CACHE_COUNT: usize = 16;
 #[derive(Default)]
 struct ParsedCache {
     values: std::collections::BTreeMap<[u8; 32], (usize, std::sync::Arc<Recipe>)>,

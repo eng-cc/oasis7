@@ -105,7 +105,7 @@ fn small_raw_and_duplicate_frames_do_not_grow_redundant_payload() {
     let mut b = vec![7; 200000];
     b.extend_from_slice(b"tail");
     let b = object(b);
-    assert!(persist(&f.0, &[b.clone()]).unwrap());
+    assert!(persist(&f.0, std::slice::from_ref(&b)).unwrap());
     assert!(fs::read_dir(f.0.join(FRAMES)).unwrap().count() <= before + 1);
     assert_eq!(
         read_object(&f.0.join(&b.0), &b.0, false).unwrap().unwrap(),
@@ -143,7 +143,7 @@ fn private_frame_selector_and_alias_interruptions_recover_exact_batch_on_reopen_
 fn physical_recipe_descriptor_bitrot_rejects_range_without_full_logical_decode() {
     let f = Fixture::new();
     let value = object(vec![73; 200000]);
-    assert!(persist(&f.0, &[value.clone()]).unwrap());
+    assert!(persist(&f.0, std::slice::from_ref(&value)).unwrap());
     let selected = f.0.join(SELECTORS).join(&value.0);
     let mut bytes = fs::read(&selected).unwrap();
     let last = bytes.len() - 1;
@@ -235,7 +235,7 @@ fn long_reader_allows_serialized_immutable_append_but_fences_retirement() {
         "two publishers must not overlap"
     );
     assert!(pin(&fixture.0, true).is_err());
-    assert!(persist_guarded(&fixture.0, &[value.clone()], &writer).unwrap());
+    assert!(persist_guarded(&fixture.0, std::slice::from_ref(&value), &writer).unwrap());
     drop(writer);
     // The legacy/raw fallback and retention ledger use the SAME writer fence.
     let raw = object(vec![102; 100]);
