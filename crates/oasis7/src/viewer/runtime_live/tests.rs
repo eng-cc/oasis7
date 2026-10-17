@@ -28,6 +28,8 @@ mod chain_sync;
 #[path = "tests/mock_http.rs"]
 mod mock_http;
 mod paused_start;
+#[path = "tests/periodic_connection_lifecycle.rs"]
+mod periodic_connection_lifecycle;
 #[path = "tests/provider_continuation_drains.rs"]
 mod provider_continuation_drains;
 pub(super) use chain_sync::TestChainStatusServer;

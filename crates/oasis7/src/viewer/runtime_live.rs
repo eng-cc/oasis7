@@ -1,3 +1,4 @@
+use self::periodic_connection_diagnostic::TraceSink;
 use super::auth::verify_session_register_auth_proof_for_recovery;
 use super::live::ViewerLiveDecisionMode;
 use super::protocol::{
@@ -42,6 +43,7 @@ mod agent_service_io;
 mod agent_service_io_diagnostics;
 mod agent_service_phase;
 mod agent_service_pump;
+mod periodic_connection_diagnostic;
 mod periodic_service_io;
 mod response_outbox;
 use tracing::Level;
@@ -523,12 +525,14 @@ impl ViewerRuntimeLiveServer {
     pub fn run(self) -> Result<(), ViewerRuntimeLiveServerError> {
         let listener = TcpListener::bind(&self.config.bind_addr)?;
         let shared = Arc::new(Mutex::new(self));
+        let diagnostics = periodic_connection_diagnostic::TraceSink::from_env();
         Self::start_agent_service_pump(&shared)?;
         for incoming in listener.incoming() {
             let stream = incoming?;
             let shared = Arc::clone(&shared);
+            let diagnostics = diagnostics.clone();
             thread::spawn(move || {
-                if let Err(err) = Self::serve_shared_stream(shared, stream) {
+                if let Err(err) = Self::serve_shared_stream(shared, stream, diagnostics) {
                     emit_stderr_or_event(
                         Level::WARN,
                         format!("viewer runtime live server error: {err:?}").as_str(),
@@ -612,12 +616,60 @@ impl ViewerRuntimeLiveServer {
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
-        Self::serve_shared_stream(shared, stream)
+        Self::serve_shared_stream(
+            shared,
+            stream,
+            periodic_connection_diagnostic::TraceSink::from_env(),
+        )
+    }
+
+    #[cfg(test)]
+    fn test_serve_shared_stream_with_connection(
+        shared: Arc<Mutex<Self>>,
+        stream: TcpStream,
+        connection: Option<periodic_connection_diagnostic::ConnectionTrace>,
+        session_already_primed: bool,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        Self::serve_shared_stream_with_connection(
+            shared,
+            stream,
+            connection,
+            session_already_primed,
+        )
     }
 
     fn serve_shared_stream(
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
+        diagnostics: Option<Arc<periodic_connection_diagnostic::TraceSink>>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        let connection = diagnostics.as_ref().map(TraceSink::connection);
+        Self::serve_shared_stream_with_connection(shared, stream, connection, false)
+    }
+
+    fn serve_shared_stream_with_connection(
+        shared: Arc<Mutex<Self>>,
+        stream: TcpStream,
+        connection: Option<periodic_connection_diagnostic::ConnectionTrace>,
+        session_already_primed: bool,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        let result = Self::serve_shared_stream_inner(
+            shared,
+            stream,
+            connection.clone(),
+            session_already_primed,
+        );
+        if let Some(connection) = connection {
+            connection.emit_close(connection.close_snapshot());
+        }
+        result
+    }
+
+    fn serve_shared_stream_inner(
+        shared: Arc<Mutex<Self>>,
+        stream: TcpStream,
+        connection: Option<periodic_connection_diagnostic::ConnectionTrace>,
+        session_already_primed: bool,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         Self::start_agent_service_pump(&shared)?;
         let mut agent_presence = agent_service_pump::AgentServicePresence::new(&shared);
@@ -632,13 +684,20 @@ impl ViewerRuntimeLiveServer {
             response_outbox::ResponseLimits::from_config(&server.config)
         };
         let mut session = RuntimeLiveSession::new_with_playing(false);
-        let mut periodic_io = periodic_service_io::SessionPoll::default();
+        session.chain_runtime_authoritatively_primed = session_already_primed;
+        let mut periodic_io = periodic_service_io::SessionPoll::with_connection(connection.clone());
 
         loop {
             Self::start_agent_service_pump(&shared)?;
             let mut line = String::new();
             match reader.read_line(&mut line) {
-                Ok(0) => return Ok(()),
+                Ok(0) => {
+                    if let Some(connection) = &connection {
+                        connection
+                            .set_close_reason(periodic_connection_diagnostic::CloseReason::Eof);
+                    }
+                    return Ok(());
+                }
                 Ok(_) => {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
@@ -694,13 +753,41 @@ impl ViewerRuntimeLiveServer {
                                 }
                             }
                         }
-                        output.deliver(&mut socket)?;
-                        handled?;
+                        if let Err(error) = output.deliver(&mut socket) {
+                            if let Some(connection) = &connection {
+                                connection.set_close_reason(
+                                    periodic_connection_diagnostic::CloseReason::WriteError,
+                                );
+                            }
+                            return Err(error.into());
+                        }
+                        if let Err(error) = handled {
+                            if let Some(connection) = &connection {
+                                connection.set_close_reason(
+                                    periodic_connection_diagnostic::CloseReason::RequestError,
+                                );
+                            }
+                            return Err(error);
+                        }
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
-                Err(err) if is_expected_disconnect_error(&err) => return Ok(()),
-                Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
+                Err(err) if is_expected_disconnect_error(&err) => {
+                    if let Some(connection) = &connection {
+                        connection.set_close_reason(
+                            periodic_connection_diagnostic::CloseReason::ReadError,
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(err) => {
+                    if let Some(connection) = &connection {
+                        connection.set_close_reason(
+                            periodic_connection_diagnostic::CloseReason::ReadError,
+                        );
+                    }
+                    return Err(ViewerRuntimeLiveServerError::Io(err));
+                }
             }
 
             let (write_fenced, chain_link_enabled, chain_poll_interval, service_mode) = {
@@ -753,7 +840,13 @@ impl ViewerRuntimeLiveServer {
                     Ok(())
                 }
             };
-            periodic_io.deliver_output(&mut output, &mut socket)?;
+            if let Err(error) = periodic_io.deliver_output(&mut output, &mut socket) {
+                if let Some(connection) = &connection {
+                    connection
+                        .set_close_reason(periodic_connection_diagnostic::CloseReason::WriteError);
+                }
+                return Err(error.into());
+            }
             driven?;
         }
     }

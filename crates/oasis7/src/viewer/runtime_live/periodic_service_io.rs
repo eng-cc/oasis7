@@ -2,6 +2,9 @@
 //! One worker and one queued job belong to one Viewer server. Each connection
 //! owns at most one result mailbox; disconnect drops it without joining I/O.
 use super::chain_link::PreparedChainLinkedRuntimeUpdate;
+use super::periodic_connection_diagnostic::ConnectionTrace;
+#[cfg(test)]
+use super::periodic_connection_diagnostic::TraceSink;
 use super::world_service_link::prepare_world_service_update_until;
 use super::*;
 use crate::world_service::WorldServicePayloadV1;
@@ -9,7 +12,7 @@ use crate::world_service::client::{WorldServiceClientConfig, WorldServiceQuerySt
 use crate::world_service::verified_view::VerifiedWorldView;
 use oasis7_client_api::world_service::RequestCorrelation;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
 
 type Pending = Vec<(RequestCorrelation, WorldServicePayloadV1)>;
@@ -65,9 +68,7 @@ struct Completion {
 }
 
 // Opt-in diagnostics emit a bounded lifecycle for each admitted read.
-const PERIODIC_IO_TRACE_ENV: &str = "OASIS7_VIEWER_PERIODIC_IO_TRACE";
 const TRACE_ELAPSED_MAX_MS: u128 = 120_000;
-static NEXT_TRACE_JOB_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TraceStage {
@@ -108,20 +109,18 @@ struct TraceObservation {
 struct TraceIdentity {
     sequence: u64,
     submitted_at: Instant,
+    connection: ConnectionTrace,
     #[cfg(test)]
     observations: Option<Arc<Mutex<Vec<TraceObservation>>>>,
 }
 
 impl TraceIdentity {
-    fn new() -> Self {
-        let sequence = NEXT_TRACE_JOB_SEQUENCE
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                Some(current.saturating_add(1))
-            })
-            .unwrap_or(u64::MAX);
+    fn new(connection: ConnectionTrace) -> Self {
+        let sequence = connection.job_sequence();
         Self {
             sequence,
             submitted_at: Instant::now(),
+            connection,
             #[cfg(test)]
             observations: None,
         }
@@ -142,8 +141,7 @@ impl TraceIdentity {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .push(TraceObservation { stage, status });
         }
-        let line = format!(
-            "OASIS7_VIEWER_PERIODIC_IO_TRACE schema=v2 job={} stage={} stage_order={} status={} since_ms={} {}",
+        self.connection.emit_job(
             self.sequence,
             stage.as_str(),
             stage.order(),
@@ -151,9 +149,6 @@ impl TraceIdentity {
             self.elapsed_ms(),
             details,
         );
-        let mut stderr = std::io::stderr().lock();
-        let _ = std::io::Write::write_all(&mut stderr, line.as_bytes());
-        let _ = std::io::Write::write_all(&mut stderr, b"\n");
     }
 }
 
@@ -254,13 +249,14 @@ struct PeriodicIoTrace {
 }
 
 impl PeriodicIoTrace {
-    fn enabled() -> bool {
-        std::env::var_os(PERIODIC_IO_TRACE_ENV).is_some_and(|value| value == "1")
-    }
-
-    fn new(baseline: TraceCursor, outstanding_at_submit: usize, pending_count: usize) -> Self {
+    fn new(
+        baseline: TraceCursor,
+        outstanding_at_submit: usize,
+        pending_count: usize,
+        connection: ConnectionTrace,
+    ) -> Self {
         Self {
-            identity: TraceIdentity::new(),
+            identity: TraceIdentity::new(connection),
             worker_started_at: None,
             worker_completed_at: None,
             baseline,
@@ -278,7 +274,8 @@ impl PeriodicIoTrace {
 
     #[cfg(test)]
     fn for_test(baseline: TraceCursor) -> (Self, Arc<Mutex<Vec<TraceObservation>>>) {
-        let mut trace = Self::new(baseline, 1, 0);
+        let sink = TraceSink::for_test();
+        let mut trace = Self::new(baseline, 1, 0, sink.connection());
         let observations = Arc::new(Mutex::new(Vec::new()));
         trace.identity.observations = Some(observations.clone());
         (trace, observations)
@@ -433,12 +430,19 @@ impl TraceTerminalEvent {
 }
 
 fn create_trace(
-    enabled: bool,
     baseline: TraceCursor,
     outstanding_at_submit: usize,
     pending_count: usize,
+    connection: Option<&ConnectionTrace>,
 ) -> Option<PeriodicIoTrace> {
-    enabled.then(|| PeriodicIoTrace::new(baseline, outstanding_at_submit, pending_count))
+    connection.map(|connection| {
+        PeriodicIoTrace::new(
+            baseline,
+            outstanding_at_submit,
+            pending_count,
+            connection.clone(),
+        )
+    })
 }
 
 fn send_traced_completion<T>(
@@ -446,10 +450,16 @@ fn send_traced_completion<T>(
     completion: T,
     terminal: Option<TraceTerminalEvent>,
 ) {
-    let mailbox_status = if destination.try_send(completion).is_ok() {
-        "queued"
-    } else {
-        "dropped"
+    let mailbox_status = match destination.try_send(completion) {
+        Ok(()) => "queued",
+        Err(TrySendError::Full(completion)) => {
+            drop(completion);
+            "full"
+        }
+        Err(TrySendError::Disconnected(completion)) => {
+            drop(completion);
+            "disconnected"
+        }
     };
     if let Some(terminal) = terminal {
         terminal.emit(mailbox_status);
@@ -517,6 +527,11 @@ impl Executor {
             worker: Mutex::new(Some(worker)),
         }))
     }
+
+    #[cfg(test)]
+    pub(super) fn outstanding_for_test(&self) -> usize {
+        self.outstanding.load(Ordering::Acquire)
+    }
 }
 
 #[derive(Default)]
@@ -525,7 +540,26 @@ pub(super) struct SessionPoll {
     executor: Option<Arc<Executor>>,
     retry_at: Option<Instant>,
     trace: Option<PeriodicIoTrace>,
-    trace_enabled: Option<bool>,
+    connection: Option<ConnectionTrace>,
+}
+
+impl SessionPoll {
+    pub(super) fn with_connection(connection: Option<ConnectionTrace>) -> Self {
+        let mut poll = Self::default();
+        poll.connection = connection;
+        poll
+    }
+}
+
+impl Drop for SessionPoll {
+    fn drop(&mut self) {
+        if let Some(connection) = &self.connection {
+            // Drop::drop runs before the receiver field is dropped. The outer
+            // stream handler emits the captured state only after all original
+            // connection-owned objects have then dropped in their old order.
+            connection.capture_before_receiver_drop();
+        }
+    }
 }
 
 fn same_config(left: &WorldServiceClientConfig, right: &WorldServiceClientConfig) -> bool {
@@ -571,7 +605,11 @@ impl SessionPoll {
             });
             // Success only means this process completed the outbox socket write;
             // it does not attest that the peer received or applied the frame.
+            let job_sequence = trace.identity.sequence;
             trace.finish_delivery(delivery_result.is_ok(), elapsed);
+            if let Some(connection) = &self.connection {
+                connection.clear_pending_job(job_sequence);
+            }
         }
         delivery_result
     }
@@ -588,9 +626,6 @@ impl SessionPoll {
         session: &mut RuntimeLiveSession,
         writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
-        let trace_enabled = *self
-            .trace_enabled
-            .get_or_insert_with(PeriodicIoTrace::enabled);
         if let Some(receiver) = &self.result {
             match receiver.try_recv() {
                 Ok(mut completion) => {
@@ -744,6 +779,11 @@ impl SessionPoll {
                 Err(TryRecvError::Empty) => return Ok(()),
                 Err(TryRecvError::Disconnected) => {
                     self.result = None;
+                    if let Some(job_sequence) = self.pending_job_sequence()
+                        && let Some(connection) = &self.connection
+                    {
+                        connection.clear_pending_job(job_sequence);
+                    }
                     let mut server = lock_shared_server(shared)?;
                     if let (Some(current), Some(owned)) =
                         (&server.periodic_service_executor, &self.executor)
@@ -799,11 +839,12 @@ impl SessionPoll {
             .cloned()
             .collect::<Pending>();
         let trace = create_trace(
-            trace_enabled,
             TraceCursor::from_view(&baseline),
             executor.outstanding.load(Ordering::Acquire),
             pending.len(),
+            self.connection.as_ref(),
         );
+        let job_sequence = trace.as_ref().map(|trace| trace.identity.sequence);
         let admission = trace.as_ref().map(PeriodicIoTrace::admission_event);
         let job = Job {
             token: Token {
@@ -824,6 +865,9 @@ impl SessionPoll {
             Ok(()) => {
                 self.result = Some(result);
                 self.executor = Some(executor);
+                if let (Some(connection), Some(job_sequence)) = (&self.connection, job_sequence) {
+                    connection.set_pending_job(job_sequence);
+                }
                 drop(server);
                 if let Some(admission) = admission {
                     admission.emit();
@@ -839,6 +883,16 @@ impl SessionPoll {
             }
         }
         Ok(())
+    }
+}
+
+impl SessionPoll {
+    fn pending_job_sequence(&self) -> Option<u64> {
+        self.connection
+            .as_ref()
+            .map(ConnectionTrace::pending_at_close)
+            .filter(|pending| pending.present)
+            .map(|pending| pending.job_sequence)
     }
 }
 
@@ -990,10 +1044,8 @@ mod tests {
             } else {
                 TraceBufferResult::Error
             };
-            let mut poll = SessionPoll {
-                trace: Some(trace),
-                ..SessionPoll::default()
-            };
+            let mut poll = SessionPoll::default();
+            poll.trace = Some(trace);
 
             let delivery = poll.deliver_output(&mut output, &mut socket);
             assert_eq!(delivery.is_ok(), expect_success);
@@ -1018,13 +1070,13 @@ mod tests {
     fn disabled_trace_creates_no_lifecycle_and_delivery_still_runs() {
         assert!(
             create_trace(
-                false,
                 TraceCursor {
                     commit_position: 1,
                     event_sequence: 1,
                 },
                 1,
                 0,
+                None,
             )
             .is_none()
         );
