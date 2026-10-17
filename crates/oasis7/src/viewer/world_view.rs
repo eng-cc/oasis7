@@ -3,7 +3,11 @@ use crate::simulator::WorldSnapshot;
 use crate::viewer::world_view_authority::SourceAuthority;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+#[path = "world_view_delta.rs"]
+mod delta;
+#[cfg(test)]
+#[path = "world_view_delta_tests.rs"]
+mod delta_tests;
 #[path = "world_view_index.rs"]
 mod index;
 #[path = "world_view_projection.rs"]
@@ -24,6 +28,12 @@ struct Query {
     page_size: usize,
     #[serde(default)]
     cursor: Option<String>,
+    #[serde(default)]
+    resume_cursor: Option<String>,
+    #[serde(default)]
+    detail_level: Option<String>,
+    #[serde(default)]
+    include_events: bool,
 }
 #[derive(Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -45,6 +55,13 @@ fn validate(query: &Value) -> Result<(Query, Option<Rect>), &'static str> {
         || q.page_size > 200
         || q.request_generation.len() > 64
         || q.search.as_ref().is_some_and(|s| s.len() > 128)
+        || (q.cursor.is_some() && q.resume_cursor.is_some())
+        || q.resume_cursor
+            .as_ref()
+            .is_some_and(|cursor| cursor.len() > 4096)
+        || q.detail_level
+            .as_ref()
+            .is_some_and(|level| !matches!(level.as_str(), "auto" | "overview" | "site" | "entity"))
         || q.pinned_entities.len() > 3
         || q.pinned_entities.iter().any(|p| {
             !matches!(p.kind.as_str(), "agent" | "location" | "factory")
@@ -102,6 +119,59 @@ pub(super) fn build_with_authority(
     };
     build_inner(&snapshot.config.space, world, query, &prepared, false)
 }
+fn query_id(
+    space: &crate::simulator::SpaceConfig,
+    prepared: &Prepared,
+    q: &Query,
+    scope_key: &str,
+) -> String {
+    blake3::hash(
+        json!([
+            &prepared.scope,
+            scope_key,
+            &prepared.epoch,
+            space,
+            &q.bounds,
+            &q.search,
+            &q.pinned_entities,
+            q.page_size,
+            q.detail_level.as_deref().unwrap_or("entity"),
+            q.include_events
+        ])
+        .to_string()
+        .as_bytes(),
+    )
+    .to_hex()
+    .to_string()
+}
+fn query_objects(prepared: &Prepared, q: &Query, bounds: Option<Rect>) -> Vec<projection::Object> {
+    let pins: Vec<_> = q
+        .pinned_entities
+        .iter()
+        .map(|p| (p.kind.clone(), p.id.clone()))
+        .collect();
+    let mut objects = projection::query_objects(
+        prepared,
+        q.detail_level.as_deref().unwrap_or("entity"),
+        bounds,
+        &pins,
+        q.search.as_deref(),
+        q.include_events,
+    );
+    let order = |object: &projection::Object| {
+        format!(
+            "{}:{}",
+            u8::from(
+                !pins
+                    .iter()
+                    .any(|(kind, id)| object.key == format!("entity:{kind}:{id}"))
+            ),
+            object.key
+        )
+    };
+    objects.sort_by_key(order);
+    objects
+}
 fn build_inner(
     space: &crate::simulator::SpaceConfig,
     world: &str,
@@ -110,8 +180,23 @@ fn build_inner(
     source_frozen: bool,
 ) -> Value {
     let (q, bounds) = match validate(&query) {
-        Ok(q) => q,
+        Ok(query) => query,
         Err(reason) => return unavailable(world, &query, reason),
+    };
+    let objects = query_objects(prepared, &q, bounds);
+    build_page(space, world, &query, prepared, source_frozen, &objects)
+}
+fn build_page(
+    space: &crate::simulator::SpaceConfig,
+    world: &str,
+    query: &Value,
+    prepared: &Prepared,
+    source_frozen: bool,
+    objects: &[projection::Object],
+) -> Value {
+    let (q, _) = match validate(query) {
+        Ok(query) => query,
+        Err(reason) => return unavailable(world, query, reason),
     };
     let fingerprint = blake3::hash(
         json!([
@@ -120,7 +205,9 @@ fn build_inner(
             &q.bounds,
             &q.search,
             &q.pinned_entities,
-            q.page_size
+            q.page_size,
+            q.detail_level.as_deref().unwrap_or("entity"),
+            q.include_events
         ])
         .to_string()
         .as_bytes(),
@@ -129,81 +216,54 @@ fn build_inner(
     .to_string();
     let after = if let Some(cursor) = &q.cursor {
         if cursor.len() > 4096 {
-            return unavailable(world, &query, "cursor_reset_required");
+            return unavailable(world, query, "cursor_reset_required");
         }
         match hex::decode(cursor)
             .ok()
-            .and_then(|b| serde_json::from_slice::<(String, String)>(&b).ok())
+            .and_then(|bytes| serde_json::from_slice::<(String, String)>(&bytes).ok())
         {
             Some((binding, key)) if binding == fingerprint => Some(key),
-            _ => return unavailable(world, &query, "cursor_reset_required"),
+            _ => return unavailable(world, query, "cursor_reset_required"),
         }
     } else {
         None
     };
-    let search = q.search.as_deref().unwrap_or("").to_lowercase();
-    let candidates = bounds.map_or_else(
-        || (0..prepared.objects.len()).collect(),
-        |b| prepared.index.query(b),
-    );
-    let mut chosen: BTreeSet<usize> = candidates
-        .into_iter()
-        .filter(|i| {
-            let object = &prepared.objects[*i];
-            search.is_empty()
-                || ["label", "entity_id", "relation_id"].iter().any(|k| {
-                    object.value[*k]
-                        .as_str()
-                        .is_some_and(|s| s.to_lowercase().contains(&search))
-                })
-        })
+    let order = |object: &projection::Object| {
+        format!(
+            "{}:{}",
+            u8::from(
+                !q.pinned_entities
+                    .iter()
+                    .any(|pin| object.key == format!("entity:{}:{}", pin.kind, pin.id))
+            ),
+            object.key
+        )
+    };
+    let remaining: Vec<_> = objects
+        .iter()
+        .filter(|object| after.as_ref().is_none_or(|after| order(object) > *after))
         .collect();
-    let mut pinned_keys = BTreeSet::new();
-    for pin in &q.pinned_entities {
-        if let Some(i) = prepared.identities.get(&(pin.kind.clone(), pin.id.clone())) {
-            chosen.insert(*i);
-            pinned_keys.insert(prepared.objects[*i].key.clone());
-        }
-    }
-    // Relationship endpoints must be from this same authorized cut, never old cache.
-    for i in chosen.iter().copied().collect::<Vec<_>>() {
-        let object = &prepared.objects[i];
-        if object.relation {
-            for key in ["from", "to"] {
-                let e = &object.value[key];
-                if let (Some(kind), Some(id)) = (e["kind"].as_str(), e["id"].as_str())
-                    && let Some(i) = prepared.identities.get(&(kind.into(), id.into()))
-                {
-                    chosen.insert(*i);
-                }
-            }
-        }
-    }
-    let order_key =
-        |o: &projection::Object| format!("{}:{}", u8::from(!pinned_keys.contains(&o.key)), o.key);
-    let mut objects: Vec<_> = chosen
-        .into_iter()
-        .map(|i| &prepared.objects[i])
-        .filter(|o| after.as_ref().is_none_or(|a| order_key(o) > *a))
-        .collect();
-    objects.sort_by_key(|o| order_key(o));
-    let partial = objects.len() > q.page_size;
-    objects.truncate(q.page_size);
+    let partial = remaining.len() > q.page_size;
+    let page: Vec<_> = remaining.into_iter().take(q.page_size).collect();
     let next = if partial {
-        objects.last().map(|o| {
-            hex::encode(serde_json::to_vec(&(&fingerprint, order_key(o))).expect("string tuple"))
+        page.last().map(|object| {
+            hex::encode(serde_json::to_vec(&(&fingerprint, order(object))).expect("string tuple"))
         })
     } else {
         None
     };
-    if next.as_ref().is_some_and(|s| s.len() > 4096) {
-        return unavailable(world, &query, "cursor_limit_exceeded");
+    if next.as_ref().is_some_and(|cursor| cursor.len() > 4096) {
+        return unavailable(world, query, "cursor_limit_exceeded");
     }
     let mut entities = Vec::new();
     let mut relations = Vec::new();
-    for object in objects {
+    let mut aggregates = Vec::new();
+    let mut events = Vec::new();
+    for object in page {
         let mut value = object.value.clone();
-        let provenance = if object.relation {
+        let aggregate = value.get("aggregate_id").is_some();
+        let event = value.get("event_id").is_some();
+        let provenance = if object.relation || event {
             &mut value
         } else {
             &mut value["provenance"]
@@ -213,17 +273,21 @@ fn build_inner(
             provenance["reason"] = json!("frozen_pagination_cut");
         }
         if object.relation {
-            relations.push(value);
+            relations.push(value)
+        } else if aggregate {
+            aggregates.push(value)
+        } else if event {
+            events.push(value)
         } else {
-            entities.push(value);
+            entities.push(value)
         }
     }
-    let view = json!({"api_revision":1,"world_id":world,"scope_id":prepared.scope,"source_cut":prepared.cut,"source_binding":prepared.source_binding,"request_generation":q.request_generation,
-    "world_bounds":{"min_x_cm":"0","min_y_cm":"0","max_x_cm":space.width_cm.to_string(),"max_y_cm":space.depth_cm.to_string(),"width_cm":space.width_cm.to_string(),"depth_cm":space.depth_cm.to_string(),"height_cm":space.height_cm.to_string()},
-    "coverage":{"kind":"viewer_snapshot_projection","bounds":q.bounds,"search":q.search,"replacement_scope":"query_only","absence_means_world_deletion":false},
-    "entities":entities,"relations":relations,"events":[],"next_cursor":next,"completeness":if partial {"partial"}else{"complete"},"source_frozen":source_frozen,"unavailable_reasons":[],"excluded_kinds":["resource","event"]});
+    let view = json!({"api_revision":1,"world_id":world,"reorg_epoch":prepared.epoch,"scope_id":prepared.scope,"source_cut":prepared.cut,"source_binding":prepared.source_binding,"request_generation":q.request_generation,"observed_at_tick":prepared.observed_at_tick,
+        "world_bounds":{"min_x_cm":"0","min_y_cm":"0","max_x_cm":space.width_cm.to_string(),"max_y_cm":space.depth_cm.to_string(),"width_cm":space.width_cm.to_string(),"depth_cm":space.depth_cm.to_string(),"height_cm":space.height_cm.to_string()},
+        "coverage":{"kind":"viewer_snapshot_projection","bounds":q.bounds,"search":q.search,"detail_level":q.detail_level.as_deref().unwrap_or("entity"),"include_events":q.include_events,"event_window":{"kind":"latest_typed_candidates","candidate_limit":200,"complete_history":false},"replacement_scope":"query_only","absence_means_world_deletion":false},
+        "entities":entities,"relations":relations,"aggregates":aggregates,"events":events,"next_cursor":next,"completeness":if partial {"partial"} else {"complete"},"source_frozen":source_frozen,"unavailable_reasons":[],"excluded_kinds":if q.include_events {vec!["resource"]} else {vec!["resource","event"]}});
     if view.to_string().len() > 2 * 1024 * 1024 {
-        return unavailable(world, &query, "response_limit_exceeded");
+        return unavailable(world, query, "response_limit_exceeded");
     }
     view
 }
@@ -236,6 +300,8 @@ pub(super) struct SessionProjection {
     created: std::time::Instant,
     space: crate::simulator::SpaceConfig,
     prepared: Prepared,
+    delta: Option<delta::Baseline>,
+    source_confirmed: bool,
 }
 #[cfg(test)]
 pub(super) fn build_session(
@@ -254,6 +320,7 @@ pub(super) fn build_session(
     };
     build_session_bound(cache, snapshot, world, epoch, audience, query, authority)
 }
+#[cfg(test)]
 pub(super) fn build_session_bound(
     cache: &mut Option<SessionProjection>,
     snapshot: impl FnOnce() -> WorldSnapshot,
@@ -263,63 +330,150 @@ pub(super) fn build_session_bound(
     query: Value,
     authority: SourceAuthority,
 ) -> Value {
-    if let Err(reason) = validate(&query) {
-        return unavailable(world, &query, reason);
+    build_session_evolving(
+        cache,
+        snapshot,
+        (world, epoch, audience),
+        query,
+        authority,
+        false,
+    )
+}
+pub(super) fn build_session_evolving(
+    cache: &mut Option<SessionProjection>,
+    snapshot: impl FnOnce() -> WorldSnapshot,
+    context: (&str, u64, &str),
+    query: Value,
+    authority: SourceAuthority,
+    delta_enabled: bool,
+) -> Value {
+    let (world, epoch, audience) = context;
+    let (q, bounds) = match validate(&query) {
+        Ok(query) => query,
+        Err(reason) => return unavailable(world, &query, reason),
+    };
+    if q.resume_cursor.is_some() && !delta_enabled {
+        return unavailable(world, &query, "capability_unavailable");
     }
-    let continuation = query.get("cursor").is_some_and(|c| !c.is_null());
+    let continuation = q.cursor.is_some();
+    let resumed = q.resume_cursor.is_some();
     let source_scope = authority.scope_key();
     let source_cut_key = authority.cut_key();
-    let valid = cache.as_ref().is_some_and(|c| {
-        c.world == world
-            && c.epoch == epoch
-            && c.audience == audience
-            && c.source_scope == source_scope
-            && c.created.elapsed() < std::time::Duration::from_secs(10)
+    let valid = cache.as_ref().is_some_and(|cached| {
+        cached.world == world
+            && cached.epoch == epoch
+            && cached.audience == audience
+            && cached.source_scope == source_scope
+            && cached.created.elapsed() < std::time::Duration::from_secs(10)
     });
-    if continuation && !valid {
+    if (continuation || resumed) && !valid {
         *cache = None;
-        return unavailable(world, &query, "cursor_reset_required");
+        return if resumed {
+            delta::reset(world, &query, "resume_cursor_invalid")
+        } else {
+            unavailable(world, &query, "cursor_reset_required")
+        };
     }
     let freeze_continuation = continuation
         && (!authority.has_bound_cut()
             || cache
                 .as_ref()
-                .is_some_and(|c| c.source_cut_key != source_cut_key));
+                .is_some_and(|cached| cached.source_cut_key != source_cut_key));
     let same_source = valid
         && authority.current()
         && cache
             .as_ref()
-            .is_some_and(|c| c.source_cut_key == source_cut_key);
+            .is_some_and(|cached| cached.source_cut_key == source_cut_key);
     if !continuation && !same_source {
+        let retirement_candidates = if valid && resumed {
+            cache
+                .as_ref()
+                .map(|cached| delta::seen_factory_ids(&cached.delta))
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        let previous = if valid && resumed {
+            cache.as_mut().and_then(|cached| cached.delta.take())
+        } else {
+            None
+        };
         *cache = None;
         let snapshot = snapshot();
         let source = if authority.validate_snapshot(&snapshot) {
-            authority
+            authority.with_retirement_candidates(retirement_candidates)
         } else {
             SourceAuthority::unknown()
         };
+        let confirmed = source.has_bound_cut();
         let Some(prepared) = prepare(&snapshot, world, epoch, audience, &source) else {
-            return unavailable(world, &query, "projection_limit_exceeded");
+            return if resumed {
+                delta::reset(world, &query, "projection_limit_exceeded")
+            } else {
+                unavailable(world, &query, "projection_limit_exceeded")
+            };
         };
         *cache = Some(SessionProjection {
             world: world.into(),
             epoch,
             audience: audience.into(),
             source_scope,
-            source_cut_key,
+            source_cut_key: source_cut_key.clone(),
             created: std::time::Instant::now(),
             space: snapshot.config.space.clone(),
             prepared,
+            delta: previous,
+            source_confirmed: confirmed,
         });
     }
-    let cached = cache.as_ref().expect("prepared above");
-    build_inner(
+    let cached = cache.as_mut().expect("prepared above");
+    let id = query_id(&cached.space, &cached.prepared, &q, &cached.source_scope);
+    let objects = query_objects(&cached.prepared, &q, bounds);
+    let mut view = build_page(
         &cached.space,
         world,
-        query,
+        &query,
         &cached.prepared,
         freeze_continuation,
-    )
+        &objects,
+    );
+    if view["completeness"] == "unknown" {
+        return if resumed {
+            cached.delta = None;
+            delta::reset(world, &query, "delta_source_unavailable")
+        } else {
+            view
+        };
+    }
+    if delta_enabled {
+        if let Some(resume) = &q.resume_cursor {
+            if let Err(reason) = delta::update(
+                &mut view,
+                &mut cached.delta,
+                &id,
+                resume,
+                &objects,
+                &cached.prepared,
+                cached.source_confirmed && cached.source_cut_key == source_cut_key,
+            ) {
+                cached.delta = None;
+                return delta::reset(world, &query, reason);
+            }
+            cached.created = std::time::Instant::now();
+        } else {
+            if !continuation {
+                cached.delta = None;
+            }
+            delta::snapshot(
+                &mut view,
+                &mut cached.delta,
+                id,
+                &objects,
+                cached.source_confirmed && !freeze_continuation,
+            );
+        }
+    }
+    view
 }
 
 #[cfg(test)]

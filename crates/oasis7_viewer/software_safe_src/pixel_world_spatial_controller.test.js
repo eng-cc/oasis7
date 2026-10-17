@@ -66,3 +66,44 @@ it('keeps querying an older world_view server without sending the unnegotiated p
  expect(core.requestWorldView.mock.lastCall[0]).toMatchObject({search:'ore',bounds:bounds(8)});
  expect(core.requestWorldView.mock.lastCall[0]).not.toHaveProperty('pinned_entities');expect(controller.state().error).toBeNull();
 });
+
+it('gates evolution fields and coalesces snapshot refreshes during a delta request',async()=>{
+ const {core,controller}=setup();core.state.viewerProtocol.capabilities.push('world_view_delta_v1','world_view_aggregate_v1','world_view_event_anchor_v1');
+ let finish;core.requestWorldView.mockImplementationOnce(q=>new Promise(resolve=>{finish=()=>resolve(page(q));}));
+ const initial=controller.query({});controller.refresh({time:1});controller.refresh({time:2});controller.refresh({time:3});
+ expect(core.requestWorldView).toHaveBeenCalledOnce();finish();await initial;await Promise.resolve();
+ expect(core.requestWorldView).toHaveBeenCalledTimes(2);expect(core.requestWorldView.mock.lastCall[0]).toMatchObject({detail_level:'auto',include_events:true});
+});
+it('drills an authorized aggregate down without replacing the business actor',async()=>{
+ const aggregate={aggregate_id:'site',member_count:'3',provenance:{geometry_source:'display_aggregation',valid_at_source_cut:'cut',freshness:'unknown'},drilldown:{bounds:bounds(4),detail_level:'entity'}};
+ const {core,controller}=setup(async q=>page(q,{aggregates:[aggregate]}));core.state.viewerProtocol.capabilities.push('world_view_aggregate_v1');
+ core.state.selectedKind='agent';core.state.selectedId='actor';await controller.query({});await controller.drilldown(aggregate);
+ expect(controller.navigation()).toMatchObject({mode:'fit_bounds',bounds:bounds(4),target:null});expect(core.requestWorldView.mock.lastCall[0].detail_level).toBe('entity');expect(core.state.selectedId).toBe('actor');expect(core.applySelection).not.toHaveBeenCalled();
+});
+
+it('links only the exact authorized event identity in the current feed',async()=>{
+ const event={event_id:'W:2:7',identity:{world_id:'W',reorg_epoch:'2',event_seq:'7'},feed_ref:{world_id:'W',reorg_epoch:'2',event_seq:'7'},logical_time:'3',source_class:'runtime_journal_payload',source_cut:'cut',freshness:'last_known'};
+ const {core,controller}=setup(async q=>page(q,{reorg_epoch:'2',events:[event]}));await controller.query({});
+ core.state.worldFeed={worldId:'W',reorgEpoch:'1',events:[{event_seq:'7'}]};expect(controller.eventFeed(event)).toBe(false);
+ core.state.worldFeed.reorgEpoch='2';const exploration=document.createElement('details');exploration.className='pixel-world-exploration-disclosure';exploration.open=true;document.body.append(exploration);const details=document.createElement('details');const row=document.createElement('article');row.dataset.worldFeedEvent='7';details.append(row);document.body.append(details);
+ expect(controller.eventFeed(event)).toBe(true);expect(details.open).toBe(true);expect(exploration.open).toBe(false);expect(document.activeElement).toBe(row);
+ core.state.auth.playerId='other';expect(controller.eventFeed(event)).toBe(false);details.remove();exploration.remove();expect(core.applySelection).not.toHaveBeenCalled();
+});
+
+it('returns to the target after cancelling an outstanding viewport read',async()=>{
+ let finish;const {core,controller}=setup();core.buildGameplaySummary=()=>({acceptedIntentTarget:'main'});
+ core.requestWorldView.mockImplementationOnce(q=>new Promise(resolve=>{finish=()=>resolve(page(q,{entities:[]}));}));
+ core.requestWorldView.mockImplementation(q=>Promise.resolve(page(q,{entities:[{kind:'agent',entity_id:'main',position:{x_cm:'1',y_cm:'2',z_cm:'0'},provenance:{geometry_source:'authoritative',freshness:'current',valid_at_source_cut:'cut'}}]})));
+ const old=controller.query({bounds:bounds(1)});const returning=controller.returnTarget();finish();await old;await returning;
+ expect(core.requestWorldView.mock.lastCall[0].search).toBe('main');expect(controller.navigation()).toMatchObject({mode:'locate',target:{kind:'agent',id:'main'}});expect(controller.state().notice).not.toBe('target_unavailable');
+});
+
+it('keeps a programmatic drill level until manual camera input restores automatic aggregation',async()=>{
+ vi.useFakeTimers();const aggregate={aggregate_id:'site',member_count:'3',provenance:{geometry_source:'display_aggregation',valid_at_source_cut:'cut',freshness:'unknown'},drilldown:{bounds:bounds(4),detail_level:'entity'}};
+ const {core,controller}=setup(async q=>page(q,{aggregates:[aggregate]}));core.state.viewerProtocol.capabilities.push('world_view_aggregate_v1');
+ await controller.query({});await controller.drilldown(aggregate);
+ controller.cameraChanged({viewport_bounds:bounds(4)});await vi.advanceTimersByTimeAsync(180);
+ expect(core.requestWorldView.mock.lastCall[0].detail_level).toBe('entity');
+ controller.pauseFollow();controller.cameraChanged({viewport_bounds:bounds(40)});await vi.advanceTimersByTimeAsync(180);
+ expect(core.requestWorldView.mock.lastCall[0]).toMatchObject({detail_level:'auto',bounds:bounds(40)});
+});

@@ -129,7 +129,7 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(state["agents"][0]["position_source"], "location_derived");
     assert!(state["agents"][0]["pos"].is_object());
     assert_eq!(state["links"].as_array().unwrap().len(), 0);
-    assert_eq!(state["visual_hotspots"].as_array().unwrap().len(), 4);
+    assert_eq!(state["visual_hotspots"].as_array().unwrap().len(), 2);
 
     let surface = &state["commercial_surface"];
     assert!(surface["active_agent_id"].is_null());
@@ -145,11 +145,11 @@ fn rust_host_state_derives_fragment_agent_link_and_commercial_surface() {
     assert_eq!(surface["world_read"]["agents"], 1);
     assert_eq!(surface["world_read"]["routes"], 0);
     assert_eq!(surface["world_read"]["fragments"], 2);
-    assert_eq!(surface["world_read"]["hotspots"], 4);
+    assert_eq!(surface["world_read"]["hotspots"], 2);
 }
 
 #[test]
-fn world_scoped_crisis_events_never_become_spatial_hotspots() {
+fn unanchored_recent_events_never_become_spatial_hotspots() {
     let mut input = sample_input();
     input["recentEvents"] = json!([
         {
@@ -165,8 +165,7 @@ fn world_scoped_crisis_events_never_become_spatial_hotspots() {
 
     let state = build_render_state(&input);
     let recent = state["recent_event_hotspots"].as_array().unwrap();
-    assert_eq!(recent.len(), 1);
-    assert_eq!(recent[0]["id"], "evt-ordinary");
+    assert!(recent.is_empty());
     assert!(
         state["visual_hotspots"]
             .as_array()
