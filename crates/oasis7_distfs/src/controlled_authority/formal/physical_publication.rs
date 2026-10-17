@@ -370,8 +370,9 @@ mod frame_batch_tests {
     fn frame_batch_failure_before_directory_barrier_keeps_source_and_retries_exactly() {
         let fixture = Fixture::new();
         let item = object((0..300000).map(|value| (value % 251) as u8).collect());
-        fs::write(fixture.0.join(&item.0), &item.1).unwrap();
-        File::open(fixture.0.join(&item.0))
+        let source = fixture.0.join("retained-input-source");
+        fs::write(&source, &item.1).unwrap();
+        File::open(&source)
             .unwrap()
             .sync_all()
             .unwrap();
@@ -387,7 +388,7 @@ mod frame_batch_tests {
                 .next()
                 .is_some()
         );
-        assert_eq!(fs::read(fixture.0.join(&item.0)).unwrap(), item.1);
+        assert_eq!(fs::read(&source).unwrap(), item.1);
         // Existing files from the interrupted batch are reread and fsynced by
         // persist_guarded before the retry's frame-directory barrier and selector.
         assert!(persist(&fixture.0, std::slice::from_ref(&item)).unwrap());
@@ -397,7 +398,7 @@ mod frame_batch_tests {
                 .unwrap(),
             item.1
         );
-        assert_eq!(fs::read(fixture.0.join(&item.0)).unwrap(), item.1);
+        assert_eq!(fs::read(&source).unwrap(), item.1);
     }
 
     #[test]
