@@ -98,11 +98,11 @@ Trace refs: O7-REQ-d34e2dec-9ad4-44a8-9ba7-7931956e39b8；声明：[REQ-WR-GR-00
 Trace ID: O7-REQ-ce8c31b1-5294-4acd-a65f-2012bcbef911
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[玩家发布 authority](../../world-runtime/module/player-published-entities.design.md#ppe-publication-authority) 已承接玩家发布闭环中的完整 payload 承诺、当前 owner/审批角色复核与权威提交结果；该设计的需求承接表和验证映射表已反向关联本要求。此为局部设计与验证计划定位，尚未核实本功能全部发布/激活入口及授权期限、撤销、能力范围变化的组合覆盖；完整范围仍未核实，不以相邻设计或产品体验 design 推断完整覆盖。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。模块编译入口检查主体、发布策略和费用；生产策略可禁runtime source compile。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_actions.rs#L4-L110)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_actions.rs#L200-L290)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls.rs#L1-L100)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清扩展从批准到每次发布/激活的当前授权、capability scope 和世界前置重验，不能以 build/module registry 成功替代。
+- 实现与验证依据：已核玩家发布闭环的实际 Apply 路径：重新读取 exact artifact 当前 owner、所需审批人的当前 role binding，复核 reviewed manifest/profile commitment 与 append-only profile 前置，再经 prepared publication 提交 module/profile/release 结果。 实现：[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L129-L444)；[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/world/governance_publication.rs#L240-L371)；测试定义：[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/tests/module_action_loop_regressions.rs#L346-L560)。 本轮只读生产源码及fixture/故障注入测试定义，未运行Rust、真实发布、跨节点或端到端验收；不声明同候选测试通过。相关历史交付PR与运行记录未精确归属，不将审查任务当交付证明。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码固定 `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5`，本轮24个完整来源文件与 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9` tree逐个Git blob一致；无新增运行验收证据。
+- 剩余范围：仅支持玩家发布 Apply 的当前 owner/role、payload/前置重验及冻结新准入切片。全部 install/activation 入口的治理授权期限、撤销/收缩/替代与产品 capability scope 映射仍未核清；通用 v2 grant 校验、构建成功或 module registry active 不等于该全合同。
 
 - 要求：扩展批准只提供受限准入资格；每次发布或激活都必须按当前授权、能力范围和世界前置重新校验，不能以技术构建成功、旧 receipt 或本地缓存替代权威生效。
 - 专业权威：[`player-published-entities.prd.md`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
@@ -124,11 +124,11 @@ Trace refs: O7-REQ-ce8c31b1-5294-4acd-a65f-2012bcbef911；声明：[REQ-WR-GR-00
 Trace ID: O7-REQ-ac12295b-63a5-4440-9924-deaedafd7965
 
 - 系统设计状态：部分覆盖
-- 实现状态：未核实
+- 实现状态：部分实现
 - 系统设计依据：[玩家发布有限回滚](../../world-runtime/module/player-published-entities.design.md#ppe-rollback-disposition) 已承接回滚后冻结新增发布/激活准入、保留既有 profile/资产/历史、失败原子性及重复/恢复/replay 不复制效果；该设计的需求承接表和验证映射表已反向关联本要求。此为有限回滚子范围的设计与验证计划定位，尚未核实一般撤销、到期、收缩或替代授权的原子交接及最小安全动作组合；完整范围仍未核实，不以局部设计推断完整覆盖。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。模块编译入口检查主体、发布策略和费用；生产策略可禁runtime source compile。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_actions.rs#L4-L110)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_actions.rs#L200-L290)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls.rs#L1-L100)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清扩展撤销/到期/收缩/替代期间重叠 scope 单一执行权、最小安全动作与历史 receipt 连续性。
+- 实现与验证依据：已核有限 rollback 选择“仅停止新的发布/激活”：恢复目标 instance 与 FROM exact module/version/hash 的 durable admission-freeze marker 在同一 prepared 生命周期发布，拒绝旧批准/直接安装升级/再次激活的对应新准入，并保留既有 profile、资产与历史。实现：[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/state/module_instance_transition.rs#L337-L392)；[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/world/module_admission_freeze.rs#L6-L41)；[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/world/governance_publication.rs#L240-L371)；测试定义：[固定基线证据](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7/src/runtime/world/rollback_admission_freeze_test.rs#L3-L164)。 本轮只读生产源码及fixture/故障注入测试定义，未运行Rust、真实发布、跨节点或端到端验收；不声明同候选测试通过。相关历史交付PR与运行记录未精确归属，不将审查任务当交付证明。
+- 核对日期与基线：2026-10-17；需求、专业设计与静态源码固定 `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5`，本轮24个完整来源文件与 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9` tree逐个Git blob一致；无新增运行验收证据。
+- 剩余范围：仅支持停止新增准入的有限回滚处置；现存其他 instance 不因该 marker 自动停用。一般撤销/到期/收缩、跨重叠 scope 原子替代唯一执行权、限制/退出的最小安全动作及玩家/创作者当前范围与下一步消费链仍未核清。
 
 - 要求：撤销、到期、收缩或替代必须声明对既有能力的后续结果；历史 receipt 保留，同一重叠范围最多一个可执行授权，限制/退出期间只允许声明范围内的最小安全、价值保全或既有义务动作。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
