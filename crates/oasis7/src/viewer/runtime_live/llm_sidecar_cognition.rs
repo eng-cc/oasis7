@@ -3,10 +3,11 @@ use crate::simulator::{
     BudgetContractV1, CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR, CONTINUOUS_AGENT_CONTEXT_VERSION,
     ContinuousAgentRequestContextV1, ContinuousAgentTurnContextV1,
     DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
-    DecisionRequest, Digest32, Observation, ObservationEnvelope, ProviderInteractionTarget,
+    DecisionRequest, Digest32, ObservationEnvelope, ProviderInteractionTarget,
     ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
     ProviderRecentEvent, ProviderSelfState, RuntimeBindingV1, h_v1,
 };
+use oasis7_simulator::Observation;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -171,7 +172,7 @@ impl RuntimeLlmSidecar {
             let observation = kernel.observe(agent_id.as_str());
             let observation = match observation {
                 Ok(observation) => observation,
-                Err(crate::simulator::RejectReason::AgentNotFound { .. }) => {
+                Err(oasis7_simulator::RejectReason::AgentNotFound { .. }) => {
                     self.quarantine_missing_provider_agent(world, agent_id.as_str());
                     continue;
                 }

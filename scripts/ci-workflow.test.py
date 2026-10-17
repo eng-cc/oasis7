@@ -448,6 +448,9 @@ run_cargo() {
     printf 'BUILD|%s\\n' "$*" >> "$CI_LOG"
     [[ "${FAIL_PHASE:-}" != build ]] || return 47
     printf '{"reason":"compiler-artifact","target":{"name":"oasis7_viewer_live"},"executable":"%s"}\\n' "$VIEWER_BIN"
+  elif [[ "$1" == check ]]; then
+    printf 'CHECK|%s\\n' "$*" >> "$CI_LOG"
+    [[ "${FAIL_PHASE:-}" != check ]] || return 49
   else
     printf 'TEST|%s|VIEWER=%s\\n' "$*" "${PRE2_VIEWER_BINARY:-}" >> "$CI_LOG"
     [[ "${FAIL_PHASE:-}" != test ]] || return 48
@@ -463,6 +466,8 @@ run_cargo() {
             calls = log.read_text().splitlines()
             self.assertEqual(sum(call.startswith('BUILD|') for call in calls), 2)
             self.assertEqual(sum(call.startswith('TEST|') for call in calls), 2)
+            self.assertIn('CHECK|check -p oasis7_agent_api -p oasis7_simulator --target wasm32-unknown-unknown --locked', calls)
+            self.assertTrue(all('-p oasis7_simulator' in call for call in calls if call.startswith('TEST|')))
             for feature in ('test_tier_required', 'test_tier_full,wasmtime,viewer_live_integration'):
                 build_index = next((index for index, call in enumerate(calls)
                                     if call.startswith('BUILD|') and f'--features {feature} ' in call), None)

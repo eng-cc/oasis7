@@ -1,7 +1,7 @@
 use crate::runtime;
-use crate::simulator::{Action as SimulatorAction, ActionSubmitter};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_client_api::MainTokenTransfer;
+use oasis7_simulator::{Action as SimulatorAction, ActionSubmitter};
 use serde::{Deserialize, Serialize};
 
 pub use oasis7_client_api::{

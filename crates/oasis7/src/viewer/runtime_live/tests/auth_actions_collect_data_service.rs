@@ -48,7 +48,10 @@ fn install_collect_data_verified_projection(
         .unwrap()
         .state
         .resources
-        .set(crate::simulator::ResourceKind::Electricity, 30)
+        .set(
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            30,
+        )
         .unwrap();
     let request = ReadWorldViewRequest {
         formal_anchor: None,
@@ -122,7 +125,11 @@ fn runtime_collect_data_service_preflight_uses_one_verified_claim_and_balance_pr
         );
         server
             .world
-            .set_agent_resource_balance(&collector, crate::simulator::ResourceKind::Electricity, 2)
+            .set_agent_resource_balance(
+                &collector,
+                oasis7_agent_api::world_action::ResourceKind::Electricity,
+                2,
+            )
             .unwrap();
         install_collect_data_verified_projection(
             &mut server,

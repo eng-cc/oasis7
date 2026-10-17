@@ -809,7 +809,7 @@ fn native_task_runner_http_scripted_factory_chain_and_restart_conformance() {
             delivered.world.state().agents["agent-a"]
                 .state
                 .resources
-                .get(oasis7::simulator::ResourceKind::Electricity),
+                .get(oasis7_agent_api::world_action::ResourceKind::Electricity),
             100 - i64::try_from(total).unwrap()
         );
         for (kind, grant, cost) in [

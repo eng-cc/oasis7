@@ -3,11 +3,11 @@ use oasis7::consensus_action_payload::{
 };
 use oasis7::runtime::Action as RuntimeAction;
 use oasis7::runtime::ProviderBackedBootstrapAuthorityV1;
-use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{
     NodeExecutionCommitContext, decode_replicated_execution_input_action,
     validate_replicated_execution_input_actions,
 };
+use oasis7_simulator::{Action as SimulatorAction, ActionSubmitter};
 
 #[expect(
     clippy::type_complexity,

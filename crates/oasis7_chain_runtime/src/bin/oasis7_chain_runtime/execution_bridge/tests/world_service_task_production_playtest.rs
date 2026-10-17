@@ -42,7 +42,11 @@ pub(super) fn fixture_kind(
     });
     world.step().unwrap();
     world
-        .set_agent_resource_balance("agent-a", oasis7::simulator::ResourceKind::Electricity, 100)
+        .set_agent_resource_balance(
+            "agent-a",
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            100,
+        )
         .unwrap();
     world.submit_action(Action::ClaimStarterOc {
         agent_id: "agent-a".into(),
@@ -216,7 +220,7 @@ pub(super) fn goal() -> GoalContentV1 {
     }
 }
 pub(super) fn witness(world: &RuntimeWorld) -> serde_json::Value {
-    serde_json::json!({"input_iron_ore":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"iron_ore"),"input_carbon_fuel":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"carbon_fuel"),"output_iron_ingot":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"iron_ingot"),"output_slag":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"slag"),"pending_recipe_jobs":world.state().pending_recipe_jobs,"factory":world.state().factories.get("production-factory"),"causal_receipts":world.agent_causal_receipts("agent-a").unwrap(),"electricity":world.state().agents["agent-a"].state.resources.get(oasis7::simulator::ResourceKind::Electricity)})
+    serde_json::json!({"input_iron_ore":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"iron_ore"),"input_carbon_fuel":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"carbon_fuel"),"output_iron_ingot":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"iron_ingot"),"output_slag":world.ledger_material_balance(&oasis7::runtime::MaterialLedgerId::site("production-site"),"slag"),"pending_recipe_jobs":world.state().pending_recipe_jobs,"factory":world.state().factories.get("production-factory"),"causal_receipts":world.agent_causal_receipts("agent-a").unwrap(),"electricity":world.state().agents["agent-a"].state.resources.get(oasis7_agent_api::world_action::ResourceKind::Electricity)})
 }
 #[test]
 #[ignore = "explicit production prepared-world service; independent player uses shipped task Skill"]

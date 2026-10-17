@@ -761,7 +761,7 @@ pub(super) struct ExecutionModuleResolutionAnchor {
     pub module_id: String,
     pub module_version: String,
     pub wasm_hash: String,
-    pub install_target: oasis7::simulator::ModuleInstallTarget,
+    pub install_target: oasis7_agent_api::world_action::ModuleInstallTarget,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -45,3 +45,5 @@ pub mod intent_summary;
 pub mod world_entity;
 pub mod world_geometry;
 pub mod world_resource;
+
+pub mod module_source;

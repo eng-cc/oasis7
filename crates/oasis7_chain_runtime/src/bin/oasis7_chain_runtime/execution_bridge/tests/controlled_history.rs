@@ -273,10 +273,18 @@ fn module_world() -> RuntimeWorld {
     });
     world.step().unwrap();
     world
-        .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Electricity, 256)
+        .set_agent_resource_balance(
+            "agent-0",
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            256,
+        )
         .unwrap();
     world
-        .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Data, 256)
+        .set_agent_resource_balance(
+            "agent-0",
+            oasis7_agent_api::world_action::ResourceKind::Data,
+            256,
+        )
         .unwrap();
     world.submit_action(Action::DeployModuleArtifact {
         publisher_agent_id: "agent-0".into(),

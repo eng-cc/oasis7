@@ -24,10 +24,12 @@ use crate::runtime::{
     WorldError as RuntimeWorldError, WorldEventBody as RuntimeWorldEventBody, blake3_hex,
 };
 use crate::simulator::{
-    AgentDecisionTrace, CHUNK_GENERATION_SCHEMA_VERSION, PlayerGameplayRecentFeedback,
-    RejectReason as SimulatorRejectReason, ResourceKind, RunnerMetrics, SNAPSHOT_VERSION,
-    WorldConfig, WorldEvent, WorldInitConfig, WorldModel, WorldScenario, WorldSnapshot,
-    build_world_model,
+    AgentDecisionTrace, PlayerGameplayRecentFeedback, RunnerMetrics, WorldEvent, WorldSnapshot,
+};
+use oasis7_agent_api::world_action::ResourceKind;
+use oasis7_simulator::{
+    CHUNK_GENERATION_SCHEMA_VERSION, RejectReason as SimulatorRejectReason, SNAPSHOT_VERSION,
+    WorldConfig, WorldInitConfig, WorldModel, WorldScenario, build_world_model,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
