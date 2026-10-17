@@ -1,3 +1,4 @@
+use super::super::super::checkpoint;
 use super::private_goal_tests::{consumer, http, http_with_hook};
 use super::*;
 use oasis7::world_service::{
@@ -144,10 +145,10 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     for height in 7..40 {
         commit(&mut driver, height, create.clone());
     }
-    super::super::super::checkpoint::task_evidence::reset_protected_height_validation_count();
+    checkpoint::task_evidence::reset_protected_height_validation_count();
     commit(&mut driver, 40, create.clone());
     assert_eq!(
-        super::super::super::checkpoint::task_evidence::protected_height_validation_count(),
+        checkpoint::task_evidence::protected_height_validation_count(),
         1,
         "one retention transaction must fully validate existing task-pin shards once"
     );
@@ -172,7 +173,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         .unwrap();
     let retained_bytes = std::fs::read(&shard).unwrap();
     for _ in 0..3 {
-        super::super::super::checkpoint::refresh_live_task_read_evidence(
+        checkpoint::refresh_live_task_read_evidence(
             &dir.join("records"),
             &cas,
             &driver.execution_world,
@@ -189,7 +190,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     // Reuse must still reject a parseable shard with the wrong semantic set.
     std::fs::write(&shard, br#"{"pins":[]}"#).unwrap();
     assert!(
-        super::super::super::checkpoint::refresh_live_task_read_evidence(
+        checkpoint::refresh_live_task_read_evidence(
             &dir.join("records"),
             &cas,
             &driver.execution_world,
@@ -197,13 +198,11 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         )
         .is_err()
     );
-    let latest_record_path =
-        super::super::super::checkpoint::execution_bridge_record_path(&dir.join("records"), 40);
+    let latest_record_path = checkpoint::execution_bridge_record_path(&dir.join("records"), 40);
     let latest_record =
-        super::super::super::checkpoint::load_execution_bridge_record(latest_record_path.as_path())
-            .unwrap();
+        checkpoint::load_execution_bridge_record(latest_record_path.as_path()).unwrap();
     assert!(
-        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance(
+        checkpoint::run_execution_bridge_incremental_retention_maintenance(
             &dir.join("records"),
             &cas,
             &latest_record,
@@ -215,16 +214,12 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         "standalone incremental maintenance must revalidate a corrupt task-pin shard"
     );
     assert!(
-        super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
-            &dir.join("records"),
-            &cas,
-            2,
-        )
-        .is_err(),
+        checkpoint::run_execution_bridge_retention_maintenance(&dir.join("records"), &cas, 2,)
+            .is_err(),
         "full reconciliation must revalidate a corrupt task-pin shard"
     );
     std::fs::write(&shard, &retained_bytes).unwrap();
-    let validated = super::super::super::checkpoint::refresh_live_task_read_evidence(
+    let validated = checkpoint::refresh_live_task_read_evidence(
         &dir.join("records"),
         &cas,
         &driver.execution_world,
@@ -234,7 +229,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let mut replacement_record = latest_record.clone();
     replacement_record.node_block_hash = Some("replacement-head-hash".into());
     assert!(
-        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+        checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
             &dir.join("records"),
             &cas,
             &replacement_record,
@@ -246,12 +241,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         .is_err(),
         "validated task-pin set must not be reused for a replaced same-height record"
     );
-    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
-        &dir.join("records"),
-        &cas,
-        2,
-    )
-    .unwrap();
+    checkpoint::run_execution_bridge_retention_maintenance(&dir.join("records"), &cas, 2).unwrap();
     assert!(
         super::super::super::world_service_read::pin_at_height(
             &dir.join("records"),
@@ -402,12 +392,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .is_some()
     );
     // A pending capture remains usable even when a full maintenance window excludes its height.
-    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
-        &dir.join("records"),
-        &cas,
-        1,
-    )
-    .unwrap();
+    checkpoint::run_execution_bridge_retention_maintenance(&dir.join("records"), &cas, 1).unwrap();
     assert!(
         super::super::super::world_service_read::pin_at_height(
             &dir.join("records"),
@@ -432,10 +417,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         goal.request.content
     );
     // Missing historical capture evidence fails before decrypting/delivering context.
-    let capture_path = super::super::super::checkpoint::execution_bridge_record_path(
-        &dir.join("records"),
-        AGE + 7,
-    );
+    let capture_path = checkpoint::execution_bridge_record_path(&dir.join("records"), AGE + 7);
     let capture_bytes = std::fs::read(&capture_path).unwrap();
     let mut missing: serde_json::Value = serde_json::from_slice(&capture_bytes).unwrap();
     missing["snapshot_ref"] = serde_json::Value::Null;
@@ -581,8 +563,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         .0,
         403
     );
-    let retired = super::super::super::checkpoint::load_execution_bridge_record(
-        &super::super::super::checkpoint::execution_bridge_record_path(&dir.join("records"), 4),
+    let retired = checkpoint::load_execution_bridge_record(
+        &checkpoint::execution_bridge_record_path(&dir.join("records"), 4),
     )
     .unwrap();
     assert!(
@@ -999,12 +981,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     );
     // Settled and expired contexts no longer authorize writes, but their exact
     // receipts remain recoverable for the current live task fence beyond hot history.
-    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
-        &dir.join("records"),
-        &cas,
-        1,
-    )
-    .unwrap();
+    checkpoint::run_execution_bridge_retention_maintenance(&dir.join("records"), &cas, 1).unwrap();
     let retained = [
         AGE + 10,
         AGE + 11,
@@ -1047,10 +1024,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         .unwrap()
         .activation_committed_height
         .0;
-    let historical_path = super::super::super::checkpoint::execution_bridge_record_path(
-        &dir.join("records"),
-        activation,
-    );
+    let historical_path =
+        checkpoint::execution_bridge_record_path(&dir.join("records"), activation);
     let historical_bytes = std::fs::read(&historical_path).unwrap();
     let mut compacted: serde_json::Value = serde_json::from_slice(&historical_bytes).unwrap();
     compacted["snapshot_ref"] = serde_json::Value::Null;
@@ -1107,12 +1082,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let unknown = cache_dir.join("unexpected.json");
     std::fs::write(&unknown, b"{}").unwrap();
     assert!(
-        super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
-            &dir.join("records"),
-            &cas,
-            1
-        )
-        .is_err()
+        checkpoint::run_execution_bridge_retention_maintenance(&dir.join("records"), &cas, 1)
+            .is_err()
     );
     std::fs::remove_file(unknown).unwrap();
     // A Stop committed after preparation/decryption and before delivery fences the reply.
@@ -1167,27 +1138,21 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .any(|b| b == goal.request.content.goal_text.as_bytes())
     );
     let records = dir.join("records");
-    let stale_height =
-        super::super::super::checkpoint::list_execution_bridge_record_heights(&records)
-            .unwrap()
-            .last()
-            .copied()
+    let stale_height = checkpoint::list_execution_bridge_record_heights(&records)
+        .unwrap()
+        .last()
+        .copied()
+        .unwrap();
+    let stale_record = checkpoint::load_execution_bridge_record(
+        checkpoint::execution_bridge_record_path(&records, stale_height).as_path(),
+    )
+    .unwrap();
+    let stale_validation =
+        checkpoint::refresh_live_task_read_evidence(&records, &cas, &driver.execution_world, 2)
             .unwrap();
-    let stale_record = super::super::super::checkpoint::load_execution_bridge_record(
-        super::super::super::checkpoint::execution_bridge_record_path(&records, stale_height)
-            .as_path(),
-    )
-    .unwrap();
-    let stale_validation = super::super::super::checkpoint::refresh_live_task_read_evidence(
-        &records,
-        &cas,
-        &driver.execution_world,
-        2,
-    )
-    .unwrap();
     commit(&mut driver, stale_height + 1, create.clone());
     assert!(
-        super::super::super::checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
+        checkpoint::run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
             &records,
             &cas,
             &stale_record,
