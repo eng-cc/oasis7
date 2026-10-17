@@ -44,7 +44,7 @@ pub(super) fn fixture() -> (Fixture, FormalBusinessResultEnvelopeV1) {
     .unwrap();
     let envelope = envelope(delta);
     let bytes = envelope.encode().unwrap();
-    let mut body = fixture.authority.initial.clone().unwrap();
+    let mut body = fixture.authority.initial_body().cloned().unwrap();
     body.authority.profile_version = 2;
     body.artifact_roots.insert(
         ArtifactRole::Result,

@@ -543,3 +543,7 @@ fn open_slot_token(secret: &[u8; 32], aad: &str, encoded: &str) -> Result<String
 #[cfg(test)]
 #[path = "world_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "world_runtime_timeout_tests.rs"]
+mod runtime_timeout_tests;

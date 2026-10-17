@@ -817,11 +817,14 @@ impl WorldGate {
             &started_record,
         )
         .unwrap();
-        let gate_budget = if kind == "periodic-view" {
-            Duration::from_millis(1_500)
-        } else {
-            Duration::from_secs(2)
-        };
+        let gate_budget =
+            if kind == "periodic-view" && root.join("world-periodic-slow-view").exists() {
+                Duration::from_secs(4)
+            } else if kind == "periodic-view" {
+                Duration::from_millis(1_500)
+            } else {
+                Duration::from_secs(2)
+            };
         let deadline = Instant::now() + gate_budget;
         while !root.join(format!("world-{kind}-release")).exists() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(2));

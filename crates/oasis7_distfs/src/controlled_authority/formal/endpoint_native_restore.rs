@@ -261,12 +261,24 @@ pub(crate) fn restore_native_with_durable_set(
         }
         cut.clone()
     } else {
-        let verdict = NativeCheckpointVerdictV1 {
-            proof: proof.clone(),
-            parent: parent.clone(),
-            head: body.head.clone(),
-            authority_id: context.authority().authority_id()?,
-        };
+        let verdict = NativeCheckpointVerdictV1::verify(
+            context.checkpoint_bytes(),
+            context.authority(),
+            context.endpoint_public_key(),
+            context.checkpoint(),
+            context.provider(),
+            &body.head,
+            context.minimum(),
+            &context.authority().authority_id()?,
+            &mut load,
+        )?;
+        if verdict.proof() != &proof
+            || verdict.verified_parent_record() != parent.as_ref().map(|p| &p.record)
+            || verdict.verified_parent_finalizing_authority_id()
+                != parent.as_ref().map(|p| p.finalizing_authority_id.as_str())
+        {
+            return Err(invalid("native checked checkpoint exact parent/proof"));
+        }
         let origin = if proof.decision.branch == FormalCompletionBranchV1::Normal {
             context.authority()
         } else {

@@ -51,6 +51,8 @@ mod provider_bootstrap;
 mod qa_conformance;
 mod replay;
 mod retention;
+#[path = "qa_conformance/scenario_resource.rs"]
+mod scenario_resource;
 mod simulator_driver;
 pub(super) mod world_service;
 

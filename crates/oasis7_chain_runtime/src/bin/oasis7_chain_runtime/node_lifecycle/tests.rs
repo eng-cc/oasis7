@@ -4,6 +4,10 @@ use sha2::Digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -360,6 +364,68 @@ fn receiver(
     receiver.recv_timeout(Duration::from_secs(3)).unwrap();
     handle
 }
+pub(crate) struct TestReceiverGuard {
+    signal_stop: Arc<AtomicBool>,
+    handle: Option<std::thread::JoinHandle<Result<(), String>>>,
+    ready: Option<std::sync::mpsc::Receiver<()>>,
+}
+
+impl TestReceiverGuard {
+    fn spawn(config: &model::NodeConfig, command: Command) -> Self {
+        let config = config.clone();
+        let intent = process::test_intent(&config).unwrap();
+        let (sender, ready) = std::sync::mpsc::channel();
+        let signal_stop = Arc::new(AtomicBool::new(false));
+        let thread_signal_stop = signal_stop.clone();
+        let handle = std::thread::spawn(move || {
+            process::run_test_receiver_with_stop_signal(
+                &config,
+                intent,
+                command,
+                sender,
+                thread_signal_stop,
+            )
+        });
+        Self {
+            signal_stop,
+            handle: Some(handle),
+            ready: Some(ready),
+        }
+    }
+
+    fn wait_ready(&mut self) {
+        self.ready
+            .take()
+            .expect("receiver readiness can only be awaited once")
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap();
+    }
+
+    pub(crate) fn finish(mut self, request_stop: bool) -> Result<(), String> {
+        if request_stop {
+            self.signal_stop.store(true, Ordering::SeqCst);
+        }
+        match self.handle.take().expect("receiver handle is owned").join() {
+            Ok(result) => result,
+            Err(_) => Err("test receiver thread panicked".into()),
+        }
+    }
+}
+
+impl Drop for TestReceiverGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            self.signal_stop.store(true, Ordering::SeqCst);
+            let _ = handle.join();
+        }
+    }
+}
+
+fn receiver_with_stop_signal(config: &model::NodeConfig, command: Command) -> TestReceiverGuard {
+    let mut receiver = TestReceiverGuard::spawn(config, command);
+    receiver.wait_ready();
+    receiver
+}
 fn running(config: &model::NodeConfig) -> process::Instance {
     let started = Instant::now();
     loop {
@@ -592,6 +658,39 @@ pub(crate) fn operation_fixture() -> (
         handle,
         current,
     )
+}
+
+pub(crate) fn operation_fixture_with_stop_signal()
+-> (Fixture, PathBuf, TestReceiverGuard, super::LocalInstance) {
+    let fixture = Fixture::new();
+    let config = fixture.initialize();
+    let mut command = Command::new("/bin/sleep");
+    command.arg("100");
+    let receiver = receiver_with_stop_signal(&config, command);
+    let current = running(&config);
+    (
+        fixture,
+        config.identity.data_dir.join(model::CONFIG_FILE),
+        receiver,
+        current,
+    )
+}
+
+#[test]
+fn receiver_guard_reaps_child_when_fixture_setup_assertion_unwinds() {
+    let fixture = Fixture::new();
+    let config = fixture.initialize();
+    let data_dir = config.identity.data_dir.clone();
+    let setup = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut command = Command::new("/bin/sleep");
+        command.arg("100");
+        let _receiver = TestReceiverGuard::spawn(&config, command);
+        panic!("injected fixture setup assertion before readiness");
+    }));
+    assert!(setup.is_err(), "injected setup assertion must unwind");
+    let status = process::status(&data_dir).unwrap();
+    assert_eq!(status["instance"]["state"], "stopped");
+    assert!(status["instance"]["runtime_pid"].is_null());
 }
 
 pub(crate) fn operation_stubborn_fixture() -> (

@@ -1,6 +1,6 @@
 use oasis7_client_api::world_service::FormalReadAnchorRefV1;
 use oasis7_client_api::world_service::MAX_FORMAL_PROOF_BYTES;
-use oasis7_distfs::controlled_authority::{fencing::*, formal::*};
+use oasis7_formal_protocol::controlled_authority::{fencing::*, formal::*};
 use serde::{Deserialize, Serialize};
 pub const MAX_FORMAL_HISTORY_STEPS: usize = 128;
 

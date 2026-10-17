@@ -46,6 +46,7 @@ impl SignedWorld {
                     }
                     Err(e) => panic!("signed fixture accept: {e}"),
                 };
+                stream.set_nonblocking(false).unwrap();
                 let proof = read_request(&mut stream);
                 verify_read_request(VIEW_JSON_PATH, &proof).unwrap();
                 assert_eq!(proof.subject_public_key, expected_public);

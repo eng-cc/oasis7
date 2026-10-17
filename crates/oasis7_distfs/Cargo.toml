@@ -8,6 +8,8 @@ license = "MIT"
 path = "src/lib.rs"
 
 [dependencies]
+oasis7_formal_protocol = { path = "../oasis7_formal_protocol" }
+oasis7_cas = { path = "../oasis7_cas" }
 oasis7_proto = { version = "0.1.0", path = "../oasis7_proto" }
 oasis7_wasm_build = { version = "0.1.0", path = "../oasis7_wasm_build", optional = true }
 serde = { version = "1", features = ["derive"] }
@@ -17,10 +19,12 @@ blake3 = "1"
 sha2 = "0.11"
 hex = "0.4"
 ed25519-dalek = "3"
-zstd = { version = "0.13", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+oasis7_formal_protocol = { path = "../oasis7_formal_protocol", features = ["test-support"] }
 
 [features]
 sync-builtin-wasm-identity = ["dep:oasis7_wasm_build"]

@@ -2,6 +2,7 @@
 //! their exclusive storage lease before signing an install. The configured
 //! directory and instance come from that provider's registry, never the wire.
 use super::*;
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 use store::durable_set::copy_authenticated_closure;
 
 pub struct VerifiedDurableSetNativeInstallPlanV1 {

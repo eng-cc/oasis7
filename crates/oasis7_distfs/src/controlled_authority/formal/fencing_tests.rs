@@ -1,4 +1,6 @@
 use super::*;
+use crate::controlled_authority::replicated_protocol::HeadAnchor;
+use ed25519_dalek::Signer;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
 fn root() -> std::path::PathBuf {

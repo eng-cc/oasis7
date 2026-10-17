@@ -8,6 +8,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
+#[path = "endpoint_signed_provider_fixture.rs"]
+mod signed_provider;
+use signed_provider::SignedTestProvider;
 fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
 }
@@ -63,7 +66,7 @@ struct Fixture {
     path: PathBuf,
     pdir: PathBuf,
     rdir: PathBuf,
-    provider: Arc<fencing::ControlledFileProvider>,
+    provider: Arc<SignedTestProvider>,
     authority: VerifiedAuthorityV1,
     initial: FormalCandidateMaterialV1,
 }
@@ -79,8 +82,7 @@ impl Fixture {
         let rdir = path.join("replica");
         fs::create_dir(&pdir).unwrap();
         fs::create_dir(&rdir).unwrap();
-        let provider =
-            Arc::new(fencing::ControlledFileProvider::new(path.join("provider"), key(3)).unwrap());
+        let provider = Arc::new(SignedTestProvider::new(path.join("provider"), key(3)));
         let policy = RecoveryPolicyV1 {
             schema_version: 1,
             recovery_issuer_public_key: public(1),
@@ -682,13 +684,20 @@ fn native_formal_sealed_index_transfer_preserves_old_context_and_rejects_second_
     let primary = coordinator.endpoints_mut().0;
     let checkpoint = primary.checkpoint().unwrap();
     let receipt = primary.seal_epoch(&h(210), 2, &checkpoint).unwrap();
-    // Controlled local fixture only. Production verify_epoch_seal rejects this
-    // provider, and no cfg(test) token constructor is exposed to runtime users.
-    let seal = fencing::test_verified_seal_with_resource(
-        receipt.body,
-        public(3),
-        fixture.provider.resource_binding().into(),
+    // Simulate the external provider's signed custody/floor contract, then
+    // obtain opaque evidence through the same verifier used in production.
+    let resource_binding = fixture.provider.resource_binding().to_owned();
+    let signed_seal = oasis7_formal_protocol::controlled_authority::formal::test_fixtures::signed_epoch_seal_receipt(
+        receipt.body, &key(5), &key(3), resource_binding.clone(),
     );
+    let seal = fencing::verify_epoch_seal(
+        &signed_seal,
+        &fencing::TrustedFencingPolicyV1 {
+            provider_public_key: public(3),
+            authorized_resource_bindings: vec![resource_binding],
+        },
+    )
+    .unwrap();
     let mut transfer = primary.export_sealed_archive(&seal).unwrap();
     let pdir = fixture.path.join("successor-primary");
     let rdir = fixture.path.join("successor-replica");
@@ -712,21 +721,14 @@ fn native_formal_sealed_index_transfer_preserves_old_context_and_rejects_second_
         binding.fault_domain_id = format!("successor-domain-{n}");
     }
     definition.validate().unwrap();
-    let successor = VerifiedAuthorityV1 {
-        definition: definition.clone(),
-        policy: fixture.authority.policy().clone(),
-        activation_ref: h(211),
-        durable_set_activation_digest: None,
-        initial: None,
-        first_normal_position: Some(2),
-        recovery_cut: Some(cut.head()),
-        recovery_retained_record: None,
-        initial_input_digest: None,
-    };
-    let recovery = VerifiedRecovery {
-        original: fixture.authority.clone(),
-        retained_candidate: None,
-        body: RecoveryCertificateBodyV1 {
+    let coverage = VerifiedAppendFencingCoverageV1::derive_from_necessary_endpoint_seal(
+        &fixture.authority,
+        &cut,
+        &seal,
+    )
+    .unwrap();
+    let intent = VerifiedRecoveryIntent::verify_single_survivor(
+        RecoveryCertificateBodyV1 {
             retained_context: None,
             schema_version: 1,
             world: definition.world.clone(),
@@ -735,14 +737,22 @@ fn native_formal_sealed_index_transfer_preserves_old_context_and_rejects_second_
             predecessor_epoch: 1,
             sealed_cut: cut.head(),
             tail: RecoveryTailV1::Empty,
-            fencing_evidence_digest: h(212),
+            fencing_evidence_digest: coverage.evidence_digest().unwrap(),
             successor: definition,
             first_normal_position: Some(2),
         },
-        predecessor: fixture.authority.clone(),
-        successor: successor.clone(),
-        certificate_digest: h(211),
-    };
+        &fixture.authority,
+        &cut,
+        &coverage,
+        &RecoveryTailWitnessV1::Empty,
+    )
+    .unwrap();
+    let recovery =
+        oasis7_formal_protocol::controlled_authority::formal::test_fixtures::verified_recovery(
+            &intent,
+            &fixture.authority,
+        );
+    let successor = recovery.successor().clone();
     // Candidate import must reject a different cut before installing any state.
     let exact_cut = transfer.cut.clone();
     transfer.cut.record_id = h(249);

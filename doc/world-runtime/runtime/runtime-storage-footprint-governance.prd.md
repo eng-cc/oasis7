@@ -166,7 +166,7 @@ Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；O7-REQ-3f7d612d-5a6a-4
   - `crates/oasis7/src/runtime/world/persistence.rs`
   - `crates/oasis7/src/runtime/snapshot.rs`
   - `crates/oasis7_node/src/replication.rs`
-  - `crates/oasis7_distfs/src/lib.rs`
+  - `crates/oasis7_cas/src/store.rs`
   - `doc/world-runtime/runtime/runtime-integration.md`
   - `doc/world-runtime/prd.md`
 - Edge Cases & Error Handling:

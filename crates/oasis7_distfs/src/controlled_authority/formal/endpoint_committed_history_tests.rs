@@ -5,7 +5,7 @@ fn committed_historical_cut_uses_current_canonical_inclusion_and_keeps_main_anch
     let (fixture, initial_envelope) = super::business_tests::fixture();
     let mut coordinator = fixture.coordinator();
     let initial = coordinator.submit(fixture.initial.clone()).unwrap();
-    let body = fixture.authority.initial.clone().unwrap();
+    let body = fixture.authority.initial_body().cloned().unwrap();
     let certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&body).unwrap(), 9),
         body,

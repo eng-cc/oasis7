@@ -238,6 +238,7 @@ fn private_task_production_prepared_world_live_service() {
 }
 #[test]
 fn private_task_production_signed_quote_first_product_and_restart() {
+    let _scenario_permit = super::private_task_resource_permit();
     let _probe_slot = super::prepared_world_probe_slot();
     use oasis7::world_service::private_task_context::*;
     let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
@@ -264,7 +265,9 @@ fn private_task_production_signed_quote_first_product_and_restart() {
     // starting before the host leaves at least 60 seconds of service reserve.
     let deadline = Instant::now() + Duration::from_secs(300);
     std::thread::scope(|scope| {
+        let host_permit = _scenario_permit.clone();
         let host = scope.spawn(|| {
+            let _host_permit = host_permit;
             super::run_prepared_world_service_kind_with_cognition_503(
                 ready.clone(),
                 cadence,
@@ -334,6 +337,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
         let mut categories = CleanupCategories::default();
         let mut attempts = Vec::new();
         let mut forced_action_rejection = false;
+        let mut first_cognition_original_seen = false;
         let mut committed = None;
         for attempt in 0..8 {
             assert!(
@@ -431,22 +435,37 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                     sign_read_request("cognition", intent, &delegate).unwrap(),
                 ),
             );
+            let expects_one_shot_503 = !first_cognition_original_seen;
+            first_cognition_original_seen = true;
             let cleanup_before_original = categories;
             match settle_cleanup_original(&client, &original, deadline, &mut categories) {
                 Ok(first) => {
+                    assert_eq!(
+                        categories.submit_http_503 - cleanup_before_original.submit_http_503,
+                        if expects_one_shot_503 { 1 } else { 0 },
+                        "one-shot cognition 503 count must match this original"
+                    );
+                    if expects_one_shot_503 {
+                        assert!(
+                            categories.lookup_unknown > cleanup_before_original.lookup_unknown,
+                            "the exact original must be looked up after the unsigned 503"
+                        );
+                    }
                     committed = Some((captured, original, first, quote_proof, quoted));
                     break;
                 }
                 Err("canonical cleanup rejected") => {
                     assert_eq!(
                         categories.submit_http_503 - cleanup_before_original.submit_http_503,
-                        1,
-                        "the exact stale cognition original must exercise one HTTP 503"
+                        if expects_one_shot_503 { 1 } else { 0 },
+                        "one-shot cognition 503 count must match this original"
                     );
-                    assert!(
-                        categories.lookup_unknown > cleanup_before_original.lookup_unknown,
-                        "the exact original must be looked up after the unsigned 503"
-                    );
+                    if expects_one_shot_503 {
+                        assert!(
+                            categories.lookup_unknown > cleanup_before_original.lookup_unknown,
+                            "the exact original must be looked up after the unsigned 503"
+                        );
+                    }
                     retain_terminal_original(&client, &original, "action", &root, &mut attempts);
                     forced_action_rejection = true;
                     assert_eq!(
@@ -784,11 +803,18 @@ fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::V
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     let body = serde_json::to_vec(body).unwrap();
+    // A connected client may send its first request bytes later. Exercise that
+    // boundary even when the fixture listener polls with nonblocking accept.
+    std::thread::sleep(Duration::from_millis(50));
     write!(stream,"POST {TASK_RECIPE_QUOTE_PATH} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",body.len()).unwrap();
     stream.write_all(&body).unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
-    assert!(response.contains("Cache-Control: no-store"));
+    assert!(
+        response.contains("Cache-Control: no-store"),
+        "private quote response missing no-store header (response_bytes={})",
+        response.len()
+    );
     let (headers, body) = response.split_once("\r\n\r\n").unwrap();
     (
         headers.split_whitespace().nth(1).unwrap().parse().unwrap(),

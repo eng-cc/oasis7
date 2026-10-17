@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use oasis7_distfs::LocalCasStore;
+use oasis7_cas::LocalCasStore;
 use serde::{Deserialize, Serialize};
 
 use super::super::error::WorldError;

@@ -36,7 +36,7 @@ mod fixture_stage_diagnostics;
 mod hosted_wait_clock;
 use fixture_stage_diagnostics::Stage;
 mod provider_metadata;
-mod scenario_resource;
+use super::scenario_resource;
 use application_harness::{run_isolated_application, run_isolated_application_provider_closure};
 mod application_process_dispatch;
 mod application_provider;
