@@ -234,7 +234,10 @@
         "scripts/governance-registry-live-drill.sh",
         "scripts/run-local-letai-provider-bridge.sh",
         "scripts/provider-parity-p0.sh",
-        "scripts/oasis7-liveops-grant.sh"
+        "scripts/oasis7-liveops-grant.sh",
+        "scripts/newapi-bridge-service/package-newapi-bridge-service.sh",
+        "scripts/run-local-public-testnet-letai-test-environment.sh",
+        "scripts/runtime-module-routing-perf-harness.sh"
       ],
       "groups": [
         "oasis7_required",
