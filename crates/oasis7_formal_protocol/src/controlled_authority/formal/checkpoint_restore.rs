@@ -1,11 +1,12 @@
-use super::super::endpoint::NativeCheckpointVerdictV1;
 use super::*;
 
-/// Native endpoint hot restart only. The opaque checkpoint verdict attests the
-/// previously verified parent context through its signed archive commitments
-/// and a trusted provider's exact current monotonic floor. Ordinary readers
-/// still verify the activation/history chain and cannot construct this verdict.
-pub(crate) fn restore_formal_commit_from_checkpoint(
+/// Native endpoint checkpoint revalidation only. The checked verdict binds
+/// signed archive commitments to a policy-authorized provider statement for
+/// that exact checkpoint. It does not establish freshness: native callers must
+/// retain their authenticated RPC request/minimum or held monotonic guard checks.
+/// Ordinary readers still require their independently configured external pin
+/// and canonical activation/history verification.
+pub fn restore_formal_commit_from_checkpoint(
     proof: &FormalQualifiedCommitProofV1,
     original_authority: &VerifiedAuthorityV1,
     recovery: Option<&VerifiedRecovery>,

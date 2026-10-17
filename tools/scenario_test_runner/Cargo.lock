@@ -1262,6 +1262,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_cas"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "oasis7_proto",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "sha2",
+ "zstd",
+]
+
+[[package]]
 name = "oasis7_client_api"
 version = "0.1.0"
 dependencies = [
@@ -1283,7 +1297,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "hmac",
- "oasis7_distfs",
+ "oasis7_cas",
  "oasis7_proto",
  "serde",
  "serde_cbor",
@@ -1299,12 +1313,25 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "libc",
+ "oasis7_cas",
+ "oasis7_formal_protocol",
  "oasis7_proto",
  "serde",
  "serde_cbor",
  "serde_json",
  "sha2",
- "zstd",
+]
+
+[[package]]
+name = "oasis7_formal_protocol"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_cbor",
+ "serde_json",
 ]
 
 [[package]]
@@ -1321,7 +1348,7 @@ dependencies = [
  "libc",
  "oasis7_agent_api",
  "oasis7_client_api",
- "oasis7_distfs",
+ "oasis7_formal_protocol",
  "oasis7_wasm_abi",
  "reqwest",
  "serde",
@@ -1429,7 +1456,7 @@ name = "oasis7_wasm_materializer"
 version = "0.1.0"
 dependencies = [
  "hex",
- "oasis7_distfs",
+ "oasis7_cas",
  "oasis7_proto",
  "reqwest",
  "sha2",

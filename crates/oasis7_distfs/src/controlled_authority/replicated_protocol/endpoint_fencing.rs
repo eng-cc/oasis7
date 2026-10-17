@@ -1,5 +1,6 @@
 //! Native instance/progress gate. Controlled providers never prove formal fencing.
 use super::*;
+use crate::controlled_authority::fencing::EndpointInstanceBindingDirectoryExt;
 impl FileEndpoint {
     pub(super) fn check_gate_write(
         gate: &Option<Box<dyn MonotonicEndpointGuard>>,

@@ -1,12 +1,13 @@
 use super::super::{
     LocalRequestIdentity,
     replicated_protocol::{
-        ArtifactObject, ClosedRecord, EndpointRole, FileEndpoint, ProtocolOutcome, ReceiptStage,
-        ReplicatedCoordinator,
+        ArtifactObject, ArtifactRole, ClosedRecord, EndpointRole, FileEndpoint, FixedTrust,
+        ProtocolError, ProtocolOutcome, ReceiptStage, ReplicatedCoordinator,
     },
 };
 use super::*;
 use ed25519_dalek::{Signer, SigningKey};
+use std::collections::BTreeMap;
 fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
 }

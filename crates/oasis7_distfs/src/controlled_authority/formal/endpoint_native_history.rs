@@ -16,8 +16,23 @@ pub struct VerifiedNativeHistoricalRestoreV1 {
     current_head: FormalHeadRefV1,
     minimum: FormalHeadRefV1,
     checkpoint: fencing::EndpointCheckpointBindingV1,
+    provenance: NativeCheckpointVerdictV1,
 }
 impl VerifiedNativeHistoricalRestoreV1 {
+    /// Private service publication recovery, never a new ordinary-reader pin.
+    /// The pure constructor retains exact restored authority/head context even
+    /// when this is the same canonical cut as the configured minimum.
+    pub fn service_read_anchor(
+        &self,
+        trusted: &VerifiedFormalReadAnchorV1,
+    ) -> Result<VerifiedFormalReadAnchorV1, FormalError> {
+        VerifiedFormalReadAnchorV1::from_native_historical_service_restore(
+            trusted,
+            &self.provenance,
+            &self.authority,
+            &self.commit,
+        )
+    }
     pub fn reference(&self) -> FormalHeadRefV1 {
         self.commit.head()
     }
@@ -264,12 +279,24 @@ pub(crate) fn restore_native_position(
             "historical healthy first Normal exact boundary parent",
         ));
     }
-    let verdict = NativeCheckpointVerdictV1 {
-        proof: proof.clone(),
-        parent: parent.clone(),
-        head: target.clone(),
-        authority_id: historical_authority.authority_id()?,
-    };
+    let verdict = NativeCheckpointVerdictV1::verify(
+        context.checkpoint_bytes(),
+        context.authority(),
+        context.endpoint_public_key(),
+        context.checkpoint(),
+        context.provider(),
+        target,
+        context.minimum(),
+        &historical_authority.authority_id()?,
+        &mut load,
+    )?;
+    if verdict.proof() != &proof
+        || verdict.verified_parent_record() != parent.as_ref().map(|p| &p.record)
+        || verdict.verified_parent_finalizing_authority_id()
+            != parent.as_ref().map(|p| p.finalizing_authority_id.as_str())
+    {
+        return Err(invalid("historical checked checkpoint exact parent/proof"));
+    }
     let origin = if proof.decision.branch == FormalCompletionBranchV1::Normal {
         historical_authority
     } else {
@@ -319,6 +346,7 @@ pub(crate) fn restore_native_position(
         current_head: body.head,
         minimum: context.minimum().clone(),
         checkpoint: context.checkpoint().clone(),
+        provenance: verdict,
     })
 }
 /// A bounded byte cache only. `BusinessIndexNodeReader` still validates each

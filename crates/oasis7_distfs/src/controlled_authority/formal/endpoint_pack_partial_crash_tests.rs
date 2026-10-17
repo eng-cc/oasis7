@@ -58,7 +58,7 @@ fn endpoint_pack_first_link_sigkill_reopens_real_store_and_preserves_retry() {
     use std::os::unix::process::ExitStatusExt;
     let fixture = Fixture::new();
     let oracle = Oracle::start(&fixture, EndpointRole::Primary);
-    let body = fixture.authority.initial.clone().unwrap();
+    let body = fixture.authority.initial_body().cloned().unwrap();
     let certificate = SignedInitialActivationV1 {
         signature_hex: signed(initial_activation_signing_bytes(&body).unwrap(), 9),
         body,
