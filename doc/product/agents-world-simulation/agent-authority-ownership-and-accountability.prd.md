@@ -104,9 +104,9 @@ Trace ID: O7-REQ-be254f99-9b66-47b1-ad7f-4a356d296b2a
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-011)：转让生效、旧授权失效与历史因果保留；完整经济转让、退休/报废与跨入口历史呈现仍须组合核对。
 - 实现状态：未核实
-- 实现与验证依据：[实际重配置处理](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L590-L635)区分版本、更新主体/时点与runtime-instance apply，且明确 persistence_scope/sync_scope=None；[持久意图与原回执身份](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/agent_cell.rs#L31-L108)保存intent/actor/replaced_by/receipt，但不是转让、退休或报废历史投影。旧owner grant失效仍只证明授权重验，不证明本卡要求的处置后历史可读。
-- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，源码逐文件 Git blob 校验；本轮未运行模型、Runtime、浏览器或产品验收。既有PR运行记录仅按各自候选/范围引用。
-- 剩余范围：继续核对转让/退休/报废的真实事件入口、处置状态及跨入口历史读取，特别新owner生效点、旧配置/来源、责任和既有结果。当前重配置ack的runtime-instance范围不能代签完整持久历史；本轮未执行验收。
+- 实现与验证依据：[真实claim终态](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/agent_claim_terminal_publication.rs#L30-L78)核验原owner及退款；[终态安装](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/agent_claim_terminal_publication.rs#L225-L244)移除当前claim。[identity安装](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/capability_authorization_admin.rs#L136-L183)只接受不可回退generation并journal身份，不能据此把释放/重认领称为经济转让或退休/报废。[重配置ack](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/viewer/runtime_live/control_plane/prompt_control_enhanced.rs#L590-L635)有版本、更新主体/时点，但明确runtime-instance且persistence/sync=None；未核到这些处置后旧配置、来源、责任和既有结果的玩家历史reader。本轮静态审读。
+- 核对日期与基线：2026-10-17；需求与静态实现固定main `8a9d6b78c6fc94f1676cb29537c7af97665c3d0d`，引用源码逐文件Git blob与当前完整tree核验；#4865未合并，不使用其候选类型。本轮只读源码/本地产物，未执行模型、Runtime、产品验收或部署；测试源码和历史QA报告不改称本候选PASS。
+- 剩余范围：具体待核：经济转让/退休/报废的实际启用入口→生效事件writer→新owner控制绑定与不可变旧配置/责任历史→Launcher/Viewer/API历史读取。已有claim终态、identity generation和原intent/receipt不得拼接代签；仍需处置后既有世界结果不被改写的同候选验收。
 
 - 要求：Agent 转让、重配置、退休或报废后，产品必须把新 owner 的生效点与既有身份、来源、审计历史和已生效世界结果区分呈现，不得以处置抹除责任或历史。
 - 验收：AC-AGENT-AUTH-002

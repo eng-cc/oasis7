@@ -274,9 +274,9 @@ Trace refs: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264（[REQ-ENTRY-MODE-001](.
 - 系统设计状态：未核实
 - 系统设计依据：已核对 §5.1 专业责任与上列精确叶项/组合关系；叶项已确认的专业条款仅证明其实际子范围，尚不能判定整个根组合的系统设计覆盖。
 - 实现状态：未核实
-- 实现与验证依据：[模型连接与第一方执行说明](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx#L146-L180)明确实验执行方、预算和停止；[Viewer来源权威](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/world_view_source.rs#L7-L73)区分local_bound、formal_verified和signed_service_assertion。这两种实际消费者不等于Launcher/Viewer/pure API共同使用声明组合与证据范围记录。 本轮静态核查，不新增行为验收。
-- 核对日期与基线：2026-10-17；需求/设计/源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；最新main `0ec10379419b0aaedb9d16157b81c92f4e6e3495` 仅作delta边界参考，不将旧源码或历史运行改称最新候选通过。
-- 剩余范围：需定位各入口claim/支持组合的权威发布者及其版本、模式、证据窗口读取，尤其pure API和缺parity证据时的受限表达；不以mode enum或技术ready代替支持承诺。
+- 实现与验证依据：[Viewer来源authority](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/viewer/runtime_live/world_view_source.rs#L7-L73)区分local_bound、formal_verified、signed_service_assertion并绑定世界/权限版本；[Provider mode合同](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7_agent_api/src/provider.rs#L12-L35)及观察校验限制模式数据。[专业报告输出](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/scripts/provider-parity-p0.sh#L884-L978)独立区分benchmark/parity/release blocked，[部署配置边界](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_model_client/config.rs#L10-L22)不把配置视为public support attestation。上述真实消费者各自闭合来源/模式或报告，但未核到Launcher、Viewer、pure API共同消费支持声明及证据窗口，不以模式enum或技术ready推根组合。
+- 核对日期与基线：2026-10-17；需求与静态实现固定main `8a9d6b78c6fc94f1676cb29537c7af97665c3d0d`，引用源码逐文件Git blob与当前完整tree核验；#4865未合并，不使用其候选类型。本轮只读源码/本地产物，未执行模型、Runtime、产品验收或部署；测试源码和历史QA报告不改称本候选PASS。
+- 剩余范围：具体尚未定位支持claim的权威发布记录及Launcher/Viewer/pure API三入口的版本、模式、provider组合和证据窗口reader；专业报告与世界来源校验到产品受限/退化说明的消费链仍未知。尤其pure API当前支持承诺不能由Viewer source标签代签。
 
 <a id="sc-agent-005"></a>
 #### 功能状态卡：SC-5 组合
@@ -409,9 +409,9 @@ Trace refs: O7-REQ-bd548350-7fce-4026-aeec-5b26a10b86ad（[REQ-AGENT-AUTH-001](a
 - 系统设计状态：未核实
 - 系统设计依据：已核对 §5.1 专业责任与上列精确叶项/组合关系；叶项已确认的专业条款仅证明其实际子范围，尚不能判定整个根组合的系统设计覆盖。
 - 实现状态：未核实
-- 实现与验证依据：[grant安装与来源](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_delegation.rs#L159-L245)消费可信host安装的starter-owner electricity grant并拒绝组织issuer；[exact intent override消费](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_delegation_controls.rs#L61-L127)校验owner/control/intent/digest/revision。未建立玩家高自治/有界选择或明确后续确认→该grant/override的直接生产入口。 本轮静态核查，不新增行为验收。
-- 核对日期与基线：2026-10-17；需求/设计/源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；最新main `0ec10379419b0aaedb9d16157b81c92f4e6e3495` 仅作delta边界参考，不将旧源码或历史运行改称最新候选通过。
-- 剩余范围：核清玩家选择和确认producer及其传输身份、累计额度/高后果执行重验、团队扩张/转让/异议/退休历史和组织责任投影；既有grant消费者不代签其授权来源已获玩家确认，组织issuer当前native lane不支持。
+- 实现与验证依据：[native grant来源](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/agent_delegation.rs#L159-L185)绑定starter owner并明确organization_source_unsupported；[exact owner control](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/agent_delegation_controls.rs#L33-L127)重验owner/intent/digest/grant revision；[WorldService签名authority](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/world_service/agent_authority.rs#L7-L65)匹配canonical owner claim与identity。[claim终态](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/agent_claim_terminal_publication.rs#L225-L244)是释放/回收结算，不是团队转让/退休历史组合。未把叶项底座状态自动汇总为根实现，本轮未运行组合验收。
+- 核对日期与基线：2026-10-17；需求与静态实现固定main `8a9d6b78c6fc94f1676cb29537c7af97665c3d0d`，引用源码逐文件Git blob与当前完整tree核验；#4865未合并，不使用其候选类型。本轮只读源码/本地产物，未执行模型、Runtime、产品验收或部署；测试源码和历史QA报告不改称本候选PASS。
+- 剩余范围：尚未核清高自治/有界授权的可读选择及有效后续确认producer如何到达现有grant/override；累计额度和严重后果同入口重验、组织issuer责任链、团队扩张/异议及真实转让/退休历史的共同因果reader仍缺定位。既有签名验证不证明用户已在这些产品入口作出有效确认。
 
 <a id="sc-agent-012"></a>
 #### 功能状态卡：SC-12 组合
@@ -424,9 +424,9 @@ Trace refs: O7-REQ-86ed9522-e22d-4706-9b1e-3e1452a9fb3c（[REQ-AGENT-LEARNING-00
 - 系统设计状态：未核实
 - 系统设计依据：已核对 §5.1 专业责任与上列精确叶项/组合关系；叶项已确认的专业条款仅证明其实际子范围，尚不能判定整个根组合的系统设计覆盖。
 - 实现状态：未核实
-- 实现与验证依据：[provider bootstrap输入](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/provider_backed_bootstrap.rs#L19-L43)→[live grant/catalog消费者](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/capability_catalog.rs#L17-L74)消费当前World及治理grant；[cognition每tick配额](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/cognition_scheduler.rs#L635-L676)限制认知调度。尚无训练/认证证据状态/tier与profile可选性、固定权威action slot的共同producer连接。 本轮静态核查，不新增行为验收。
-- 核对日期与基线：2026-10-17；需求/设计/源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；最新main `0ec10379419b0aaedb9d16157b81c92f4e6e3495` 仅作delta边界参考，不将旧源码或历史运行改称最新候选通过。
-- 剩余范围：需定位产品训练/认证provenance与成本/范围状态authority，串起准入/有限试点/暂停撤销→待决请求处理→恢复重确认→玩家连续历史；cognition wake配额不是action slot公平，grant verified不是产品认证。
+- 实现与验证依据：[proof-bearing bootstrap](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/provider_backed_bootstrap.rs#L19-L80)→[当前catalog](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/capability_catalog.rs#L17-L100)和[授权root](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/world/capability_authorization_state.rs#L71-L115)闭合普通治理授权与审计事实；[wake公平调度](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/crates/oasis7/src/runtime/cognition_scheduler.rs#L635-L676)仅约束认知wake。[parity报告窄结论](https://github.com/nil-studio/oasis7/blob/8a9d6b78c6fc94f1676cb29537c7af97665c3d0d/scripts/provider-parity-p0.sh#L884-L915)保留not-certified/blocked，非产品学习认证。尚未核到代表性样例中认证状态、有限试点、训练历史、情报安全边界和权威slot使用同一scope/候选的组合绑定。
+- 核对日期与基线：2026-10-17；需求与静态实现固定main `8a9d6b78c6fc94f1676cb29537c7af97665c3d0d`，引用源码逐文件Git blob与当前完整tree核验；#4865未合并，不使用其候选类型。本轮只读源码/本地产物，未执行模型、Runtime、产品验收或部署；测试源码和历史QA报告不改称本候选PASS。
+- 剩余范围：需串起产品认证状态authority→profile可选性/新意图准入→暂停撤销对待决处理→恢复新scope重确认和正常action slot，及训练provenance/成本历史与情报freshness/安全披露的共同reader。根组合不由LEARNING叶项、普通grant、认知配额或QA parity报告自动归并；本轮无真实样例验收。
 
 <a id="sc-agent-013"></a>
 #### 功能状态卡：SC-13 组合
