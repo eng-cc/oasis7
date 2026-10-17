@@ -56,27 +56,24 @@ impl World {
                 }
 
                 let source_bytes_len = source_package.files.values().map(Vec::len).sum::<usize>();
-                let compiled_bytes =
-                    match super::super::super::module_source_compiler::compile_module_artifact_from_source(
-                        module_id.as_str(),
-                        source_package,
-                    ) {
-                        Ok(bytes) => bytes,
-                        Err(err) => {
-                            self.append_event(
-                                WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                    action_id,
-                                    reason: RejectReason::RuleDenied {
-                                        notes: vec![format!(
-                                            "compile module source rejected: {err:?}"
-                                        )],
-                                    },
-                                }),
-                                Some(CausedBy::Action(action_id)),
-                            )?;
-                            return Ok(true);
-                        }
-                    };
+                let compiled_bytes = match self
+                    .source_compiler
+                    .compile(module_id.as_str(), source_package)
+                {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        self.append_event(
+                            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!("compile module source rejected: {err:?}")],
+                                },
+                            }),
+                            Some(CausedBy::Action(action_id)),
+                        )?;
+                        return Ok(true);
+                    }
+                };
 
                 let wasm_hash = super::super::super::util::sha256_hex(&compiled_bytes);
                 let fee_kind = ResourceKind::Electricity;

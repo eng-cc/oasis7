@@ -1059,3 +1059,41 @@ fn module_installed_domain_event_legacy_payload_defaults_install_target() {
     };
     assert_eq!(install_target, ModuleInstallTarget::SelfAgent);
 }
+
+
+#[test]
+fn runtime_source_compiler_is_process_local_and_policy_gated() {
+    use oasis7_agent_api::module_source::{ModuleSourceCompileError, ModuleSourceCompiler};
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    struct Compiler(Arc<AtomicUsize>);
+    impl ModuleSourceCompiler for Compiler {
+        fn compile(&self, _: &str, _: &ModuleSourcePackage) -> Result<Vec<u8>, ModuleSourceCompileError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(b"injected-runtime-source-artifact".to_vec())
+        }
+    }
+    let calls = Arc::new(AtomicUsize::new(0));
+    for production in [false, true] {
+        let mut world = World::new();
+        register_agent(&mut world, "publisher-1");
+        if production { world.set_release_security_policy(ReleaseSecurityPolicy::production_hardened()); }
+        world.set_module_source_compiler(Arc::new(Compiler(calls.clone())));
+        let encoded = serde_json::to_value(&world).expect("serialize world");
+        assert!(encoded.get("source_compiler").is_none());
+        let before = calls.load(Ordering::SeqCst);
+        let action_id = world.submit_action(Action::CompileModuleArtifactFromSource {
+            publisher_agent_id: "publisher-1".into(),
+            module_id: "m.injected.compiler".into(),
+            source_package: sample_module_source_package(),
+        });
+        assert_eq!(calls.load(Ordering::SeqCst), before, "submission cannot compile");
+        world.step().expect("execute compilation action");
+        assert_eq!(calls.load(Ordering::SeqCst), before + usize::from(!production));
+        if production {
+            assert_last_rejection_note(&world, action_id, "disabled by production release policy");
+        } else {
+            let hash = util::sha256_hex(b"injected-runtime-source-artifact");
+            assert!(world.load_module(&hash).is_ok());
+        }
+    }
+}

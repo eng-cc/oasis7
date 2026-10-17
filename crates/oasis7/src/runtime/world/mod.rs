@@ -7,6 +7,7 @@ pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
 pub(crate) mod agent_delegation;
 mod agent_intent;
+mod source_compiler;
 #[cfg(test)]
 pub(crate) use agent_intent::derive_agent_chat_request_digest;
 pub(crate) mod agent_intent_publication;
@@ -414,6 +415,8 @@ fn default_allow_runtime_source_compile() -> bool {
 /// The main World runtime that orchestrates the simulation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct World {
+    #[serde(skip)]
+    source_compiler: super::module_source_compiler::RuntimeSourceCompiler,
     manifest: Manifest,
     #[serde(default = "super::cognition_recovery::default_cognition_persistence_projection")]
     cognition: JsonValue,
@@ -612,6 +615,7 @@ impl World {
             }
         }
         let mut world = Self {
+            source_compiler: super::module_source_compiler::RuntimeSourceCompiler::default(),
             manifest: Manifest::default(),
             cognition: default_cognition_persistence_projection(),
             module_registry: ModuleRegistry::default(),
