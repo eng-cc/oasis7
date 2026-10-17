@@ -181,9 +181,17 @@ fn verify_physical_mirror(
         .map_err(|e| format!("physical simulator mirror rebuild: {e:?}"))?;
     let genesis = oasis7::simulator::WorldKernel::new();
     let expected = latest.unwrap_or(&genesis);
-    // snapshot() normalizes resource metadata identically while retaining all
-    // kernel state, pending actions, event cursors and configuration.
-    if io::digest(&physical.snapshot())? != io::digest(&expected.snapshot())?
+    // Compare explicit normalized views; ordinary snapshot() retains original
+    // committed-cut metadata. Never write these comparison views back to disk.
+    // Runtime/player extensions and the complete journal remain part of equality.
+    let normalized = |kernel: &oasis7::simulator::WorldKernel| {
+        kernel.snapshot_with_chain_resource_context(
+            oasis7_agent_api::world_resource::ChainResourceDerivationContext::simulator_default(
+                kernel.time(),
+            ),
+        )
+    };
+    if io::digest(&normalized(&physical))? != io::digest(&normalized(expected))?
         || io::digest(&physical.journal_snapshot())? != io::digest(&expected.journal_snapshot())?
     {
         return Err("physical simulator cache differs from latest recorded mirror or original genesis kernel".into());
