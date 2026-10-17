@@ -251,6 +251,7 @@ fn scheduler_api_preserves_capability_digest_rejection_diagnostics() {
         let mut request = super::agent_cognition_identity::request_from_value(
             super::agent_cognition_identity::production_request_fixture(1, 60_000),
         );
+        request.retry_seq = 1;
         if catalog_mismatch {
             request.capability_catalog_digest = Digest32(format!("blake3:{}", "0".repeat(64)));
         } else {
