@@ -131,6 +131,12 @@ impl ViewerRuntimeLiveServer {
                 if version >= 2 {
                     if offered.iter().any(|capability| capability == "world_view") {
                         selected.push("world_view".to_string());
+                        if offered
+                            .iter()
+                            .any(|capability| capability == "world_view_pins_v1")
+                        {
+                            selected.push("world_view_pins_v1".to_string());
+                        }
                     }
                     if self.authoritative_recovery_dir().is_some()
                         && offered.iter().any(|capability| {
@@ -309,8 +315,6 @@ impl ViewerRuntimeLiveServer {
                     send_response(writer, &ViewerResponse::WorldView { view })?;
                     return Ok(());
                 }
-                let local_runtime =
-                    self.config.world_service.is_none() && !self.chain_link_enabled();
                 let mut cache = session.world_view_projection.take();
                 let world_id = self.config.world_id.clone();
                 let audience = session
@@ -318,14 +322,15 @@ impl ViewerRuntimeLiveServer {
                     .clone()
                     .unwrap_or_else(|| "public".into());
                 let epoch = self.reorg_epoch;
-                let view = crate::viewer::world_view::build_session(
+                let authority = self.world_view_source_authority(&audience);
+                let view = crate::viewer::world_view::build_session_bound(
                     &mut cache,
                     || self.compat_snapshot_for_session(session),
                     &world_id,
                     epoch,
                     &audience,
                     query,
-                    local_runtime,
+                    authority,
                 );
                 session.world_view_projection = cache;
                 send_response(writer, &ViewerResponse::WorldView { view })?;

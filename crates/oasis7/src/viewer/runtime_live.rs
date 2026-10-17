@@ -134,6 +134,7 @@ mod wake_dispatch;
 mod war_declaration_quote;
 mod world_feed;
 mod world_service_link;
+mod world_view_source;
 pub use crate::runtime::ProviderBackedBootstrapAuthorityV1;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,

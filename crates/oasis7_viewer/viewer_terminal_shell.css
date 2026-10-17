@@ -1789,7 +1789,33 @@ body {
 .pixel-world-exploration-disclosure { position: absolute; top: 5rem; left: 1.5rem; z-index: 65; pointer-events: auto; max-width: calc(100vw - 3rem); color: var(--text, #dce5dc); }
 .pixel-world-exploration-disclosure > summary { cursor: pointer; width: fit-content; padding: .5rem .75rem; border: 1px solid rgba(148,163,184,.35); border-radius: .5rem; background: rgba(12,24,25,.96); }
 .pixel-world-exploration-disclosure[open] { width: min(32rem, calc(100vw - 3rem)); }
-.pixel-world-exploration-disclosure[open] > .pixel-world-exploration { max-height: min(55vh, 32rem); overflow: auto; background: rgba(12,24,25,.98); margin-top: .3rem; }
-@media (max-width: 600px) { .pixel-world-exploration-disclosure { left: .75rem; top: 8rem; max-width: calc(100vw - 1.5rem); } .pixel-world-exploration-disclosure[open] { width: calc(100vw - 1.5rem); } }
+/* The controller wrapper owns one opaque scroll surface; keep Close outside it. */
+.pixel-world-exploration-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  max-height: max(5rem, min(50dvh, calc(100dvh - 8rem - 120px - min(40dvh, 320px) - .5rem)));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-radius: .5rem;
+  background: #0c1819;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  margin-top: .3rem;
+  isolation: isolate;
+}
+.pixel-world-exploration-panel .pixel-world-exploration ul { max-height: none; overflow: visible; }
+.pixel-world-exploration-panel .pixel-world-entity-inspection { padding: .65rem; border-top: 1px solid rgba(148,163,184,.35); }
+@media (max-width: 600px) {
+  .pixel-world-exploration-disclosure { left: .75rem; top: 8rem; max-width: calc(100vw - 1.5rem); }
+  .pixel-world-exploration-disclosure[open] { width: calc(100vw - 1.5rem); }
+  /* Feed is outside the stage stacking context. Reserve the closed summary's
+   * row too, rather than trying to lift the entire map over the shell HUD. */
+  [data-viewer-shell="player-fullscreen"]:has(.pixel-world-exploration-disclosure) [data-viewer-overlay="feed"] { top: 11rem; }
+  .pixel-world-exploration-panel {
+    /* Match the existing Next Move/receipt reserve, plus disclosure and gap. */
+    max-height: max(5rem, calc(100dvh - 8rem - 144px - min(38dvh, 280px) - 3.5rem));
+  }
+}
 
 [data-viewer-shell="player-fullscreen"]:has(.pixel-world-exploration-disclosure[open]) [data-viewer-overlay="feed"] { visibility: hidden; }

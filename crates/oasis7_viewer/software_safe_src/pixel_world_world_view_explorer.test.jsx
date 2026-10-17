@@ -45,3 +45,20 @@ it('stops following before returning to the main target',()=>{
  expect(order).toEqual(['follow','stop','return']);
  expect(screen.getByRole('button',{name:'Follow'}).getAttribute('aria-pressed')).toBe('false');
 });
+it('inspects an authorized facility with derived position without offering Agent follow or controls',()=>{
+ const facility={...entity('F'),kind:'factory',label:'Furnace',provenance:{...entity('F').provenance,geometry_source:'location_derived'}};
+ const onSelect=vi.fn(),onLocate=vi.fn();render(()=> <PixelWorldWorldViewExplorer locale="en" state={{view:{source_cut:'cut',entities:[facility]}}} onSelect={onSelect} onLocate={onLocate}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Furnace'}));expect(onSelect).toHaveBeenCalledWith({kind:'factory',id:'F'});
+ expect(screen.getByRole('region',{name:'Object inspection'})).toHaveTextContent('Read-only observation');
+ expect(screen.getByRole('button',{name:'Follow'}).disabled).toBe(true);fireEvent.click(screen.getByRole('button',{name:'Locate'}));
+ expect(onLocate).toHaveBeenCalledWith({kind:'factory',id:'F'},{x_cm:10,y_cm:20,z_cm:0});expect(screen.queryByRole('button',{name:/Submit|Build|Chat/})).not.toBeInTheDocument();
+});
+it('offers read-only route endpoint inspection only when both endpoints are in the same authorized view',()=>{
+ const from=entity('A'),to={...entity('F'),kind:'factory',label:'Furnace'};
+ const route={relation_id:'r',kind:'logistics_route',label:'Ore delivery',source_class:'runtime_projection',status:'unavailable',freshness:'unknown',valid_at_source_cut:'cut',from:{kind:'agent',id:'A'},to:{kind:'factory',id:'F'}};
+ const onSelect=vi.fn();const [state,setState]=createSignal({view:{source_cut:'cut',entities:[from,to],relations:[route]}});
+ render(()=> <PixelWorldWorldViewExplorer locale="en" state={state()} onSelect={onSelect}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Ore delivery'}));expect(screen.getByRole('region',{name:'Route inspection'})).toHaveTextContent('read-only');
+ fireEvent.click(screen.getByRole('button',{name:'Inspect Furnace'}));expect(onSelect).toHaveBeenCalledWith({kind:'factory',id:'F'});
+ setState({view:{source_cut:'cut',entities:[from],relations:[route]}});expect(screen.queryByRole('region',{name:'Authorized routes'})).not.toBeInTheDocument();
+});

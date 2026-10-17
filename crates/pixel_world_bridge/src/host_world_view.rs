@@ -59,6 +59,7 @@ pub(super) fn adapt_input(input: &Value) -> Option<Value> {
     let entities = view.get("entities").and_then(Value::as_array);
     let mut agents = Vec::new();
     let mut locations = Vec::new();
+    let mut facilities = serde_json::Map::new();
     for entity in entities.into_iter().flatten() {
         let Some(record) = entity.get("render_record").filter(|r| r.is_object()) else {
             continue;
@@ -84,14 +85,36 @@ pub(super) fn adapt_input(input: &Value) -> Option<Value> {
         match entity.get("kind").and_then(Value::as_str) {
             Some("agent") => agents.push(record),
             Some("location") => locations.push(record),
+            Some("factory") if current => {
+                let id = entity.get("entity_id").and_then(Value::as_str);
+                if let Some(id) = id {
+                    let anchor = if record["pos"].is_object() {
+                        json!({"type":"absolute","data":{"pos":record["pos"]}})
+                    } else {
+                        json!({"type":"location","data":{"location_id":record["location_id"]}})
+                    };
+                    facilities.insert(id.into(), json!({"entity_id":id,"module_id":"runtime_factory",
+                        "kind":"factory","label":record.get("name").or_else(||record.get("label")),"anchor":anchor}));
+                }
+            }
             _ => (),
         }
     }
     adapted["lists"] = json!({"agents":agents,"locations":locations});
     // A selected object's old snapshot position cannot override the projection.
     adapted["selected"] = Value::Null;
+    if adapted["selectedKind"] == "factory" {
+        adapted["selectedKind"] = json!("module_visual");
+    }
+    if adapted["navigation"]["target"]["kind"] == "factory" {
+        adapted["navigation"]["target"]["kind"] = json!("module_visual");
+        // A fixed site anchor supports locating a facility, not live tracking.
+        if adapted["navigation"]["mode"] == "follow" {
+            adapted["navigation"]["mode"] = json!("stop");
+        }
+    }
     // Module/facility/event overlays do not inherit the spatial projection's grant.
-    adapted["snapshot"]["model"]["module_visual_entities"] = json!([]);
+    adapted["snapshot"]["model"]["module_visual_entities"] = Value::Object(facilities);
     adapted["recentEvents"] = json!([]);
     if let Some(bounds) = view
         .get("world_bounds")
@@ -114,6 +137,26 @@ mod tests {
         assert!(result["lists"]["agents"][0]["pos"].is_null());
         assert!(result["selected"].is_null());
     }
+    #[test]
+    fn authorized_factory_maps_to_existing_marker_and_navigation_without_snapshot_overlay_leaks() {
+        let mut input = json!({"selectedKind":"factory","selectedId":"F","navigation":{"request_id":"1","mode":"locate","target":{"kind":"factory","id":"F"}},"snapshot":{"model":{"module_visual_entities":{"private":{}}}},"worldView":{"source_cut":"C","entities":[{"entity_id":"F","kind":"factory","render_record":{"name":"Forge","pos":{"x_cm":"10","y_cm":"20","z_cm":"0"}},"provenance":{"geometry_source":"authoritative","freshness":"current","valid_at_source_cut":"C"}}]}});
+        let result = adapt_input(&input).unwrap();
+        assert_eq!(result["selectedKind"], "module_visual");
+        assert_eq!(result["navigation"]["target"]["kind"], "module_visual");
+        let facilities = &result["snapshot"]["model"]["module_visual_entities"];
+        assert_eq!(facilities["F"]["anchor"]["data"]["pos"]["x_cm"], 10);
+        assert!(facilities.get("private").is_none());
+        input["navigation"]["mode"] = json!("follow");
+        assert_eq!(adapt_input(&input).unwrap()["navigation"]["mode"], "stop");
+        input["worldView"]["entities"][0]["provenance"]["freshness"] = json!("expired");
+        assert!(
+            adapt_input(&input).unwrap()["snapshot"]["model"]["module_visual_entities"]
+                .as_object()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
     #[test]
     fn current_positions_require_the_same_cut() {
         let input = json!({"snapshot":{"config":{},"model":{}},"worldView":{"source_cut":"cut","entities":[{"entity_id":"001","kind":"agent","render_record":{"id":"001","pos":{"x_cm":"10","y_cm":"20","z_cm":"0"}},"provenance":{"geometry_source":"authoritative","freshness":"current","valid_at_source_cut":"cut"}}]}});

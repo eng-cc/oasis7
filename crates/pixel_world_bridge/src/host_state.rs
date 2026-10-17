@@ -12,6 +12,8 @@ mod relation_projection;
 mod resource_summary_projection;
 #[path = "host_social_links.rs"]
 mod social_links;
+#[path = "host_spatial_routes.rs"]
+mod spatial_routes;
 #[path = "host_world_bounds.rs"]
 mod world_bounds;
 #[path = "host_world_view.rs"]
@@ -1075,7 +1077,11 @@ pub(crate) fn build_render_state(input: &Value) -> Value {
         (Some(kind), Some(id)) => json!({ "kind": kind, "id": id }),
         _ => Value::Null,
     };
-    let links = relation_projection::build_pixel_world_links(&agents, &location_by_id);
+    let links = if input.get("worldView").is_some() {
+        spatial_routes::project(input, &agents, &locations, &module_visual_entities)
+    } else {
+        relation_projection::build_pixel_world_links(&agents, &location_by_id)
+    };
     let social_links = social_links::build_pixel_world_social_links(input, &agents, &locations);
     let anchor =
         resolve_selection_position(&selection, &agents, &locations, &module_visual_entities)

@@ -10,28 +10,31 @@ export function createWorldViewClient({ request, onChange = () => {} }) {
   const publish = patch => { state = { ...state, ...patch }; onChange(state); };
   return {
     state: () => state,
+    invalidate() { generation += 1; },
     reset(nextScope, worldId = null) { generation += 1; scope = nextScope; expectedWorld = worldId; publish({ view: null, loading: false, stale: false, error: null }); },
     async query(query = {}) {
       const current = ++generation, currentScope = scope;
       const active = () => current === generation && currentScope === scope;
       const requestGeneration = String(current);
+      const pageSize = Math.min(200, query.page_size || 200);
       publish({ loading: true, error: null });
-      let first = null, cursor, entities = new Map(), seen = new Set(), pages = 0;
+      let first = null, cursor, entities = new Map(), relations = new Map(), seen = new Set(), pages = 0;
       const deadline = Date.now() + 30000;
       try {
         do {
           if (++pages > 20 || Date.now() > deadline) throw Error('World view request budget exceeded');
-          const page = await request({ ...query, page_size: Math.min(200, query.page_size || 200), request_generation: requestGeneration, ...(cursor ? { cursor } : {}) });
+          const page = await request({ ...query, page_size: pageSize, request_generation: requestGeneration, ...(cursor ? { cursor } : {}) });
           if (!active()) return null;
           if (page?.unavailable_reasons?.length && page.completeness === 'unknown') throw Error('World view scope unavailable');
           if (expectedWorld && page?.world_id !== expectedWorld) throw Error('World view world binding mismatch');
           if (!page || !Array.isArray(page.entities) || !page.world_id || !page.source_cut || page.request_generation !== requestGeneration) throw Error('World view response binding mismatch');
           if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 2 * 1024 * 1024) throw Error('World view page byte budget exceeded');
-          if (page.entities.length > 200 || (first && binding(first) !== binding(page))) throw Error('World view page binding mismatch');
+          if (page.entities.length + (page.relations?.length || 0) > pageSize || (first && binding(first) !== binding(page))) throw Error('World view page binding mismatch');
           first ||= page;
           if (page.source_frozen) {
             first = { ...first, source_frozen: true };
             entities = new Map([...entities].map(([key, entity]) => [key, entity.provenance?.freshness === 'current' ? { ...entity, provenance: { ...entity.provenance, freshness: 'last_known', reason: 'frozen_pagination_cut' } } : entity]));
+            relations = new Map([...relations].map(([key, relation]) => [key, relation.freshness === 'current' ? {...relation, freshness:'last_known'} : relation]));
           }
           for (let entity of page.entities) {
             if (first.source_frozen && entity.provenance?.freshness === 'current') entity = { ...entity, provenance: { ...entity.provenance, freshness: 'last_known', reason: 'frozen_pagination_cut' } };
@@ -40,11 +43,22 @@ export function createWorldViewClient({ request, onChange = () => {} }) {
             if (entities.has(key) && JSON.stringify(entities.get(key)) !== JSON.stringify(entity)) throw Error('World view conflicting entity');
             entities.set(key, entity);
           }
-          if (entities.size > 1000) throw Error('World view entity budget exceeded');
+          if (page.relations != null && !Array.isArray(page.relations)) throw Error('World view relations unavailable');
+          for (let relation of page.relations || []) {
+            if (!relation.relation_id) throw Error('World view relation identity missing');
+            if (first.source_frozen && relation.freshness === 'current') relation = {...relation, freshness:'last_known'};
+            if (relations.has(relation.relation_id) && JSON.stringify(relations.get(relation.relation_id)) !== JSON.stringify(relation)) throw Error('World view conflicting relation');
+            relations.set(relation.relation_id, relation);
+          }
+          if (entities.size + relations.size > 1000) throw Error('World view object budget exceeded');
           cursor = page.next_cursor || null;
           if (cursor && seen.has(cursor)) throw Error('World view cursor cycle');
           if (cursor) seen.add(cursor);
-          publish({ view: { ...first, entities: [...entities.values()], next_cursor: cursor, completeness: cursor ? 'partial' : page.completeness }, stale: false });
+          publish({ view: { ...first, entities: [...entities.values()], relations: [...relations.values()], next_cursor: cursor, completeness: cursor ? 'partial' : page.completeness }, stale: false });
+          if (cursor && entities.size + relations.size + pageSize > 1000) {
+            publish({view:{...state.view,completeness:'partial',budget_limited:true},loading:false});
+            return state.view;
+          }
         } while (cursor);
         if (active()) { publish({ loading: false }); return state.view; }
         return null;
@@ -62,6 +76,7 @@ export function worldViewPosition(entity, view, stale = false, allowDerived = fa
   if (stale || p?.freshness !== 'current' || p?.valid_at_source_cut !== view?.source_cut || !(p?.geometry_source === 'authoritative' || (allowDerived && p?.geometry_source === 'location_derived'))) return null;
   const point = entity.position;
   if (!point) return null;
+  if (!['x_cm','y_cm','z_cm'].every(key => typeof point[key] === 'number' || (typeof point[key] === 'string' && /^-?(0|[1-9]\d*)$/.test(point[key])))) return null;
   const converted = Object.fromEntries(['x_cm','y_cm','z_cm'].map(k => [k, Number(point[k])]));
   return Object.values(converted).every(Number.isSafeInteger) ? converted : null;
 }
@@ -91,4 +106,14 @@ export function createWorldViewTransport({ send, timeoutMs = 10000, getScope = (
     },
     clear() { for (const item of pending.values()) { clearTimeout(item.timer); item.reject(Error('World view scope disconnected')); } pending.clear(); },
   };
+}
+
+// Text can retain disclosed unavailable routes; drawing remains a Rust authority check.
+export function worldViewRelations(view) {
+  const entities = new Set((view?.entities || []).map(entity => `${entity.kind}:${entity.entity_id}`));
+  return (view?.relations || []).filter(relation => relation.relation_id
+    && relation.kind === 'logistics_route' && relation.source_class === 'runtime_projection'
+    && relation.valid_at_source_cut === view.source_cut
+    && entities.has(`${relation.from?.kind}:${relation.from?.id}`)
+    && entities.has(`${relation.to?.kind}:${relation.to?.id}`));
 }
