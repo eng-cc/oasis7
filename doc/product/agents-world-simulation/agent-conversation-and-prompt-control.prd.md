@@ -107,10 +107,10 @@ Trace ID: O7-REQ-a82f1ee8-9d70-442c-9972-5f49f6665293
 - 功能点：[REQ-PROMPT-002](#req-prompt-002)；适用范围沿本条原条件与 [AC-PROMPT-002](#ac-prompt-002)，不扩大入口或阶段。
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“对话、预设、本地草稿及持续配置的技术消费”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清对话、预设、本地草稿及持续配置的技术消费的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现状态：部分实现
+- 实现与验证依据：[software-safe聊天、草稿与独立预览/应用入口](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_app.jsx#L3450-L3606)及[草稿与权威刷新隔离](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_prompt_control_module.js#L139-L166)确认聊天输入和Prompt草稿分开，编辑只置dirty，预览/应用由独立操作触发。[权威snapshot后刷新测试](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/viewer_prompt_control_protocol.test.jsx#L412)是测试定义，本轮未运行；[历史runtime交付#3686](https://github.com/nil-studio/oasis7/pull/3686)只证明原runtime/Agent子集，不能代签当前UI全范围。
+- 核对日期与基线：2026-10-17；需求、设计与静态实现固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；历史执行候选、入口和环境分别按上列记录限定。本轮只读核查，未运行测试、模型、浏览器或部署。
+- 剩余范围：已确认software-safe聊天/Prompt草稿及预览/应用分离；预设填充、全部适用入口的持续配置语义与玩家区分效果仍待逐项源码及同候选验收，保留原设计未核实边界。
 
 - 适用条件：玩家查看、填充、编辑或发送内容。
 - 要求：入口必须区分一次对话、预设填充、本地草稿和持续 Prompt/目标调整；填充或编辑不得被呈现为已发送或已应用。

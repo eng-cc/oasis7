@@ -102,9 +102,9 @@ Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；唯一要求声明：[
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-pending-design)；待决恢复已有目标设计；通用 pending 持久字段、消费者反馈与真实恢复范围仍须核对。
 - 实现状态：未核实
-- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
-- 剩余范围：设计方面，待决恢复已有目标设计；通用 pending 持久字段、消费者反馈与真实恢复范围仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+- 实现与验证依据：已核到 Agent chat 的 proposed/submitted/accepted 持久状态及 provider 回应不生成世界效果的局部定义；它不是 finality 不可用时通用签名 intent 的待决合同。 [crates/oasis7/src/runtime/world/agent_intent.rs L382-L580](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_intent.rs#L382-L580)；[doc/world-runtime/design.md](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/design.md)。测试定义：[crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs L110-L605](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs#L110-L605)。[相关历史交付/跟踪 #3612](https://github.com/nil-studio/oasis7/pull/3612)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计方面，待决恢复已有目标设计；通用 pending 持久字段、消费者反馈与真实恢复范围仍须核对；本轮实现与验证细化：通用 pending 在 finality 缺失/陈旧/无法验证时的无效果、恢复按当时权限与前置条件重裁决，以及玩家/Agent/入口只从 committed receipt 更新结论仍未核清。
 
 签名 intent 在 finality 不可用、陈旧或无法验证时必须保持可读的无效果待决；恢复后按当时有效权限和前置条件重新裁决，只有 committed receipt 才能更新玩家、Agent 或入口的世界结论。
 
@@ -127,10 +127,10 @@ finality 中断样例能区分仍待决、被拒绝/过期、须重新规划和�
 - 适用范围：本条要求及对应 AC-DWE-003，保留原文入口、前置条件及测试层级。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-lineage-design)；互斥胜者已有目标设计；专业互斥标记、持久原子处置与跨消费者竞态仍须核对。
-- 实现状态：未核实
-- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
-- 剩余范围：设计方面，互斥胜者已有目标设计；专业互斥标记、持久原子处置与跨消费者竞态仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+- 实现状态：部分实现
+- 实现与验证依据：Agent chat 已实现明确 replaces_intent_id 关联、旧请求 superseded 记录与精确 replay 检查。 [crates/oasis7/src/runtime/world/agent_intent.rs L382-L580](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_intent.rs#L382-L580)。测试定义：[crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs L110-L605](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs#L110-L605)。[相关历史交付/跟踪 #3612](https://github.com/nil-studio/oasis7/pull/3612)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计方面，互斥胜者已有目标设计；专业互斥标记、持久原子处置与跨消费者竞态仍须核对；本轮实现与验证细化：这是单一 chat intent 槽位的替代，不能证明通用互斥 lineage 的首个有效 receipt 原子胜出；撤回竞态、拒绝/过期仅终止自身及独立 intent 并发仍未核清。
 
 被专业域标记为互斥成员的原请求、撤回或 replacement 必须共享可读 lineage，并由首个有效 committed receipt 原子决定唯一胜者；拒绝或过期只终止自身，独立且未标记互斥的 intent 不被无故取消。
 
@@ -153,11 +153,11 @@ Trace refs: O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6；唯一要求声明：[
 - 适用范围：本条要求及对应 AC-DWE-004，保留原文入口、前置条件及测试层级。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 承接条款](../../world-runtime/design.md#runtime-version-design)；选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对。 补充局部依据：[builtin 工件身份](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-artifact-version-binding)、[identity 完整性](../../p2p/consensus/builtin-wasm-identity-consensus.design.md#builtin-identity-contract)；仅可验证工件子范围，不能替代 canonical block activation 或历史 replay。
-- 实现状态：未核实
-- 实现与验证依据：本轮仅核对文档关系；尚未核实覆盖本条全部验收的当前实现提交、环境与实际执行记录。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本及运行环境未核实；入口与验收范围为本条原文。
+- 实现状态：部分实现
+- 实现与验证依据：FormalReadPublication 将当前 runtime manifest digest 与 canonical record 的 governing_manifest_digest 对照，不一致拒绝发布读面；版本/manifest 绑定已有真实局部实现。 [crates/oasis7/src/world_service/formal_read_service.rs L20-L49](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_service.rs#L20-L49)；[crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)。测试定义：[crates/oasis7/src/world_service/formal_read_adapter_tests.rs L11-L74](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_adapter_tests.rs#L11-L74)。[相关历史交付/跟踪 #4683](https://github.com/nil-studio/oasis7/pull/4683)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
 - 新增局部设计关系核对：2026-10-15；`4e94163a3dff9ba69f6959b406ca3fcedf8aa097` 与本次文档候选；仅核对上述新增局部设计关系，不新增行为验证，既有实现与运行证据基线不变。
-- 剩余范围：设计方面，选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对；实现与验证方面，全部适用 AC 的同候选证据仍未核实。
+- 剩余范围：设计方面，选版与历史回放已有目标设计；激活证明、工件可用性和跨版本替代的完整组合仍须核对；本轮实现与验证细化：完整 canonical activation before/at/after、历史原版本工件 replay、缺/冲突 activation proof、混合版本与跨版本替代仍未核清；读面绑定不等于执行选版全合同。
 
 intent 的 governing version 必须由其首次进入已 committed、finality-verified 的 canonical execution block 与 manifest activation boundary 决定；客户端 compatibility declaration、提交时间、本地版本或 candidate block 不能选择世界规则。已确认历史按原 block 的 manifest replay，激活证据缺失或冲突时 fail closed。
 

@@ -156,11 +156,13 @@ Trace ID: O7-REQ-f9218cff-4a0e-4a40-8a2f-133d9c824385
 - 系统设计状态：部分覆盖
 - 系统设计依据：[官网专业设计](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)已承接：concept/illustrative/runtime_capture 与小说类型分离，目标/概念不冒充真实运行来源；同 Trace 五列承接与六列验证限定网站子范围。 [认领经济四层边界](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)原接收保留。 [测试 benchmark 局部边界](../../testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md#des-bench-public-categories)仅承接历史事实、目标、假设与证据范围分离；不覆盖全渠道发布、撤回、LiveOps 审核或四层全域验收，不改变本卡实现状态和既有证据。
 - 实现状态：未核实
-- 实现与验证依据：按 AC 审核四层字段与可发布条件；专业认领边界仅为一项输入，待取得完整公开 claim 审核记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 实现与验证依据：官网概念/真实案例/小说标签、历史testnet claims review可定位；未核清每个拟发布claim四层字段及publish_ready审批接线，故保留未核实。 [素材来源分离设计](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)；[中文首页构图、概念图与固定案例来源](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/site/index.html#L85-L117)；[历史窗口允许与禁止claim记录](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md#L1-L44)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：已核对认领经济及官网来源子范围，其他专业领域、全渠道发布与审核的组合承接未核清；实现：未取得同证据窗口的全量文案审核及发布记录。
+- 剩余范围：设计：已核对认领经济及官网来源子范围，其他专业领域、全渠道发布与审核的组合承接未核清；实现：未取得同证据窗口的全量文案审核及发布记录。 本次实现核对剩余：所有拟发布文案逐条事实/目标/假设/证据边界以及根README、专业authority、QA同窗审核与发布记录；7月历史pass不续签10月。
 
 - 设计复核日期与基线：2026-10-15；`dffd797f` 文档候选；设计剩余：其他专业领域、非官网渠道及全部公开审核仍外部。不改变本卡固定源码与已取得实现范围。
+
+- 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
 <a id="ac-entry-claim-003"></a>
 ### AC-ENTRY-CLAIM-003：目标或假设不会伪装成当前事实

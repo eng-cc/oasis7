@@ -167,10 +167,10 @@
 - 引用定位与组合边界：O7-REQ-0bb14512-622e-48fc-879f-bd9f00127b39（[REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)）；O7-REQ-792f38f5-82d4-47bc-8b1f-e4d4568e1b46（[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：部分覆盖
 - 系统设计依据：合法 profile、持久提交和交接的 [P2P 编排](../../p2p/design.md#des-p2p-authority-profiles)、[目标 BFT 证书验证](../../p2p/design.md#des-p2p-target-bft)及 [runtime 证明绑定](../../world-runtime/design.md#runtime-deterministic-design)已有明确接收；错误 profile/epoch/证书拒绝与 H/H+1 不可撤回分别保留。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：设计：BFT lock/unlock、timeout/new-round、anti-double-sign、集合转换和分区恢复的完整算法/接口仍未闭合；受控权威目标设计不代签真实旧写者隔离或独立故障域执行。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+- 实现状态：部分实现
+- 实现与验证依据：正式读面 canonical cut 绑定、执行桥 committed height 连续性，以及 prototype validator membership/stake 拒绝代码已交付。 [crates/oasis7/src/world_service/formal_read_service.rs L20-L49](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_service.rs#L20-L49)；[crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs L336-L438](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs#L336-L438)；[crates/oasis7_consensus/src/node_pos.rs L99-L169](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_consensus/src/node_pos.rs#L99-L169)。测试定义：[crates/oasis7/src/world_service/formal_read_adapter_tests.rs L11-L74](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_adapter_tests.rs#L11-L74)；[crates/oasis7_proto/src/distributed_finality_tests.rs L211-L340](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_proto/src/distributed_finality_tests.rs#L211-L340)。[相关历史交付/跟踪 #4683](https://github.com/nil-studio/oasis7/pull/4683)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计：BFT lock/unlock、timeout/new-round、anti-double-sign、集合转换和分区恢复的完整算法/接口仍未闭合；受控权威目标设计不代签真实旧写者隔离或独立故障域执行；本轮实现与验证细化：单权威双故障域持久/旧写者隔离、BFT quorum/round、合法 profile 激活与错误 profile/epoch/证书的整条组合未核清；不能汇总局部验证器为完整唯一权威历史。
 
 - 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
 
@@ -188,9 +188,9 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[角色隔离](../../p2p/design.md#des-p2p-layer-authority)和[复制边界](../../p2p/design.md#des-p2p-replication-scope)明确非权威服务只供材料、不取得投票/写入权；[恢复设计](../../p2p/design.md#des-p2p-target-recovery)明确 pruning 前的可重建、hash/root 与冗余 archive 条件。
 - 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：设计：完整角色存储/serving 接口、archive 可用性和 pruning 联合判定仍未核实；运行权限负例及同窗口运维事实另验。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+- 实现与验证依据：已定位 NodePos validator map 与正式 proof 读取，但本 SC 同时要求 full/state-sync/archive/light/service 的复制、存储、验证及 pruning 约束。 [crates/oasis7_consensus/src/node_pos.rs L99-L169](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_consensus/src/node_pos.rs#L99-L169)；[crates/oasis7/src/world_service/formal_read_service.rs L20-L49](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_service.rs#L20-L49)；[doc/p2p/design.md L24-L56](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/p2p/design.md#L24-L56)。测试定义：[crates/oasis7_proto/src/distributed_finality_tests.rs L211-L340](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_proto/src/distributed_finality_tests.rs#L211-L340)。未核到可精确归属本条全部义务的实际交付 PR/Task；不虚构。；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计：完整角色存储/serving 接口、archive 可用性和 pruning 联合判定仍未核实；运行权限负例及同窗口运维事实另验；本轮实现与验证细化：各角色真实接口、隔离和存储职责、pruning 前可重建/hash-root/冗余 archive 可用性及权限负例未形成逐项实现对照和同窗口运行证据。
 
 - 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
 
@@ -245,10 +245,10 @@
 - 引用定位与组合边界：O7-REQ-4fcbad4f-f576-4bcf-b4fc-b027967b0405（[REQ-DWE-002](deterministic-world-execution.prd.md#req-dwe-002)）；O7-REQ-78948fd8-29dc-4e9b-8a38-321ed37b7ad6（[REQ-DWE-003](deterministic-world-execution.prd.md#req-dwe-003)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[pending](../../world-runtime/design.md#runtime-pending-design)与 [lineage 原子处置](../../world-runtime/design.md#runtime-lineage-design)已有重审、唯一有效胜者、原子终止其他成员、拒绝/过期只终止自身和独立并发条款；[原决定接收](../../world-runtime/design.md#runtime-controlled-candidate-recovery-receiver)区分未知提交与已知无效果。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：设计：通用 pending 持久字段、domain 互斥标记/排序及 consumer 状态 DTO 尚待批准；跨读面原请求/替代关联与所有恢复竞态的实际执行未证明。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+- 实现状态：部分实现
+- 实现与验证依据：Agent chat 持久状态、显式替代关联、精确 replay 与 provider 回应不自动变成世界效果已有局部实现/回归定义。 [crates/oasis7/src/runtime/world/agent_intent.rs L382-L580](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/agent_intent.rs#L382-L580)。测试定义：[crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs L110-L605](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/agent_intent_v2/lifecycle.rs#L110-L605)。[相关历史交付/跟踪 #3612](https://github.com/nil-studio/oasis7/pull/3612)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计：通用 pending 持久字段、domain 互斥标记/排序及 consumer 状态 DTO 尚待批准；跨读面原请求/替代关联与所有恢复竞态的实际执行未证明；本轮实现与验证细化：同一版本化协议的游戏/Agent/玩家 committed-only 消费、通用 finality pending 重审、有效 receipt 唯一胜者和独立 intent 并发的组合未核清，不能用 chat 局部代签。
 
 - 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
 
@@ -283,10 +283,10 @@
 - 引用定位与组合边界：O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4（[REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)）；O7-REQ-ee563883-fe1d-4192-b58b-53251d32920b（[REQ-DCS-005](distributed-consensus-and-state-availability.prd.md#req-dcs-005)）。组合范围仍以本 SC 原文为准，不能由一项叶子完成代表全部义务。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[P2P 服务闸门](../../p2p/design.md#des-p2p-target-service-gate)、[runtime 恢复](../../world-runtime/design.md#runtime-recovery-design)与[日志后缀独立续跑](../../world-runtime/design.md#runtime-journal-suffix-recovery-design)分别承接只读/可服务/隔离、闸门回退、receipt 0/1 和非空历史后正向对照。
-- 实现状态：未核实
-- 实现与验证依据：尚未核实本 SC 全部适用义务的当前实现版本、同候选组合运行及实际验收证据；历史文档接收不构成此证明。
-- 核对日期与基线：2026-10-14；需求基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现版本和运行环境未核实；验收范围保留本 SC 原文及原测试层级。
-- 剩余范围：设计：DC-5 状态转换、manifest/head 负例、逐 intent receipt 与 consumer blocker/下一步的结构化 attachment/schema 仍待 owner 批准；正向新请求和模块行动续跑、合法新配方以及同候选/同窗口组合未执行。 实现与验证仍按本卡独立状态及 §5.1 原测试层级判定；不以设计接收或局部结果代签完整组合。
+- 实现状态：部分实现
+- 实现与验证依据：recovery predecessor 从不变 origin 顺序 replay 到精确 checkpoint，越过目标或缺历史拒绝；正式发布另外校验 canonical cut 与 manifest。 [crates/oasis7/src/world_service/formal_recovery_lineage.rs L12-L33](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_recovery_lineage.rs#L12-L33)；[crates/oasis7/src/world_service/formal_read_service.rs L20-L49](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_read_service.rs#L20-L49)。测试定义：[crates/oasis7/src/world_service/formal_recovery_lineage_tests.rs](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/world_service/formal_recovery_lineage_tests.rs)。[相关历史交付/跟踪 #4838](https://github.com/nil-studio/oasis7/issues/4838)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计：DC-5 状态转换、manifest/head 负例、逐 intent receipt 与 consumer blocker/下一步的结构化 attachment/schema 仍待 owner 批准；正向新请求和模块行动续跑、合法新配方以及同候选/同窗口组合未执行；本轮实现与验证细化：恢复只读不等于重新可写；四状态及回退、当前条件重审、非空 tail 后 action allocator/module schedule 与不中断对照及合法新配方完成仍缺同候选证明，J1/J2 由现有 #4838 承接。
 
 - 设计复核日期与基线：2026-10-15；规范化候选基于 `dffd797f`；逐项审读 §5.2 及其 P2P/runtime/QA 接收，不改变上述实现源码或运行证据基线。
 
@@ -320,9 +320,9 @@
 - 系统设计状态：部分覆盖
 - 系统设计依据：[world-runtime 相关承接](../../world-runtime/design.md#runtime-industrial-outage-design)；八格outage的独立失败边界和验收分层已有runtime精确承接；工业通用字段、consumer DTO及同候选证据合同仍待闭合。
 - 实现状态：未核实
-- 实现与验证依据：尚未核清本条八格独立义务的当前实现及同候选运行证据；设计承接见上，不能作为实现或通过记录。[核验任务](https://github.com/eng-cc/oasis7/issues/4695)。
-- 核对日期与基线：2026-10-15；需求与实现源码 `ef28aa8461e45fe277ca2ec28b485a1c9a0ac0ad`；GitHub 固定源码审读；入口与已核对范围见上，未执行运行、浏览器、部署或真人验收；本条原验收条件与层级不变。
-- 剩余范围：设计仍按上述准确承接及其未覆盖边界；实现与验证方面，字段与全消费者具体实现未闭合；required确定性八格/active-provider API和full真实provider Agent/外部headed浏览器分别尚无本基线完整执行证据。
+- 实现与验证依据：已核对 runtime-industrial-outage-design 的目标承接；execution driver 有 committed context 与原子失败处理，但这不是四个工业边界八格 outage 的实现或运行证明。 [doc/world-runtime/design.md](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/design.md)；[crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs L336-L438](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs#L336-L438)。测试定义：仅设计/脚本入口，尚未核到足以覆盖本条的独立测试定义。。[相关历史交付/跟踪 #4695](https://github.com/nil-studio/oasis7/issues/4695)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仍按上述准确承接及其未覆盖边界；本轮实现与验证细化：stage_finish/transit/buffer_admission/terminal_settlement 的成对 authority/read-surface outage、W/数量/lineage/receipt、Agent/Viewer/API parity、真实 provider 和 headed full 证据均未逐格核清。
 
   - **权威 finality/append/execution/industrial-service outage：** 在 committed finality 前注入时不得产生 root、hold、sink、WIP、物流 credit、产出、资格或 `W` 进度；在 root 已提交但下一 child effect 尚未形成时注入，保留既有 root、window/lease lineage、已消费/仍占用投入、WIP、在途/到达数量与 receipts，不产生第二次 child effect、delivery credit、隐式续租、优先级刷新或奖励。恢复必须从 fresh authoritative snapshot 重新校验，并最多沿同一 root 形成一次 continuation/hold/defer/reject/expire/compensation disposition；若 gameplay authority 为当前未完成 candidate 形成 canonical interruption disposition，只允许该 disposition 将 `W` reset 一次，历史里程碑与既有 receipts 不变，因果变化才建立 linked revision/child root。
   - **非权威 Viewer/API/hosting/read-surface outage：** 在 canonical service 可继续或已提交结果可读取的样例中注入读面不可用；注入本身不得改变 world state、root、投入/数量、window/lease lineage、`W`、receipts、历史里程碑或 `progression_effect`。Viewer、Agent 与 pure API 先表达 `stale/unknown`，重连后从 authoritative snapshot/journal 只 reconcile 真实 committed 结果，不补发、回滚、续租、重置 `W` 或生成第二次 sink/credit/reward；若权威执行在读面不可用期间完成，三类读面必须一致呈现其真实状态而不伪造 outage 处置。
@@ -362,10 +362,10 @@ Trace ID: O7-REQ-7a3866ed-cd66-48ea-9cc7-bb793575c957
 - 来源与独立验收：[SC-3、AC-1、PRD-WORLD_RUNTIME-016、DEC-OMR-001](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-1](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-1)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[生产模块来源受治理清单约束接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：builtin loader 优先读取 online manifest hashes，生产 fallback policy 关闭时缺条目拒绝；但进入 host materializer 后仍按 hash 尝试 fetch 与本地 compile。 [crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)；[crates/oasis7_wasm_materializer/src/lib.rs L78-L130](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_wasm_materializer/src/lib.rs#L78-L130)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：生产来源约束不能只由外层 action gate 证明；materializer 的 policy/identity/receipt 输入与生产 fallback 限制尚须闭合，同候选 AC-1 未取得运行证据。
 
 <a id="req-infra-release-identity"></a>
 #### REQ-INFRA-RELEASE-IDENTITY：生产模块身份与签名合法性
@@ -377,10 +377,10 @@ Trace ID: O7-REQ-d01cf80e-1172-4963-8bc0-877dc9de8e00
 - 来源与独立验收：[SC-1、AC-2/3、NFR-OMR-4、DEC-OMR-002](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-2](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-2)、[AC-3](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-3)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[生产模块身份与签名合法性接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：manifest identity 解析在禁止 fallback 时缺身份拒绝；release shadow 对缺失与未签 identity 的回归定义已存在。 [crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)；[crates/oasis7_wasm_materializer/src/lib.rs L78-L130](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_wasm_materializer/src/lib.rs#L78-L130)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L4-L95](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L4-L95)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：加载链从 manifest 到 artifact signature、signer trust root 的全部生产入口仍须完整核对；materializer 不直接接收 identity/policy，误接纳率0不能由负例定义代签。
 
 <a id="req-infra-release-certificate"></a>
 #### REQ-INFRA-RELEASE-CERTIFICATE：发布批准必须来自合法外部证书
@@ -392,10 +392,10 @@ Trace ID: O7-REQ-1440a1a4-3240-4644-8ada-bf9a34771465
 - 来源与独立验收：[SC-2、AC-4/8/9、PRD-WORLD_RUNTIME-017、DEC-OMR-003](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-source-and-trust)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-4](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-4)、[AC-8](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-8)、[AC-9](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-9)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[发布批准必须来自合法外部证书接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：governance certificate 校验 proposal/manifest/height/epoch/set hash/stake root/阈值、成员与 Ed25519 签名；生产 install/upgrade/rollback/apply 的缺 finality 拒绝与合法证书路径有回归定义。 [crates/oasis7/src/runtime/world/governance_internal.rs L420-L590](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L590)；[crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：完整外部 certificate 供给、所有生产应用路径不可本地派生自签、同候选外部信任材料与 AC-4/8/9 实际运行仍待核清；当前 prototype 不等于正式 BFT。
 
 <a id="req-infra-release-attestation-authorization"></a>
 #### REQ-INFRA-RELEASE-ATTESTATION-AUTHORIZATION：发布证明聚合满足当前授权门槛
@@ -407,10 +407,10 @@ ModuleReleaseApply 必须按当前 epoch 快照 signer 集聚合 attestation，�
 - 来源与独立验收：[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-14)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[发布证明聚合满足当前授权门槛接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：apply 按 current governance epoch snapshot 筛选 signer、集合去重、累计 stake，同时检查 min_unique_signers 与 threshold_bps；不足会 ActionRejected，随后才进入安装路径。 [crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：需要同候选对当前/过期/非成员 signer、阈值不足不激活，以及 attestation 与外部 finality 两个独立必要条件的组合运行；现有权重测试定义不代替整组 AC-14。
 
 <a id="req-infra-release-release-triage"></a>
 #### REQ-INFRA-RELEASE-RELEASE-TRIAGE：发布阻断故障可分诊
@@ -422,10 +422,10 @@ Trace ID: O7-REQ-a5a2d539-b2c8-42dd-83e0-a6108b5ab288
 - 来源与独立验收：[AC-15、Technical Specifications 原 Edge Cases / S11](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-15](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-15)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[发布阻断故障可分诊接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：S11 有证明冲突、阈值不足、manifest 不可达/回滚/漂移的信号、阻断与处置；对应 runtime fault_signature/threshold 拒绝和 acceptance 脚本存在。 [testing-manual.md L1199-L1277](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/testing-manual.md#L1199-L1277)；[crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)；[crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)；[scripts/module-release-node-acceptance.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/module-release-node-acceptance.sh)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：尚需同候选实际三类故障注入/原始日志及可执行分诊结果；S11 阈值示例仍用 threshold/aggregated_signers 旧形态，当前代码另含 min_unique_signers/threshold_bps，须确认检索和值守判定不依赖整句模板。
 
 <a id="req-infra-release-ci"></a>
 #### REQ-INFRA-RELEASE-CI：生产发布不依赖 CI
@@ -438,9 +438,9 @@ Trace ID: O7-REQ-c9c94faf-43bb-474c-8cf9-7ed1441e5494
 - 系统设计状态：部分覆盖
 - 系统设计依据：[生产发布不依赖 CI接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
 - 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现与验证依据：node-side flow 支持本地采集/导入、证据打包及可选提交；S11 声明主 CI 仅回归和对账。 [scripts/module-release-node-attestation-flow.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/module-release-node-attestation-flow.sh)；[testing-manual.md L1199-L1277](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/testing-manual.md#L1199-L1277)；[doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md L54-L112](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#L54-L112)。测试定义：[crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs L65-L270](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs#L65-L270)。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：实际 CI 不可用时完整生产发布、外部 worker/阈值签名与审计链，以及 CI 不持有生产写入/激活判定权的全部实现边界未核清；脚本可调用不等于独立生产闭环。
 
 <a id="req-infra-release-participation"></a>
 #### REQ-INFRA-RELEASE-PARTICIPATION：合规节点可触发并提交发布证据
@@ -452,10 +452,10 @@ Trace ID: O7-REQ-c1427344-798f-47f1-9dab-790fd3693cf7
 - 来源与独立验收：[SC-4/7、AC-5/16、PRD-WORLD_RUNTIME-018](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-5](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-5)、[AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-16)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[合规节点可触发并提交发布证据接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：node-side attestation HTTP handler 做字段归一、RuntimeAction 编码并提交共识队列；本地 flow 支持证据打包与提交。 [crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api.rs L96-L171](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api.rs#L96-L171)；[scripts/module-release-node-attestation-flow.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/module-release-node-attestation-flow.sh)。测试定义：[crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs L65-L270](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs#L65-L270)。[相关历史交付/跟踪 #4820](https://github.com/nil-studio/oasis7/pull/4820)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：合规节点从提案到复构建/阈值签名/归档的完整自动流水、可信身份和计阈资格，以及无 CI/无手改状态的端到端仍未核清；ACK 仅接收。
 
 <a id="req-infra-release-reproducibility"></a>
 #### REQ-INFRA-RELEASE-REPRODUCIBILITY：发布构建按平台可复现
@@ -467,10 +467,10 @@ Trace ID: O7-REQ-f25099a9-5f30-466e-939a-48ac57cbead2
 - 来源与独立验收：[SC-5、AC-7](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-7](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-7)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[发布构建按平台可复现接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：summary verifier 校验同 module 的 build hash 与 manifest hash、identity/receipt 集合和 canonical platform/build recipe；flow 可要求 cross-host-closed。 [scripts/ci-verify-m1-wasm-summaries.py L94-L159](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/ci-verify-m1-wasm-summaries.py#L94-L159)；[scripts/module-release-node-attestation-flow.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/module-release-node-attestation-flow.sh)。测试定义：仅设计/脚本入口，尚未核到足以覆盖本条的独立测试定义。。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：节点实际同平台重复构建、跨平台 keyed token 适用性、不可复现结果阻断生产上线与最终签名合法性组合未核清；比较现成 summary 不是完成复构建。
 
 <a id="req-infra-release-evidence"></a>
 #### REQ-INFRA-RELEASE-EVIDENCE：发布证据完整可追溯与可回放
@@ -482,10 +482,10 @@ Trace ID: O7-REQ-80d9506a-b1e5-4ac2-8d68-eb73ecfccd51
 - 来源与独立验收：[SC-7、AC-5/10/13/17、AC-14/15 的证明绑定与审计子范围、NFR-OMR-2](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-node-release)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-5](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-5)、[AC-10](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-10)、[AC-13](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-13)、[AC-14](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-14)、[AC-15](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-15)、[AC-17](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-17)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[发布证据完整可追溯与可回放接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-node-evidence-receiver)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：proof 打包脚本按附件 SHA-256 建 canonical payload/proof_cid 与 submit request；runtime 拒绝冲突 attestation 并保留首条，apply 比较证明身份元组。 [scripts/package-module-release-attestation-proof.sh L168-L260](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/package-module-release-attestation-proof.sh#L168-L260)；[crates/oasis7/src/runtime/world/module_actions/release_request_support.rs L440-L499](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_request_support.rs#L440-L499)；[crates/oasis7/src/runtime/world/module_actions/release_support.rs L251-L435](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/module_actions/release_support.rs#L251-L435)。测试定义：[crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs L706-L1065](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs#L706-L1065)。[相关历史交付/跟踪 #4331](https://github.com/nil-studio/oasis7/pull/4331)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：完整提案/证明/清单/签名/证书/高度的100%链路、归档原件读回和回放、迁移映射与同候选实际运行尚未核清；ACK 和哈希字段不代签外部归档可用性。
 
 <a id="req-infra-release-convergence"></a>
 #### REQ-INFRA-RELEASE-CONVERGENCE：信任根版本在既有窗口收敛
@@ -498,9 +498,9 @@ Trace ID: O7-REQ-02b10123-7422-4509-9d04-ea43444890c6
 - 系统设计状态：部分覆盖
 - 系统设计依据：[信任根版本在既有窗口收敛接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
 - 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现与验证依据：finality baseline 脚本定义2 epoch rotation 检查，runtime 有 epoch snapshot 与 signer 校验。 [scripts/oasis7-runtime-finality-baseline.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/oasis7-runtime-finality-baseline.sh)；[crates/oasis7/src/runtime/world/governance_internal.rs L420-L590](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L590)。测试定义：仅设计/脚本入口，尚未核到足以覆盖本条的独立测试定义。。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：所有节点 trust-root 版本/生效高度在至多2 epoch收敛的真实拓扑、窗口、记录与判定未核清；局部 snapshot 校验与脚本存在不能证明该性能/分布式保证。
 
 <a id="req-infra-release-module-latency"></a>
 #### REQ-INFRA-RELEASE-MODULE-LATENCY：缓存命中时模块验证耗时
@@ -513,9 +513,9 @@ Trace ID: O7-REQ-c2a3ca44-d9b3-4ae0-8245-d8f496f38673
 - 系统设计状态：部分覆盖
 - 系统设计依据：[缓存命中时模块验证耗时接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
 - 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现与验证依据：已有 manifest/identity 加载及独立 SLA triad 测试；后者阈值是60000ms，不能替代本条缓存命中单模块验证p95<=200ms。 [crates/oasis7/src/runtime/world/release_manifest.rs L148-L259](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/release_manifest.rs#L148-L259)；[crates/oasis7/tests/module_release_sla_triad.rs L1-L16](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/tests/module_release_sla_triad.rs#L1-L16)；[doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md L54-L112](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#L54-L112)。测试定义：仅设计/脚本入口，尚未核到足以覆盖本条的独立测试定义。。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：需要原口径 manifest+identity+signature 热缓存测量的同候选、环境、样本/分位数原始记录；本轮未取得，不能从功能源码推出耗时。
 
 <a id="req-infra-release-certificate-latency"></a>
 #### REQ-INFRA-RELEASE-CERTIFICATE-LATENCY：既有快照规模下证书验证耗时
@@ -528,9 +528,9 @@ Trace ID: O7-REQ-8d0fe4a1-7c99-42d2-8b5d-7c4990591993
 - 系统设计状态：部分覆盖
 - 系统设计依据：[既有快照规模下证书验证耗时接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
 - 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现与验证依据：已有 finality cert 验签与 baseline 脚本，脚本描述 stake_root/epoch snapshot 验签 case。 [crates/oasis7/src/runtime/world/governance_internal.rs L420-L590](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/governance_internal.rs#L420-L590)；[scripts/oasis7-runtime-finality-baseline.sh](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/scripts/oasis7-runtime-finality-baseline.sh)；[doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md L54-L112](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#L54-L112)。测试定义：仅设计/脚本入口，尚未核到足以覆盖本条的独立测试定义。。[相关历史交付/跟踪 #4102](https://github.com/nil-studio/oasis7/issues/4102)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：需要100 signer热缓存、单证书校验p95<=50ms 的精确测量范围、配置与原始结果；脚本时长或普通验签通过不能替代，当前记录未核清。
 
 <a id="req-infra-release-diagnostics"></a>
 #### REQ-INFRA-RELEASE-DIAGNOSTICS：节点证明提交结果可分诊
@@ -542,10 +542,10 @@ node-side attestation submit 返回结构化成功或失败响应；无效请求
 - 来源与独立验收：[NFR-OMR-6（submit 响应）、AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#sr2-product-release-quality)；原 SC/AC/NFR/DEC 正文、正式条件与 test_tier 不变。精确验收定位：[AC-16](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md#ac-16)。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[节点证明提交结果可分诊接收](../../world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation)；仅该独立结果，未闭合专业及跨 owner 组合仍按原条款保留。
-- 实现状态：未核实
-- 实现与验证依据：仅核对本次文档关系与已有局部源定义，未运行该结果的业务测试；专业原文中的 materializer gap、prototype 非 BFT、外部 worker 与同候选完整证明缺口不因登记关闭。
-- 核对日期与基线：2026-10-15；文档基线 a51afcd46c9e949fd4cfa8af84619ace70eeb5bd；实现与实际运行环境未核实。
-- 剩余范围：设计仅为已有目标与有限接收；实现及原完整验收仍未核实。不得将本子条款或固定测试入口当作当前能力、正式环境或公开发布证明。
+- 实现状态：部分实现
+- 实现与验证依据：handler 已逐支实现 invalid_request(400)、payload encode/internal_error(502)、consensus submit_failed(502)及结构化成功 action_id/submitted_at(200)，覆盖原文列举的三类响应分支，但尚不能证明全部失败均结构化返回。 [crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api.rs L96-L171](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api.rs#L96-L171)。测试定义：[crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs L65-L270](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/module_release_attestation_submit_api_tests.rs#L65-L270)。[相关历史交付/跟踪 #4820](https://github.com/nil-studio/oasis7/pull/4820)；本轮仅静态审读，测试定义不等于执行通过，未取得本条全部适用验收的实际运行记录。
+- 核对日期与基线：2026-10-17；需求与实现源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub 固定源码审读，未运行业务、部署或真人验收；入口、原验收条件与测试层级保持本条原文。
+- 剩余范围：设计仅为已有目标与有限接收；本轮实现与验证细化：runtime.lock()失败由map_err后直接?返回String，未走本handler的结构化错误写出；该失败及上层响应链仍须核清，不据此宣称线上故障。现有测试只直接定义归一化、payload编码、bad payload与NoopExecutionHook成功接收；编码失败及队列提交失败的实际故障注入/响应断言和全部原AC运行记录仍缺；不把200解释为finalized/applied。
 
 版本选择、激活证明及原 manifest 历史 replay 继续引用 [REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004) 原身份；本节未重发或扩展它。固定 benchmark 入口、100 signer 测量配置、summary 归档及具体 proof/schema 方法仍为专业验证机制，不另造产品功能或已通过结果。
 

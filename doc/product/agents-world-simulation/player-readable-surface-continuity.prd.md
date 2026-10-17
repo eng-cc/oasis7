@@ -164,10 +164,10 @@ Trace ID: O7-REQ-e3a70494-b3f3-4220-a654-6c9f07cdb8a4
 - 功能点：[REQ-AGENT-SURFACE-004](#req-agent-surface-004)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-004](#ac-agent-surface-004)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-error-code-preservation)：合法鉴权后的业务错误码保真；各失败类别到玩家恢复动作的完整表现承接须另核。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：各失败类别到玩家恢复动作的完整表现承接须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[合法鉴权后builder错误码保真](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/gameplay_submit_api.rs#L275-L295)当前直接返回err.code/err.message，已不再把该分支统一改写为invalid_request。这是HTTP adapter切片，不是所有失败类型的玩家恢复体验。历史[PR#2485 review](https://github.com/nil-studio/oasis7/pull/2485#discussion_r3614431998)保留原问题语境；本轮没有取得此修复的独立运行结果，不将现状静态核对写成测试通过。
+- 核对日期与基线：2026-10-17；需求、设计与静态实现固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；历史执行候选、入口和环境分别按上列记录限定。本轮只读核查，未运行测试、模型、浏览器或部署。
+- 剩余范围：已确认合法鉴权后的builder错误码保真；各失败类别到修正输入、身份/权限、世界条件、等待和安全停止的正式surface映射、未知结果与所有入口验收仍未核清。
 
 - 性质与适用条件：目标要求；适用于本人有权获得的行动拒绝与失败说明。
 - 要求：产品必须保留足以区分修正输入、重新确认身份或权限、补齐世界条件、等待或安全停止的失败含义；已有明确原因不能统一降成“请求错误”或“请重连”。原因不足或结果未知时如实说明，不能编造成功、失败细节或必然有效的重试。
@@ -193,10 +193,10 @@ Trace ID: O7-REQ-e393156d-2326-4d75-a0cb-ffba6ed74e5d
 - 功能点：[REQ-AGENT-SURFACE-005](#req-agent-surface-005)；适用范围沿本条原条件与 [AC-AGENT-SURFACE-005](#ac-agent-surface-005)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#collect-data-preflight-consistency)：CollectData 同一权威状态下预检与提交资格一致；其他受支持行动的适用范围和正式表面反馈须另核。
-- 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：其他受支持行动的适用范围和正式表面反馈须另核。实现/验证：本条全部适用验收尚未完成同候选证据核对。
+- 实现状态：部分实现
+- 实现与验证依据：[CollectData共同授权和资格计算](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/collect_data.rs#L113-L164)确认Preflight/Submit消费同一请求及data_collection_preflight，blocked时拒绝；[精确签名请求测试](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/auth_actions_collect_data.rs#L855)为已读测试定义。[原交付#2485](https://github.com/nil-studio/oasis7/pull/2485)在source cac54892196bfd304401cebc6bb70d2b3ea3d681报告局部测试通过，不能代签当前全部受支持行动；本轮未执行。
+- 核对日期与基线：2026-10-17；需求、设计与静态实现固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；历史执行候选、入口和环境分别按上列记录限定。本轮只读核查，未运行测试、模型、浏览器或部署。
+- 剩余范围：已确认runtime-live CollectData同请求共用资格计算切片；需逐项核清chain/WorldService正式路径、其他已提供preflight的受支持行动及状态漂移时玩家提示，并取得同候选组合验收。
 
 - 性质与适用条件：目标要求；仅适用于已提供提交前检查的受支持行动，不要求所有行动新增检查入口。
 - 要求：对同一经确认身份、同一行动意图与同一权威世界状态，检查对共享资格条件的判断必须与提交时的资格校验一致；无法确认身份或权威状态时明确不可确认或阻塞。检查不得被表达为行动已接受、已执行或已结算，也不保证状态变化后的提交成功。

@@ -113,9 +113,11 @@ Trace ID: O7-REQ-f3f198ce-2afd-4487-a99e-9f371bdd8264
 - 系统设计依据：[逐账号首次绑定与恢复](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)经专业 REQ/AC 承接同世界首次注册、已绑定账号返回及其 blocked/未知结果的逐入口证据和失败恢复；这是后继设计目标，不是已开放准入。
 - 本次补充系统设计依据：[Viewer 决策模式](../../p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md#vl-des-observer)仅承接direct viewer Script observer/debug 与 launcher/gameplay/release 的证据隔离；其余原剩余范围保留，系统设计仍为部分覆盖，原实现状态和历史核对基线不变。
 - 实现状态：未核实
-- 实现与验证依据：按 AC 分别核对 viewer/pure_api 当前入口及证据，加入 alias/另一模式代签负例；待取得逐入口记录。本次文档核对不证明行为验收；未核清该范围实际实现 PR/测试运行。
+- 实现与验证依据：已核对固定首次Agent实现及注册/恢复测试定义，但不覆盖唯一primary mode及所有入口独立事实；不将局部绑定能力换算为本REQ部分实现。 [逐账号注册后继设计](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001)；[当前固定首次Agent入口](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/player_gameplay.rs#L542-L565)；[首次注册/恢复测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/auth_actions_claims.rs#L4-L136)；[direct Script observer设计隔离](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/p2p/viewer-live/oasis7-viewer-live-decision-mode.design.md#vl-des-observer)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
 - 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：viewer/pure_api 入口的唯一模式、阶段、能力及独立证据表达中首次注册/返回以外的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。
+- 剩余范围：设计：viewer/pure_api 入口的唯一模式、阶段、能力及独立证据表达中首次注册/返回以外的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。 本次实现核对剩余：逐入口primary mode、阶段、能力、独立证据及alias/provider/deployment/session不能代签负例。逐账号新准入为明确后继设计目标。
+
+- 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
 <a id="ac-entry-mode-001"></a>
 ### AC-ENTRY-MODE-001：入口证据独立证明模式能力
