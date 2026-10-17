@@ -1,7 +1,7 @@
 use super::pos;
 use crate::runtime::state::LogisticsPathAuthorityV1;
 use crate::runtime::*;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 
 fn register(world: &mut World, id: &str) {

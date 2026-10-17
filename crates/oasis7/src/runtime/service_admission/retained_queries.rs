@@ -5,7 +5,7 @@ use crate::runtime::{
 };
 use std::collections::BTreeMap;
 
-pub(super) fn hot_results(
+pub(crate) fn hot_results(
     world: &World,
 ) -> Result<BTreeMap<String, CanonicalIntentResultV1>, String> {
     world
@@ -36,7 +36,7 @@ fn merge(
     }
     Ok(())
 }
-pub(super) fn owner_chat_nonce_high_water(
+pub(crate) fn owner_chat_nonce_high_water(
     world: &World,
     public_key: &str,
 ) -> Result<Option<u64>, String> {
@@ -47,7 +47,7 @@ pub(super) fn owner_chat_nonce_high_water(
         .read_retained_owner_chat_nonce_high_water(public_key)
         .map_err(|error| error.to_string())
 }
-pub(super) fn agent_chat_goal_results(
+pub(crate) fn agent_chat_goal_results(
     world: &World,
     agent: &str,
     intent_id: &str,
@@ -83,7 +83,7 @@ pub(super) fn agent_chat_goal_results(
     }
     Ok(results)
 }
-pub(super) fn game_task_results(
+pub(crate) fn game_task_results(
     world: &World,
     agent: &str,
 ) -> Result<BTreeMap<String, CanonicalIntentResultV1>, String> {

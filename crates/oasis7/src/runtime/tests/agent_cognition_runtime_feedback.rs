@@ -18,7 +18,7 @@ fn feedback(seq: u64, feedback_id: &str) -> crate::simulator::FeedbackEnvelopeV1
         candidate_action_id: Some(seq),
         runtime_receipt_id: Some(format!("receipt-{seq}")),
         status: "committed".to_string(),
-        request_digest: crate::simulator::h_v1("oasis7.cognition.request.v1", &request_id),
+        request_digest: oasis7_agent_api::h_v1("oasis7.cognition.request.v1", &request_id),
         reject_reason: None,
         provenance: "runtime_authoritative".to_string(),
     }
@@ -95,7 +95,7 @@ fn runtime_feedback_outbox_is_durable_ordered_retryable_and_recoverable() {
 fn runtime_feedback_allocator_owns_sequence_and_exact_replay_identity() {
     let mut world = World::new();
     let request_digest =
-        crate::simulator::h_v1("oasis7.cognition.request.v1", &"runtime-feedback-request")
+        oasis7_agent_api::h_v1("oasis7.cognition.request.v1", &"runtime-feedback-request")
             .to_string();
     let request = RuntimeFeedbackRequestV1 {
         feedback_id: None,
@@ -144,7 +144,7 @@ fn runtime_feedback_allocator_owns_sequence_and_exact_replay_identity() {
 fn runtime_feedback_disposition_mapping_rejects_contradictions_and_bounds_projection() {
     let mut world = World::new();
     let request_digest =
-        crate::simulator::h_v1("oasis7.cognition.request.v1", &"feedback-disposition");
+        oasis7_agent_api::h_v1("oasis7.cognition.request.v1", &"feedback-disposition");
     let contradictory = RuntimeFeedbackRequestV1 {
         feedback_id: None,
         agent_subject: SUBJECT_ID.to_string(),
@@ -195,7 +195,7 @@ fn runtime_feedback_disposition_mapping_rejects_contradictions_and_bounds_projec
             },
             RuntimeFeedbackProjectionV1 {
                 envelope_digest: Some(
-                    crate::simulator::h_v1("oasis7.cognition.envelope.v1", &"projected-envelope")
+                    oasis7_agent_api::h_v1("oasis7.cognition.envelope.v1", &"projected-envelope")
                         .to_string(),
                 ),
                 emitted_events: vec![json!({"kind": "action_committed"})],
@@ -218,7 +218,7 @@ fn runtime_feedback_disposition_mapping_rejects_contradictions_and_bounds_projec
 
     let oversize = RuntimeFeedbackProjectionV1 {
         envelope_digest: Some(
-            crate::simulator::h_v1("oasis7.cognition.envelope.v1", &"feedback-envelope")
+            oasis7_agent_api::h_v1("oasis7.cognition.envelope.v1", &"feedback-envelope")
                 .to_string(),
         ),
         emitted_events: Vec::new(),

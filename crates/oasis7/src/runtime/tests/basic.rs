@@ -1,6 +1,6 @@
 use super::super::*;
 use super::pos;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 #[test]
 fn register_and_move_agent() {

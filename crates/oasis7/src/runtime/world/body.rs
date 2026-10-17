@@ -3,7 +3,7 @@ use super::super::{
     WorldEventId, WorldTime,
 };
 use super::World;
-use crate::models::{BodyKernelView, BodySlotType, CargoEntityEntry};
+use crate::runtime::agent_state::{BodyKernelView, BodySlotType, CargoEntityEntry};
 
 /// Typed reducer delta for a validated body attribute update.
 ///

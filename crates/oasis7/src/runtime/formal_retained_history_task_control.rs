@@ -55,7 +55,7 @@ pub(crate) fn game_task_result_matches(
 pub(crate) fn game_task_result_lookup(
     result: &CanonicalIntentResultV1,
 ) -> Result<Option<GameTaskControlLookupV1>, String> {
-    use crate::world_service::WorldServicePayloadV1;
+    use crate::runtime::service_admission::WorldServicePayloadV1;
     let (agent, owner, generation, key, world, genesis, branch, epoch) =
         match &result.request.signed_payload {
             WorldServicePayloadV1::GameTaskCreate(s) => {

@@ -6,6 +6,16 @@
 - 当前任务状态与变更过程：对应 GitHub task issue / Project 与 Git history
 - 对应文件级索引: `doc/world-runtime/prd.index.md`
 
+## 实现边界与共享值所有权
+
+Runtime 与 Simulator 是并列的执行实现，不通过对方拥有共享领域值。资源库存和元素预算属于 `oasis7_agent_api::world_resource`，机器人规格和视觉实体属于 `world_entity`，chunk 坐标与纯几何派生属于 `world_geometry`；Runtime 专属 Agent/body 状态归 `runtime::agent_state`。旧 `models` 和 Simulator 类型路径仅作为现有消费者的兼容导出。
+
+资源清单 DTO、规范 hash 和纯上下文由 API 拥有；`runtime::chain_resource` 从权威状态派生，`simulator::chain_resource` 从内核状态派生。派生是两侧的 free function，不在共享 DTO 上挂接执行层固有方法。资源 commit 引用仍是既有资源关联合同，不扩大为共识最终性证明。
+
+`runtime::service_admission` 拥有 owner/delegation、task fence、nonce、canonical result 和 hot/cold history 的校验。在线执行、snapshot restore、journal replay、retention staging 使用同一实现；Service 旧路径只重导出并调用 Runtime。`ValidatedStaleCognitionRejection` 由 Runtime 拥有，其构造和拆解限制在 Runtime 内，Service 不能从诊断文本构造凭据。
+
+`World::canonical_agent_service_context` 从同一个 World 及其当前 binding 生成只读 provider context；Service 的 committed projection 和 task context 不再借 Viewer 构建。该接口不返回签名密钥、sidecar 缓存或提交凭据，准入后执行时的授权与幂等重检保持原合同。
+
 ## 1. 设计定位
 
 `world-runtime` 是 world-infrastructure 的上层确定性执行层：它不决定产品规则或网络/共识部署，而是把已排序的世界动作确定性地执行为事件、状态根、receipt、checkpoint 与可验证回放。gameplay、Agent 与 Viewer 经版本化协议提交 intent 或消费已提交状态；它们不拥有世界推进权。

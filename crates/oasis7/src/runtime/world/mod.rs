@@ -216,7 +216,6 @@ use super::snapshot::{Journal, SnapshotCatalog};
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
-use crate::simulator::ModuleVisualEntity;
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 pub(crate) use bootstrap_economy::m4_bootstrap_module_ids;
 pub use bootstrap_power::M1ScenarioBootstrapConfig;
@@ -225,6 +224,7 @@ pub use module_tick_runtime::{
     ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
     ModuleTickRoutingMetricsSnapshot,
 };
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

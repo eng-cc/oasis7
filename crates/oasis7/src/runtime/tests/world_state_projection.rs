@@ -9,9 +9,10 @@ use super::super::{
     Action, AgentIntentV2, BodyOverlay, DomainEvent, World, WorldState, WorldStateProjection,
 };
 use super::pos;
-use crate::models::BodyKernelView;
+use crate::runtime::agent_state::BodyKernelView;
 use crate::runtime::util::hash_json;
-use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
+use oasis7_agent_api::world_entity::ModuleVisualAnchor;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use std::collections::BTreeMap;
 
 fn registered_agent_world() -> World {

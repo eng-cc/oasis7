@@ -24,9 +24,7 @@ impl WorldServiceProjection {
         let mut projection = Self::from_authenticated_world(world, agent, reader)?;
         if let Some(agent) = agent {
             projection.agent_context = Some(
-                crate::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
-                    world, agent,
-                )?,
+                crate::runtime::World::canonical_agent_service_context(world, agent)?,
             );
             projection.cognition_leases = world
                 .cognition_economy()

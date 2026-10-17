@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 
 use super::events::Action;
 use super::modules::ModuleSubscriptionStage;
@@ -205,7 +205,7 @@ where
 mod tests {
     use super::*;
     use crate::geometry::GeoPos;
-    use crate::simulator::ResourceKind;
+    use oasis7_agent_api::world_action::ResourceKind;
 
     fn action() -> Action {
         Action::RegisterAgent {

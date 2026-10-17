@@ -6,7 +6,7 @@ use crate::runtime::{
     ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole, PolicySet, ProposalDecision,
     RejectReason, World, WorldEventBody, util,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{
     FactoryBuildDecision, FactoryBuildRequest, FactoryModuleSpec, MaterialStack, ModuleCallFailure,
     ModuleCallInput, ModuleCallRequest, ModuleEmit, ModuleOutput, ModuleSandbox,

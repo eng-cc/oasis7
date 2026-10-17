@@ -2,7 +2,7 @@ use super::super::{WorldEvent, WorldEventBody};
 use super::capability_authorization_command_stage::TrustedCommandStage;
 use super::{World, WorldError};
 use crate::runtime::{CapabilityEffectReceiptLink, CapabilityGrant};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{ModuleArtifact, ModuleStateUpdate};
 use std::sync::Arc;
 

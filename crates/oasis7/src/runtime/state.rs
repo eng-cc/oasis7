@@ -1,7 +1,9 @@
 //! World state management.
 
-use crate::models::AgentState;
-use crate::simulator::{ModuleInstallTarget, ModuleVisualEntity, ResourceKind};
+use crate::runtime::agent_state::AgentState;
+use oasis7_agent_api::world_action::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ResourceKind;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use oasis7_wasm_abi::{
     FactoryModuleSpec, FactoryProfileV1, MaterialProfileV1, MaterialStack, ModuleManifest,
     ProductProfileV1, ProductValidationDecision, RecipeProfileV1,

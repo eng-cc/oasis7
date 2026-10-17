@@ -1,6 +1,6 @@
 use super::super::{Action, ActionEnvelope, DomainEvent, ModuleSourcePackage, WorldEventBody};
 use super::{ReleaseSecurityPolicy, World, WorldError};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

@@ -243,8 +243,10 @@ impl World {
     pub fn read_retained_world_service_result(
         &self,
         correlation_key_digest: &str,
-    ) -> Result<Option<crate::world_service::CanonicalIntentResultV1>, RetainedHistoryReadError>
-    {
+    ) -> Result<
+        Option<crate::runtime::service_admission::CanonicalIntentResultV1>,
+        RetainedHistoryReadError,
+    > {
         if self.state.retained_history_root.is_none() {
             return Ok(None);
         }
@@ -395,7 +397,10 @@ impl World {
     pub(crate) fn read_retained_agent_chat_intent_results(
         &self,
         lookup: &AgentChatIntentLookupV1,
-    ) -> Result<Vec<crate::world_service::CanonicalIntentResultV1>, RetainedHistoryReadError> {
+    ) -> Result<
+        Vec<crate::runtime::service_admission::CanonicalIntentResultV1>,
+        RetainedHistoryReadError,
+    > {
         let (parent, reader) = self.attached_formal_history()?;
         parent.agent_chat_intent_results(lookup, reader)
     }
@@ -411,7 +416,10 @@ impl World {
     pub(crate) fn read_retained_game_task_control_results(
         &self,
         lookup: &GameTaskControlLookupV1,
-    ) -> Result<Vec<crate::world_service::CanonicalIntentResultV1>, RetainedHistoryReadError> {
+    ) -> Result<
+        Vec<crate::runtime::service_admission::CanonicalIntentResultV1>,
+        RetainedHistoryReadError,
+    > {
         let (parent, reader) = self.attached_formal_history()?;
         parent.game_task_control_results(lookup, reader)
     }
@@ -667,7 +675,7 @@ impl BusinessIndexNodeReader for CandidateBusinessIndexReader {
 struct WorldServiceCandidate {
     map_key: String,
     key_digest: String,
-    result: crate::world_service::CanonicalIntentResultV1,
+    result: crate::runtime::service_admission::CanonicalIntentResultV1,
     canonical_result_cbor: Vec<u8>,
     estimated_bytes: usize,
     hot_entry_bytes: usize,

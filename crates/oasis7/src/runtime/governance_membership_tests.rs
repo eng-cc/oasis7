@@ -1,6 +1,6 @@
 use super::*;
+use crate::runtime::service_admission::{ExecutionBinding, WorldIdentity};
 use crate::runtime::{GovernanceValidatorAdmissionStatus as Status, WorldState};
-use crate::world_service::{ExecutionBinding, WorldIdentity};
 
 fn candidate(
     id: &str,
@@ -59,7 +59,7 @@ fn commit(world: &World) -> CommitRef {
         binding: ExecutionBinding {
             provider_world_id: "world".into(),
             branch_id: "main".into(),
-            finality_ref: authority::request_digest(
+            finality_ref: oasis7_client_api::world_service::request_digest(
                 "finality",
                 &(
                     binding.finality_epoch,

@@ -1,6 +1,6 @@
 use super::super::*;
 use super::pos;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallRequest, ModuleEmit, ModuleOutput, ModuleSandbox,

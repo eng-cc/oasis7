@@ -1,8 +1,9 @@
 //! Action and domain event types.
 
 use crate::geometry::GeoPos;
-use crate::models::{BodyKernelView, BodySlotType};
-use crate::simulator::{ModuleInstallTarget, ResourceKind};
+use crate::runtime::agent_state::{BodyKernelView, BodySlotType};
+use oasis7_agent_api::world_action::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{
     FactoryModuleSpec, FactoryProfileV1, MaterialProfileV1, MaterialStack, ModuleManifest,
     ProductProfileV1, RecipeProfileV1,

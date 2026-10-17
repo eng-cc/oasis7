@@ -111,7 +111,11 @@ fn recipe_fixture() -> World {
             .unwrap();
     }
     world
-        .set_agent_resource_balance(AGENT_ID, crate::simulator::ResourceKind::Electricity, 20)
+        .set_agent_resource_balance(
+            AGENT_ID,
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            20,
+        )
         .unwrap();
     install_factory_authority(&mut world, AGENT_ID, "site", "factory", 0);
     world.submit_action(Action::BuildFactory {
@@ -173,12 +177,12 @@ fn prepare(
         envelope.reorg_epoch,
         &manifest,
     );
-    envelope.capability_snapshot_hash = crate::simulator::h_v1(
+    envelope.capability_snapshot_hash = oasis7_agent_api::h_v1(
         "oasis7.runtime.manifest.v1",
         &world.capability_authorization_root().to_string(),
     )
     .to_string();
-    envelope.authority_context_hash = crate::simulator::h_v1(
+    envelope.authority_context_hash = oasis7_agent_api::h_v1(
         "oasis7.runtime.authority-context.v1",
         &world.capability_authorization_root().to_string(),
     )

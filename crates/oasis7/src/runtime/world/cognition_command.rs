@@ -8,7 +8,7 @@
 
 use super::super::{WorldError, WorldEventBody};
 use super::World;
-use crate::simulator::ContinuousAgentTurnContextV1;
+use oasis7_agent_api::ContinuousAgentTurnContextV1;
 use oasis7_wasm_abi::{
     AgentCommandResponse, CapabilityCatalogSnapshot, CapabilityGrantV2, CapabilitySubject,
     ModuleSandbox, validate_module_command_declarations, validate_module_command_envelope,

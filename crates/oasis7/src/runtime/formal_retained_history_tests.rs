@@ -32,8 +32,8 @@ fn canonical_chat_result(
     nonce: u64,
     private_key: &str,
     public_key: &str,
-) -> crate::world_service::CanonicalIntentResultV1 {
-    let mut chat = crate::viewer::AgentChatRequest {
+) -> crate::runtime::service_admission::CanonicalIntentResultV1 {
+    let mut chat = oasis7_proto::viewer::AgentChatRequest {
         agent_id: "agent".into(),
         message: format!("intent retry {nonce}"),
         player_id: Some("owner".into()),
@@ -53,14 +53,15 @@ fn canonical_chat_result(
     chat.auth = Some(
         crate::viewer::sign_agent_chat_auth_proof(&chat, nonce, public_key, private_key).unwrap(),
     );
-    let payload = crate::world_service::WorldServicePayloadV1::AgentChat(chat);
-    let world = crate::world_service::WorldIdentity {
+    let payload = crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(chat);
+    let world = crate::runtime::service_admission::WorldIdentity {
         world_id: "world".into(),
         genesis_digest: "fixture".into(),
     };
-    let correlation = crate::world_service::derive_correlation(world, &payload).unwrap();
-    crate::world_service::CanonicalIntentResultV1 {
-        request: crate::world_service::SubmitIntentRequest {
+    let correlation =
+        crate::runtime::service_admission::derive_correlation(world, &payload).unwrap();
+    crate::runtime::service_admission::CanonicalIntentResultV1 {
+        request: crate::runtime::service_admission::SubmitIntentRequest {
             contract_version: 1,
             correlation,
             deadline_unix_ms: None,
@@ -74,10 +75,11 @@ fn canonical_chat_result(
 }
 
 fn retained_world_service_leaf(
-    result: &crate::world_service::CanonicalIntentResultV1,
+    result: &crate::runtime::service_admission::CanonicalIntentResultV1,
 ) -> (String, BusinessIndexLeafV1) {
     let correlation_key_digest =
-        crate::world_service::correlation::key_digest(&result.request.correlation.key).unwrap();
+        crate::runtime::service_admission::correlation::key_digest(&result.request.correlation.key)
+            .unwrap();
     let canonical_result_cbor = serde_cbor::to_vec(result).unwrap();
     let canonical_result_digest = blake3::hash(&canonical_result_cbor).to_hex().to_string();
     let leaf_key = retained_key_digest("world-service-result", &correlation_key_digest).unwrap();
@@ -202,9 +204,10 @@ fn archived_reorg_epoch_summary_preserves_only_query_cardinality() {
 #[test]
 fn repeated_prune_metadata_updates_preserve_monotonic_retention_state() {
     let private_key = hex::encode([71u8; 32]);
-    let public_key = crate::world_service::sign_read_request("fixture", (), &private_key)
-        .unwrap()
-        .subject_public_key;
+    let public_key =
+        crate::runtime::service_admission::sign_read_request("fixture", (), &private_key)
+            .unwrap()
+            .subject_public_key;
     let first_result = canonical_chat_result(1, &private_key, &public_key);
     let second_result = canonical_chat_result(2, &private_key, &public_key);
     let (first_result_key, first_result_leaf) = retained_world_service_leaf(&first_result);

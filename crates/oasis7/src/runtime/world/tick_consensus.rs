@@ -858,7 +858,10 @@ impl World {
     pub(super) fn state_root_hash_with_command_and_module_visual_overlay(
         &self,
         command_overlay: CommandStateOverlay<'_>,
-        module_visual_entities: &BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+        module_visual_entities: &BTreeMap<
+            String,
+            oasis7_agent_api::world_entity::ModuleVisualEntity,
+        >,
     ) -> Result<String, WorldError> {
         let manifest_hash = self.current_manifest_hash()?;
         let policy_hash = hash_json(&self.policies)?;
@@ -875,7 +878,10 @@ impl World {
 
     pub(super) fn state_root_hash_with_module_visual_overlay(
         &self,
-        module_visual_entities: &BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+        module_visual_entities: &BTreeMap<
+            String,
+            oasis7_agent_api::world_entity::ModuleVisualEntity,
+        >,
     ) -> Result<String, WorldError> {
         let manifest_hash = self.current_manifest_hash()?;
         let policy_hash = hash_json(&self.policies)?;

@@ -1,5 +1,6 @@
 use super::*;
-use crate::world_service::{SchedulerIntentV1, SchedulerOperationV1};
+use crate::runtime::service_admission::{SchedulerIntentV1, SchedulerOperationV1};
+use crate::world_service::projection;
 use oasis7_agent_api::game::{
     GAME_EXECUTOR_CONTROL_DOMAIN, GameExecutorControlV1, GameExecutorOperationV1, GameTaskFenceV1,
     TaskContextIdentityV1,

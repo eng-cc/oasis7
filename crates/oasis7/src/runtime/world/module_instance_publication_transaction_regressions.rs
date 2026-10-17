@@ -1,6 +1,7 @@
 use super::super::{Action, DomainEvent, WorldEventBody};
 use super::{World, WorldError};
-use crate::simulator::{ModuleInstallTarget, ResourceKind};
+use oasis7_agent_api::world_action::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ResourceKind;
 
 fn install(active: bool) -> DomainEvent {
     DomainEvent::ModuleInstalled {

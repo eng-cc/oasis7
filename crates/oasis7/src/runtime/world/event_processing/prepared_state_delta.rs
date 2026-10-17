@@ -19,7 +19,7 @@ pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
     },
     ModuleVisualEntities {
         event: oasis7_wasm_abi::ModuleEmitEvent,
-        next: BTreeMap<String, crate::simulator::ModuleVisualEntity>,
+        next: BTreeMap<String, oasis7_agent_api::world_entity::ModuleVisualEntity>,
     },
     ModuleRuntimeCharged(super::super::super::module_runtime_metering::PreparedModuleRuntimeCharge),
     EffectQueued {

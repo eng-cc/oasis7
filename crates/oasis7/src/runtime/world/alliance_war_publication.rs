@@ -1,6 +1,6 @@
 //! Sparse atomic projection for alliance and war events.
 
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use serde::ser::SerializeStruct;
 use std::collections::BTreeMap;
 

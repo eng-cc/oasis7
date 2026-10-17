@@ -1,7 +1,7 @@
 use super::economy::activate_pure_module;
 use super::pos;
 use crate::runtime::{Action, MaterialLedgerId, World};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{MaterialStack, ModuleEmit, ModuleOutput, RecipeExecutionPlan};
 use oasis7_wasm_executor::FixedSandbox;
 

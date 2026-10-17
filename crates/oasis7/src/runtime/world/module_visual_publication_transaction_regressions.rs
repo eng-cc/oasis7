@@ -2,7 +2,8 @@ use super::*;
 use crate::geometry::GeoPos;
 use crate::runtime::WorldEventBody;
 use crate::runtime::cognition::{MAX_EXPECTED_VALUE_BYTES, MAX_IDENTIFIER_BYTES};
-use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity};
+use oasis7_agent_api::world_entity::ModuleVisualAnchor;
+use oasis7_agent_api::world_entity::ModuleVisualEntity;
 use oasis7_wasm_abi::ModuleEmitEvent;
 
 const MODULE_ID: &str = "fixture.visual-module";

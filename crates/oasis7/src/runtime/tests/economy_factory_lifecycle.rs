@@ -4,7 +4,7 @@ use crate::runtime::{
     FactoryConstructionPowerProfileV1, FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
     MaterialLedgerId, RejectReason, World, WorldError, WorldEventBody,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
 
 pub(super) fn factory_spec(

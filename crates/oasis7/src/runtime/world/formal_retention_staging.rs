@@ -211,15 +211,16 @@ pub(super) fn world_service_candidates(
 ) -> Result<Vec<WorldServiceCandidate>, String> {
     let mut candidates = Vec::new();
     for (map_key, value) in &world.capability_revocation_state.world_service_results {
-        crate::world_service::correlation::validate_result(map_key, value)?;
-        let result: crate::world_service::CanonicalIntentResultV1 =
+        crate::runtime::service_admission::correlation::validate_result(map_key, value)?;
+        let result: crate::runtime::service_admission::CanonicalIntentResultV1 =
             serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
         result
             .request
             .validate()
             .map_err(|error| error.to_string())?;
-        let key_digest =
-            crate::world_service::correlation::key_digest(&result.request.correlation.key)?;
+        let key_digest = crate::runtime::service_admission::correlation::key_digest(
+            &result.request.correlation.key,
+        )?;
         if key_digest != *map_key {
             return Err("WorldService result map key/correlation mismatch".into());
         }
@@ -287,7 +288,7 @@ pub(super) fn stage_owner_chat_nonce(
     staged: &mut BTreeMap<String, RetainedHistoryLeafV1>,
     candidate: &WorldServiceCandidate,
 ) -> Result<(), String> {
-    let crate::world_service::WorldServicePayloadV1::AgentChat(request) =
+    let crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(request) =
         &candidate.result.request.signed_payload
     else {
         return Ok(());
@@ -322,7 +323,7 @@ pub(super) fn stage_owner_chat_nonce(
             )?
             .ok_or("retained owner nonce index witness is absent")?;
             let witness_nonce = match &witness.request.signed_payload {
-                crate::world_service::WorldServicePayloadV1::AgentChat(request) => {
+                crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(request) => {
                     if let Some(auth) = request.auth.as_ref()
                         && digest_text("owner-public-key", &auth.public_key)?
                             == owner_public_key_digest
@@ -376,12 +377,12 @@ pub(super) fn stage_agent_chat_intent(
     else {
         return Ok(());
     };
-    let crate::world_service::WorldServicePayloadV1::AgentChat(request) =
+    let crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(request) =
         &candidate.result.request.signed_payload
     else {
         return Ok(());
     };
-    if crate::world_service::agent_chat::validate_owner(world, request).is_err() {
+    if crate::runtime::service_admission::agent_chat::validate_owner(world, request).is_err() {
         return Ok(());
     }
     let Some(auth) = request.auth.as_ref() else {
@@ -429,7 +430,7 @@ pub(super) fn stage_feedback_publication(
     if candidate.result.rejected.is_some() {
         return Ok(());
     }
-    let crate::world_service::WorldServicePayloadV1::Cognition(signed) =
+    let crate::runtime::service_admission::WorldServicePayloadV1::Cognition(signed) =
         &candidate.result.request.signed_payload
     else {
         return Ok(());
@@ -539,7 +540,9 @@ fn stage_bounded_refs<T: Serialize>(
     lookup: &T,
     result_key_digest: String,
     kind: RetainedIndexKind,
-    matches_result: impl Fn(&crate::world_service::CanonicalIntentResultV1) -> Result<bool, String>,
+    matches_result: impl Fn(
+        &crate::runtime::service_admission::CanonicalIntentResultV1,
+    ) -> Result<bool, String>,
 ) -> Result<(), String> {
     let index_key = retained_key_digest(namespace, lookup).map_err(|error| error.to_string())?;
     let mut refs = match staged_or_parent(parent, reader, staged, &index_key)? {
@@ -597,7 +600,7 @@ pub(super) fn staged_or_parent_world_service_result(
     reader: &impl BusinessIndexNodeReader,
     staged: &BTreeMap<String, RetainedHistoryLeafV1>,
     result_key_digest: &str,
-) -> Result<Option<crate::world_service::CanonicalIntentResultV1>, String> {
+) -> Result<Option<crate::runtime::service_admission::CanonicalIntentResultV1>, String> {
     let leaf_key = retained_key_digest("world-service-result", &result_key_digest)
         .map_err(|error| error.to_string())?;
     let Some(leaf) = staged_or_parent(parent, reader, staged, &leaf_key)? else {
@@ -611,18 +614,19 @@ pub(super) fn staged_or_parent_world_service_result(
     {
         return Err("retained WorldService result key/digest mismatch".into());
     }
-    let result: crate::world_service::CanonicalIntentResultV1 =
+    let result: crate::runtime::service_admission::CanonicalIntentResultV1 =
         serde_cbor::from_slice(&entry.canonical_result_cbor).map_err(|error| error.to_string())?;
     let canonical = serde_cbor::to_vec(&result).map_err(|error| error.to_string())?;
     if canonical != entry.canonical_result_cbor
         || blake3::hash(&canonical).to_hex().to_string() != entry.canonical_result_digest
-        || crate::world_service::correlation::key_digest(&result.request.correlation.key)?
-            != result_key_digest
+        || crate::runtime::service_admission::correlation::key_digest(
+            &result.request.correlation.key,
+        )? != result_key_digest
     {
         return Err("retained WorldService result bytes/correlation mismatch".into());
     }
     let as_json = serde_json::to_value(&result).map_err(|error| error.to_string())?;
-    crate::world_service::correlation::validate_result(result_key_digest, &as_json)?;
+    crate::runtime::service_admission::correlation::validate_result(result_key_digest, &as_json)?;
     Ok(Some(result))
 }
 

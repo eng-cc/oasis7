@@ -1,8 +1,10 @@
 use super::super::*;
 use super::pos;
-use crate::models::{BodyKernelView, BodySlotType, CargoEntityEntry, CargoEntityKind};
+use crate::runtime::agent_state::{
+    BodyKernelView, BodySlotType, CargoEntityEntry, CargoEntityKind,
+};
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 #[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use oasis7_wasm_executor::WasmExecutor;
 

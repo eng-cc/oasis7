@@ -7,7 +7,8 @@ use crate::runtime::cognition_recovery::RuntimeCognitionBaseBindingV1;
 use crate::runtime::cognition_scheduler::{CognitionScheduler, SchedulerWakeV1};
 use crate::runtime::cognition_wake::{AgentContinuation, ContinuationStatusV1};
 use crate::runtime::error::WorldError;
-use crate::simulator::{Digest32, RuntimeBindingV1};
+use oasis7_agent_api::Digest32;
+use oasis7_agent_api::RuntimeBindingV1;
 use serde_json::Value as JsonValue;
 
 impl World {
