@@ -97,7 +97,7 @@ fn published_attempt_reclamation_retries_independent_readback_and_partial_unlink
     let save_target = |position, block: &str, digest: &str| {
         durable_transaction::write_private_file_durable(
             &target,
-            &to_cbor(&(1u32, position, block, digest)).unwrap(),
+            &to_cbor((1u32, position, block, digest)).unwrap(),
         )
         .unwrap();
     };
