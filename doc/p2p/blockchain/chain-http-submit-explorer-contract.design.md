@@ -4,7 +4,7 @@
 - Owner role：`runtime_engineer`；验证联审：`qa_engineer`；客户端合同联审：`viewer_engineer`。
 - 配对专业需求：[链 HTTP 提交与 Explorer P0 后端合同](chain-http-submit-explorer-contract.prd.md)。
 - 固定源码审读基线：`e01e29064517f4bf375767a19a09802335828249`，2026-10-12。
-- 本文规定目标设计；本次文档变更不修改运行行为。实现、测试及交付事实由 [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450)、PR 与真实验证记录维护。
+- 本文规定目标设计；本次文档变更不修改运行行为。[#4450 的文档承接关闭决定](https://github.com/nil-studio/oasis7/issues/4450#issuecomment-6126251006) 已停止该 Issue 跟踪；它仅为历史来源。H1–H4 目标合同仍有效，实际实现、测试及交付事实由承接工作的 PR 与真实验证记录维护，不能从关闭推断实现或验收完成。
 
 ## 1. 问题、目标与非目标
 

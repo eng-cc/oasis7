@@ -17,7 +17,7 @@ Do not use this skill when:
 - the task does not match the trigger conditions above
 
 
-对小红书笔记进行全方位分析，提供优化建议，提升内容质量和曝光率。
+对小红书笔记进行全方位分析，提供人工编辑建议；不保证曝光、推荐或审核结果。以下数量、评分和风险等级均为编辑启发式，不是平台官方权重、违规词库或处罚规则。涉及平台规则时应另核对适用的官方来源、时间和上下文；无依据的审核或流量判断标记为未知。
 
 ## 分析维度
 
@@ -48,7 +48,7 @@ Do not use this skill when:
 | 核心关键词 | 标题+首段+正文+标签都包含 | 仅出现1-2处 |
 | 长尾关键词 | 3-5个相关长尾词自然分布 | 无长尾词或堆砌 |
 | 标签数量 | 5-10个相关标签 | <3个或>15个 |
-| 关键词密度 | 2-3%自然出现 | <1%或>5%堆砌 |
+| 关键词字符占比 | 2-3%可作重复检查起点，按参考文档统一口径计数 | <1%或>5%提示人工检查，不直接判为不足或堆砌 |
 
 ### 关键词布局公式
 
@@ -88,12 +88,12 @@ Do not use this skill when:
 
 ### 风险等级
 
-| 等级 | 说明 | 后果 |
+| 人工复核优先级 | 说明 | 处理建议（不预测平台结果） |
 |------|------|------|
-| 🔴 高危 | 明确违规词 | 删帖/封号 |
-| 🟠 中危 | 灰色地带词 | 限流/不推荐 |
-| 🟡 低危 | 可能触发审核 | 延迟发布 |
-| 🟢 安全 | 无敏感内容 | 正常推荐 |
+| 🔴 优先复核 | 可能涉及违法、失实承诺或高风险推广 | 核对事实、语境与适用规则 |
+| 🟠 重点复核 | 表述或推广边界不清 | 补充依据或改写真实含义 |
+| 🟡 常规复核 | 需要上下文判断 | 不凭词语推断审核时长 |
+| 🟢 未发现明显问题 | 本次人工检查未发现明显风险 | 不代表合规认证或正常推荐保证 |
 
 ### 常见敏感类别
 
@@ -203,5 +203,5 @@ Do not use this skill when:
 
 ## Guardrails
 
-- Separate style/engagement advice from factual compliance claims.
+- Separate style/engagement advice from factual compliance claims. Do not infer platform penalties, ranking weights, or guaranteed safety from word matches or this rubric.
 - Do not over-optimize content in ways that misrepresent the author or product.

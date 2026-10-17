@@ -92,3 +92,13 @@
 - `short_window_longrun` is now closed for the freshly recovered live window.
 - `mixed_topology_baseline` is now also closed for the freshly recovered live window.
 - Current same-window evidence supports rerunning the canonical shared-network gate with all required lanes at `pass`.
+
+## 证据适用范围补注
+
+上述原始 `pass`、计数、命令及历史结论保持不变，仅说明其证明边界。[当时 rehearsal 入口](https://github.com/nil-studio/oasis7/blob/d59e892ad1deb8cc612a56af67ce08e6c5d7ff97/scripts/shared-devnet-rehearsal.sh#L951-L1005) 给 S9/S10 都传入 `--no-prewarm`；[当时 S10 入口](https://github.com/nil-studio/oasis7/blob/d59e892ad1deb8cc612a56af67ce08e6c5d7ff97/scripts/s10-five-node-game-soak.sh#L369-L376) 使用 `target/debug/oasis7_chain_runtime`。本记录说明曾重建 debug runtime，但未保留将这些被执行二进制 SHA 绑定到 live release candidate artifact 的证明。same-window / candidate 标签不能单独证明 same-binary；这里既不推断实际 hash 不同，也不将原始 pass 改成失败。此运行不构成当前网络 readiness 或新候选验收。
+
+## 历史决定的固定定位
+
+原始 [task execution log, 0450e84, L198–L220](https://github.com/nil-studio/oasis7/blob/0450e84dce0ae037be3a7fe8041f7f10f154e721/.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md#L198-L220) 保留了 2026-05-24 10:14:18 CST 的 QA 同窗复采样与 pass 建议，以及 10:14:54 CST 的 producer 接受 mixed-topology uplift 和 lane 升级决定。这是可取回的历史决定，不是今日重新审批或执行授权。
+
+本页 shared-access 中工作站和 cloud storage host 的独立访问证明只覆盖不同访问位置，不自动证明由独立人员完成 operator handoff；人员交接仍须其自身可关联记录。不得把本补注当作补做了交接、重跑或新的 release-binary 身份证明。

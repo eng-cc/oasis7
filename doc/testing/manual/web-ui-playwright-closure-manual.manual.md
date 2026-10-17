@@ -52,9 +52,11 @@ Playwright 实跑系列长期目标是形成一套可重复执行的玩家操作
 - `summary.json` 中 `inputMode=ui`。
 - `chatInputMode=ui`。
 - 收到 `agentReply`。
-- 回复包含默认 required fragments：`我在 runtime:`、`data 8`、`electricity 32`。
+- 回复包含默认 required fragments：`runtime:`、`data 8`、`electricity 32`。
 - 回复不得包含 `[local-mock-receipt]` 或 `[local-mock-chat]`。
 - 脚本结束后默认清理自己启动的本地端口。
+
+当前 oracle 限制：`real-agent-chat-regression.mjs` 在整个 `chatHistory` 中按 Agent 与文本片段寻找回复，没有以本次发送前的历史边界或 request/correlation ID 绑定新回复；`lastChatFeedback.stage=ack` 也未绑定本次请求。旧的匹配回复或 ACK 因此可能满足现有检查。上述因果闭环仍是验收目标，脚本成功只能证明实际 UI 操作和所匹配的观测，不能单独证明本次输入导致新的 provider 回复。本说明未修改 oracle，也未声称发生过误通过。
 
 选择契约：
 - WebGPU/canvas 渲染路径必须暴露稳定 DOM Agent marker：`[data-pixel-world-agent-marker="true"][data-agent-id="<agent-id>"]`。

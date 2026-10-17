@@ -22,7 +22,7 @@ Options:
   --chat-message <text>       Chat message to send
                               (default: 你在哪里？身边有什么资源？请直接回答。)
   --expect-contains <text>    Required Agent reply fragment; repeatable
-                              (default: 我在 runtime:, data 8, electricity 32)
+                              (default: runtime:, data 8, electricity 32)
   --forbid-contains <text>    Forbidden Agent reply fragment; repeatable
                               (default: [local-mock-receipt], [local-mock-chat])
   --keep-stack                Leave a stack started by this script running

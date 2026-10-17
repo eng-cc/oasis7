@@ -62,3 +62,7 @@
 ## 结论
 - 当前 `shared-devnet-live-reset-20260523-01` 已拥有 same-window 的真实 S9/S10 short-window evidence。
 - 这次升级后，formal gate 只剩 `mixed_topology_baseline=partial`。
+
+## 证据适用范围补注
+
+上述原始 `pass`、计数、命令及历史结论保持不变，仅说明其证明边界。[当时 rehearsal 入口](https://github.com/nil-studio/oasis7/blob/d59e892ad1deb8cc612a56af67ce08e6c5d7ff97/scripts/shared-devnet-rehearsal.sh#L951-L1005) 给 S9/S10 都传入 `--no-prewarm`；[当时 S10 入口](https://github.com/nil-studio/oasis7/blob/d59e892ad1deb8cc612a56af67ce08e6c5d7ff97/scripts/s10-five-node-game-soak.sh#L369-L376) 使用 `target/debug/oasis7_chain_runtime`。本记录说明曾重建 debug runtime，但未保留将这些被执行二进制 SHA 绑定到 live release candidate artifact 的证明。same-window / candidate 标签不能单独证明 same-binary；这里既不推断实际 hash 不同，也不将原始 pass 改成失败。此运行不构成当前网络 readiness 或新候选验收。

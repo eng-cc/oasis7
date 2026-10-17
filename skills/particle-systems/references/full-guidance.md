@@ -223,8 +223,10 @@ public class ParticleEffectController : MonoBehaviour
 
 ## GPU Particles (Compute Shader)
 
+This is an illustrative update kernel, not a production-ready lifetime-curve implementation. The `p.size *= ...` operation compounds once per dispatch, so size depends on update count/frame cadence, not just normalized lifetime. Choose the intended artistic curve and its time semantics before production use; validate timestep variation, end-of-life handling, and buffer/dispatch bounds. This example does not prescribe that curve.
+
 ```hlsl
-// ✅ Production-Ready: GPU Particle Compute Shader
+// Illustrative GPU particle update; see cadence and lifetime limits above
 #pragma kernel UpdateParticles
 
 struct Particle
@@ -280,7 +282,7 @@ void UpdateParticles(uint3 id : SV_DispatchThreadID)
     // Update lifetime
     p.lifetime -= deltaTime;
 
-    // Fade out
+    // Illustrative alpha assignment and per-dispatch size decay (cadence-dependent)
     float lifetimeRatio = p.lifetime / p.maxLifetime;
     p.color.a = lifetimeRatio;
     p.size *= (0.5 + 0.5 * lifetimeRatio);

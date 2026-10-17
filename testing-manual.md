@@ -282,7 +282,7 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 - 默认目标：使用候选 release Viewer 产物，由 agent 经正式 UI 完成真实玩家动作、核对可归因世界结果，并根据结果作出下一步决策。URL 取自本次 harness/producer 的实际输出；登录、操作和采证绑定同一 owned browser session。独立试玩的输入、有限时长和结果合同沿用[自主试玩设计](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)。记录实际 `execution_mode`；固定脚本路线不能改名为自主规划证据。
 - 构建与驱动前置：release 不安装 `__AW_TEST__`，即使 URL 带 `test_api=1` 也不安装。需要测试 API 的受控回归必须显式使用 `build:viewer:visual-test` 的隔离产物，并启用测试查询参数；它只证明所声明的测试范围，不能代签 release UI。先核对实际产物和驱动能力，能力不匹配时在登录/玩法等待前停止并留痕；不要为通过测试给 release 注入测试 API。
 - 实际操作会话：默认 `hosted_public_join` 从 guest 识别开始，经正式登录/注册成为 authenticated；恢复会话也须核对当前 player 和 gameplay readiness 后再提交。准备者另开的 headed 窗口不能代签执行会话的登录。缺账号/配置、登录失败或 player 不一致分别记 blocker；不得自动签发 Hosted 身份或静默切换 `trusted_local_only`。凭据不进入日志、截图或卡片。
-- 当前工具差距：在 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对的 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 仍依赖测试 API、分开创建 producer/headed 与 automation session，并缺少实际操作会话的 Hosted 登录编排；其自动评分和早退结果也未满足下述合同。`commands.sh` 仍包含该旧入口，不能仅因生成成功就把它当作已验证的默认 L4B。实现与实际验收继续由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 承接，本次文档不增加尚未实现的 runner 参数。
+- 当前工具差距：在 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对的 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 仍依赖测试 API、分开创建 producer/headed 与 automation session，并缺少实际操作会话的 Hosted 登录编排；其自动评分和早退结果也未满足下述合同。`commands.sh` 仍包含该旧入口，不能仅因生成成功就把它当作已验证的默认 L4B。[#4438 的关闭决定](https://github.com/nil-studio/oasis7/issues/4438#issuecomment-6127544475) 已在文档 PR #4641 承接后以 `not_planned` 停止独立跟踪；它仅为历史来源。L1 正式 UI/实际会话前置、L2 入口边界与 L3 scaffold 输出要求仍由现行合同保留，关闭不表示实现或验收完成；本次文档不增加尚未实现的 runner 参数。
 - 与 `L4A` 的衔接：scaffold 还复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`。完整 `L4` 至少收口 `L4A` packet / cards、当前尝试的 `L4B` agent 卡和最终 `l4-summary.md`。已有启动部件可用于准备 release 环境；能否形成 L4B 以实际会话和下述证据为准，不以启动器名称判定。
 - 执行结果：每次尝试独立保留 [RunResult](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)，summary 显式引用 `current_attempt`、结果和证据路径。沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`，阻断、取消和中断也记录已到阶段、停止原因、清理结果及未覆盖项；缺前置是 `blocked`，未知是 `inconclusive`，已执行且违反约定才是 `fail`。新尝试不能借旧成功产物通过。旧 runner 未完成该写出合同前，使用新 artifact 并保留已评审卡片，缺 RunResult 明确写缺失。
 - 最低完成定义：agent 实际游玩、具备当前尝试的动作/结果/后续决策证据，RunResult 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，再由 `producer_system_designer` / `qa_engineer` 审阅 `L4B` verdict。只有启动、截图、时间/进度增长或 ACK，不足以填写 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。五分项分别需要动作、可归因变化、结果解释、新决策与继续理由；缺观察保持未知。无实际试玩时 L4B 为 `missing`，不能把登录失败解释为 agent 不想玩。
@@ -304,7 +304,7 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 | L4-C03 执行终态 | 对可创建 artifact 的启动、能力检查、登录、操作及采证失败设置受控故障；另测取消、中断、清理失败和“旧成功后新阻断” | 每次保留独立结果和停止阶段，`current_attempt` 指向新尝试；缺前置/未知/违约分别归类，清理结果不伪装玩法结果；旧汇总不覆盖当前阻断 | 先用受控 fixture 检查结果写出与指针，再用适用环境验证真实故障；若输出目录本身不可写，stderr/退出结果明确说明无法落盘，不能声称有结果文件 |
 | L4-C04 事实与判断 | 提供只有 progress/ACK/player 一致的样本、完整五项观察样本、缺一项样本；对已评审卡片重跑事实采集 | 机械事实不自动产生继续结论、满分或非环境推进判断；五项逐项引用证据，缺项未知；自动采集不覆写已评审 verdict，固定脚本如实记录执行模式 | fixture 可检查写入归属；真实继续倾向、因果与理解必须来自实际会话和评审，不能由 fixture 代签 |
 | L4-C05 兼容产物与操作入口 | 对照本手册、game-test、Viewer entry compatibility；在 L4-C01 四格中分别执行 alias 生成、dist copy 与 stale-dist rebuild，并复核 opt-in 正负例；不同 worktree 使用各自实际 URL/session | 所有兼容产物保留，复制/重建前后类型一致且不覆盖另一类输出；无固定端口、跨会话假定或 release 测试 API 等待；错误 URL/session 明确阻断，原锚点保留 | 文档链接检查、alias/copy/freshness 定向回归与适用浏览器验证；历史 URL 保留为历史证据，不当当前默认 |
-| L4-C06 离线 scaffold | 不带 `--with-l4a-stack`，以普通、含空格、含单引号的合法新目录运行 `--json`；再用已存在目录重试，并模拟生成后失败 | 成功 stdout 为单个 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与 manifest 一致，`manifest_path` 指向它；已存在目录退出 2 且不改原文件，部分输出失败明确范围并非成功 | 纯离线产物验收，不启动游戏/模型。当前实现的 shell 到 Python 序列化缺陷仍待 #4438 修复，不能在本次文档验证中记为通过 |
+| L4-C06 离线 scaffold | 不带 `--with-l4a-stack`，以普通、含空格、含单引号的合法新目录运行 `--json`；再用已存在目录重试，并模拟生成后失败 | 成功 stdout 为单个 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与 manifest 一致，`manifest_path` 指向它；已存在目录退出 2 且不改原文件，部分输出失败明确范围并非成功 | 纯离线产物验收，不启动游戏/模型。shell 到 Python 序列化及路径回归仍需实际实现与验收；#4438 仅为已关闭的历史来源，不能在本次文档验证中记为通过 |
 
 L4-C05 保留已有三条回归入口：[alias 生成](crates/oasis7_viewer/scripts/viewer-compat-aliases.test.mjs)、[dist copy](scripts/copy-viewer-web-dist.test.sh)、[stale-dist fallback](scripts/agent-browser-viewer-dist-freshness-test.sh)。在实现验收中还须补齐上述两类构建的类型保持断言与实际入口采证，不能把现有 fixture 通过直接当作全部四格已覆盖。
 
@@ -766,13 +766,14 @@ npm --prefix crates/oasis7_viewer run build:viewer:visual-test
   - `topologies[].metrics.consensus_hash_consistent` 必须为 `true`，且 `consensus_hash_mismatch_count == 0`（若失败需检查 `topology/.consensus_hash_mismatch.tsv`）；
   - 如启用 chaos，`chaos_events.log` 与 `summary.json.totals.chaos_events_total` 一致。
   - 如启用 feedback events，`summary.json.totals.feedback_events_total == summary.json.totals.feedback_events_success_total + summary.json.totals.feedback_events_failed_total`，且 `feedback_events.log` 中 `phase=completed/failed` 事件数量与 `feedback_events_total` 一致。
-- reward-runtime 指标口径：S9/S10 只消费 `oasis7_chain_runtime` 的
+- reward-runtime 目标合同（尚未全部由脚本保证）：S9/S10 只消费 `oasis7_chain_runtime` 的
   `/v1/chain/status.reward_runtime` 原生快照，禁止以兼容字段回推。每个可用节点
   先取累计最大值再聚合；缺失节点必须留告警，status 不可达记为 HTTP failure 并
   终止门禁判定。`distfs_total_checks=0` 为 `insufficient_data`，不得与比例超阈值
   混写；仅 `reward_runtime.invariant_ok=false` 可触发
   `reward_asset_invariant_violation`，`running_false/http_failure` 必须保留为独立
   失败分类，即使发生于 chaos 恢复窗口。
+- 当前实现差距：两脚本的 mint 非空采样取 balances 的 `reward_mint_record_count` 与原生累计计数的最大值；节点累计聚合使用缺项默认 0，全局 available-sample 计数不能证明每个节点均有数据。S9 在存在 available samples 时把零 DistFS checks 记为 `distfs_checks_zero` warning，其他条件满足可得 `pass`；S10 则将零 checks 记为 data warning / `insufficient_data`。两者 status HTTP 失败后仍以默认字段继续采样，未立即终止；S9 的 HTTP/running 失败在 chaos 下可降为 warning，S10 HTTP 失败通常为 warning（全部 status 缺失或 running=false 等另可失败）。timeline 的 `invariant_ok` 来自 running/last_error，并非原生资产不变量；原生字段读取中的 jq `// true` 会把显式 false 也变成 true。因此脚本绿灯不能代签上述原生来源、逐节点完整性与独立失败分类合同。应核对原始 status、balances、缺失节点及失败样本，未证明项保持未满足；本说明不降低目标、不修改阈值，也不表示本次已执行或修复脚本。
 - 漂移定位/回滚演练门禁（TASK-GAME-014）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::persistence::rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift -- --nocapture
@@ -1145,7 +1146,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `summary.json` 中 `run.status == "ok"`，并产出 `timeline.csv`；
   - `summary.json` 中 `run.metric_gate.status == "pass"`（一般告警通过 `run.metric_gate.notes` 留痕，不应降级为 `insufficient_data`）；
   - 若失败，必须保留 `failures.md` 作为分诊依据。
-- metric-source boundary：S10 的 mint、DistFS、settlement 与 invariant 只以
+- metric-source 目标边界（当前脚本差距见 S9）：S10 的 mint、DistFS、settlement 与 invariant 只以
   `reward_runtime` 原生快照为准；每节点累计最大值聚合、缺失节点告警、
   `distfs_total_checks=0 -> insufficient_data`、以及 invariant/HTTP/运行状态的
   独立分类均与 S9 一致。历史 run 或空集 probe seed 不能替代本次完整 metric gate。
