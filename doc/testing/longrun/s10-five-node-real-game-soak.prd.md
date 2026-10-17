@@ -47,6 +47,8 @@
 
 ### Reward-runtime metric source and classification
 
+下列为目标验收合同；当前脚本仍有 mint 兼容计数、逐节点缺样本、HTTP 回退和 invariant 读取/分类差距，具体见 [S9/S10 手册](../../../testing-manual.md#s9p2p存储共识在线长跑技术套件)。脚本绿灯不代表这些合同已全部实现；本次仅校正编排入口，不修改指标、seed、五节点或非 readiness 边界。
+
 - S10 直接消费 `oasis7_chain_runtime` 的
   `/v1/chain/status.reward_runtime` 快照；`metrics_available` 与 mint、DistFS、
   settlement、invariant 字段以 runtime 输出为准，禁止用兼容字段回推。
@@ -77,10 +79,10 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 基于 `oasis7_viewer_live --topology single` 多进程编排 5 节点，脚本统一构建 validator/peer 配置、采集每节点状态报告，并在 S10 门禁中联合判定共识推进、网络追平、存储挑战、结算应用与资产一致性。
+- Architecture Overview: 基于 `oasis7_chain_runtime` 直接 headless 多进程编排 5 节点（1 sequencer + 2 storage + 2 observer），脚本统一构建 validator/peer 配置、采集每节点状态报告，并在 S10 门禁中联合判定共识推进、网络追平、存储挑战、结算应用与资产一致性。
 - Integration Points:
   - `scripts/s10-five-node-game-soak.sh`
-  - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
+  - `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime.rs`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - no-LLM stall：仅 sequencer 启用执行 hook，避免非 sequencer contiguous-height 冲突导致停摆。

@@ -5,7 +5,7 @@
 - 上位产品：[`世界基础设施成功标准`](../../product/world-infrastructure/prd.md#world-infrastructure-done) 的既有 SC-2 / SC-5；本文只承接请求关联与只读观察的专业组成部分。
 - Owner role：`runtime_engineer`；验证由适用 QA 责任承接，Launcher 表现由其现有专业 authority 承接。
 - 复核日期：2026-10-12；静态基线：`e01e29064517f4bf375767a19a09802335828249`。
-- 合同性质：待实现与验收的目标要求；任务进度、候选提交及实际证据以 [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450) 为准。
+- 合同性质：待实现与验收的目标要求；[#4450](https://github.com/nil-studio/oasis7/issues/4450#issuecomment-6126251006) 已在文档 PR #4637 承接后以 `not_planned` 关闭，仅为历史来源，不是当前执行台账。H1 共享身份与可靠处置、H2 状态单调、H3 P0 独立同步、H4 组合过滤仍由本合同保留；实际实现与验收由承接工作的 PR 和真实验证记录说明，关闭不表示完成。
 
 ## 1. Executive Summary
 
