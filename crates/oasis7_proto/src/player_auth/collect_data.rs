@@ -1,5 +1,5 @@
 use super::*;
-use crate::viewer::protocol::{CollectDataCommand, CollectDataRequest};
+use crate::viewer::{CollectDataCommand, CollectDataRequest};
 
 pub fn sign_collect_data_auth_proof(
     command: &CollectDataCommand,
@@ -69,7 +69,7 @@ pub fn verify_collect_data_auth_proof(
     if proof.nonce == 0 {
         return Err("auth nonce must be greater than zero".to_string());
     }
-    oasis7_proto::collect_data_auth::verify_authorization(
+    crate::collect_data_auth::verify_authorization(
         operation,
         request.electricity_cost,
         request.data_amount,
@@ -100,7 +100,7 @@ fn build_collect_data_signing_payload(
     public_key: &str,
     nonce: u64,
 ) -> Result<Vec<u8>, String> {
-    oasis7_proto::collect_data_auth::encode_authorization_payload(
+    crate::collect_data_auth::encode_authorization_payload(
         operation,
         request.electricity_cost,
         request.data_amount,

@@ -59,11 +59,13 @@ pub fn derive_correlation(
             Ok(match payload {
                 WorldServicePayloadV1::GameplayJson(bytes) => {
                     if let Ok(request) =
-                        serde_json::from_slice::<crate::viewer::GameplayActionRequest>(bytes)
+                        serde_json::from_slice::<oasis7_proto::viewer::GameplayActionRequest>(bytes)
                     {
                         let proof = request.auth.as_ref().ok_or("missing gameplay proof")?;
                         let verified =
-                            crate::viewer::verify_gameplay_action_auth_proof(&request, proof)?;
+                            oasis7_proto::player_auth::verify_gameplay_action_auth_proof(
+                                &request, proof,
+                            )?;
                         (
                             verified.public_key,
                             "gameplay",
@@ -71,14 +73,16 @@ pub fn derive_correlation(
                             verified.nonce.to_string(),
                         )
                     } else {
-                        let command: crate::viewer::CollectDataCommand =
+                        let command: oasis7_proto::viewer::CollectDataCommand =
                             serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
-                        let crate::viewer::CollectDataCommand::Submit { request } = &command else {
+                        let oasis7_proto::viewer::CollectDataCommand::Submit { request } = &command
+                        else {
                             return Err("unsupported collect_data operation".into());
                         };
                         let proof = request.auth.as_ref().ok_or("missing collect_data proof")?;
-                        let verified =
-                            crate::viewer::verify_collect_data_auth_proof(&command, proof)?;
+                        let verified = oasis7_proto::player_auth::verify_collect_data_auth_proof(
+                            &command, proof,
+                        )?;
                         (
                             verified.public_key,
                             "collect_data",
@@ -92,7 +96,8 @@ pub fn derive_correlation(
                         .auth
                         .as_ref()
                         .ok_or("missing canonical chat proof")?;
-                    let verified = crate::viewer::verify_agent_chat_auth_proof(request, proof)?;
+                    let verified =
+                        oasis7_proto::player_auth::verify_agent_chat_auth_proof(request, proof)?;
                     (
                         verified.public_key,
                         "agent_chat",
