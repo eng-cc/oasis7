@@ -223,6 +223,27 @@
     },
     {
       "match": [
+        "scripts/oasis7-pure-api-parity-smoke.sh",
+        "scripts/governance-registry-drill.sh",
+        "scripts/governed-rollback-v2-drill.sh",
+        "scripts/hosted-account-staging-smoke.sh",
+        "scripts/llm-baseline-fixture-smoke.sh",
+        "scripts/llm-longrun-stress.sh",
+        "scripts/public-testnet-faucet/package-public-testnet-faucet.sh",
+        "scripts/check-active-llm-provider.sh",
+        "scripts/governance-registry-live-drill.sh",
+        "scripts/run-local-letai-provider-bridge.sh",
+        "scripts/provider-parity-p0.sh",
+        "scripts/oasis7-liveops-grant.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "operational_contracts"
+      ],
+      "reason": "independent_bin_runtime_callers"
+    },
+    {
+      "match": [
         "deny.toml",
         "scripts/rustsec-ignore-direct-dependency-baseline.json",
         "scripts/check-rustsec-ignore-baseline.sh",
