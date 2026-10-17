@@ -2,27 +2,29 @@
 
 审计轮次: 4
 
-- 上游 PRD: `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`
+- 上游 PRD：[运行态存储治理及 profile/历史边界](runtime-storage-footprint-governance.prd.md#storage-profile-history-boundary)。
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history。
 - 适用范围: `oasis7_viewer_live` / `oasis7_chain_runtime` 默认运行链路下的 execution bridge、execution world sidecar、node-distfs 复制热数据与 footprint metrics。
+- 正式世界边界：[完整历史要求](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001)及[无损存储专业设计](formal-world-storage-efficiency.design.md#des-lws-001)约束本专题的正式持久路径。以下 legacy/local bootstrap 样本、字段和局部验收保留原范围；本次边界澄清不表示现有实现已具备完整正式历史回收或恢复能力。
 
 ## 1. 设计目标
-- **Replayability-first**：体积治理不能破坏“可追溯、可回放”；必须明确 canonical replay source、checkpoint 语义与 GC 边界。
+- **Replayability-first**：体积治理不能破坏“可追溯、可回放”；必须明确 canonical replay source、checkpoint 语义与 GC 边界。正式持久世界保留全部已承诺历史高度及其完整依赖，storage profile 的热窗口不能缩小该范围。
 - **Latest-state recoverability**：任意时刻成功提交后的 latest head 必须可恢复，且恢复后 `execution_state_root` 与 GC 前一致。
-- **Bounded default footprint**：默认 `dev_local` / launcher profile 不能因运行时间增长而无界膨胀。
-- **Profile-governed retention**：`dev_local`、`release_default`、`soak_forensics` 通过同一套 storage profile 控制保留密度，而不是散落在脚本中的隐式常量。
-- **Derived data is disposable**：快照、sidecar chunk、热提交镜像和体积型索引都是加速/诊断数据；在满足 replay contract 的前提下允许回收。
+- **Bounded default footprint**：默认 `dev_local` / launcher 的热数据、重复表示与临时材料按适用预算治理；完整历史的真实新增信息仍会增长，不承诺正式世界总存储恒定，也不以达到预算为由删历史。
+- **Profile-governed retention**：`dev_local`、`release_default`、`soak_forensics` 通过同一套 storage profile 控制热工作集、恢复加速密度与诊断用量；它们不是 authority profile，不决定世界身份、提交权或历史保留承诺。
+- **Derived data is disposable**：只有已经证明存在完整等价恢复路径、且不再被历史、未决操作、读者或回滚依赖的物理表示，才可作为派生材料回收；snapshot、journal 或 sidecar 的类型名本身不能证明可删除。
 
 ## 2. 非目标
 - 不改变共识协议、区块签名语义或 DistFS challenge 业务规则。
-- 不引入远端对象存储、外部数据库或跨节点中心化归档服务。
-- 不要求默认开发 profile 下任意历史高度都存在本地全量 `snapshot_ref`；默认 profile 保障的是“保留范围内可回放”和“latest head 可恢复”。
+- 本专题的原本地改造不直接引入远端对象存储、外部数据库或跨节点中心化归档服务；正式无损分层及独立故障域合同由[配套设计](formal-world-storage-efficiency.design.md#des-lws-005)拥有。
+- 不要求每个历史高度都有一份本地展开全量 `snapshot_ref`。legacy/local bootstrap 的已有验收只证明其实际保留范围；正式世界无论选何 storage profile，仍须保留全部承诺历史及原依赖内容，不能用该局部证据降低承诺。
 - 不尝试在本轮清理 `target/`、bundle、浏览器缓存等非运行态产物。
 
 ## 3. 现状诊断
 
 下列体积样本和初始写法是本方案形成时的历史诊断，不代表当前测量；当前 generation 故障边界
 按 §§8、13、16 的固定基线与目标合同分别判断，不能把已有 index/sweep 当作完整原子性证明。
+这些样本及下文 `2500` heights、store/sidecar/node-root 预算只约束原负载、目录和配置，不是正式端点、独立副本与冷归档的全盘容量上限，也不证明当前正式提交仍沿相同写法。
 
 ### 3.1 当前三套主要数据
 - `output/chain-runtime/<node_id>/store`
@@ -48,34 +50,39 @@
 
 ## 4. 设计原则与回放契约
 ### 4.1 Canonical replay source
-本方案把运行态数据分为“权威输入日志”和“派生缓存”两类：
+本方案按原权威和可验证的替代关系区分保留内容与派生表示；下面列举原本地路径，不是正式世界完整依赖清单：
 
 - **权威输入日志（必须保留）**
   - `consensus/commits/<height>.json` 对应的 commit 内容与顺序。
   - 影响确定性执行的外部输入必须在 commit 前物化为 committed payload，或以“commit-height -> external-effect receipt”形式被权威引用。
-  - 模块工件 hash / manifest / active version 等执行依赖。
-- **派生缓存（允许回收）**
+  - 模块工件原字节及 hash / manifest / active version 等执行依赖；只有 hash 或版本名不等于保存了内容。
+- **可证明等价后才允许回收的表示**
   - 每高度 `snapshot_ref` / `journal_ref`。
   - `reward-runtime-execution-world/.distfs-state/blobs` 的旧 generation chunk。
   - 热提交消息镜像、快照内热窗口外的 `tick_consensus_records`。
+
+正式提交中的 snapshot/journal、原结果、历史 native/WASM 工件、控制链、证明、未决输入和外部效果账本，可能是原历史或续跑的唯一材料；其闭包按[正式保留根](formal-world-storage-efficiency.design.md#des-lws-001)和[安全回收](formal-world-storage-efficiency.design.md#des-lws-004)逐项判断，不能仅因它们可由执行过程产生就归为可删缓存。
 
 ### 4.2 Replay contract
 - **R0 Latest Recovery Contract**
   - latest successful committed height 必须总是可以直接恢复。
   - latest head 相关 manifest / snapshot / journal / module refs 永远 pin。
 - **R1 Retained Replay Contract**
-  - 对于 retention policy 明确保留的任意目标高度 `H`，系统必须能从“最近 checkpoint `C <= H` + canonical replay log `(C+1..H)`”重建出与原记录一致的 `execution_state_root`。
+  - legacy/local bootstrap 的原验收仍按其明确保留的目标高度 `H` 核对。“retained”在正式持久世界覆盖所有已承诺历史高度，不随 storage profile、热窗口、checkpoint 数量或本机角色缩小。
+  - 每个适用 `H` 必须存在完整原 snapshot 或经过验证的 `C <= H` checkpoint 加 `(C+1..H)` 原始内容与依赖路径；原根匹配、控制状态、原字节/证明和新工作续跑分别按适用恢复合同核对。不能把普通 Journal 或 committed-input 日志直接当作已证明完整的状态 delta。
 - **R2 Audit Contract**
-  - 即使默认 profile 不保留每高度完整 snapshot，也必须保留足以证明 replay chain 完整性的 metadata：`height`、`execution_state_root`、`execution_block_hash`、`journal_len`、`checkpoint_anchor`、`commit_ref`。
+  - 即使不保留每高度展开全量 snapshot，也保留定位与核对所需 metadata：`height`、`execution_state_root`、`execution_block_hash`、`journal_len`、`checkpoint_anchor`、`commit_ref`。这些索引必须能取回原 payload 及其完整依赖；metadata、hash 或首尾高度不足以证明历史内容仍完整，不能替代原文。
 - **R3 Fail-safe Contract**
-  - 任意 GC、compaction、generation 切换失败都不得破坏 R0；若 R1 暂时不可验证，系统必须显式进入 `degraded`，而不是 silent success。
+  - 任意 GC、compaction、generation 切换失败都不得破坏 R0–R2 的适用保留与恢复条件；正式世界完整历史不得因维护失败被删减。闭包、原内容或证明不可验证时停止相应回收，保留已知/未知材料并显式 `degraded`；正式 serving/new confirmation 仍受原恢复闸门约束，不能以 latest 可读带过缺证。
 
 ### 4.3 Profile matrix
-| Profile | 目标 | 快照保留 | Checkpoint 保留 | 日志保留 | 适用场景 |
+下列均为 storage profile，与权威、共识和独立故障域 profile 分开。三档只改变物理放置、热密度和读取成本；正式世界仍保留全部承诺历史，原局部 fixture 不证明这一全局能力已实现。
+
+| Profile | 目标 | 本地展开快照 | Checkpoint 加速密度 | 日志与原依赖保留 | 适用场景 |
 | --- | --- | --- | --- | --- | --- |
-| `dev_local` | 控制磁盘增长 | latest head + 短 hot window | 稀疏 checkpoint | 保留 replay 所需 canonical log | 本地开发、启动器 |
-| `release_default` | 保证长期服务恢复 | latest head + 较长 hot window | 规则化 checkpoint | 保留 replay 所需 canonical log | 单节点/发行运行 |
-| `soak_forensics` | 强取证 | latest head + 长 hot window | 高密度或全量 checkpoint | 保留 replay 所需 canonical log + 更多审计输出 | 长跑、事故复盘 |
+| `dev_local` | 控制热/临时用量 | latest head + 短 hot window | 稀疏 checkpoint，删除需满足 §9.3 | 全部适用 R1 原内容及依赖 | 本地开发、启动器；名称不授予删正式历史权限 |
+| `release_default` | 控制恢复成本 | latest head + 较长 hot window | 规则化 checkpoint，删除需满足 §9.3 | 全部适用 R1 原内容及依赖 | 单节点/发行的存储配置；不证明正式持久资格 |
+| `soak_forensics` | 增加取证材料 | latest head + 长 hot window | 高密度或全量 checkpoint | 全部适用 R1 原内容及依赖 + 更多审计输出 | 长跑、事故复盘；额外副本可增多，原历史不缩短 |
 
 ## 5. 数据分类与目录方案
 
@@ -112,9 +119,9 @@ output/
   - checkpoint 使用 execution store CAS，和 latest head 的 sidecar 分离，避免 latest directory 无限保留历史 generation。
 - `reward-runtime-execution-records/`
   - 保留每高度 metadata，但不要求每条都持有唯一 snapshot/journal blob。
-  - 对非 checkpoint 高度，仅保留 `checkpoint_anchor`、`commit_ref`、`execution_state_root` 等轻量索引。
+  - 对已有完整替代恢复路径的非 checkpoint 高度，本地 record 可仅持 `checkpoint_anchor`、`commit_ref`、`execution_state_root` 等索引；被引用的原内容仍须可获取，不能留下 hash-only 历史。
 - `store/`
-  - 只保存 latest head、hot window snapshot/journal、checkpoint snapshot/journal、archive 索引和受保护 module artifacts 所引用的 blob。
+  - 保存完整保留根和所有 pins 可达的 blob。latest/hot/checkpoint/archive/module 是本地基础集合；正式路径还必须纳入 §9.2 的完整历史、未决与读者等闭包。
 
 ## 6. 核心数据结构
 ### 6.1 StorageProfileConfig
@@ -159,7 +166,7 @@ struct ExecutionBridgeRecordV3 {
 ```
 
 #### 设计说明
-- `commit_log_ref` 指向 canonical replay log 中该高度的 commit 内容（或其 hash / path）；snapshot/journal refs 只在 retention/pin 集要求时保留。
+- `commit_log_ref` 定位 canonical replay log 中该高度的实际 commit 内容；hash / path 只负责定位与校验，内容及依赖必须保存。snapshot/journal refs 的释放条件以完整保留根及 pin 为准。
 - V1/V2 记录可读，缺失字段按 legacy compatibility 处理；新写入为 v3，V2 不再被表述为最终当前 schema。
 - `last_applied_committed_height` 是持久 bridge state：恢复后只接受连续的下一高度，stale/non-contiguous 输入失败关闭。checkpoint install/restart 必须重新验证 record refs、canonical log 与 state root。
 - world-head proof/ref 只绑定本地 committed context、CAS refs 与 checkpoint manifest；不是 light-client、receipt/state proof、DA sampling、public-testnet 或 mainnet finality 证明。
@@ -292,7 +299,7 @@ struct StorageReplaySummary {
 
 ## 7. 写路径设计
 ### 7.1 Commit 落账顺序
-目标：保证 canonical log 先成立，再生成派生执行数据。
+目标：保证 canonical log 先成立，再生成派生执行数据。本节是原本地 execution bridge 改造次序；正式协议仍遵循其原候选、决策与持久回执，不能据此把当前 formal 全量材料宣称为已经改成稀疏写入。
 
 1. `NodeRuntime` 提交共识高度 `H`。
 2. canonical commit log 持久化成功，得到 `commit_ref(H)`。
@@ -306,16 +313,16 @@ struct StorageReplaySummary {
    - 只有 hot/checkpoint 高度才写 `hot_snapshot_ref` / `hot_journal_ref`。
 6. 更新 latest execution world 目录。
 7. 若 `H` 触发 checkpoint，则写 `execution-checkpoints/<checkpoint_id>.json` 并 pin checkpoint refs。
-8. 运行 retention manager 重算 pin set，并对 execution store 做 sweep。
+8. 运行 retention manager 重算完整保留根及 pin set；通过 §9 和相应闭包验证后，才对 execution store 做 sweep。
 9. 发布 metrics/state。
 
 ### 7.2 为什么不能“每高度先写完整快照”
-- 现状证明每高度 snapshot 会造成 GiB 级增长。
+- 历史本地样本显示每高度 snapshot 会增加重复持久用量；不能直接外推当前正式路径的节省量。
 - 对 replay 来说，真正必须的是：
   - 最近可恢复 head
   - 足以跳点的 checkpoint
-  - 不可丢的 canonical replay log
-- 因此完整快照必须从“默认每高度产物”降级为“按 retention class 生成的加速产物”。
+  - 不可丢的 canonical replay log、原结果、版本及完整控制状态依赖
+- 减少展开快照的前提是每个依赖它的历史高度仍有已验证完整路径。正式路径先采用[原字节共享](formal-world-storage-efficiency.design.md#des-lws-002)，未来稀疏快照加完整增量须通过[非空后缀与续跑 gate](formal-world-storage-efficiency.design.md#des-lws-007)；当前日志不完整时保留原快照。
 
 ## 8. Latest head 与 sidecar generation 设计
 ### 8.1 Latest head 目录角色
@@ -334,17 +341,17 @@ struct StorageReplaySummary {
 2. 生成新的 manifest / journal segments / pinned blob set，并在 staging 中写入候选及元数据；此时只增加材料，不删除旧 index 仍引用的任何对象。
 3. 按 [完整候选读取](#storage-generation-g3-design) 验证新代可独立组装，完成候选文件及引用依赖要求的同步；再次核对旧 head 未漂移。
 4. 同步临时 index，原子替换 `latest_generation` 指针/index，并完成其父目录同步，才确认本地 durable commit；新 index 把旧 latest 标为 `rollback_safe_generation`。rename 可见而目录同步失败，按 [G1](#storage-generation-g1-design) 保持未知并保护旧、新两组材料，不运行 sweep。
-5. 确认新 index 已提交后，以新 retained set 与外部 pin 为依据，回收不再引用的 generation-local 文件、manifest 与 CAS blobs。清理失败只保留多余数据，记录可重试维护结果；后续可回收未索引的遗留 payload，但不得触及未决提交所需材料。
+5. 确认新 index 已提交后，以新 retained set、完整历史根与外部 pin 的并集为依据，回收不再引用的 generation-local 文件、manifest 与 CAS blobs。清理失败只保留多余数据，记录可重试维护结果；未索引的遗留 payload 也须证明不属于历史、未决提交或其他保护闭包才能回收。
 
 A/B 已提交而 C 尚未确认提交时，必须保留旧 index 的 A/B 全部闭包；B 自身损坏不解除 A 的保护。
-C 正常提交后才以 C/B 为 retained set 回收 A。清理与重新计算 pin 失败都不能撤销 C 的提交。
+C 正常提交后，只有 A 不再被完整历史或任何外部 pin 引用，才可按 C/B 的本地 retained set 回收 A。清理与重新计算 pin 失败都不能撤销 C 的提交；保留两代本地加速材料不等于正式世界只保留两代历史。
 
 ### 8.3 Sweep 规则
-- 允许删除：已确认提交的新 index 与外部 pin 均不再引用、且不属于未决提交保护集合的 sidecar blobs 和 generation-local 工件。
+- 允许删除：已确认提交的新 index、完整历史根与外部 pin 均不再引用，且不属于未决提交保护集合、已有验证充分的替代表示或恢复路径的 sidecar blobs 和 generation-local 工件。
 - 禁止删除：
   - latest generation 任何 chunk
   - rollback-safe generation 任何 chunk
-  - 未来扩展中被 checkpoint 明确复用的 chunk
+  - 被任一历史、checkpoint、未决候选、reader、rollback 或迁移根复用的 chunk
 
 <a id="storage-generation-g1-design"></a>
 ### 8.4 普通保存的提交判定与内存安装
@@ -429,14 +436,16 @@ G1 的未知保护优先于 G2 的回收目标，G3 的回退选择不得解除 
 - `ArchiveOnly`
 
 ### 9.2 Pin set 计算
-每个 sweep 周期重算一次 execution store pin set：
+每个 sweep 周期在受控边界重算 execution store 保留根及 pin set；原本地基础集合包括：
 - latest head record 的 `snapshot_ref` / `journal_ref`
 - hot window 中所有 record 的 `hot_snapshot_ref` / `hot_journal_ref`
 - checkpoint manifest 引用的 `snapshot_ref` / `journal_ref`
 - replay archive index / tick archive segment blobs
-- 恢复所需 module artifact refs
+- 恢复所需 module artifact 原内容及 refs
 
-未在 pin set 中的 CAS blob 视为可回收。
+正式路径还必须按[完整历史闭包](formal-world-storage-efficiency.design.md#des-lws-001)纳入全部历史 qualified/控制链、原 snapshot/input/result/proof/版本依赖，未决 Frozen/Prepared/Decided 等材料，以及 reader/transfer、rollback、attempt、迁移源/目标和物理 recipe/dictionary 的保护根。引用边须按实际对象类型遍历，不能只扫 latest 或直接 artifact.references。
+
+只有完整 typed mark 成功、期间新增根和 pins 已重核、替代内容在必要独立故障域验证可读，才按[安全回收事务](formal-world-storage-efficiency.design.md#des-lws-004)释放不再需要的表示。未被不完整 pin 扫描发现，不等于可回收；未知类型、缺内容、预算不足或读者状态不明均保留并停止相应 sweep。TTL、mtime、最近数量或磁盘压力不能替代证明。
 
 ### 9.3 Checkpoint 策略
 - 默认每 `N` 个 committed heights 生成一个 checkpoint。
@@ -444,12 +453,13 @@ G1 的未知保护优先于 G2 的回收目标，G3 的回退选择不得解除 
   - `dev_local` 较稀疏
   - `release_default` 中等
   - `soak_forensics` 更密集
-- 至少保留最近 `K` 个 checkpoint。
-- 当删除旧 checkpoint 时，必须保证其之后仍存在更近的保留 checkpoint，且 replay contract 仍可覆盖保留窗口。
+- 最近 `K` 个 checkpoint 是本地恢复加速的密度目标，不能单独构成删除其他 checkpoint 的条件。
+- 删除某旧 checkpoint 前，枚举所有曾依赖它、且仍在适用历史承诺中的高度 `H`；正式世界包括全部承诺高度。对每个 `H` 验证仍有完整原 snapshot，或另一个 `C' <= H` 加完整原日志/增量、版本及控制依赖能恢复原内容与语义。更晚的 checkpoint `C' > H` 不能恢复更早的 `H`，只证明存在更新 checkpoint 不足以删除。
+- 上述覆盖、原引用字节/证明、必要故障域与 reader/rollback/未决 pins 全部成立后，才可释放旧展开表示；任何区间不具备完整 delta 或原工件时继续保留所需 checkpoint。checkpoint 密度调整不改变世界历史范围。
 
 ## 10. Replay 设计
 ### 10.1 指定高度重建
-输入：目标高度 `H`
+输入：目标高度 `H`；正式世界适用范围为全部承诺历史，原 local bootstrap 验收仍只说明实际覆盖高度。
 
 1. 在 checkpoint index 中找到最近的 `C <= H`。
 2. 加载 checkpoint snapshot/journal/module anchor。
@@ -463,14 +473,16 @@ G1 的未知保护优先于 G2 的回收目标，G3 的回退选择不得解除 
 拟继续执行的候选还必须具备该路径完整的 action cursor/era 与 tick schedule，并按 [续跑验证](../design.md#runtime-journal-suffix-validation) 提供正向对照；不能只凭本步骤的 root success 丢弃仍是唯一控制状态来源的 checkpoint/历史材料。
 
 ### 10.2 无 checkpoint 情况
-- 若 `H` 在 hot window 内，可直接使用最近 hot snapshot 作为 replay 起点。
-- 若 `H` 不在 hot window 且无 checkpoint，视为违反 replay contract，GC 不允许发生到该状态。
+- 若 `H` 在 hot window 内，可使用经验证的 `C <= H` hot snapshot 及完整后缀作为起点；不能从较晚快照倒推更早历史。
+- 若某适用 `H` 无完整原 snapshot，也没有可验证的 `C <= H` 恢复路径，就违反 replay contract，GC 不允许造成该状态；正式路径须保留材料并按原服务闸门限制能力。
 
 ### 10.3 外部非确定性约束
 若某些效果当前未完全体现在 committed payload 中，则必须在实现前明确补齐。否则 replay 只能得到“结构上可重放”而不能保证 bit-identical state。必须逐项核对：
 - LLM 决策是否已经在 commit 前固定成 action payload
 - 模块版本/工件 hash 是否在 replay 时可唯一解析
 - 随机种子/时钟依赖是否已包含在 block / commit 上下文
+
+正式路径同时适用[原候选、冻结输入与外部回执未知的恢复边界](formal-world-storage-efficiency.design.md#des-lws-007)：重用原已持久结果，按原幂等身份核对效果，不能为补齐历史重新调用模型、派发已确认效果或收费。完整 delta 尚未证明时不回收唯一 snapshot/控制状态材料。
 
 ## 11. Tick consensus 热冷分层
 ### 11.1 目标
@@ -540,11 +552,12 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
 
 ## 13. 失败语义与恢复策略
 ### 13.1 GC 失败
-- 任何 pin set 构建失败、引用校验失败、latest ref 缺失：
+- 任何 pin set 构建失败、历史闭包/引用校验失败、必要内容/证明或 latest ref 缺失：
   - 停止 sweep
   - 写 `last_gc_result=failed`
   - 写 `degraded_reason`
   - 保留现有 pinned + unknown 数据，不冒进删除
+  - 正式恢复或 serving 所需闭包/证明未满足时，按[原服务闸门](../design.md#runtime-recovery-design)限制受影响能力；latest 可读或本地 degraded 输出不能代签正式服务资格
 
 ### 13.2 Save 中断
 - latest generation 切换必须两阶段提交。
@@ -556,11 +569,12 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
   - status 标记 `replay_contract_broken`
   - 阻断进一步 aggressive GC
   - 在 `test_tier_full` 与 release gate 中作为硬阻断
+  - 正式世界保留全部相关材料，恢复到所需合法边界并补齐闭包/证明前，不由旧快照匹配结果重新开放写服务
 
 ## 14. 迁移方案
 ### 14.1 向后兼容
 - 旧 `ExecutionBridgeRecord` 仍可读；迁移时若缺 `commit_ref` / `retention_class`，按 legacy 模式处理。
-- legacy 模式下禁止 aggressive GC，只允许 latest-safe sweep。
+- legacy 模式下禁止 aggressive GC；原 latest-safe sweep 只表示本地受保护范围，不授权删除正式历史。无法证明完整旧引用闭包时保留 unknown 材料并阻止相应回收。
 
 ### 14.2 渐进迁移步骤
 1. 先落 storage profile / metrics，不改变存储语义。
@@ -571,6 +585,7 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
 ### 14.3 回退策略
 - 任一步失败都可回退到“保留更多数据、不删历史”的安全模式。
 - 回退不允许改变 canonical log 结构。
+- 正式新物理格式的混合读取、切换及旧 binary 能力检查由[正式迁移合同](formal-world-storage-efficiency.design.md#des-lws-006)拥有；回退软件不能抹掉新写历史，已有 legacy 恢复测试不证明新格式迁移已完成。
 
 ## 15. 代码落点建议
 - `crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs`
@@ -590,6 +605,8 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
   - footprint / replay contract / GC fail-safe 验收矩阵
 
 ## 16. 测试设计
+本节既有 `2500` heights、llm_bootstrap、local SSD 和单目录预算仍按原 fixture/配置独立判断，不上调其历史证明范围。正式完整历史、P/R 独立故障域、原字节迁移、长期规模及全生命周期实际容量另按[正式验证设计](formal-world-storage-efficiency.design.md#des-lws-009)提供证据；局部 required 通过不能替代该组合。
+
 ### 16.1 `test_tier_required`
 - `2500` heights 样本下默认 profile 体积预算验证。
 - latest-state restart 后 `execution_state_root` 一致。
@@ -615,6 +632,7 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
 `authoritative_recovery_skips_invalid_latest_generation_for_rollback_safe`，不能代签普通事务或 snapshot/journal 组装矩阵。
 实施时将可确定性注入的 GEN 场景接入受影响模块的 required 回归；实际文件系统持久性按适用平台另验，
 不以本地回读或测试 failpoint 代替真实掉电证据。执行按 [现有测试手册](../../../testing-manual.md) 记录命令、候选、环境和结果。
+GEN-G2 中允许回收 A 的本地 fixture 须明确 A 没有额外历史或外部 pin；该结论不放宽正式完整历史根。新增正式 GC 场景还应包含被较早 H 唯一依赖的 A，验证它继续受到保护。
 
 | 目标场景 | 同一单 writer 临时目录中的故障刺激 | 必须对账的结果 |
 | --- | --- | --- |
@@ -631,29 +649,30 @@ collector 提供实际目录关系及可用性，adapter 统一字段，summary 
 - `tick_consensus_records` archive segment 是放 execution store 还是 node-distfs store；当前建议优先放 execution store，避免跨子系统依赖扩大。
 
 ## 18. 结论
-- 要同时满足“默认体积可控”和“必须可追溯可回放”，唯一可持续方案不是永久保留每高度完整快照，而是：
-  - **canonical log 为真**
-  - **checkpoint 为跳点**
-  - **latest head 为快速恢复缓存**
-  - **GC 只删除不被 replay contract 引用的数据**
-- 这份设计将把当前的“快照主导存储”收敛为“日志主导、快照加速”的运行态持久化体系。
+- 本地目标是减少热副本、重复展开状态和临时材料。canonical 原内容及依赖保持，checkpoint 提供经过验证的恢复起点，latest head 提供快速恢复路径，GC 只释放不再被完整保留集合依赖的表示。
+- 正式世界先按无损物理合同共享/压缩；只有完整原字节、历史闭包与 J1/J2 等续跑证据成立后，才评估稀疏 checkpoint 加完整增量。该目标不把旧本地样本或当前局部实现升级为正式全历史能力。
 
 ## 存储适用设计承接视图
 owner runtime_engineer；原视图审读基线为 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230，本次 generation 增补及相关验收修订采用[G1](#storage-generation-g1-design)所列基线。旧 §§1–18 章节保留；尤其旧 §11.1 目标仍是 tick compaction anchor，不改名。新增“11.1 验证映射表”是 trace view，语义/heading 不覆盖旧 anchor。历史体积样本不是当前测量，定义结构/测试不是 proven capability。
 
 <a id="storage-history-dependency"></a>
 ### 历史版本、引用与权威材料
-retained H 从最近 C<=H checkpoint + canonical committed log 重建，原 governing manifest/artifact/hash/schema/module binding 唯一解析；当前版本不能解释旧 receipt/资源/责任。R0 latest、R1 retained、R2 audit metadata、R3 fail-safe 各自独立；pin includes latest/rollback-safe、hot/checkpoint、archive、恢复所需历史 module artifacts，缺 anchor/artifact/hash mismatch 不称 matched replay，停止不安全 sweep。具体 ABI/schema/migration 由 [WASM interface](../wasm/wasm-interface.md)，finalized checkpoint/active registry/redundant archive 由 P2P/ops。旧 ModuleAnchor 概念与 open question 保留，不声称实际完整 schema 已实现。
+Trace refs: O7-REQ-c33f4bee-41db-4558-9c49-80c4e0c016a1、O7-REQ-46fb6d36-e9c9-41d5-98df-200b93d68670、O7-REQ-90d4c44a-8042-4f63-94fb-3389d8474e2c；分别承接[完整历史](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001)、[冷热不缩历史](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-003)及[安全回收](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-004)在本专题的删除与保留边界。
+
+正式 retained H 为全部承诺历史高度；每个 H 具有原完整 snapshot 或 C<=H 加完整原内容及依赖的可验证恢复路径。原 governing manifest、native/WASM 工件原字节/hash/schema/module binding 唯一解析；当前版本不能替代旧 receipt/资源/责任解释。R0 latest、R1 全部适用历史、R2 原审计内容及索引、R3 fail-safe 分别验证；metadata 不替代 payload，较晚 checkpoint 不代签较早 H。
+
+pin 包括本地 latest/rollback-safe、hot/checkpoint/archive，及[正式保留根](formal-world-storage-efficiency.design.md#des-lws-001)的全部历史、控制链、证明、未决/reader/rollback/attempt/迁移依赖。按[正式 GC 事务](formal-world-storage-efficiency.design.md#des-lws-004)先完整闭合再回收；缺 anchor/artifact/proof、未知引用或 hash mismatch 不称 matched replay，停止不安全 sweep，并遵守原正式服务闸门。具体 ABI/schema/migration 由 [WASM interface](../wasm/wasm-interface.md)，finalized checkpoint/active registry/redundant archive 由 P2P/ops。旧 ModuleAnchor 概念与 open question 保留，不声称实际完整 schema 已实现。
 current ExecutionBridgeRecord 在 crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs 为 v3，new_v3/V1/V2 reader；旧 schematic hot_snapshot_ref/hot_journal_ref 描述 retention 角色，不是新增 DTO 字段。实际 snapshot_ref/journal_ref/ref reader 以 source 为准，不能因 schematic prose 改 current schema。record/checkpoint/root/CAS 只证明本地 committed binding，不提供 BFT/light proof。
 
 <a id="storage-state-transaction-persistence"></a>
 ### 状态、事务与持久化
 canonical commit log 先持久，再执行 bridge/records/latest/checkpoint，最后 retention/metrics；记录 last_applied 防 stale/noncontiguous，restore/checkpoint 重新核 refs/log/root。world generation 先 staging/校验/sync，再原子 latest pointer/index 及必要目录同步；确认新 index 提交前保护旧 index 的完整引用闭包，未知时保留旧/新材料并 fence，确认后以新 retained set 回收。GC/镜像维护在业务 commit 外且只在授权 runtime 根目录；维护失败不撤销已提交业务结果。pin 构建失败/latest missing/未知引用保留数据、degraded、停止 sweep；只有确认 NotCommitted 才维持旧 World 的业务状态，不能由任意 save Err 推导回滚。普通保存与完整候选读取分别遵循 [G1](#storage-generation-g1-design)、[G2](#storage-generation-g2-design)、[G3](#storage-generation-g3-design) 和 [交叉边界](#storage-generation-cross-boundary-design)。replay mismatch 标记 replay_contract_broken 并阻断 aggressive GC/full release verdict；留更多数据 rollback 不改 canonical log。
-R0 latest-only restart 与 R1 retained exact H 分开，超 policy 深历史无默认保证；legacy 无 ref 只 latest-safe sweep。原始 payload hash 不受磁盘压缩编码影响，只有 header 后确实更小才压缩。continuous latest-based hot range 与 shared cold anchor/segmented pack/双写别名回填保持旧合同，seek/scan 边界同源。多进程第二 writer 必须检测阻止，不新增多writer协调。budget/p95/CPU/metrics采样依旧 PRD NFR；soak_growth 显式 profile，不作为 leak 豁免。
+R0 latest-only restart 与 R1 exact H 的证据分开：legacy/local bootstrap 只报告实际覆盖范围，不能外推正式能力；正式世界不因超出 storage profile 热窗口失去完整历史保证。legacy 无 ref 时的 latest-safe sweep 也不得删除尚未证明可替代的正式依赖。原始 payload hash 不受磁盘压缩编码影响，只有 header 后确实更小才压缩；正式 codec/共享/迁移的目标另按[原字节合同](formal-world-storage-efficiency.design.md#des-lws-002)，不把通用 CAS 基础表述为 formal 已实现。continuous latest-based hot range 与 shared cold anchor/segmented pack/双写别名回填保持旧合同，seek/scan 边界同源。多进程第二 writer 必须检测阻止，不新增多writer协调。旧 budget/p95/CPU/metrics 采样仍限其 PRD NFR 样本；正式总盘按[实际物理容量合同](formal-world-storage-efficiency.design.md#des-lws-009)分域度量，soak_growth 不作为 leak 或删历史豁免。
 
 <a id="storage-service-limit"></a>
 ### 只读恢复、服务限制与演进
 restore root 相等仅本地历史材料条件，开放 voting/serving/new intent 还需 [root recovery gate](../design.md#runtime-recovery-design) 的同world/finality/append/version/head；state-sync/ops 同窗口材料不可由 latest-only green 代签。CLI/launcher/bundle 同名 profile 和 OASIS7_CHAIN_STORAGE_PROFILE 非空注入、默认继承及 bundle runtime 路径保持旧 AC-6.1/§6.8。status 仅 budget/bytes/pins/replay/GC/原因，不导出 payload；不按 file mtime 猜删除。migration 按 §14 渐进保留 legacy refs，external-effect committed payload materialization 未完整时保留 §17 风险、禁止假定 bit-identical replay；输入/profile/retention/version/消费者变更触发 runtime/P2P/WASM/launcher/QA 复核。
+归档或索引缺证时，G3 允许的本地只读诊断候选仍须满足其原错误分类和完整组装要求；该候选不产生正式 serving 权。正式完整闭包/证明未核验、独立持久条件未成立或新格式读者不兼容时，保留材料并限制能力，不能以调整 storage profile 或加载较旧状态绕过。
 
 <a id="storage-case-ac1"></a>
 #### AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling
@@ -773,7 +792,7 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 
 ### 2.1 需求承接与分配表
 
-限定产品来源沿配对 PRD“当前合同、历史样本与上游接受”及既有根 receiver 承接；以下只是局部义务来源，不替换后面 29 组独立专业接受关系：
+限定产品来源沿配对 PRD“当前合同、历史样本与上游接受”、[profile/历史边界](runtime-storage-footprint-governance.prd.md#storage-profile-history-boundary)及既有根 receiver 承接；以下局部义务与新增正式边界不替换原独立专业接受关系，也不扩大旧测试的证明范围：
 
 - Trace refs: O7-REQ-3f7d612d-5a6a-4d6d-bb0e-722c44d986f4；[product_requirement: REQ-DCS-002](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root recovery receiver](../design.md#runtime-recovery-design)，定位 G2/G3/交叉边界及 [历史材料与 replay](#storage-history-dependency) 的本地子义务。完整非空事件后缀正向续跑、独立故障域、合法 authority 与重新 serving 仍未由本专题证明，原 `test_tier_full` 和 ops/runtime/QA 同窗口组合不变。
 - Trace refs: O7-REQ-cf672e18-ed16-42a3-9338-ab7b965ac607；[product_requirement: REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 经 [root generation 合同](../prd.md#runtime-generation-persistence-contract) 与 [root generation receiver](../design.md#runtime-generation-persistence-design)，仅定位 [G1](#storage-generation-g1-design) 的持久结果、调用方一致性及未知保护；本地 durable commit 不等于正式 authority 提交或全部验证者组合。
@@ -785,6 +804,9 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 
 | 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
 | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-c33f4bee-41db-4558-9c49-80c4e0c016a1；[REQ-LWS-001](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001) | 正式全部承诺 H 及原依赖完整；索引/hash 不能替代原文 | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | Runtime/formal/WASM；[正式闭包权威](formal-world-storage-efficiency.design.md#des-lws-001) | 原 local bootstrap、latest/root 与 2500 样本不证明完整正式历史 |
+| Trace refs: O7-REQ-46fb6d36-e9c9-41d5-98df-200b93d68670；[REQ-LWS-003](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-003) | storage profile 只调工作集/恢复密度；删除 checkpoint 覆盖所有依赖 H | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | Runtime/ops；[正式冷热合同](formal-world-storage-efficiency.design.md#des-lws-003) | 旧 retained-window 场景不授权缩短正式历史或改变 authority |
+| Trace refs: O7-REQ-90d4c44a-8042-4f63-94fb-3389d8474e2c；[REQ-LWS-004](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-004) | 先闭合完整根与未决/reader/rollback pins，后释放可替代表示 | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | Runtime/formal/ops；[正式 GC](formal-world-storage-efficiency.design.md#des-lws-004) | 两代保留、未发现引用、TTL 或本地 sweep 成功不证明正式可删 |
 | [professional_acceptance: storage-observation-contract](runtime-storage-footprint-governance.prd.md#storage-observation-contract) | STORAGE-AC-1–5：容量并集、GC availability、实际间隔、普通 Gate 与 dry-run 分别验收 | [观测设计](#storage-observation-design) | 对应工具/运行时维护者及 QA | 文档修订不声明脚本或现场验收通过，不新增发布门禁 |
 | [professional_acceptance: storage-generation-g1](runtime-storage-footprint-governance.prd.md#storage-generation-g1) | 普通保存按精确候选与 durable 证据区分三态，安装/原返回值/幂等/fence 一致，维护失败独立 | [G1 设计](#storage-generation-g1-design) | runtime persistence 与普通 mutator；现有 cognition key；QA | 目标；不新增业务 ledger、外部 wire enum 或网络正式提交证明 |
 | [professional_acceptance: storage-generation-g2](runtime-storage-footprint-governance.prd.md#storage-generation-g2) | 替代 index 确认前保旧闭包，确认后回收，未知保护旧/新材料 | [G2 设计](#storage-generation-g2-design) | runtime storage 单 writer；DistFS 引用与 sync；QA | 不增加多 writer 协调或远端归档；未证明真实掉电 |
@@ -820,9 +842,13 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 SC-7 原 [driver storage profile 入口](../../../crates/oasis7_chain_runtime/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_storage_profile.rs) 只提供 hardened policy、dev supply、初始化/部分缓存文件与正常 commit/CAS record 的集成相关定义，没有 hot_head/checkpoint_interval 比较断言；下表改用真实 profile 配置断言。两者均未运行，配置 equality 不代签实际 retention、exact-height restore 或 footprint。
 
 所有下列行为验证在本次文档编辑中未运行。定义/计划与当前实现、实际执行、发布分别成立；执行须另固定 source/integration/tested tree、config/world/entry/environment/window、exit/result/artifacts，并回 PR 与实际验证记录。target场景尚无完整runner时明确保持待证明，现有test/manual只是有界接收入口，不能伪称已实现或通过。
+新增正式边界的验证使用配套无损手册；原各 AC/NFR 数值及案例保持原负载/路径，不是正式端点、P/R 与冷归档的整体预算或验收替代。
 
 | 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| Trace refs: O7-REQ-c33f4bee-41db-4558-9c49-80c4e0c016a1；[REQ-LWS-001](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001) | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | 所有承诺 H 的原内容、版本/控制依赖及证明完整 | [V-LWS-HISTORY](formal-world-storage-efficiency.manual.md#v-lws-history)；同候选、同完整历史逐对象检查，跨热窗/版本并移除唯一 payload 负例；formal full 范围 | 原对象/高度覆盖、缺失拒绝及实际恢复记录 | 规划未执行；旧 latest 或局部 retained replay 不证明此义务 |
+| Trace refs: O7-REQ-46fb6d36-e9c9-41d5-98df-200b93d68670；[REQ-LWS-003](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-003) | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | profile/checkpoint 变化不删除较早 H 的唯一恢复起点 | [V-LWS-HISTORY](formal-world-storage-efficiency.manual.md#v-lws-history)；构造早期 H 仅依赖旧 C、存在更晚 C'>H，检查拒绝回收；补齐等价路径后再验证释放 | 每个被影响 H 的恢复路径、原内容与回收判定 | 规划未执行；profile 配置 equality 或单个目标恢复不证明全范围 |
+| Trace refs: O7-REQ-90d4c44a-8042-4f63-94fb-3389d8474e2c；[REQ-LWS-004](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-004) | [历史边界](runtime-storage-footprint-governance.design.md#storage-history-dependency) | 任何必要历史/未决/pin 未闭合均不 sweep | [V-LWS-GC](formal-world-storage-efficiency.manual.md#v-lws-gc)；真实 typed 根、旧 checkpoint、unknown、并发 reader/rollback 与迁移中断；required 局部 + full 进程/故障域 | 根/pin/保留理由、原操作和恢复结果、实际释放 | 规划未执行；原两代 sidecar fixture 不证明正式全局 GC |
 | [professional_acceptance: storage-observation-contract](runtime-storage-footprint-governance.prd.md#storage-observation-contract) | [观测设计](#storage-observation-design) | STORAGE-AC-1–5：容量并集、GC availability、实际间隔、普通 Gate 与 dry-run 分别验收 | [现有验证入口](../../../testing-manual.md)；在实际实施候选按观测设计中的各正负 fixture 和进程边界分别运行，入口存在不代表矩阵已覆盖 | 实施 PR 的候选、命令、逐项结果和未运行项 | 本次未运行行为、真实节点、部署或性能验收 |
 | [professional_acceptance: storage-generation-g1](runtime-storage-footprint-governance.prd.md#storage-generation-g1) | [G1 设计](#storage-generation-g1-design) | GEN-G1 的提交前后、维护和 sync/回读故障分别成立 | [局部基线](../../../crates/oasis7/src/runtime/tests/cognition_economy.rs)；目标 required GEN-G1：同候选单 writer 临时目录，注入 §16.3 全部故障窗并对账返回值、内存、恢复和同 key/后续写入；现有基线不覆盖该组合 | PR 中实际故障窗、命令、exit 与 lease/余额/receipt、fence 对账 | 本次未实现/运行；平台持久性、真实掉电/provider 未证明 |
 | [professional_acceptance: storage-generation-g2](runtime-storage-footprint-governance.prd.md#storage-generation-g2) | [G2 设计](#storage-generation-g2-design) | GEN-G2 的 A/B/C 保护与提交后清理独立于 G1 | [局部基线](../../../crates/oasis7/src/runtime/tests/persistence.rs)；目标 required GEN-G2：同候选单 writer 临时目录，第三代 index.tmp open/write/sync 注入、坏 B/健康 A、提交后 GC 失败与重试；比旧 index 字节与全闭包 | PR 中实际 A/B/C 身份、故障窗、工件完整性和回收结果 | 本次未实现/运行；已有 interrupted-save 测试不代签全部窗口 |
