@@ -139,7 +139,7 @@ pub(super) fn validate_snapshot_continuity(
     previous_pre: Option<&Snapshot>,
     next: &CapturePreparation,
 ) -> Result<(), String> {
-    use oasis7::runtime::{ChainResourceDelta, ChainResourceDerivationContext};
+    use oasis7::runtime::ChainResourceDerivationContext;
     use sha2::{Digest, Sha256};
     let world = World::from_snapshot(post.clone(), journal)
         .map_err(|e| format!("prefix restore: {e:?}"))?;
