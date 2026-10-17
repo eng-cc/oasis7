@@ -171,6 +171,10 @@ pub(crate) struct FormalWriter<P: FormalDurabilityEndpoint, R: FormalDurabilityE
 mod published;
 pub(crate) use published::{read_published_candidate_at, read_published_proof_at};
 
+#[path = "formal_writer_restore.rs"]
+mod restoration;
+use restoration::{restore, restore_qualified};
+
 fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let bytes = crate::controlled_history_cli::read_bounded(path, 64 * 1024 * 1024)?;
     published::decode(&bytes)
@@ -211,74 +215,6 @@ pub(crate) fn initial_business_nodes(
     Ok(writes)
 }
 
-fn restore(
-    candidate: &FormalCandidateMaterialV1,
-    release: &ReleaseSecurityPolicy,
-) -> Result<World, String> {
-    let expanded_snapshot =
-        oasis7_distfs::controlled_authority::formal::verify_record_material_retaining_snapshot(
-            &candidate.candidate.record,
-            &candidate.material,
-        )
-        .map_err(|e| e.to_string())?;
-    let snapshot: Snapshot = match expanded_snapshot {
-        Some(bytes) => capture::decode_generic(&bytes)?,
-        None => capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?,
-    };
-    let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
-    let world = World::from_snapshot(snapshot, journal)
-        .map_err(|e| format!("{e:?}"))?
-        .with_release_security_policy(release.clone());
-    if blake3_hex(&to_cbor(world.snapshot())?) != candidate.candidate.record.after_state_root {
-        return Err("formal writer restored candidate root mismatch".into());
-    }
-    super::formal_business_package::tree(
-        &candidate.material,
-        &candidate.candidate.record,
-        &world,
-        false,
-    )?;
-    Ok(world)
-}
-fn restore_qualified(
-    candidate: &FormalCandidateMaterialV1,
-    release: &ReleaseSecurityPolicy,
-    anchor: &VerifiedFormalReadAnchorV1,
-    reader: std::sync::Arc<dyn business_index::BusinessIndexNodeReader + Send + Sync>,
-) -> Result<World, String> {
-    let expanded_snapshot =
-        oasis7_distfs::controlled_authority::formal::verify_record_material_retaining_snapshot(
-            &candidate.candidate.record,
-            &candidate.material,
-        )
-        .map_err(|e| e.to_string())?;
-    if &candidate.candidate.record != anchor.head().record() {
-        return Err("formal restore candidate differs from qualified anchor".into());
-    }
-    let snapshot: Snapshot = match expanded_snapshot {
-        Some(bytes) => capture::decode_generic(&bytes)?,
-        None => capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?,
-    };
-    let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
-    if snapshot.state.retained_history_root.is_none() {
-        if anchor.authority().definition().profile_version == 2 {
-            return Err("profile2 native restore requires retained-history descriptor".into());
-        }
-        return restore(candidate, release);
-    }
-    let bytes = to_cbor(&snapshot)?;
-    let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
-    let world = World::from_verified_formal_snapshot(snapshot, journal, parent, reader)
-        .map_err(|e| format!("{e:?}"))?
-        .with_release_security_policy(release.clone());
-    super::formal_business_package::tree(
-        &candidate.material,
-        &candidate.candidate.record,
-        &world,
-        false,
-    )?;
-    Ok(world)
-}
 impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R> {
     #[cfg(test)]
     pub(crate) fn open(
