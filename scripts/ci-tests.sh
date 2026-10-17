@@ -138,7 +138,7 @@ print(artifacts[0])
 PY_VIEWER
 )"
   rm -f "$viewer_manifest"
-  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features test_tier_required
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features test_tier_required
 }
 
 run_scenario_regression_tests() {
@@ -146,11 +146,11 @@ run_scenario_regression_tests() {
 }
 
 run_oasis7_required_tier_clippy() {
-  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features test_tier_required
+  run_cargo_clippy -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features test_tier_required
 }
 
 run_oasis7_full_tier_tests() {
-  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --tests --features "test_tier_full,wasmtime,viewer_live_integration"
+  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --tests --features "test_tier_full,wasmtime,viewer_live_integration"
 }
 
 run_oasis7_consensus_tests() {
@@ -633,7 +633,7 @@ run_full_support_tier_tests() {
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_software_safe_build
-  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --features wasmtime --lib --bins
+  run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --features wasmtime --lib --bins
 }
 
 run_full_required_superset() {
@@ -707,7 +707,7 @@ else
     required)
       for group in baseline rust_baseline oasis7_required consensus distfs node net viewer_js_required pixel_world_bridge launcher_web workspace_support scenario_regression operational_contracts packaging_contracts workflow_governance codex_agent_config_validation compile_metrics site_quality doc_checker_contracts cargo_tooling_contracts; do run_group "$group"; done
       ;;
-    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
+    full|full-standard) run_full_required_superset; run_rust_baseline; run_oasis7_full_tier_tests; run_oasis7_llm_baseline_fixture_smoke; run_cargo test -p oasis7 -p oasis7_chain_runtime -p oasis7_client_cli -p oasis7_launcher_backend -p oasis7_newapi_bridge_service -p oasis7_ops_tools -p oasis7_provider_local_bridge -p oasis7_provider_tools -p oasis7_viewer_runtime -p oasis7_observability -p oasis7_hosted_access -p oasis7_letai_credit_adapter -p oasis7_launcher_config -p oasis7_wasm_materializer -p oasis7_game_client --features wasmtime --lib --bins; if [[ "$tier" == full ]]; then run_group formal_process; fi ;;
     full-core) run_full_core_tier_tests ;;
     full-support) run_full_support_tier_tests ;;
   esac

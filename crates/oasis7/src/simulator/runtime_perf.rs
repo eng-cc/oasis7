@@ -96,7 +96,7 @@ pub struct RuntimePerfSnapshot {
 /// This intentionally preserves the default snapshot shape while making `Unknown`
 /// health explicit at the boundary that reports unsupported metrics.
 #[allow(dead_code)]
-pub(crate) fn unsupported_runtime_perf_snapshot() -> RuntimePerfSnapshot {
+pub fn unsupported_runtime_perf_snapshot() -> RuntimePerfSnapshot {
     let snapshot = RuntimePerfSnapshot::default();
     debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
     snapshot

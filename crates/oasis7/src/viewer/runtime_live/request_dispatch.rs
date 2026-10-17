@@ -131,6 +131,15 @@ impl ViewerRuntimeLiveServer {
                 if version >= 2 {
                     if offered.iter().any(|capability| capability == "world_view") {
                         selected.push("world_view".to_string());
+                        for capability in [
+                            "world_view_delta_v1",
+                            "world_view_aggregate_v1",
+                            "world_view_event_anchor_v1",
+                        ] {
+                            if offered.iter().any(|offered| offered == capability) {
+                                selected.push(capability.to_string());
+                            }
+                        }
                         if offered
                             .iter()
                             .any(|capability| capability == "world_view_pins_v1")
@@ -305,6 +314,24 @@ impl ViewerRuntimeLiveServer {
                 }
             }
             ViewerRequest::RequestWorldView { query } => {
+                let supports = |capability: &str| {
+                    session
+                        .negotiated_protocol
+                        .capabilities
+                        .iter()
+                        .any(|selected| selected == capability)
+                };
+                let delta_enabled = supports("world_view_delta_v1");
+                let unnegotiated = (query.get("resume_cursor").is_some() && !delta_enabled)
+                    || (query.get("detail_level").is_some()
+                        && !supports("world_view_aggregate_v1"))
+                    || (query.get("include_events").is_some()
+                        && !supports("world_view_event_anchor_v1"));
+                if unnegotiated {
+                    let view = serde_json::json!({"world_id":self.config.world_id,"request_generation":query.get("request_generation"),"completeness":"unknown","entities":[],"unavailable_reasons":["capability_unavailable"]});
+                    send_response(writer, &ViewerResponse::WorldView { view })?;
+                    return Ok(());
+                }
                 if (self.config.world_service.is_some() && self.verified_world_view.is_none())
                     || (self.chain_link_enabled()
                         && !session.chain_runtime_authoritatively_primed
@@ -323,14 +350,13 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|| "public".into());
                 let epoch = self.reorg_epoch;
                 let authority = self.world_view_source_authority(&audience);
-                let view = crate::viewer::world_view::build_session_bound(
+                let view = crate::viewer::world_view::build_session_evolving(
                     &mut cache,
                     || self.compat_snapshot_for_session(session),
-                    &world_id,
-                    epoch,
-                    &audience,
+                    (&world_id, epoch, &audience),
                     query,
                     authority,
+                    delta_enabled,
                 );
                 session.world_view_projection = cache;
                 send_response(writer, &ViewerResponse::WorldView { view })?;

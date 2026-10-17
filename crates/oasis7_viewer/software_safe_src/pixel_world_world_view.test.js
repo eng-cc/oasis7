@@ -94,3 +94,42 @@ it('stops before a whole fixed-size cursor page would exceed the combined object
  const sizes=[];const client=createWorldViewClient({request:async q=>{sizes.push(q.page_size);const offset=Number(q.cursor||0);return page({request_generation:q.request_generation,entities:Array.from({length:q.page_size},(_,i)=>({kind:'agent',entity_id:`A${offset+i}`})),next_cursor:String(offset+q.page_size),completeness:'partial'});}});
  client.reset('s');const view=await client.query({page_size:67});expect(view.entities).toHaveLength(938);expect(sizes).toEqual(Array(14).fill(67));expect(view.budget_limited).toBe(true);expect(client.state().stale).toBe(false);
 });
+
+it('uses only a complete baseline cursor and atomically resets on a delta gap',async()=>{
+ const requests=[];let turn=0;
+ const client=createWorldViewClient({request:async query=>{requests.push(query);turn++;
+  const common={world_id:'W',scope_id:'S',reorg_epoch:'0',request_generation:query.request_generation,entities:[],relations:[],completeness:'complete',query_id:'Q',update_sequence:'1',source_cut:'A',resume_cursor:'resume'};
+  if(turn===2)return {...common,delivery:'delta',base_cut:'wrong',previous_sequence:'1',update_sequence:'2',observed_at_tick:'5',carry_forward:true};
+  return {...common,delivery:'snapshot'};
+ }});client.reset('scope','W');await client.query({});await client.query({},{delta:true});
+ expect(requests[1].resume_cursor).toBe('resume');expect(requests[2].resume_cursor).toBeUndefined();expect(client.state().view.source_cut).toBe('A');expect(client.state().stale).toBe(false);
+});
+it('clears previous deletion notices when a stream reset replaces its authority baseline',async()=>{
+ let turn=0;
+ const client=createWorldViewClient({request:async query=>{
+  const common={world_id:'W',scope_id:'S',reorg_epoch:'0',request_generation:query.request_generation,entities:[],relations:[],events:[],aggregates:[],completeness:'complete',query_id:'Q',source_cut:'A',update_sequence:'1',observed_at_tick:'0',resume_cursor:'one'};
+  turn++;
+  if(turn===1)return {...common,delivery:'snapshot',entities:[{kind:'factory',entity_id:'F'}]};
+  if(turn===2)return {...common,delivery:'delta',base_cut:'A',source_cut:'B',previous_sequence:'1',update_sequence:'2',resume_cursor:'two',carry_forward:true,removals:[{record_kind:'entity',kind:'factory',id:'F',world_deleted:true,reason:'factory_recycled'}]};
+  if(turn===3)return {...common,delivery:'reset'};
+  return {...common,delivery:'snapshot'};
+ }});
+ client.reset('scope','W');await client.query({});await client.query({},{delta:true});
+ expect(client.state().changes).toHaveLength(1);
+ await client.query({},{delta:true});expect(client.state().changes).toEqual([]);
+});
+
+it('retains same-authority notices on automatic pins baseline reads but clears changed permissions',async()=>{
+ const binding=(permission,position)=>({version:{visibility_scope:'public',projection_revision:'projection-v1',commit:{world:{world_id:'W',genesis_digest:'G'},position,state_root_ref:`root-${position}`,binding:{provider_world_id:'provider',branch_id:'main',reorg_generation:'0',authority_generation:'1',permission_generation:permission,governing_manifest_ref:'manifest'}}}});
+ let turn=0;
+ const client=createWorldViewClient({request:async query=>{
+  turn++;
+  const common={world_id:'W',scope_id:'S',reorg_epoch:'0',request_generation:query.request_generation,source_binding:binding(turn===4?'2':'1',turn),entities:[],relations:[],events:[],aggregates:[],completeness:'complete',query_id:'Q',source_cut:'A',update_sequence:'1',observed_at_tick:'0',resume_cursor:'one'};
+  if(turn===1)return {...common,delivery:'snapshot',entities:[{kind:'factory',entity_id:'F'}]};
+  if(turn===2)return {...common,delivery:'delta',base_cut:'A',source_cut:'B',previous_sequence:'1',update_sequence:'2',resume_cursor:'two',carry_forward:true,removals:[{record_kind:'entity',kind:'factory',id:'F',world_deleted:true,reason:'factory_recycled'}]};
+  return {...common,delivery:'snapshot'};
+ }});
+ client.reset('scope','W');await client.query({});await client.query({},{delta:true,preserveChanges:true});expect(client.state().changes).toHaveLength(1);
+ await client.query({pinned_entities:[{kind:'agent',id:'A'}]},{delta:true,preserveChanges:true});expect(client.state().changes).toHaveLength(1);
+ await client.query({pinned_entities:[{kind:'agent',id:'A'}]},{preserveChanges:true});expect(client.state().changes).toEqual([]);
+});

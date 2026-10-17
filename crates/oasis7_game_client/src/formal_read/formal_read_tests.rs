@@ -1,15 +1,19 @@
-use super::super::{
-    authority,
-    formal_projection::{ProjectionAudienceV1, ProjectionCommitmentsV1},
-};
+use crate::authority;
+use oasis7::world_service::projection::WorldServiceProjection;
+use oasis7_client_api::formal_projection::{ProjectionAudienceV1, ProjectionCommitmentsV1};
+type FormalReadVerifier = super::FormalReadVerifier<WorldServiceProjection>;
 use super::*;
-pub(super) use crate::world_service::formal_read_fixtures as fixtures;
+#[path = "../../../oasis7/src/world_service/formal_read_fixtures.rs"]
+pub(super) mod fixtures;
+#[path = "../../../oasis7/src/world_service/formal_read_response_fixture.rs"]
+mod response_fixture;
 use ed25519_dalek::Signer;
 use fixtures::*;
 use oasis7_distfs::controlled_authority::{
     fencing::*,
     replicated_protocol::{ArtifactRole, EndpointRole, HeadAnchor},
 };
+pub(super) use response_fixture::response;
 use serde::Serialize;
 
 #[path = "formal_read_durable_set_tests.rs"]
@@ -18,89 +22,6 @@ mod durable_set_tests;
 mod historical_v2_tests;
 #[path = "formal_read_rebase_tests.rs"]
 mod rebase_tests;
-
-pub(super) fn response(
-    world: &oasis7::runtime::World,
-    anchor: &VerifiedFormalReadAnchorV1,
-    history: FormalReadHistoryV1,
-) -> (
-    ReadWorldViewRequest,
-    ReadWorldViewResponse<WorldServiceProjection>,
-) {
-    let view = projection(world);
-    let commit = commit_ref(anchor, &view);
-    let cache = FormalReadVerifier::new(
-        &InitialActivationTrustV1 {
-            issuer_public_key: public(9),
-            world: anchor.authority().definition().world.clone(),
-            initial_state_root: anchor.initial_certificate().body.initial_state_root.clone(),
-            governing_manifest_digest: anchor
-                .initial_certificate()
-                .body
-                .governing_manifest_digest
-                .clone(),
-            recovery_policy_digest: anchor.authority().policy().digest().unwrap(),
-        },
-        anchor.clone(),
-    )
-    .unwrap();
-    let anchor_ref = cache.anchor_ref().unwrap();
-    let inclusion = crate::world_service::formal_projection::commitments_for_world(world)
-        .unwrap()
-        .inclusion(&ProjectionAudienceV1::public())
-        .unwrap();
-    let request = ReadWorldViewRequest {
-        observation_nonce: Some("07".repeat(32)),
-        formal_anchor: Some(anchor_ref.clone()),
-        contract_version: 1,
-        world: commit.world.clone(),
-        scope_id: "public".into(),
-        min_commit: None,
-        fixed_commit: None,
-        deadline_unix_ms: None,
-    };
-    let response = ReadWorldViewResponse {
-        formal_profile: Some(FormalReadProfileV1::controlled()),
-        formal_proof: Some(FormalReadSidecarV1 {
-            schema_version: 1,
-            profile: FormalReadProfileV1::controlled(),
-            anchor: anchor_ref,
-            history_cbor_hex: history.encode_hex().unwrap(),
-            projection: FormalProjectionInclusionV1 {
-                schema_version: inclusion.schema_version,
-                audience: FormalProjectionAudienceV1 {
-                    scope_id: inclusion.audience.scope_id,
-                    reader_public_key: inclusion.audience.reader_public_key,
-                },
-                leaf_index: inclusion.leaf_index,
-                leaf_count: inclusion.leaf_count,
-                siblings: inclusion.siblings,
-            },
-        }),
-        execution_evidence_scope: None,
-        contract_version: 1,
-        logical_tick: view.state.time,
-        version: ProjectionVersion {
-            commit: commit.clone(),
-            projection_revision: authority::request_digest("projection", &view).unwrap(),
-            visibility_scope: "public".into(),
-        },
-        continuation: EventCursor {
-            stream_id: authority::request_digest("formal-events-v1", &(&commit.world, &"public"))
-                .unwrap(),
-            scope_id: "public".into(),
-            era: view.formal_commit_header.as_ref().unwrap().event_id_era,
-            sequence: view
-                .formal_commit_header
-                .as_ref()
-                .unwrap()
-                .journal_high_watermark,
-            commit,
-        },
-        view,
-    };
-    (request, response)
-}
 
 fn domain_bytes<T: Serialize>(domain: &str, value: &T) -> Vec<u8> {
     let mut bytes = (domain.len() as u64).to_be_bytes().to_vec();
@@ -366,69 +287,6 @@ fn recovery_step(
     )
 }
 #[test]
-fn externally_pinned_actual_world_read_is_independent_of_service_assertion() {
-    let (world, trust, anchor, _) = actual_world_initial_fixture();
-    let checkpoint = anchor.checkpoint();
-    let pin = checkpoint.digest().unwrap();
-    let restored = VerifiedFormalReadAnchorV1::from_fixed_pin(&checkpoint, &pin, &trust).unwrap();
-    let (request, response) = response(
-        &world,
-        &anchor,
-        FormalReadHistoryV1 {
-            schema_version: 1,
-            steps: vec![],
-        },
-    );
-    assert!(
-        super::super::verified_view::VerifiedWorldView::new(response.clone(), &request).is_err()
-    );
-    let mut verifier = FormalReadVerifier::new(&trust, restored).unwrap();
-    let observed = verifier
-        .verify_view(&response, &request, &public(7))
-        .unwrap();
-    let view = super::super::verified_view::VerifiedWorldView::new_formal_verified(
-        response.clone(),
-        &request,
-        observed,
-    )
-    .unwrap();
-    assert_eq!(view.formal_commit().unwrap().head(), anchor.head().head());
-    let membership_request = ReadMembershipRequest {
-        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
-        world: request.world.clone(),
-        min_commit: Some(view.version().commit.clone()),
-        fixed_commit: Some(view.version().commit.clone()),
-    };
-    let membership =
-        super::super::membership::AuthenticatedMembershipObservation::from_formal_view(
-            &view,
-            &membership_request,
-        )
-        .unwrap();
-    assert_eq!(membership.response().commit, view.version().commit);
-    assert!(membership.response().applied_consensus_membership.is_none());
-    assert!(!membership.response().supports_safe_runtime_update);
-    let mut malicious = response;
-    malicious.view.state.time += 1;
-    malicious.logical_tick += 1;
-    malicious.view.runtime_binding.as_mut().unwrap().base_tick = malicious.logical_tick;
-    malicious.version.projection_revision =
-        authority::request_digest("projection", &malicious.view).unwrap();
-    let before = verifier.anchor_ref().unwrap();
-    assert!(
-        verifier
-            .verify_view(&malicious, &request, &public(7))
-            .is_err()
-    );
-    assert_eq!(verifier.anchor_ref().unwrap(), before);
-    let mut wrong_checkpoint = checkpoint;
-    wrong_checkpoint.active_authority.writer_public_key = public(99);
-    assert!(VerifiedFormalReadAnchorV1::from_fixed_pin(&wrong_checkpoint, &pin, &trust).is_err());
-    let mut wrong_trust = trust;
-    wrong_trust.issuer_public_key = public(98);
-    assert!(FormalReadVerifier::new(&wrong_trust, anchor).is_err());
-}
-#[test]
 fn formal_header_scope_and_proof_absence_fail_closed_without_cache_changes() {
     let (world, trust, anchor, _) = actual_world_initial_fixture();
     let (request, response) = response(
@@ -448,8 +306,9 @@ fn formal_header_scope_and_proof_absence_fail_closed_without_cache_changes() {
             1 => value.version.commit.binding.authority_generation += 1,
             2 => value.version.commit.binding.permission_generation += 1,
             3 => {
-                value.execution_evidence_scope =
-                    Some(super::super::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into())
+                value.execution_evidence_scope = Some(
+                    oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into(),
+                )
             }
             4 => {
                 value
@@ -493,7 +352,7 @@ fn formal_header_scope_and_proof_absence_fail_closed_without_cache_changes() {
 
 #[test]
 fn configured_checkpoint_cannot_be_replaced_by_another_higher_pinned_anchor() {
-    use crate::world_service::client::{
+    use oasis7::world_service::client::{
         FormalReadTrustConfigV1, RemoteWorldServiceClient, WorldServiceClientConfig,
     };
     let (world, trust, anchor, _) = actual_world_initial_fixture();
@@ -566,7 +425,7 @@ fn configured_checkpoint_cannot_be_replaced_by_another_higher_pinned_anchor() {
 
 #[test]
 fn typed_qualified_successor_allows_bound_governance_and_permission_evolution() {
-    use crate::world_service::formal_projection::projection_leaf;
+    use oasis7::world_service::formal_projection::projection_leaf;
     use oasis7_distfs::controlled_authority::replicated_protocol::{ArtifactRole, EndpointRole};
     let (world, trust, anchor, _) = actual_world_initial_fixture();
     let mut verifier = FormalReadVerifier::new(&trust, anchor.clone()).unwrap();
@@ -714,7 +573,7 @@ fn typed_qualified_successor_allows_bound_governance_and_permission_evolution() 
 
 #[test]
 fn formal_cursor_restore_failure_is_atomic_and_existing_projection_cache_cannot_rewind() {
-    use crate::world_service::client::{
+    use oasis7::world_service::client::{
         FormalReadTrustConfigV1, RemoteWorldServiceClient, WorldServiceClientConfig,
     };
     let (world, trust, anchor, _) = actual_world_initial_fixture();
@@ -888,7 +747,7 @@ fn retained_recovery_e3_completes_original_frozen_tail_from_external_e1_pin() {
         .insert(ArtifactRole::ExecutionManifest, h(62));
     let tree = ProjectionCommitmentsV1::from_leaves(vec![(
         audience.clone(),
-        super::super::formal_projection::projection_leaf(&audience, &view).unwrap(),
+        oasis7_client_api::formal_projection::projection_leaf(&audience, &view).unwrap(),
     )])
     .unwrap();
     record.projection_root = tree.root().unwrap();
@@ -1191,4 +1050,69 @@ fn retained_recovery_e3_completes_original_frozen_tail_from_external_e1_pin() {
     );
     assert!(verifier.verify_view(&reply, &request, &public(7)).is_err());
     assert_eq!(verifier.anchor_ref().unwrap(), advanced);
+}
+
+impl super::FormalReadProjection for WorldServiceProjection {
+    fn validate_contents(
+        response: &ReadWorldViewResponse<Self>,
+        request: &ReadWorldViewRequest,
+    ) -> Result<(), String> {
+        <Self as oasis7::world_service::formal_read::FormalReadProjection>::validate_contents(
+            response, request,
+        )
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct NoopSchemaProjection(WorldServiceProjection);
+impl super::FormalReadProjection for NoopSchemaProjection {
+    fn validate_contents(
+        _: &ReadWorldViewResponse<Self>,
+        _: &ReadWorldViewRequest,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[test]
+fn generic_formal_verifier_owns_envelope_checks_even_with_noop_schema_validator() {
+    let (world, trust, anchor, _) = actual_world_initial_fixture();
+    let (request, original) = response(
+        &world,
+        &anchor,
+        FormalReadHistoryV1 {
+            schema_version: 1,
+            steps: vec![],
+        },
+    );
+    let reply: ReadWorldViewResponse<NoopSchemaProjection> =
+        serde_json::from_value(serde_json::to_value(original).unwrap()).unwrap();
+    super::FormalReadVerifier::<NoopSchemaProjection>::new(&trust, anchor.clone())
+        .unwrap()
+        .verify_view(&reply, &request, &public(7))
+        .unwrap();
+
+    let mut wrong_world = request.clone();
+    wrong_world.world.world_id = "different-world".into();
+    let mut wrong_scope = reply.clone();
+    wrong_scope.version.visibility_scope = "agent:other".into();
+    let mut wrong_version = reply.clone();
+    wrong_version.contract_version = WORLD_SERVICE_CONTRACT_VERSION + 1;
+    let mut accepted = Vec::new();
+    for (name, request, reply) in [
+        ("request world", wrong_world, reply.clone()),
+        ("response visibility scope", request.clone(), wrong_scope),
+        ("response contract version", request.clone(), wrong_version),
+    ] {
+        let mut verifier =
+            super::FormalReadVerifier::<NoopSchemaProjection>::new(&trust, anchor.clone()).unwrap();
+        if verifier.verify_view(&reply, &request, &public(7)).is_ok() {
+            accepted.push(name);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "generic verifier accepted mismatched envelope: {accepted:?}"
+    );
 }

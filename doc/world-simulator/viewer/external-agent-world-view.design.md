@@ -40,7 +40,7 @@ Runtime拥有世界、控制版本、观察资格、admission及持久结果；A
 | host_state.rs::build_render_state从有界snapshot派生DTO；JS消费Rust。 | 数据客户端先组装明确授权范围/版本，再交Rust和renderer。 | 分页WorldView不是完整snapshot的直接替身。 |
 | 按类型reconcile、位置来源、地形LOD和宿主选择事件。 | 保留ABI，补partial/裁剪/来源侧带状态。 | 不把旧每帧全量重建当当前事实。 |
 | 显示焦点仅取明确选中；下一动作与原回执各取其原绑定。 | 保持原操作关联，不从列表补主体。 | 缺原绑定保留null；真实Runtime组合仍须验收。 |
-| Viewer WS `request_world_view`提供当前连接可见Agent/Location的有界查询、搜索和同cut分页。 | HTTP WorldView、远端独立观察binding、完整产业/事件空间投影。 | 新协议能力协商；来源不足标unknown，冻结续页标last-known；不证明完整大世界容量。 |
+| Viewer WS `request_world_view`提供当前连接获准对象/设施/路线的有界查询、空间索引、同cut分页与可选增量、工业聚合和事件锚点。 | HTTP WorldView、远端独立观察binding、完整产业/事件空间投影。 | 新协议能力协商；来源不足标unknown，冻结续页标last-known；不证明完整大世界容量。 |
 | Launcher控制面不证明内嵌世界。 | 同build的受限WebView世界窗口。 | 平台支持/运行证据待独立验证。 |
 
 ## 4. 边界与结构
@@ -130,6 +130,18 @@ owner指导沿固定主体与方案→核验owner权限及适用控制/审批条
 
 ### 5.5 初始实现范围
 
+#### 增量、工业聚合与事件空间层
+
+Trace refs: O7-REQ-8b88187a-985b-4cf0-a9d4-b6137882ffc3；O7-REQ-2ede7851-f1c0-4851-8d6b-5da4afcdefcf。
+
+三项查询扩展分别协商 `world_view_delta_v1`、`world_view_aggregate_v1`、`world_view_event_anchor_v1`，复用原 `request_world_view`，旧服务端不收到新增字段。分页 token 与增量 resume cursor 分开；只有完整、非冻结且满足累计预算的查询最终页提供增量基线。`resume_cursor` 绑定会话、world/epoch/audience、来源权限和完整查询（含视口、搜索、pin、层级、事件开关），不是世界写权限或 Feed cursor。更新以十进制序号、base/target cut 和 query ID 原子应用；重放冲突、缺口、过期、撤权、reorg、不兼容、超出单批 200 项/2 MiB 时 reset 并重建基线。未改变的获准记录仅按明确 carry-forward 确认到新切点，不提升未知几何。持续活动合并为单个在途读取，可见页面有界补读，切换范围立即使旧更新失效。
+
+增量移除区分 `projection_removed`/离开查询范围与世界删除。视口、搜索、聚合、权限投影和事件保留窗口的移除仅撤下本地记录，不声称世界对象消失。只有同授权来源的明确回收事实才能发布 `world_deleted:true` 的设施删除通知，且只通知此会话此前已见的对象；远端投影未提供回收事实时保持未知，不从缺项推断。路线 unavailable 不等于删除。scope 改变先清缓存，不通过旧范围 tombstone 泄漏身份。
+
+`detail_level` 为 `auto/overview/site/entity`；工业层级在授权、空间与搜索筛选后，对可信当前设施按有界网格聚合。聚合 DTO 独立于业务实体，含显示中心、格网范围、设施数量与类型计数、来源和下钻层级；无可信位置的设施不进入空间计数。pin 保留原对象并排除重复统计；明确路线可将端点映射到聚合节点汇总，不能按邻近生成产业关系。展开聚合只用 Rust `fit_bounds` 调整相机和更细查询，不设置业务行动主体；聚合中心不是任何设施的精确坐标。全部记录共同使用分页与字节预算，部分查询明确不完整。
+
+事件空间层只从已获准 typed journal payload 提取显式位置，首批支持 AgentRegistered 与 absolute ModuleVisualUpsert。远端只消费 verified projection 自带的获准事件；公开投影无事件时不补造。事件按 `(world_id,reorg_epoch,event_seq)` 保留原身份并与 Feed 精确关联；当前实体仅用于验证可见资格，绝不拿其现位置填补历史事件坐标。无锚点、无权限、冲突或未知来源事件不落地图，仍可在原 Feed 表达。事件点击仅检查、定位已验证锚点或查看原 Feed，不跟随事件、不补写行动或回执主体。事件集合进入切点与缓存身份，旧 epoch/旧 scope 不再命中；历史锚点明确为历史位置，不冒充当前设施/Agent 状态。
+
 #### 绑定来源与空间查询扩展
 
 远端空间观察复用服务端已验证的 WorldService 投影，不接受客户端自报 current。当前性须同时匹配读取配置、world/branch/权限/投影版本、普通证据策略、Runtime 的空间依赖字段与兼容 snapshot；未知、observer、回放或不匹配时降级。出站仅含非秘密来源绑定，不发布 read key 或其身份摘要。分页保留同一切点；仍能验证为当前同一来源切点时保留当前，来源推进或无法比较时冻结并降为最近已知；权限、来源范围或 epoch 改变立即使旧 cursor 失效。
@@ -142,15 +154,15 @@ owner指导沿固定主体与方案→核验owner权限及适用控制/审批条
 
 相机事件增加十进制字符串 `viewport_bounds` 与逻辑像素尺寸，使用 Rust 绘制转换的逆变换，向外取整并裁至世界边界；宿主不重算另一套坐标。连续平移/缩放立即使旧查询代际失效，尾部防抖发出最新 bounds；应用查询结果不触发自动总览或查询循环。服务端在完整授权投影建立有界二维包围盒索引，查询索引后再筛选文本、稳定分页并合并获准 pin/路线端点；索引和来源切点一起重建，不能跨权限复用。
 
-该扩展不包含原生容器、事件增量流或工业语义多尺度聚合。索引正确性与候选裁剪可用确定性测试证明，50k 世界、P95 与长期驻留内存仍须按质量条款独立实测。
+本查询扩展不包含原生容器或独立推送订阅；工业聚合和事件空间层按上文合同提供。索引正确性与候选裁剪可用确定性测试证明，50k 世界、P95 与长期驻留内存仍须按质量条款独立实测。
 
 当前空间读模型使用已协商 `world_view` 的 Viewer WebSocket：`request_world_view` 请求带 `request_generation`、可选 `search`/`bounds`/`cursor` 和 `page_size`，响应为 `world_view`。它只裁剪同一连接本来可读的兼容 snapshot，不新增 Agent 私有观察权限。展示字段经 allowlist；world、reorg、audience 和查询范围隔离分页。每会话只保留一份有界短期只读投影，不能用旧 audience 的 cursor读取。
 
-初次查询只在匹配本地权威 Runtime 或已验证远端来源的 Agent/显式设施位置上声明current；回放、observer、来源不匹配和缺几何证明的地点/设施位置保留unknown。仍能证明来源切点未变的续页保留current；冻结历史续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；当前不提供权威 tombstone 流。请求代际、输入导航、world/task流分别处理。
+初次查询只在匹配本地权威 Runtime 或已验证远端来源的 Agent/显式设施位置上声明current；回放、observer、来源不匹配和缺几何证明的地点/设施位置保留unknown。仍能证明来源切点未变的续页保留current；冻结历史续页的全部显示集合降为last-known，不以分页完成升级时效。客户端按整个查询范围保留partial，不把 viewport/搜索淘汰解释为删除；明确删除事实按增量合同发布，其他移除不表示世界删除。请求代际、输入导航、world/task流分别处理。
 
 图形context loss停止原会话和命中，保留仍获准的文本/原回执并提供显式重试；授权身份或world变化先清显示，旧异步挂载和事件不再生效，新scope通过带请求身份、socket和作用域代际校验的 `request_scope_snapshot` 定向重读后才可解锁；普通迟到snapshot不能解除锁定。旧本地反馈按提交scope隐藏，但原pending操作身份保留，不重新提交。导航明确区分选择、定位、跟随、停止和总览；手动平移/缩放退出跟随，失去可信位置后不会自动恢复。
 
-本切片不交付HTTP目标路由、空间索引、完整实体/关系/事件投影或native窗口，不声明§9数值预算和端到端验收已经通过。
+本切片不交付 HTTP 目标路由或 native 窗口；投影只覆盖现有获准对象、明确路线及最近有界 typed 事件候选，不声明完整历史、所有实体类型、§9 数值预算和端到端验收已经通过。
 
 ## 6. 接口与数据合同
 

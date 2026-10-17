@@ -1,4 +1,4 @@
-pub(super) use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
+pub(super) use oasis7_launcher_config::parse_chain_replication_bootstrap_peers;
 
 pub(super) fn next_value<'a, I>(
     iter: &mut std::iter::Peekable<I>,

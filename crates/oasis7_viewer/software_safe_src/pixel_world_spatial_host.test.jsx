@@ -1,6 +1,9 @@
 import { fireEvent, screen, waitFor } from '@solidjs/testing-library';
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 import { renderPixelWorldHost, runtimeMock, sampleSnapshot, useTestRustRenderState } from './pixel_world_host_test_support.jsx';
+
+// Compile the shared host fixture before measuring interaction deadlines. Each case still resets its core modules.
+beforeAll(async()=>{await import('./pixel_world_host.jsx');});
 
 it('connects Rust camera bounds to authorized queries and opens a read-only facility inspector',async()=>{
  useTestRustRenderState();let request;
@@ -43,4 +46,32 @@ it('inspects new authorized Agent and Location without rewriting the old snapsho
  await waitFor(()=>expect(derive.mock.lastCall[0]).toMatchObject({selectedKind:'location',selectedId:'new-location'}));
  expect(core.state.selectedId).toBe('agent-0');expect(core.state.auth.boundAgentId).toBe(actor);expect(core.state.lastGameplayActionFeedback).toBe(receipt);
  expect(core.state.snapshot).toBe(originalSnapshot);expect(core.state.snapshot.model.agents['new-agent']).toBeUndefined();expect(core.state.snapshot.model.locations['new-location']).toBeUndefined();
+});
+
+it('removes a selected projected object on a delta while preserving actor and receipt identity',async()=>{
+ useTestRustRenderState();let request,removed=false;
+ const {core}=await renderPixelWorldHost(sampleSnapshot(),undefined,'en',{setupCore(core){
+  core.state.viewerProtocol.capabilities=['world_view','world_view_pins_v1','world_view_delta_v1'];
+  core.applySelection({kind:'agent',id:'agent-0'});core.state.lastGameplayActionFeedback={id:'original-operation',agentId:'agent-0',stage:'sent'};
+  request=vi.spyOn(core,'requestWorldView').mockImplementation(async query=>{
+   const common={world_id:core.state.worldId || 'W',scope_id:'S',reorg_epoch:'0',query_id:'Q',request_generation:query.request_generation,completeness:'complete',relations:[],aggregates:[],events:[]};
+   if(query.resume_cursor){removed=true;return {...common,delivery:'delta',base_cut:'A',source_cut:'B',previous_sequence:'1',update_sequence:'2',observed_at_tick:'5',carry_forward:true,resume_cursor:'next',entities:[],removals:[{record_kind:'entity',kind:'factory',id:'factory-3',reason:'factory_recycled',world_deleted:true}]};}
+   return {...common,delivery:'snapshot',source_cut:'A',update_sequence:'1',resume_cursor:'resume',entities:removed?[]:[{kind:'factory',entity_id:'factory-3',label:'Projected Factory',provenance:{freshness:'unknown',valid_at_source_cut:'A'}}]};
+  });
+ }});
+ await waitFor(()=>expect(runtimeMock.mountCalls).toBe(1));core.requestRender();
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Projected Factory'})).toBeInTheDocument());
+ const actor=core.state.auth.boundAgentId,receipt=core.state.lastGameplayActionFeedback;
+ fireEvent.click(screen.getByRole('button',{name:'Projected Factory'}));core.requestRender();
+ await waitFor(()=>expect(request.mock.calls.length).toBeGreaterThanOrEqual(2));
+ core.state.snapshot={...core.state.snapshot};core.requestRender();
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'Projected Factory'})).toBeNull());
+ expect(screen.queryByRole('region',{name:'Object inspection'})).toBeNull();
+ core.requestRender();
+ await waitFor(()=>{const deltaIndex=request.mock.calls.findIndex(([query])=>query.resume_cursor);expect(deltaIndex).toBeGreaterThanOrEqual(0);expect(request.mock.calls.slice(deltaIndex+1).some(([query])=>!query.resume_cursor)).toBe(true);});
+ expect(screen.getByText(/1 objects confirmed removed from the world/)).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Projected Factory'})).toBeNull();
+ expect(core.state.selectedId).toBe('agent-0');expect(core.state.auth.boundAgentId).toBe(actor);expect(core.state.lastGameplayActionFeedback).toBe(receipt);
+ fireEvent.click(screen.getByRole('button',{name:'World overview'}));
+ expect(screen.queryByText(/1 objects confirmed removed from the world/)).toBeNull();
 });

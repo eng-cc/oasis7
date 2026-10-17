@@ -72,6 +72,41 @@ class Ownership(unittest.TestCase):
         self.assertIs(data['dependencies']['oasis7']['default-features'], False)
         self.assertFalse(data['dependencies']['oasis7'].get('features', []))
 
+    def test_client_proof_library_has_no_normal_world_or_node_dependency(self):
+        pending, visited = ['oasis7_game_client'], set()
+        while pending:
+            package = pending.pop()
+            if package in visited:
+                continue
+            visited.add(package)
+            data = manifest(package)
+            tables = [data.get('dependencies', {})]
+            tables += [target.get('dependencies', {}) for target in data.get('target', {}).values()]
+            for table in tables:
+                for name, dependency in table.items():
+                    if isinstance(dependency, dict) and 'path' in dependency:
+                        pending.append(dependency.get('package', name))
+        self.assertTrue({'oasis7', 'oasis7_node', 'oasis7_wasm_executor'}.isdisjoint(visited))
+
+    def test_world_library_does_not_own_launcher_or_network_hosting(self):
+        source = ROOT / 'crates/oasis7/src'
+        self.assertFalse((source / 'launcher_bootstrap_peers.rs').exists())
+        for name in ('server.rs', 'web_bridge.rs', 'game_read_api.rs'):
+            self.assertFalse((source / 'viewer' / name).exists())
+            self.assertTrue((ROOT / 'crates/oasis7_viewer_runtime/src' / name).is_file())
+        core = manifest('oasis7')
+        native = core['target']['cfg(not(target_arch = "wasm32"))']['dependencies']
+        self.assertTrue({'ctrlc', 'tracing-subscriber', 'tungstenite', 'async-openai'}.isdisjoint(native))
+        self.assertNotIn('multiaddr', core['dependencies'])
+
+    def test_shared_launch_configuration_and_artifact_adapter_do_not_depend_on_world(self):
+        for package in ('oasis7_launcher_config', 'oasis7_wasm_materializer'):
+            data = manifest(package)
+            tables = [data.get('dependencies', {})]
+            tables += [target.get('dependencies', {}) for target in data.get('target', {}).values()]
+            for table in tables:
+                self.assertTrue({'oasis7', 'oasis7_node'}.isdisjoint(table), package)
+
     def test_no_cross_package_source_borrowing_from_binary_directories(self):
         for package in ['oasis7', *OWNERS, 'oasis7_hosted_access', 'oasis7_letai_credit_adapter']:
             directory = ROOT / 'crates' / package
