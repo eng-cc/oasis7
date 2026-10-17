@@ -29,6 +29,7 @@ impl WorldKernel {
             intel_cache: Default::default(),
             last_intent_batch_report: None,
             rule_hooks: Default::default(),
+            source_compiler: Default::default(),
         }
     }
 
@@ -128,6 +129,22 @@ impl WorldKernel {
         snapshot: WorldSnapshot,
         journal: WorldJournal,
     ) -> Result<Self, PersistError> {
+        Self::replay_with_compiler(snapshot, journal, None)
+    }
+
+    pub fn replay_from_snapshot_with_source_compiler(
+        snapshot: WorldSnapshot,
+        journal: WorldJournal,
+        compiler: std::sync::Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>,
+    ) -> Result<Self, PersistError> {
+        Self::replay_with_compiler(snapshot, journal, Some(compiler))
+    }
+
+    fn replay_with_compiler(
+        snapshot: WorldSnapshot,
+        journal: WorldJournal,
+        compiler: Option<std::sync::Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>>,
+    ) -> Result<Self, PersistError> {
         snapshot.validate_version()?;
         journal.validate_version()?;
         if journal.events.len() < snapshot.journal_len {
@@ -146,6 +163,9 @@ impl WorldKernel {
         validate_journal_event_prefix(snapshot.next_event_id, &journal.events[..journal_len])?;
         let mut kernel =
             Self::restore_persisted_state(snapshot.into_kernel_parts().0, journal.events.clone());
+        if let Some(compiler) = compiler {
+            kernel.set_module_source_compiler(compiler);
+        }
 
         for event in journal.events.iter().skip(journal_len) {
             kernel.apply_event(event)?;

@@ -152,6 +152,8 @@ pub struct WorldKernel {
     last_intent_batch_report: Option<IntentBatchReport>,
     #[serde(skip, default)]
     rule_hooks: RuleHookRegistry,
+    #[serde(skip, default)]
+    source_compiler: super::source_compiler::KernelSourceCompiler,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -186,6 +188,7 @@ impl WorldKernel {
             intel_cache: BTreeMap::new(),
             last_intent_batch_report: None,
             rule_hooks: RuleHookRegistry::default(),
+            source_compiler: Default::default(),
         }
     }
 
@@ -207,7 +210,17 @@ impl WorldKernel {
             intel_cache: BTreeMap::new(),
             last_intent_batch_report: None,
             rule_hooks: RuleHookRegistry::default(),
+            source_compiler: Default::default(),
         }
+    }
+
+    /// Install a host capability. Source compilation still occurs at action execution,
+    /// and the resulting deployed bytes are journaled for compiler-free replay.
+    pub fn set_module_source_compiler(
+        &mut self,
+        compiler: Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>,
+    ) {
+        self.source_compiler = super::source_compiler::KernelSourceCompiler::new(compiler);
     }
 
     pub fn set_intel_ttl_ticks(&mut self, ttl_ticks: WorldTime) {
