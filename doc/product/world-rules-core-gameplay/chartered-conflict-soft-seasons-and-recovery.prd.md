@@ -100,9 +100,9 @@ Trace ID: O7-REQ-19ea1035-2d0a-43fc-a3a8-b0309030273c
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。战争到期产生胜负/资源与声誉结果，成员排序；该MVP结算不能代替occupation/hold/extraction/season contracts。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L515-L712)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L603-L653)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：恢复选项投影不能证明冲突损失与身份/历史保全，亦不能证明 repair/rebuild/pivot/撤离成本和路径已由当前 authority 判定。
+- 实现与验证依据：战争MVP结算保留agent及war历史，但不是要求给定的chassis/设施损毁恢复场景。 [生产dispatcher把战争/危机、经济合同、工业及物流分别路由；没有把这些普通动作自动解释为专属frontier/认可/赛季合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/event_processing.rs#L379-L478) [WarConcluded保留war记录和agent身份，结算Electricity/Data/reputation；未承载chassis/设施损毁→恢复项目合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L232-L330) [真实snapshot消费分支/因果/可用fallback，工业失败disposition存在则清理旧恢复投影；不是冲突恢复或分支回退authority。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L124-L246) 本轮只读静态审读，未执行验收；实际实现交付PR映射未逐条核清，固定生产源码为交付子范围依据，不以未取得运行证据抹去已证交付。
+- 核对日期与基线：2026-10-17；需求/专业设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；本轮对比 main 仅文档变化，本条源码继续适用。无新产品运行验收。
+- 剩余范围：已核清WarConcluded只处理Electricity/Data/reputation；尚需冲突损毁producer与身份/历史保全、世界内修复投入、repair/rebuild/pivot/撤离可执行消费者的直接绑定。不能把工业恢复描述升为本条交付。
 
 - 性质：`目标要求`
 - 适用条件：冲突、区域危机或经营能力受损后。
@@ -120,9 +120,9 @@ Trace ID: O7-REQ-eedaa5cf-e91e-48df-9c33-158774b40168
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。战争到期产生胜负/资源与声誉结果，成员排序；该MVP结算不能代替occupation/hold/extraction/season contracts。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L515-L712)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L603-L653)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清恢复项目资格、里程碑、贡献 producer 与权威 receipt 一次性效果、到期/阻断及重连授权变化的组合。
+- 实现与验证依据：已核清普通危机spawn/timeout路径；未找到可直接认定为本条恢复项目的交付子范围。 [生产dispatcher把战争/危机、经济合同、工业及物流分别路由；没有把这些普通动作自动解释为专属frontier/认可/赛季合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/event_processing.rs#L379-L478) [危机生产生命周期为auto-spawn和到期penalty事件；不能替代有资格/范围/贡献receipt的恢复项目。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L438-L500) [WarConcluded保留war记录和agent身份，结算Electricity/Data/reputation；未承载chassis/设施损毁→恢复项目合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L232-L330) 本轮只读静态审读，未执行验收；实际实现交付PR映射未逐条核清，固定生产源码为交付子范围依据，不以未取得运行证据抹去已证交付。
+- 核对日期与基线：2026-10-17；需求/专业设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；本轮对比 main 仅文档变化，本条源码继续适用。无新产品运行验收。
+- 剩余范围：危机到期惩罚不承载项目作用域、资格、里程碑、贡献receipt；恢复项目开放/推进/完成/到期/阻断和重试/授权变化的一次性效果producer与读面仍未核清。
 
 - 性质：`目标要求`
 - 适用条件：系统性危机、恢复项目开放或项目贡献提交。
@@ -160,9 +160,9 @@ Trace ID: O7-REQ-ce9fbace-7fc6-4973-8bcf-8b58e11b3339
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。战争到期产生胜负/资源与声誉结果，成员排序；该MVP结算不能代替occupation/hold/extraction/season contracts。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L515-L712)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L603-L653)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清软赛季刷新对象/窗口的执行路径、历史 receipt 和资产连续性、复核/申诉；普通世界持久化不证明刷新合同。
+- 实现与验证依据：普通战争生命周期和历史持久状态存在，非软赛季刷新交付。 [生产dispatcher把战争/危机、经济合同、工业及物流分别路由；没有把这些普通动作自动解释为专属frontier/认可/赛季合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/event_processing.rs#L379-L478) [战争到期生成WarConcluded；此事件没有赛季刷新对象/窗口。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/gameplay_loop.rs#L515-L582) [WarConcluded保留war记录和agent身份，结算Electricity/Data/reputation；未承载chassis/设施损毁→恢复项目合同。](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/alliance_war_publication.rs#L232-L330) 本轮只读静态审读，未执行验收；实际实现交付PR映射未逐条核清，固定生产源码为交付子范围依据，不以未取得运行证据抹去已证交付。
+- 核对日期与基线：2026-10-17；需求/专业设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；本轮对比 main 仅文档变化，本条源码继续适用。无新产品运行验收。
+- 剩余范围：当前战争到期只产生WarConcluded；尚需明确软赛季刷新对象/窗口authority、实际刷新事件及连续资产/历史/申诉消费者；未穷尽可扩展模块，故不宣称全仓未实现。
 
 - 性质：`目标要求`
 - 适用条件：软赛季刷新竞争窗口、公共项目、排行榜或部分区域权利/资格时。
