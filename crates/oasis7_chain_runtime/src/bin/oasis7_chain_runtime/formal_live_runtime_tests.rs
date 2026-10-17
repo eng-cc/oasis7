@@ -22,6 +22,101 @@ fn local_formal_node_profile_disables_network_attestation_and_requires_execution
 }
 
 #[test]
+fn pending_stop_retains_the_same_owner_until_an_in_flight_node_tick_finishes() {
+    use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc::{self, RecvTimeoutError},
+    };
+
+    struct BlockingTick {
+        entered: Option<mpsc::SyncSender<()>>,
+        release: mpsc::Receiver<()>,
+        calls: Arc<AtomicUsize>,
+    }
+    impl NodeExecutionHook for BlockingTick {
+        fn on_commit(
+            &mut self,
+            context: NodeExecutionCommitContext,
+        ) -> Result<NodeExecutionCommitResult, String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if let Some(entered) = self.entered.take() {
+                entered.send(()).map_err(|error| error.to_string())?;
+                self.release
+                    .recv_timeout(Duration::from_secs(15))
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(NodeExecutionCommitResult {
+                execution_height: context.height,
+                execution_block_hash: format!("stop-regression-block-{}", context.height),
+                execution_state_root: format!("stop-regression-state-{}", context.height),
+            })
+        }
+    }
+
+    let (entered_send, entered_receive) = mpsc::sync_channel(1);
+    let (release_send, release_receive) = mpsc::channel();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let config = local_single_authority_node_config("stop-regression", "stop-world")
+        .unwrap()
+        .with_tick_interval(Duration::from_millis(5))
+        .unwrap();
+    let node = Arc::new(Mutex::new(NodeRuntime::new(config).with_execution_hook(
+        BlockingTick {
+            entered: Some(entered_send),
+            release: release_receive,
+            calls: calls.clone(),
+        },
+    )));
+    node.lock().unwrap().start().unwrap();
+    entered_receive
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap();
+
+    let state = FormalLiveState::default();
+    state.node_running.store(true, Ordering::Release);
+    state.stopping.store(true, Ordering::Release);
+    let pending = PendingNodeStop::spawn(node.clone(), state.clone()).unwrap();
+    let worker_id = pending.worker.thread().id();
+    let stop_started_deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        match node.try_lock() {
+            Err(std::sync::TryLockError::WouldBlock) => break,
+            Err(std::sync::TryLockError::Poisoned(_)) => panic!("stop owner lock poisoned"),
+            Ok(guard) => drop(guard),
+        }
+        assert!(
+            std::time::Instant::now() < stop_started_deadline,
+            "the stop worker must acquire the same runtime before execution is released"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    for _ in 0..2 {
+        assert_eq!(
+            pending.result.recv_timeout(Duration::from_millis(10)),
+            Err(RecvTimeoutError::Timeout),
+            "stop must not report completion while real execution is blocked"
+        );
+        assert_eq!(pending.worker.thread().id(), worker_id);
+        assert!(!pending.worker.is_finished());
+        assert!(state.node_running.load(Ordering::Acquire));
+    }
+    release_send.send(()).unwrap();
+    assert_eq!(
+        pending.result.recv_timeout(Duration::from_secs(5)).unwrap(),
+        Ok(())
+    );
+    assert_eq!(pending.worker.join().unwrap(), Ok(()));
+    assert!(!state.node_running.load(Ordering::Acquire));
+    assert!(!node.lock().unwrap().snapshot().running);
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "stop must not abandon or repeat the in-flight Tick"
+    );
+}
+
+#[test]
 fn business_reader_requires_dual_replica_content_addressed_bytes() {
     let bytes = b"verified business node".to_vec();
     let digest = hex::encode(blake3::hash(&bytes).as_bytes());

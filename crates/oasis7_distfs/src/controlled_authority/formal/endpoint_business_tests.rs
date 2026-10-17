@@ -31,6 +31,11 @@ pub(super) fn replace_result(material: &mut ClosedRecord, bytes: Vec<u8>) {
         .sort_by(|a, b| a.content_hash.cmp(&b.content_hash));
 }
 pub(super) fn fixture() -> (Fixture, FormalBusinessResultEnvelopeV1) {
+    fixture_with_snapshot(b"state0".to_vec())
+}
+pub(super) fn fixture_with_snapshot(
+    snapshot: Vec<u8>,
+) -> (Fixture, FormalBusinessResultEnvelopeV1) {
     let mut fixture = Fixture::new();
     let delta = BusinessIndexDeltaV1::build(
         BusinessIndexRootV1::empty().unwrap(),
@@ -46,6 +51,9 @@ pub(super) fn fixture() -> (Fixture, FormalBusinessResultEnvelopeV1) {
     let bytes = envelope.encode().unwrap();
     let mut body = fixture.authority.initial.clone().unwrap();
     body.authority.profile_version = 2;
+    body.initial_state_root = blake3::hash(&snapshot).to_hex().to_string();
+    body.artifact_roots
+        .insert(ArtifactRole::Snapshot, body.initial_state_root.clone());
     body.artifact_roots.insert(
         ArtifactRole::Result,
         blake3::hash(&bytes).to_hex().to_string(),
@@ -67,7 +75,7 @@ pub(super) fn fixture() -> (Fixture, FormalBusinessResultEnvelopeV1) {
     .unwrap();
     let mut closed = material(
         initial_activation_input_bytes(&certificate).unwrap(),
-        b"state0".to_vec(),
+        snapshot,
         b"manifest".to_vec(),
     );
     replace_result(&mut closed, bytes);
@@ -75,6 +83,8 @@ pub(super) fn fixture() -> (Fixture, FormalBusinessResultEnvelopeV1) {
     record.original_authority_id = fixture.authority.authority_id().unwrap();
     record.activation_ref = fixture.authority.activation_ref().into();
     record.payload_digest = closed.payload_digest.clone();
+    record.before_state_root = closed.before_state_root.clone();
+    record.after_state_root = closed.after_state_root.clone();
     record.artifact_roots = closed.roots.clone();
     record.result_root = envelope.delta.new_root.clone();
     fixture.initial = FormalCandidateMaterialV1 {

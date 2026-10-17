@@ -927,3 +927,5 @@ mod artifact_cas_tests;
 
 #[path = "endpoint_durable_set_copy_graph_tests.rs"]
 mod durable_set_copy_graph_tests;
+#[path = "endpoint_durable_set_copy_source_tests.rs"]
+mod durable_set_copy_source_tests;

@@ -94,11 +94,29 @@ pub(crate) struct PublishedReadState {
 }
 impl PublishedReadState {
     pub(crate) fn current(&self) -> Result<PublishedReadCut, String> {
-        self.current
+        self.observe(|cut| Ok(cut.clone()))
+    }
+
+    /// Borrow one atomic World/anchor cut for a small local observation. The
+    /// callback must not perform network or retained-history reads: publication
+    /// holds this same lock. Callers that need an owned cut still use `current`.
+    pub(crate) fn observe<T>(
+        &self,
+        read: impl FnOnce(&PublishedReadCut) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let current = self
+            .current
             .lock()
-            .map_err(|_| "formal read publication lock poisoned")?
-            .clone()
-            .ok_or_else(|| "formal read publication is not ready".into())
+            .map_err(|_| "formal read publication lock poisoned")?;
+        let cut = current
+            .as_ref()
+            .ok_or("formal read publication is not ready")?;
+        read(cut)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn position(&self) -> Result<u64, String> {
+        self.observe(|cut| Ok(cut.anchor.head().record().position))
     }
     pub(crate) fn publish(
         &self,
@@ -229,8 +247,22 @@ pub(crate) trait FormalLiveHistoryResolver: Send + Sync {
         &self,
         _hint: &FormalReadAnchorRefV1,
         _reader: &dyn BusinessIndexNodeReader,
-    ) -> Result<(), String> {
-        Ok(())
+    ) -> Result<Option<super::formal_live_history::VerifiedBusinessPrewarmReceipt>, String> {
+        Ok(None)
+    }
+
+    /// Consume at most one successful hint warmup from this same open. An
+    /// implementation may reuse its verified bytes only when the independently
+    /// restored writer anchor and the complete opaque context match exactly.
+    /// `true` reports reuse; it never authorizes skipping the dual native restore.
+    fn prewarm_qualified_business_history_after_hint(
+        &self,
+        target: &VerifiedFormalReadAnchorV1,
+        reader: &dyn BusinessIndexNodeReader,
+        _receipt: Option<super::formal_live_history::VerifiedBusinessPrewarmReceipt>,
+    ) -> Result<bool, String> {
+        self.prewarm_qualified_business_history(target, reader)?;
+        Ok(false)
     }
 }
 

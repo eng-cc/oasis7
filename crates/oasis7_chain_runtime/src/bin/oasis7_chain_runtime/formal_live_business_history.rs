@@ -19,6 +19,81 @@ use std::{
 
 const MAX_VERIFIED_BUSINESS_SEED_BYTES: usize = 64 * 1024 * 1024;
 
+#[derive(PartialEq, Eq)]
+struct PrewarmAnchorBinding {
+    checkpoint: FormalReadCheckpointV1,
+    // Checkpoints deliberately do not serialize every opaque authority field,
+    // including the healthy durable-set activation digest.
+    authority_context: String,
+}
+
+impl PrewarmAnchorBinding {
+    fn new(anchor: &VerifiedFormalReadAnchorV1) -> Result<Self, String> {
+        Ok(Self {
+            checkpoint: anchor.checkpoint(),
+            authority_context: anchor
+                .authority()
+                .context_digest()
+                .map_err(|error| error.to_string())?,
+        })
+    }
+}
+
+/// A single-use byte-cache receipt, never a persisted checkpoint or a read
+/// capability. Only a complete C0 replay followed by successful staged-cache
+/// installation constructs this value. The scope retains the exact immutable
+/// resolver configuration, and the Arc retains the cache that received bytes.
+pub(crate) struct VerifiedBusinessPrewarmReceipt {
+    scope: Arc<()>,
+    reader: Arc<dyn BusinessIndexNodeReader + Send + Sync>,
+    external_origin: PrewarmAnchorBinding,
+    trusted: PrewarmAnchorBinding,
+    active_context: String,
+    target: PrewarmAnchorBinding,
+}
+
+impl VerifiedBusinessPrewarmReceipt {
+    fn from_completed(
+        resolver: &NativeHistoryResolver,
+        target: &VerifiedFormalReadAnchorV1,
+        reader: &dyn BusinessIndexNodeReader,
+    ) -> Result<Option<Self>, String> {
+        if !std::ptr::addr_eq(resolver.business_reader.as_ref(), reader) {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            scope: Arc::clone(&resolver.prewarm_scope),
+            reader: Arc::clone(&resolver.business_reader),
+            external_origin: PrewarmAnchorBinding::new(&resolver.external_origin)?,
+            trusted: PrewarmAnchorBinding::new(&resolver.trusted)?,
+            active_context: resolver
+                .active
+                .context_digest()
+                .map_err(|error| error.to_string())?,
+            target: PrewarmAnchorBinding::new(target)?,
+        }))
+    }
+
+    fn matches(
+        &self,
+        resolver: &NativeHistoryResolver,
+        target: &VerifiedFormalReadAnchorV1,
+        reader: &dyn BusinessIndexNodeReader,
+    ) -> Result<bool, String> {
+        Ok(Arc::ptr_eq(&self.scope, &resolver.prewarm_scope)
+            && std::ptr::addr_eq(self.reader.as_ref(), reader)
+            && std::ptr::addr_eq(resolver.business_reader.as_ref(), reader)
+            && self.external_origin == PrewarmAnchorBinding::new(&resolver.external_origin)?
+            && self.trusted == PrewarmAnchorBinding::new(&resolver.trusted)?
+            && self.active_context
+                == resolver
+                    .active
+                    .context_digest()
+                    .map_err(|error| error.to_string())?
+            && self.target == PrewarmAnchorBinding::new(target)?)
+    }
+}
+
 #[cfg(test)]
 struct LookupTiming {
     enabled: bool,
@@ -106,7 +181,22 @@ pub(super) fn prewarm_qualified_history(
             .authority_id()
             .map_err(|error| error.to_string())?,
     };
-    prewarm_history_from_origin(resolver, &target_ref, Some(target), false, reader)
+    prewarm_history_from_origin(resolver, &target_ref, Some(target), false, reader).map(|_| ())
+}
+
+pub(super) fn prewarm_qualified_history_after_hint(
+    resolver: &NativeHistoryResolver,
+    target: &VerifiedFormalReadAnchorV1,
+    reader: &dyn BusinessIndexNodeReader,
+    receipt: Option<VerifiedBusinessPrewarmReceipt>,
+) -> Result<bool, String> {
+    if let Some(receipt) = receipt
+        && receipt.matches(resolver, target, reader)?
+    {
+        return Ok(true);
+    }
+    prewarm_qualified_history(resolver, target, reader)?;
+    Ok(false)
 }
 
 /// Use matching fresh protected replica heads only to locate a possible cache
@@ -117,13 +207,16 @@ pub(super) fn prewarm_qualified_history_hint(
     resolver: &NativeHistoryResolver,
     hint: &FormalReadAnchorRefV1,
     reader: &dyn BusinessIndexNodeReader,
-) -> Result<(), String> {
+) -> Result<Option<VerifiedBusinessPrewarmReceipt>, String> {
     if resolver.active.definition().profile_version != 2
         || hint.position < resolver.external_origin.head().record().position
     {
-        return Ok(());
+        return Ok(None);
     }
-    prewarm_history_from_origin(resolver, hint, None, true, reader)
+    match prewarm_history_from_origin(resolver, hint, None, true, reader)? {
+        Some(target) => VerifiedBusinessPrewarmReceipt::from_completed(resolver, &target, reader),
+        None => Ok(None),
+    }
 }
 
 fn prewarm_history_from_origin(
@@ -132,7 +225,7 @@ fn prewarm_history_from_origin(
     exact_target: Option<&VerifiedFormalReadAnchorV1>,
     is_head_hint: bool,
     reader: &dyn BusinessIndexNodeReader,
-) -> Result<(), String> {
+) -> Result<Option<VerifiedFormalReadAnchorV1>, String> {
     if resolver
         .external_origin
         .authority()
@@ -140,7 +233,7 @@ fn prewarm_history_from_origin(
         .profile_version
         != 2
     {
-        return Ok(());
+        return Ok(None);
     }
     let deadline = std::time::Instant::now()
         .checked_add(resolver.timeout)
@@ -224,16 +317,16 @@ fn finish_prewarm_result(
     context_matches_hint: impl FnOnce(&VerifiedFormalReadAnchorV1) -> Result<bool, String>,
     deadline: std::time::Instant,
     reader: &dyn BusinessIndexNodeReader,
-) -> Result<(), String> {
+) -> Result<Option<VerifiedFormalReadAnchorV1>, String> {
     let replayed = match replayed {
         Ok(replayed) => replayed,
         Err(
             super::ReplayFailure::LocalPublicationMissing | super::ReplayFailure::DeadlineExceeded,
-        ) => return Ok(()),
-        Err(super::ReplayFailure::TargetMismatch) if is_head_hint => return Ok(()),
+        ) => return Ok(None),
+        Err(super::ReplayFailure::TargetMismatch) if is_head_hint => return Ok(None),
         Err(super::ReplayFailure::UnqualifiedPendingRecoveryTarget(expected)) => {
             if is_head_hint || exact_checkpoint.as_ref() == Some(expected.as_ref()) {
-                return Ok(());
+                return Ok(None);
             }
             return Err(
                 "HistoryUnavailable: pending recovery context differs from exact writer anchor"
@@ -252,10 +345,10 @@ fn finish_prewarm_result(
             );
         }
     } else if !context_matches_hint(&replayed.anchor)? {
-        return Ok(());
+        return Ok(None);
     }
     if std::time::Instant::now() >= deadline {
-        return Ok(());
+        return Ok(None);
     }
 
     // The staging map is bounded throughout replay. Install only after every
@@ -267,7 +360,10 @@ fn finish_prewarm_result(
                 format!("HistoryUnavailable: cache verified business node: {error}")
             })?;
     }
-    Ok(())
+    if std::time::Instant::now() >= deadline {
+        return Ok(None);
+    }
+    Ok(Some(replayed.anchor))
 }
 
 fn replayed_context_matches_hint(

@@ -186,7 +186,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - `./scripts/ci-tests.sh required --group formal_process`：准备产物后顺序执行全部真实进程分片；兼容入口 `./scripts/formal-live-local-tests.sh "$PWD"` 调用相同清单和运行器。
 - `./scripts/ci-tests.sh full`：full-standard 加重型验收。本地/CI 内部 `full-standard` 只执行普通与扩展检查；nightly/manual-full 另起共享产物矩阵，不执行两次重型链路。
 - 合同回归：`python3 scripts/ci-formal-process.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`。使用 Python 3.11+；覆盖精确零匹配、清单遗漏/重复、旧基线扩大、选中后失败/取消/跳过、绝对期限和真实小型 libtest。
-- hosted 验证检查构建与各消费 job 位于不同 Linux runner：下载同 tested SHA 的 tar、核对 manifest、无本地 target 前置时运行全部真实用例。不得在分片调用 Cargo。普通组和重型矩阵都在公共构建后启动，任一必选分片失败则固定汇总失败。
+- hosted 验证检查构建与各消费 job 位于不同 Linux runner：下载同 tested SHA 的消费者 tar.gz、核对 manifest 与所选执行闭包、无本地 target 前置时运行全部真实用例。不得在分片调用 Cargo。普通组与正式矩阵分别依赖各自 producer，正式矩阵不等待普通构建；互斥正式 producer 恰有一个成功且另一个跳过，任一必选分片失败则固定汇总失败。
+- 优化回归核对全部完整用例在逻辑 suite 与物理 shard 中恰好一次，保留长历史 70 次及健康集合 40 次连续操作。比较 producer、分包原始/压缩 bytes、下载、实际测试、重开/冷查/stop 各阶段；记录缓存来源、是否命中及 8 GiB 保存预算结果。fixture 和本地计数器只能证明对应机制，整体耗时改善须用实际 runner 结果另证。
 - `output/formal-process/results.jsonl` 记录每个命令的开始时间、耗时、退出码、超时、测试数和清理状态。只上传此安全摘要；详细输出查看 job 日志，失败世界目录不自动上传。缺摘要、缺产物和构建失败须从 Actions 失败步骤诊断，不能计为通过。
 
 <a id="ci-dependency-installation-validation"></a>

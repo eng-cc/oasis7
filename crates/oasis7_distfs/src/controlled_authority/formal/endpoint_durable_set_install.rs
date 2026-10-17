@@ -8,6 +8,49 @@ use std::fs::File;
 use std::path::PathBuf;
 use store::durable_set::copy_authenticated_closure;
 
+struct CandidateTiming {
+    phase: &'static str,
+    phase_started: Option<std::time::Instant>,
+    started: Option<std::time::Instant>,
+}
+impl CandidateTiming {
+    fn new() -> Self {
+        let started = std::env::var_os("OASIS7_HEALTHY_NATIVE_TRACE")
+            .is_some_and(|value| value == "1")
+            .then(std::time::Instant::now);
+        Self {
+            phase: "verify_transfer",
+            phase_started: started,
+            started,
+        }
+    }
+    fn report(&self) {
+        if let Some(started) = self.phase_started {
+            eprintln!(
+                "healthy-native-staging phase={} elapsed_us={}",
+                self.phase,
+                started.elapsed().as_micros(),
+            );
+        }
+    }
+    fn next(&mut self, phase: &'static str) {
+        self.report();
+        self.phase = phase;
+        self.phase_started = self.started.map(|_| std::time::Instant::now());
+    }
+}
+impl Drop for CandidateTiming {
+    fn drop(&mut self) {
+        self.report();
+        if let Some(started) = self.started {
+            eprintln!(
+                "healthy-native-staging total_us={}",
+                started.elapsed().as_micros(),
+            );
+        }
+    }
+}
+
 enum Backend {
     Primary(Box<FileFormalEndpoint>),
     Replica(File),
@@ -36,6 +79,7 @@ fn make_candidate(
     role: EndpointRole,
     budget: u64,
 ) -> Result<DurableSetCandidateV1, FormalError> {
+    let mut timing = CandidateTiming::new();
     let transition = sealed.transition();
     let old = transition.predecessor_authority();
     let transfer = verify_formal_archive_transfer(&manifest, old, source.clone())?;
@@ -66,6 +110,7 @@ fn make_candidate(
         EndpointRole::Replica => &transition.body().successor.replica.instance,
     };
     instance.verify_directory(path).map_err(fencing_error)?;
+    timing.next("copy_closure");
     let inventory = copy_authenticated_closure(
         path,
         &manifest.checkpoint_bytes,
@@ -75,6 +120,7 @@ fn make_candidate(
         budget,
         true,
     )?;
+    timing.next("bind_boundary");
     let node_id = transfer
         .head_node
         .as_ref()
@@ -121,6 +167,7 @@ fn make_candidate(
     if predecessor_proof.decision.record.record_id()? != transition.body().predecessor.record_id {
         return Err(invalid("healthy predecessor proof canonical hash"));
     }
+    timing.next("bind_install");
     let revision = match role {
         EndpointRole::Primary => sealed
             .evidence()
@@ -158,8 +205,10 @@ fn make_candidate(
             activation_digest: None,
         }),
     };
+    timing.next("persist_manifest");
     let manifest_bytes = serde_cbor::to_vec(&manifest).map_err(|e| invalid(e.to_string()))?;
     Store::persist_candidate_manifest(path, transition.digest(), &manifest_bytes)?;
+    timing.next("install_request");
     let request = DurableSetNativeInstallRequestV1 {
         schema_version: 1,
         authorization: sealed.evidence().clone(),

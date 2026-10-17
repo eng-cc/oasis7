@@ -6,6 +6,9 @@ use crate::controlled_authority::formal::business_index::{
     BUSINESS_INDEX_DEPTH, BusinessIndexNodeKindV1, BusinessIndexNodeV1, BusinessIndexRootV1,
     empty_subtree_hashes,
 };
+#[path = "endpoint_store_durable_set_copy_memo.rs"]
+mod copy_memo;
+use copy_memo::CopyReadMemo;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct DurableSetClosureInventoryV1 {
     pub source_checkpoint_digest: String,
@@ -376,6 +379,9 @@ pub(crate) fn copy_authenticated_closure(
         logical_bytes: 0,
     };
     let mut copy_pack = CopyPackBatch::default();
+    // The lifetime is exactly this signed-root walk. The independent provider
+    // must still read its registered local storage, never these copied bytes.
+    let mut source_memo = copy.then(|| CopyReadMemo::new(source, trace.enabled));
     let mut empty_hash_table: Option<[String; BUSINESS_INDEX_DEPTH + 1]> = None;
     trace.setup_us = elapsed_us(trace.started);
     while let Some(visit) = work.pop() {
@@ -429,7 +435,9 @@ pub(crate) fn copy_authenticated_closure(
         let bytes = if copy {
             match &visit {
                 Visit::Raw(_, bytes) => bytes.clone(),
-                _ => source
+                _ => source_memo
+                    .as_mut()
+                    .ok_or_else(|| invalid("healthy copy source memo absent"))?
                     .read_object(visit.id())?
                     .ok_or_else(|| invalid("healthy copy referenced object missing"))?,
             }
@@ -489,7 +497,11 @@ pub(crate) fn copy_authenticated_closure(
                 let node: HistoryNode = decode(&bytes)?;
                 check_history_head(&node, expected)?;
                 let mut load = |id: &str| {
-                    source.read_object(id)?.ok_or_else(|| {
+                    let bytes = match &mut source_memo {
+                        Some(memo) => memo.read_object(id)?,
+                        None => source.read_object(id)?,
+                    };
+                    bytes.ok_or_else(|| {
                         invalid("healthy copy history/index referenced object missing")
                     })
                 };
@@ -539,7 +551,13 @@ pub(crate) fn copy_authenticated_closure(
                 verify_record_material(record, &candidate.material)?;
                 trace.material_us += elapsed_us(started);
                 let started = trace.start();
-                enqueue_material(&candidate.material, profile_version, true, &mut work)?;
+                enqueue_material(
+                    &candidate.material,
+                    profile_version,
+                    true,
+                    &mut work,
+                    source_memo.as_mut(),
+                )?;
                 trace.enqueue_us += elapsed_us(started);
                 if let Some(material) = &candidate.frozen_material {
                     let started = trace.start();
@@ -556,7 +574,13 @@ pub(crate) fn copy_authenticated_closure(
                     )?;
                     trace.material_us += elapsed_us(started);
                     let started = trace.start();
-                    enqueue_material(material, profile_version, false, &mut work)?;
+                    enqueue_material(
+                        material,
+                        profile_version,
+                        false,
+                        &mut work,
+                        source_memo.as_mut(),
+                    )?;
                     trace.enqueue_us += elapsed_us(started);
                 }
                 // Publish only after all intrinsic checks and closure enqueue
@@ -634,6 +658,7 @@ fn enqueue_material(
     profile_version: u32,
     candidate: bool,
     work: &mut Vec<Visit>,
+    mut memo: Option<&mut CopyReadMemo<'_>>,
 ) -> Result<(), FormalError> {
     use crate::controlled_authority::replicated_protocol::ArtifactRole;
     for object in &material.objects {
@@ -654,9 +679,9 @@ fn enqueue_material(
     // authenticated Snapshot still binds the retained history root below.
     if candidate {
         let envelope = FormalBusinessResultEnvelopeV1::decode(&result.bytes)?;
-        enqueue_business_delta(&envelope.delta, work);
+        enqueue_business_delta(&envelope.delta, work, memo.as_deref_mut())?;
         if let Some(delta) = envelope.retained_history_delta {
-            enqueue_business_delta(&delta, work);
+            enqueue_business_delta(&delta, work, memo)?;
         }
     }
     #[derive(Deserialize)]
@@ -687,7 +712,8 @@ fn enqueue_material(
 fn enqueue_business_delta(
     delta: &crate::controlled_authority::formal::business_index::BusinessIndexDeltaV1,
     work: &mut Vec<Visit>,
-) {
+    mut memo: Option<&mut CopyReadMemo<'_>>,
+) -> Result<(), FormalError> {
     // The signed transition commits every synthesized write, including branch
     // nodes superseded by later updates in this same delta. The final root walk
     // cannot reach those intermediate nodes, but activation re-verifies the
@@ -695,9 +721,16 @@ fn enqueue_business_delta(
     // walker structurally validates and packs reachable nodes first; remaining
     // signed writes are then copied as raw, hash-checked closure objects.
     for write in &delta.node_writes {
+        // The Result material was checked against the authenticated entry.
+        // Recheck each content hash before memo admission; the subsequent root
+        // walk still validates every node and its exact structural edge.
+        if let Some(memo) = memo.as_deref_mut() {
+            memo.seed(&write.digest, &write.bytes)?;
+        }
         work.push(Visit::Raw(write.digest.clone(), write.bytes.clone()));
     }
     work.push(Visit::Business(delta.new.node_root.clone(), 0));
+    Ok(())
 }
 
 #[cfg(test)]

@@ -205,6 +205,127 @@ pub(super) fn optional_retained_result_from_hot_or_cold(
         .map_err(|error| format!("authenticated cold result read failed: {error}"))
 }
 
+/// Only for a newly submitted generation whose predecessor was awaited before
+/// submission. Its first result belongs to the bounded recent-result window;
+/// absence means execution has not published yet, not a cold-history lookup.
+pub(super) fn fresh_request_result(
+    world: &oasis7::runtime::World,
+    key: &str,
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+) -> Result<Option<oasis7::world_service::CanonicalIntentResultV1>, String> {
+    let Some(value) = world
+        .capability_revocation_state()
+        .world_service_results
+        .get(key)
+    else {
+        return Ok(None);
+    };
+    correlation::validate_result(key, value)?;
+    let result: oasis7::world_service::CanonicalIntentResultV1 =
+        serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+    if result.request != *request || result.rejected.is_some() {
+        return Err(format!(
+            "fresh exact task outcome mismatch or rejection: {:?}",
+            result.rejected
+        ));
+    }
+    Ok(Some(result))
+}
+
+pub(super) fn wait_for_new_request_result(
+    runtime: &FormalLiveRuntime,
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+    timeout: Duration,
+    label: &str,
+) -> Result<oasis7::world_service::CanonicalIntentResultV1, String> {
+    let key =
+        correlation::key_digest(&request.correlation.key).map_err(|error| error.to_string())?;
+    let started = Instant::now();
+    let deadline = started + timeout;
+    let mut next_diagnostic = Duration::from_secs(20);
+    let observe = || {
+        runtime.published.observe(|cut| {
+            Ok((
+                cut.anchor.head().record().position,
+                fresh_request_result(&cut.world, &key, request)?,
+            ))
+        })
+    };
+    loop {
+        let (position, result) = observe()?;
+        if let Some(result) = result {
+            return Ok(result);
+        }
+        let snapshot = runtime
+            .runtime
+            .lock()
+            .map_err(|_| "fresh request runtime lock poisoned")?
+            .snapshot();
+        if let Some(error) = snapshot.last_error {
+            return Err(format!("{label} task failed before publication: {error}"));
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            // The atomic publication may advance while diagnostics are read.
+            let (position, result) = observe()?;
+            if let Some(result) = result {
+                return Ok(result);
+            }
+            return Err(format!(
+                "{label} task {key} missing after {}s at position {position}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
+                timeout.as_secs(),
+                snapshot.running,
+                snapshot.tick_count,
+                snapshot.consensus.slot,
+                snapshot.consensus.latest_height,
+                snapshot.consensus.committed_height,
+                snapshot.consensus.last_execution_height,
+                snapshot.consensus.pending_consensus_actions,
+                snapshot.consensus.pending_proposal,
+                snapshot.consensus.last_status,
+            ));
+        }
+        if now.duration_since(started) >= next_diagnostic {
+            eprintln!(
+                "{label} task {key} still awaiting exact publication after {}s; position={position} running={} ticks={} slot={} height={} committed={} executed={} pending={:?} proposal={:?} status={:?}",
+                now.duration_since(started).as_secs(),
+                snapshot.running,
+                snapshot.tick_count,
+                snapshot.consensus.slot,
+                snapshot.consensus.latest_height,
+                snapshot.consensus.committed_height,
+                snapshot.consensus.last_execution_height,
+                snapshot.consensus.pending_consensus_actions,
+                snapshot.consensus.pending_proposal,
+                snapshot.consensus.last_status,
+            );
+            next_diagnostic += Duration::from_secs(20);
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[test]
+fn fresh_request_absence_never_reads_cold_history() {
+    let mut staged = oasis7::runtime::World::new();
+    staged.initialize_empty_formal_history().unwrap();
+    let world =
+        oasis7::runtime::World::from_snapshot(staged.snapshot(), staged.journal().clone()).unwrap();
+    let identity = WorldIdentity {
+        world_id: "formal-fixture-world".into(),
+        genesis_digest: fixtures::h(8),
+    };
+    let request = request_for_owner(&fixtures::key(71), &identity);
+    let key = correlation::key_digest(&request.correlation.key).unwrap();
+    assert!(world.read_retained_world_service_result(&key).is_err());
+    assert!(
+        fresh_request_result(&world, &key, &request)
+            .unwrap()
+            .is_none(),
+        "a new request must wait without consulting unavailable cold storage"
+    );
+}
+
 pub(super) fn wait_for_canonical_request_result(
     runtime: &FormalLiveRuntime,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
@@ -311,7 +432,7 @@ pub(super) fn wait_for_published_position(
 ) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
-        let published_position = runtime.published.current()?.anchor.head().record().position;
+        let published_position = runtime.published.position()?;
         if published_position >= position {
             return Ok(());
         }
