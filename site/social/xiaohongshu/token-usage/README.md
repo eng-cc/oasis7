@@ -11,8 +11,9 @@
 ## Source / Editable Assets
 - `token-usage-cover.html`
 
-## Publish-Ready Exports
-- `exports/token-usage-cover.png`
+## Historical Exports (not cleared for reuse)
+- `exports/token-usage-cover.png` was listed by the historical package. Its currency and source statistics are not verified; regenerate from the corrected HTML and review before reuse.
 
 ## Notes
+- The 2026-04-20 statistics lack a linked original export/billing record. Amounts remain historical reported figures, not verified settlement costs. Copy and HTML now state this boundary; no PNG regeneration or visual review is claimed.
 - Do not delete HTML/source assets just because PNG exports exist; source files support later correction and re-export.
