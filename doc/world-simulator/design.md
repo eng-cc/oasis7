@@ -80,7 +80,7 @@ Simulator 原生 Action、Agent、WorldModel 与 Runtime 模型各自保持现�
 
 `KernelRuleDecision.cost` 是历史 adapter 保留的决策数据。`crates/oasis7_simulator/src/kernel/types.rs::merge_kernel_rule_decisions` 聚合 cost；`kernel/step.rs::execute_action_envelope_at_time` 随后只按 verdict、override 和拒绝 notes 决定动作执行，不使用 cost 进行余额检查或资源扣账，也不把聚合 cost 作为独立事件写入 journal。动作自己的资源变化由其实现负责，不能据此推断所有动作都无成本。
 
-正式 runtime 的 `RuleDecision` 与该 adapter 分属不同执行入口：`crates/oasis7/src/runtime/world/step.rs` 检查资源缺口并应用 `decision.cost`，成本应用失败形成结构化拒绝。保留 simulator 的兼容行为不改变正式 runtime 的结算合同。若以后让 simulator cost 生效，应明确付款主体、数值及原子性、事件/replay、旧决策与旧消费者兼容，并以针对该行为的回归验证替代对字段存在的推断。
+正式 runtime 的 `RuleDecision` 与该 adapter 分属不同执行入口：`crates/oasis7_runtime/src/world/step.rs` 检查资源缺口并应用 `decision.cost`，成本应用失败形成结构化拒绝。保留 simulator 的兼容行为不改变正式 runtime 的结算合同。若以后让 simulator cost 生效，应明确付款主体、数值及原子性、事件/replay、旧决策与旧消费者兼容，并以针对该行为的回归验证替代对字段存在的推断。
 
 ### Wasm adapter 与其余模拟边界
 

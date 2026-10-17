@@ -122,13 +122,13 @@ fn verify_record_payload(
     let snapshot_ref = text(record, "snapshot_ref")?;
     let journal_ref = text(record, "journal_ref")?;
     let snapshot_bytes = payload(snapshot_ref)?;
-    if oasis7::runtime::blake3_hex(&snapshot_bytes) != text(record, "execution_state_root")? {
+    if oasis7_runtime::blake3_hex(&snapshot_bytes) != text(record, "execution_state_root")? {
         return Err("legacy record snapshot root mismatch".into());
     }
     let snapshot = serde_cbor::from_slice(&snapshot_bytes).map_err(|e| e.to_string())?;
     let journal = serde_cbor::from_slice(&payload(journal_ref)?).map_err(|e| e.to_string())?;
     let restored =
-        oasis7::runtime::World::from_snapshot(snapshot, journal).map_err(|e| format!("{e:?}"))?;
+        oasis7_runtime::World::from_snapshot(snapshot, journal).map_err(|e| format!("{e:?}"))?;
     if restored.state().time != height
         || restored.chain_resource_manifest().world_id != world_id
         || record["journal_len"].as_u64() != Some(restored.journal().len() as u64)
@@ -142,7 +142,7 @@ fn verify_record_payload(
     };
     refs(mirror, cas)?;
     let mirror_snapshot = payload(text(mirror, "snapshot_ref")?)?;
-    if oasis7::runtime::blake3_hex(&mirror_snapshot) != text(mirror, "state_root")? {
+    if oasis7_runtime::blake3_hex(&mirror_snapshot) != text(mirror, "state_root")? {
         return Err("legacy simulator mirror snapshot root mismatch".into());
     }
     let snapshot: oasis7::simulator::WorldSnapshot = serde_cbor::from_slice(&mirror_snapshot)
@@ -226,7 +226,7 @@ pub(super) fn closure(
         return Err("legacy chain binding missing".into());
     }
     let snapshot_root =
-        oasis7::runtime::blake3_hex(&serde_cbor::to_vec(&snapshot).map_err(|e| e.to_string())?);
+        oasis7_runtime::blake3_hex(&serde_cbor::to_vec(&snapshot).map_err(|e| e.to_string())?);
     let state = read_json(&paths["--execution-bridge-state"])?;
     let height = state["last_applied_committed_height"]
         .as_u64()

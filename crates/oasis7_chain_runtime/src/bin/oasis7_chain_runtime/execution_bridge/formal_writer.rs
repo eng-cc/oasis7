@@ -3,7 +3,6 @@ use super::{
     controlled_capture as capture, durable_transaction, formal_executor, formal_package, to_cbor,
 };
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use oasis7_distfs::controlled_authority::{
     formal::{
         coordinator::{FormalCoordinator, FormalDurabilityEndpoint},
@@ -15,6 +14,7 @@ use oasis7_distfs::controlled_authority::{
     replicated_protocol::{ArtifactRole, ClosedRecord},
 };
 use oasis7_node::NodeLocalExecutionContinuation;
+use oasis7_runtime::{Journal, ReleaseSecurityPolicy, Snapshot, World, blake3_hex};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -180,7 +180,7 @@ fn restore(
         .map_err(|e| e.to_string())?;
     let snapshot: Snapshot = capture::decode_role(&candidate.material, ArtifactRole::Snapshot)?;
     let journal: Journal = capture::decode_role(&candidate.material, ArtifactRole::Journal)?;
-    let world = World::from_snapshot(snapshot, journal)
+    let world = oasis7::runtime_host::world::from_snapshot(snapshot, journal)
         .map_err(|e| format!("{e:?}"))?
         .with_release_security_policy(release.clone());
     if blake3_hex(&to_cbor(world.snapshot())?) != candidate.candidate.record.after_state_root {
@@ -214,10 +214,12 @@ fn restore_qualified(
         return restore(candidate, release);
     }
     let bytes = to_cbor(&snapshot)?;
-    let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
-    let world = World::from_verified_formal_snapshot(snapshot, journal, parent, reader)
-        .map_err(|e| format!("{e:?}"))?
-        .with_release_security_policy(release.clone());
+    let parent = oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(anchor, &bytes)?;
+    let world = oasis7::runtime_host::world::from_verified_formal_snapshot(
+        snapshot, journal, parent, reader,
+    )
+    .map_err(|e| format!("{e:?}"))?
+    .with_release_security_policy(release.clone());
     super::formal_business_package::tree(
         &candidate.material,
         &candidate.candidate.record,
@@ -580,7 +582,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         }
         if self.world.state().retained_history_root.is_some() {
             let bytes = to_cbor(self.world.snapshot())?;
-            let parent = oasis7::runtime::VerifiedFormalRetainedHistoryParentV1::verify(
+            let parent = oasis7_runtime::VerifiedFormalRetainedHistoryParentV1::verify(
                 &self.anchor,
                 &bytes,
             )?;

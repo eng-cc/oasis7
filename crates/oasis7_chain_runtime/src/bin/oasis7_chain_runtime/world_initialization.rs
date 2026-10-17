@@ -2,9 +2,6 @@
 //! formal initial world. This module never creates a World or manufactures
 //! identity, issuer trust, or an activation signature.
 use ed25519_dalek::SigningKey;
-use oasis7::runtime::{
-    Journal, ObserverReadLimits, ReleaseSecurityPolicy, Snapshot, World, blake3_hex,
-};
 use oasis7_distfs::controlled_authority::formal::{
     AuthorityDefinitionV1, FormalCompletionBranchV1, FormalRecordKindV1, FormalWorldIdentityV1,
     InitialActivationBodyV1, InitialActivationTrustV1, RecoveryPolicyV1, SignedInitialActivationV1,
@@ -12,6 +9,9 @@ use oasis7_distfs::controlled_authority::formal::{
     coordinator::{FormalCoordinator, FormalCoordinatorErrorV1},
     transport::RemoteFormalEndpoint,
     verify_formal_qualified, verify_initial_activation,
+};
+use oasis7_runtime::{
+    Journal, ObserverReadLimits, ReleaseSecurityPolicy, Snapshot, World, blake3_hex,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
@@ -413,7 +413,7 @@ fn rebuild(config_path: &Path) -> Result<RebuiltRequest, String> {
             .map_err(|error| format!("formal World snapshot CBOR: {error}"))?;
         let journal: Journal = serde_cbor::from_slice(&journal_bytes)
             .map_err(|error| format!("formal World journal CBOR: {error}"))?;
-        let world = World::from_snapshot(snapshot, journal)
+        let world = oasis7::runtime_host::world::from_snapshot(snapshot, journal)
             .map_err(|error| format!("restore explicit formal World boundary: {error:?}"))?;
         let release = ReleaseSecurityPolicy::production_hardened();
         let closure = match config.mode {

@@ -466,8 +466,9 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_
     assert_eq!(decision_request.runtime_binding.reorg_epoch, 0);
     let current_state_root = server
         .world
-        .current_state_root_hash()
-        .expect("current Runtime state root");
+        .execution_state_identity()
+        .expect("current Runtime state root")
+        .state_root_hash;
     let ad_hoc_state_hash = crate::simulator::h_v1(
         "oasis7.runtime.world-state.v1",
         &crate::simulator::Digest32::from(current_state_root),

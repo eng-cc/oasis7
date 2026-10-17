@@ -954,7 +954,9 @@ pub(super) fn runtime_context_digests_for_continuation(
 
 use service_cognition::runtime_continuation_for_wake_with_identity;
 
-use crate::runtime::service_context::{ProviderCapabilityContext, provider_capability_context};
+use crate::runtime_host::provider_context::{
+    ProviderCapabilityContext, provider_capability_context,
+};
 
 #[cfg(test)]
 #[path = "llm_sidecar_cognition_tests.rs"]

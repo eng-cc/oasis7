@@ -536,7 +536,7 @@ fn retained_history_root(material: &ClosedRecord) -> Result<Option<String>, Stri
         .iter()
         .find(|object| &object.content_hash == hash)
         .ok_or("full-sync Snapshot object missing")?;
-    let snapshot: oasis7::runtime::Snapshot =
+    let snapshot: oasis7_runtime::Snapshot =
         serde_cbor::from_slice(&bytes.bytes).map_err(|error| error.to_string())?;
     Ok(snapshot
         .state
@@ -562,7 +562,7 @@ fn verify_business_path(
         .iter()
         .find(|object| &object.content_hash == snapshot_hash)
         .ok_or("full-sync Snapshot object missing")?;
-    let snapshot: oasis7::runtime::Snapshot =
+    let snapshot: oasis7_runtime::Snapshot =
         serde_cbor::from_slice(&snapshot_bytes.bytes).map_err(|error| error.to_string())?;
     let retained = snapshot
         .state

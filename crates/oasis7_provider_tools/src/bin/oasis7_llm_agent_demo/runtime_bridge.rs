@@ -452,7 +452,7 @@ impl RuntimeGameplayBridge {
     }
 
     pub(crate) fn from_kernel(kernel: &WorldKernel) -> Result<Self, String> {
-        let mut world = RuntimeWorld::new();
+        let mut world = oasis7::runtime_host::world::new();
         let mut agent_ids: Vec<String> = kernel.model().agents.keys().cloned().collect();
         agent_ids.sort();
         for agent_id in &agent_ids {

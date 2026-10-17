@@ -1,8 +1,8 @@
 //! AGC02: independent processes and the Rust SDK exercise the same native contract.
 //! Scripted fixed decisions only; timings are diagnostics, never benchmarks.
 use super::*;
-use oasis7::runtime::{Action, MaterialLedgerId, STARTER_SMELTER_FACTORY_ID};
 use oasis7_game_client::{device_client::Client, operation_store::ClientStateKind};
+use oasis7_runtime::{Action, MaterialLedgerId, STARTER_SMELTER_FACTORY_ID};
 use serde_json::{Value, json};
 use std::{
     path::PathBuf,

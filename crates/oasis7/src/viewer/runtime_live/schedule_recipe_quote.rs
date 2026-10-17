@@ -173,13 +173,12 @@ impl ViewerRuntimeLiveServer {
                 target_agent_id: Some(agent_id.to_string()),
             });
         };
-        let (local_shortage_delay_ticks, shortage_reason) = self
+        let readiness = self
             .world
-            .schedule_recipe_local_scarcity_delay_for_quote(
+            .quote_recipe_execution_readiness(
                 request.factory_id.as_str(),
                 request.recipe_id.as_str(),
-                &canonical_plan.consume,
-                &canonical_plan.produce,
+                &canonical_plan,
             )
             .map_err(|message| GameplayActionError {
                 code: "schedule_recipe_quote_rejected".to_string(),
@@ -187,6 +186,8 @@ impl ViewerRuntimeLiveServer {
                 action_id: Some("quote_schedule_recipe".to_string()),
                 target_agent_id: Some(agent_id.to_string()),
             })?;
+        let local_shortage_delay_ticks = readiness.local_shortage_delay_ticks;
+        let shortage_reason = readiness.shortage_reason;
         Ok(ScheduleRecipeQuotePreflight {
             owner_agent_id: agent_id.to_string(),
             factory_id: quote.factory_id,

@@ -5,7 +5,6 @@ use super::{
     to_cbor,
 };
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{ReleaseSecurityPolicy, World, blake3_hex};
 use oasis7_distfs::controlled_authority::formal::{
     business_index::BusinessIndexNodeReader,
     business_material::{FORMAL_BUSINESS_ENVELOPE_DOMAIN_V1, FormalBusinessResultEnvelopeV1},
@@ -14,6 +13,7 @@ use oasis7_distfs::controlled_authority::{
     formal::{endpoint::FormalCandidateMaterialV1, *},
     replicated_protocol::{ArtifactObject, ArtifactRole, ClosedRecord},
 };
+use oasis7_runtime::{ReleaseSecurityPolicy, World, blake3_hex};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 struct EmptyBusinessIndex;
@@ -157,9 +157,10 @@ impl InitialWorldClosure {
             );
         }
         validate_modules(&snapshot)?;
-        let mut restored = World::from_snapshot(snapshot.clone(), world.journal().clone())
-            .map_err(|e| format!("{e:?}"))?
-            .with_release_security_policy(release.clone());
+        let mut restored =
+            oasis7::runtime_host::world::from_snapshot(snapshot.clone(), world.journal().clone())
+                .map_err(|e| format!("{e:?}"))?
+                .with_release_security_policy(release.clone());
         if snapshot.state.retained_history_root.is_some() {
             // Explicit initial preparation may inspect only the canonical empty
             // index. Restore its process-local reader without minting lineage.

@@ -121,7 +121,7 @@ fn write_report(durations: &[u128], p50_ms: u128, p95_ms: u128, min_ms: u128, ma
 
 #[test]
 fn triad_release_sla_submit_to_apply_p95_under_60s() {
-    let mut world = World::new();
+    let mut world = oasis7::runtime_host::world::new();
     world.set_policy(PolicySet::allow_all());
 
     register_agent(

@@ -61,7 +61,7 @@ pub(super) fn start_parent_clock(fixture: &Fixture, enabled: bool) -> ParentCloc
                         .leases
                         .values()
                         .any(|lease| {
-                            lease.status == oasis7::runtime::CognitionLeaseStatusV1::Settled
+                            lease.status == oasis7_runtime::CognitionLeaseStatusV1::Settled
                         });
                     if active && settled {
                         let mut before =
@@ -161,7 +161,7 @@ pub(super) fn report_canonical_resume_failure(fixture: &Fixture) {
         } = &signed.request.operation
         {
             let execution_tick = signed.request.captured_base_binding.base_tick;
-            let derived_tick = oasis7::runtime::WakeConditionValidator::next_wake_tick_at(
+            let derived_tick = oasis7_runtime::WakeConditionValidator::next_wake_tick_at(
                 &proposal.wake_conditions,
                 execution_tick,
             );
@@ -260,7 +260,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                         .iter()
                         .any(|c| c.continuation_proposal_id == proposal.continuation_proposal_id)
                     && current.projection().cognition_leases.iter().any(|lease| {
-                        lease.status == oasis7::runtime::CognitionLeaseStatusV1::Settled
+                        lease.status == oasis7_runtime::CognitionLeaseStatusV1::Settled
                     })
                 {
                     break proposal;
@@ -399,7 +399,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                 );
                 assert_ne!(
                     rejected.projection().state.agents["agent-a"].state.pos,
-                    oasis7::GeoPos::new(2, 2, 0)
+                    oasis7_agent_api::world_action::GeoPos::new(2, 2, 0)
                 );
                 println!("PRE2_APPLICATION_RESOURCE_DRIFT_WAKE_REJECTED");
                 return;
@@ -439,7 +439,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                     .continuations
                     .iter()
                     .any(|entry| entry.continuation_id == continuation_id
-                        && entry.status == oasis7::runtime::ContinuationStatusV1::Consumed)
+                        && entry.status == oasis7_runtime::ContinuationStatusV1::Consumed)
             );
             assert!(
                 current
@@ -447,7 +447,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                     .continuations
                     .iter()
                     .any(|entry| entry.continuation_id != continuation_id
-                        && entry.status == oasis7::runtime::ContinuationStatusV1::Scheduled)
+                        && entry.status == oasis7_runtime::ContinuationStatusV1::Scheduled)
             );
             assert!(
                 !current
@@ -458,7 +458,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
             );
             assert_eq!(
                 current.projection().state.agents["agent-a"].state.pos,
-                oasis7::GeoPos::new(2, 2, 0)
+                oasis7_agent_api::world_action::GeoPos::new(2, 2, 0)
             );
             let lease = current
                 .projection()
@@ -468,7 +468,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                 .expect("canonical resumed Act lease missing");
             assert_eq!(
                 lease.status,
-                oasis7::runtime::CognitionLeaseStatusV1::Settled
+                oasis7_runtime::CognitionLeaseStatusV1::Settled
             );
             assert!(
                 !summary["mirrored_lease_identities"]
