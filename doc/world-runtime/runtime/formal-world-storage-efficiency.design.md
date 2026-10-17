@@ -3,7 +3,7 @@
 - 状态：active；表示本 PR 候选的目标合同，不表示相关优化已经实现、启用或验收。
 - Owner：runtime_engineer；共同审读：blockchain_ops_engineer、wasm_platform_engineer、qa_engineer。
 - 适用范围：正式持久世界的端点、执行 attempt、历史依赖闭包、存储表示、迁移与恢复；覆盖 Primary/Replica 各独立故障域。
-- 文档基线：[4220622fde069346a828d42572eea61c0073d95e](https://github.com/nil-studio/oasis7/commit/4220622fde069346a828d42572eea61c0073d95e)；静态源码审读基线为 `2676c835cc50f12d7fd16a762eaa21f026ae79d4`，期间变更只涉及文档，相关存储源码未变。下文源码定位统一固定到文档基线；本轮没有实际世界存储样本、运行验收或节省比例。
+- 文档基线：[4220622fde069346a828d42572eea61c0073d95e](https://github.com/nil-studio/oasis7/commit/4220622fde069346a828d42572eea61c0073d95e)；静态源码审读基线为 `2676c835cc50f12d7fd16a762eaa21f026ae79d4`，期间变更只涉及文档，相关存储源码未变。下文源码定位统一固定到文档基线；该初始设计审读没有实际世界存储样本、运行验收或节省比例，后续实现与证据范围见 §10.2 及实施 PR。
 - 产品来源：[无损世界历史存储 PRD](../../product/world-infrastructure/lossless-world-history-storage.prd.md#req-lws-001)。
 - 专业配套：[既有 storage 治理](runtime-storage-footprint-governance.design.md#storage-history-dependency)、[同世界恢复](../design.md#runtime-recovery-design)、[事件后缀控制状态恢复](../design.md#runtime-journal-suffix-recovery-design)。
 - 验证操作：[无损存储验收手册](formal-world-storage-efficiency.manual.md#lws-validation-use)；步骤是目标合同，实际入口、候选和结果须由实现交付记录。
@@ -441,6 +441,8 @@ SnapshotDelta 的验证接受上限仍为深度 32、链输入 256 MiB；生产�
 单个端点 Prepare 的既有 request-local 候选闭包证明，允许保留同一完整验证 pass 得到的原 before Frozen 与 after record 的 Snapshot 字节，供原前态匹配、retention descriptor 和 Tick prefix 检查借用。证明仍绑定精确借用的 candidate、record、material、Frozen body/source；不跨端点、RPC 或 Decision 复用，不接收执行后 World 作为原前态替代。完整闭包、对象 hash、原前后状态根、证书、native 环境、两个 delta 及原 retention/prefix 校验全部保留；只消除同一不可变材料在一次校验中的重复展开。两个原字节缓冲各不超过 64 MiB、合计不超过 128 MiB，不克隆额外缓冲；已有两个 encoded 闭包各 8 MiB 上限保持。原 typed Tick tail 允许合法 legacy 长度，不能把其 Value 容器误称固定小型视图，需保留原解码语义并分别测量峰值。公开 record/Frozen verifier 的旧行为保持：旧 schema 本来不展开时仍不新增展开、校验或分配，只在原来就需要 Snapshot 的 Prepare 路径补一次原读取。Decision 是新的独立校验调用，不能沿用 Prepare 的证明。实现和验收须区分源码消除的重复次数与真实 Linux 进程耗时，不以次数变化代替完整场景通过。
 
 Node writer 从同一不可变候选恢复时，也可将 record 完整验证同一 pass 返回的原 Snapshot 字节直接交给原 typed Snapshot decoder，避免验证后立即再次展开同一链。该原字节仅在本次恢复内使用、解码后释放；旧 schema 未返回字节时沿原读取路径。原 journal、状态根、qualified anchor、retained parent、World boundary、树及 release policy 检查不变，不能将这种字节复用视为免除其他恢复检查或跨候选缓存。
+
+World 的共享正式历史 reader 完整转发底层 `BusinessIndexNodeReader` 的路径预取、已缓存节点读取、内容缓存与普通节点读取，避免透明适配器截断既有整路径双端预取，使冷 Journal/Tick 恢复退化为逐节点远程调用。原远端 reader 的签名、root/key、双端路径一致性和固定缓存预算不变；`BusinessIndexRoot` 仍从合格根逐节点校验 hash、深度与路径，缺失或损坏仍拒绝。预取与逻辑内容缓存只服务恢复读取，不代签端点独立持久闭包读回或删除授权；包含未合格 overlay 的其他 reader 不盲目套用远端根预取。
 
 阶段是技术依赖顺序，可合并实施，不新增 workflow、审批次数或每阶段强制 PR。当前无运行世界时直接创建新表示；本地实现与验证不代替真实节点部署验收。
 

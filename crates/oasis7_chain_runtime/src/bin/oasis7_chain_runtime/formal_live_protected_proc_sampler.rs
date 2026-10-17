@@ -89,10 +89,10 @@ mod linux {
         let keep = ["Name", "State", "Threads", "VmRSS", "VmHWM"];
         let mut values = serde_json::Map::new();
         for line in text.lines() {
-            if let Some((key, value)) = line.split_once(':') {
-                if keep.contains(&key) {
-                    values.insert(key.into(), value.trim().into());
-                }
+            if let Some((key, value)) = line.split_once(':')
+                && keep.contains(&key)
+            {
+                values.insert(key.into(), value.trim().into());
             }
         }
         values.into()
@@ -109,10 +109,10 @@ mod linux {
                         scan_truncated = true;
                         break;
                     }
-                    if let Ok(entry) = entry {
-                        if let Ok(tid) = entry.file_name().to_string_lossy().parse::<u32>() {
-                            ids.push(tid);
-                        }
+                    if let Ok(entry) = entry
+                        && let Ok(tid) = entry.file_name().to_string_lossy().parse::<u32>()
+                    {
+                        ids.push(tid);
                     }
                 }
                 None
