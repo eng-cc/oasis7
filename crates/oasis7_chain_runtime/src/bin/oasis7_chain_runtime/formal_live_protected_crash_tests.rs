@@ -127,6 +127,14 @@ pub(super) fn run_crash_recovery(
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
     initial_emits: usize,
 ) -> Result<(), String> {
+    // C03 previously had no shared scenario deadline. Use the healthy fixture's
+    // existing five-minute scenario budget once, including both exact reopens
+    // and retries of the same pending stop owner. The phase/RPC bounds stay put.
+    let started_at = Instant::now();
+    let scenario = ScenarioDeadline {
+        started_at,
+        expires_at: started_at + Duration::from_secs(5 * 60),
+    };
     let root = config.parent().ok_or("crash fixture root missing")?;
     let marker = root.join("runtime-crash-phase");
     let target_request = root.join("crash-original-request.cbor");
@@ -185,6 +193,7 @@ pub(super) fn run_crash_recovery(
         return Err(format!("C03 did not observe SIGKILL: {status}"));
     }
     drop(child);
+    scenario.report_stage("runtime SIGKILL observed")?;
 
     let config_value: Value =
         serde_json::from_slice(&std::fs::read(config).map_err(|e| e.to_string())?)
@@ -225,6 +234,7 @@ pub(super) fn run_crash_recovery(
     let mut qualified_record = None;
     let mut exact_effect = None;
     for reopen in 0..2 {
+        scenario.report_stage("exact crash recovery reopen started")?;
         crate::execution_bridge_real_tests::real_execution_bridge::formal_crash_test_boundary::reset_execution_attempts(&original_block_hash);
         let mut runtime = FormalLiveRuntime::open_with_native_history(config)?;
         runtime.start()?;
@@ -328,7 +338,11 @@ pub(super) fn run_crash_recovery(
         {
             return Err("C03 original retry changed CommitRef/agent/owner/resources/result".into());
         }
-        runtime.stop(Duration::from_secs(10))?;
+        eprintln!(
+            "C03 phase={phase} reopen={reopen} exact identity/effect/retry assertions passed; stopping same runtime owner"
+        );
+        super::durable_set_tests::stop_healthy_runtime(&mut runtime, scenario)?;
+        scenario.report_stage("exact crash recovery reopen stopped")?;
     }
     eprintln!(
         "C03 phase={phase} SIGKILL verified; original qualified once; two exact reopen reads"
