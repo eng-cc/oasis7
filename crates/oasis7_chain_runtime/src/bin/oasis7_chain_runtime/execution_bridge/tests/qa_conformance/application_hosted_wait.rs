@@ -87,9 +87,10 @@ pub(super) fn observation(
         logical.transport_attempt = 1;
         let context_digest =
             oasis7::simulator::h_v1("oasis7.cognition.context.v1", &logical).to_string();
+        let incoming_bytes = serde_cbor::to_vec(incoming).expect("encode original host request");
         let prefix = results.iter().find(|result| matches!(&result.request.signed_payload,
             WorldServicePayloadV1::Scheduler(signed) if matches!(&signed.request.operation,
-                SchedulerOperationV1::ProviderPrefix{request,context_digest:actual} if request == incoming && actual == &context_digest)))
+                SchedulerOperationV1::ProviderPrefix{request,context_digest:actual} if serde_cbor::to_vec(request).expect("encode contract request") == incoming_bytes && actual == &context_digest)))
             .expect("actual committed exact ProviderPrefix before model response");
         assert_eq!(prefix.receipt["dispatched"], true);
         assert_eq!(prefix.receipt["request_digest"], digest);

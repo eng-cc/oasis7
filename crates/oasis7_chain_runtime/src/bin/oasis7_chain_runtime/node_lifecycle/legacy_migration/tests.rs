@@ -184,7 +184,7 @@ fn export_fixture_kind(root: &Path, with_simulator_action: bool) {
         agent_id: "pending-after-cut".into(),
         pos: oasis7::geometry::GeoPos::new(1, 2, 3),
     });
-    let feedback = oasis7::simulator::FeedbackEnvelopeV1 {
+    let feedback = oasis7_agent_api::FeedbackEnvelopeV1 {
         feedback_id: "retained-feedback".into(),
         feedback_seq: 1,
         agent_subject: "fixture-agent".into(),
