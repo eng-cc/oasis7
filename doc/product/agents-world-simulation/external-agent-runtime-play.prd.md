@@ -419,9 +419,9 @@ Trace ID: O7-REQ-cb69c2a7-f13a-42ea-a929-214fa7ff9d43
 - 系统设计状态：部分覆盖
 - 系统设计依据：[专业承接条款](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-budget)已承接模型/工具共享预算、有限deadline与中断能力；同文件需求承接/验证表反链本条AC。剩余：世界资源成本区分归因及失去授权后原结果查询尚需组合承接；不代表实现或发布。
 - 实现状态：未核实
-- 实现与验证依据：[第一方原子预算准入](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_model_provider/src/connection.rs#L677-L707)确实限制调用数、并发和token预留；[预算读取与解释](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx#L150-L172)显示未知费用不为零、不能限制其他应用支出、限额及已占用预算，执行诊断与已受理世界作业分开。上述真实链属于第一方会话，不等于外部Runtime内部工具/子调用计量或世界资源成本归因。
-- 核对日期与基线：2026-10-17；需求/设计/静态实现固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，源码逐文件 Git blob 校验；本轮未运行模型、Runtime、浏览器或产品验收。既有PR运行记录仅按各自候选/范围引用。
-- 剩余范围：外部Runtime的计量来源/去重、部分强制边界、世界资源成本区分、授权失效后停止新请求及原世界结果查询的完整生产链仍未核清。已审预算UI/准入不代签这组直接义务；保留设计中世界成本与失权原结果组合缺口。
+- 实现与验证依据：[实际预算生产接线](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7_agent_harness/src/native_task_sdk.rs#L65-L99)将config/world/agent/task_fence绑定到[持久物理调用预算](https://github.com/nil-studio/oasis7/blob/e27f4d990bc4d481097c003ff75afc582fd8f65d/crates/oasis7_client_storage/src/native_run_budget.rs#L28-L190)；每次provider调用前持久预留，重启不恢复余额，缺失/损坏/改限额拒绝，非Unix明确unsupported。5d503f→e27f的native_run_budget逐字节相同；operation_store仅公开feedback存取函数并注明调用者validator责任。实际上游仍Hosted BYOK→SessionModelProvider→NativeTaskRunner；该run物理调用数不是Runtime内部子调用UsageMeasurement计量，更不是CapabilityExecution授权额度或世界资源账。第一方UI仍明确未知费用≠0、预算占用及已受理世界作业独立。
+- 核对日期与基线：2026-10-17；状态卡按 A `0901927131b3e7c919fc6b092e77ae8895579989`，静态生产源码固定 main `e27f4d990bc4d481097c003ff75afc582fd8f65d`，22个引用/闭包源逐 Git blob 校验；另比较 `5d503f0ca79bcc68708a32672a48a2786ad51395` 迁移前源码。未运行模型、Runtime、浏览器或行为验收，未把测试源码当本轮PASS。
+- 剩余范围：已查清新增crate的预算/原操作恢复语义与真实第一方消费者；仍缺Codex/OpenClaw各自manifest计量范围、稳定meter/sequence去重与恢复、partial enforcement/unknown保留、世界资源成本分项，以及失权停止新受限请求后原结果可读的两Runtime+玩家表面闭包。不得把本地调用数当费用硬上限或将缺完整合同抹成已审子链不存在。
 
 - 要求：开始和持续执行时必须区分外部推理/工具开销与世界资源成本，说明可执行的预算限制、估计值和未知值；达到可执行限制或授权失效后停止新的受限请求或提交，并保留已有结果的处理路径。无法保证的下游硬上限不得被显示为已强制生效，未知开销不得按零处理。
 - 理由：玩家能够判断是否继续委托，并理解 Runtime 内部调用对开销的影响。
