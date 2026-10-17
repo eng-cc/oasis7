@@ -1,6 +1,8 @@
 use super::*;
+use crate::world_service::{SchedulerIntentV1, SchedulerOperationV1};
 use oasis7_agent_api::game::{
     GAME_EXECUTOR_CONTROL_DOMAIN, GameExecutorControlV1, GameExecutorOperationV1, GameTaskFenceV1,
+    TaskContextIdentityV1,
 };
 
 fn delegated(world: &mut World, owner: &str, generation: u64, nonce: u64, delegate: &str) {
@@ -96,6 +98,58 @@ fn execute(
         rejected: None,
     }
 }
+
+fn task_provider_prefix_result(
+    world: &World,
+    context: &TaskContextIdentityV1,
+    private: &str,
+    request_id: &str,
+    committed_height: u64,
+    rejected: Option<&str>,
+) -> CanonicalIntentResultV1 {
+    let payload = WorldServicePayloadV1::Scheduler(
+        sign_read_request(
+            "scheduler",
+            SchedulerIntentV1 {
+                agent_id: context.fence.agent_id.clone(),
+                request_id: request_id.into(),
+                delegation_generation: context
+                    .fence
+                    .executor_binding
+                    .as_ref()
+                    .unwrap()
+                    .delegation_generation
+                    .0,
+                captured_base_binding: world.current_cognition_base_binding().unwrap(),
+                operation: SchedulerOperationV1::TaskProviderPrefix {
+                    context: context.clone(),
+                },
+            },
+            private,
+        )
+        .unwrap(),
+    );
+    let request = SubmitIntentRequest {
+        contract_version: 1,
+        correlation: derive_correlation(
+            WorldIdentity {
+                world_id: context.fence.world_id.clone(),
+                genesis_digest: context.fence.genesis_digest.clone(),
+            },
+            &payload,
+        )
+        .unwrap(),
+        signed_payload: payload,
+        deadline_unix_ms: None,
+    };
+    CanonicalIntentResultV1 {
+        request,
+        action_id: committed_height,
+        committed_height,
+        receipt: serde_json::Value::Null,
+        rejected: rejected.map(str::to_owned),
+    }
+}
 #[test]
 fn game_task_executor_bind_replace_stop_restart_and_metadata_audience() {
     let (mut world, owner, delegate, initial) = boot();
@@ -110,10 +164,21 @@ fn game_task_executor_bind_replace_stop_restart_and_metadata_audience() {
     assert_eq!(active.task_revision.0, 3);
     assert_eq!(active.executor_epoch.0, 1);
     let fence = GameTaskFenceV1::from_control(&active);
+    let history = validate_retention_history(&world).unwrap();
+    assert_eq!(
+        history.current_control("agent").unwrap(),
+        Some(active.clone())
+    );
+    assert_eq!(
+        history.active_publish("agent").unwrap(),
+        active_publish(&world, "agent").unwrap()
+    );
     let public = sign_read_request("key", (), &delegate)
         .unwrap()
         .subject_public_key;
     validate_task_executor(&world, &fence, &public).unwrap();
+    history.validate_task_executor(&fence, &public).unwrap();
+    history.validate_task_reader(&fence, &public).unwrap();
     assert!(validate_task_executor(&world, &fence, &fence.owner_public_key).is_err());
     assert!(
         projection::WorldServiceProjection::from_authenticated_world(
@@ -140,6 +205,16 @@ fn game_task_executor_bind_replace_stop_restart_and_metadata_audience() {
     assert!(validate_task_executor(&world, &fence, &public).is_err());
     let replaced = current_control(&world, "agent").unwrap().unwrap();
     assert_eq!(replaced.executor_epoch.0, 2);
+    let replaced_history = validate_retention_history(&world).unwrap();
+    assert!(
+        replaced_history
+            .validate_task_executor(&fence, &public)
+            .is_err()
+    );
+    assert_eq!(
+        replaced_history.current_control("agent").unwrap(),
+        Some(replaced.clone())
+    );
     let checkpoint = goal_snapshot(&world);
     let stopped = execute(
         &world,
@@ -152,6 +227,12 @@ fn game_task_executor_bind_replace_stop_restart_and_metadata_audience() {
     assert_eq!(stopped.executor_epoch.0, 3);
     assert_eq!(stopped.task_status, GameTaskStatusV1::Suspended);
     assert!(stopped.executor_binding.is_none());
+    let stopped_history = validate_retention_history(&world).unwrap();
+    assert!(
+        stopped_history
+            .validate_task_executor(&GameTaskFenceV1::from_control(&stopped), &public)
+            .is_err()
+    );
     assert!(
         projection::WorldServiceProjection::from_authenticated_world(
             &world,
@@ -232,7 +313,97 @@ fn game_task_executor_staged_conflict_goal_change_and_revocation_are_fenced() {
     );
     delegated(&mut world, &owner, 2, 2, &hex::encode([73; 32]));
     assert!(validate_task_executor(&world, &old_fence, &public).is_err());
+    let revoked_history = validate_retention_history(&world).unwrap();
+    assert!(
+        revoked_history
+            .validate_task_executor(&old_fence, &public)
+            .is_err()
+    );
 }
+
+#[test]
+fn validated_history_selects_only_one_accepted_task_provider_prefix() {
+    let (mut world, owner, delegate, initial) = boot();
+    let binding = execute(
+        &world,
+        executor_request(
+            &owner,
+            &initial,
+            "bind-prefix",
+            bind(&delegate, 1, "executor"),
+        ),
+        &[],
+        3,
+    );
+    world.record_world_service_result(binding).unwrap();
+    let control = current_control(&world, "agent").unwrap().unwrap();
+    let base = world.current_cognition_base_binding().unwrap();
+    let context = TaskContextIdentityV1 {
+        schema_revision: 1,
+        fence: GameTaskFenceV1::from_control(&control),
+        agent_session_id: "session-prefix".into(),
+        agent_turn_id: "turn-prefix".into(),
+        decision_request_id: "request-prefix".into(),
+        retry_seq: 1,
+        transport_attempt: 1,
+        request_commitment: format!("blake3:{}", "11".repeat(32)),
+        context_commitment: format!("blake3:{}", "22".repeat(32)),
+        provider_invocation_commitment: format!("blake3:{}", "33".repeat(32)),
+        valid_until_tick: DecimalU64(base.base_tick + 1),
+    };
+    let delegate_public = sign_read_request("key", (), &delegate)
+        .unwrap()
+        .subject_public_key;
+
+    let rejected = task_provider_prefix_result(
+        &world,
+        &context,
+        &delegate,
+        "rejected-prefix",
+        4,
+        Some("prefix_rejected"),
+    );
+    let accepted =
+        task_provider_prefix_result(&world, &context, &delegate, "accepted-prefix", 5, None);
+    world.record_world_service_result(rejected).unwrap();
+    let rejected_history = validate_retention_history(&world).unwrap();
+    assert_eq!(
+        rejected_history
+            .matching_task_prefix(&context, &delegate_public)
+            .unwrap(),
+        None,
+        "a rejected matching record must not be selected as a canonical prefix"
+    );
+
+    world.record_world_service_result(accepted.clone()).unwrap();
+
+    let history = validate_retention_history(&world).unwrap();
+    assert_eq!(
+        history
+            .matching_task_prefix(&context, &delegate_public)
+            .unwrap(),
+        Some(&accepted),
+        "a rejected matching record must not hide or replace the accepted prefix"
+    );
+
+    let duplicate = task_provider_prefix_result(
+        &world,
+        &context,
+        &delegate,
+        "second-accepted-prefix",
+        6,
+        None,
+    );
+    world.record_world_service_result(duplicate).unwrap();
+    let duplicated_history = validate_retention_history(&world).unwrap();
+    assert!(
+        duplicated_history
+            .matching_task_prefix(&context, &delegate_public)
+            .is_err(),
+        "two accepted matching prefixes must remain ambiguous"
+    );
+}
+
 #[test]
 fn game_task_executor_invalid_history_tail_and_weak_or_foreign_bind_fail_closed() {
     let (mut world, owner, delegate, initial) = boot();

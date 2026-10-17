@@ -4,7 +4,7 @@ use super::super::{
     checkpoint::{
         complete_execution_bridge_retention_transaction,
         fail_execution_bridge_retention_transaction, refresh_live_task_read_evidence,
-        run_execution_bridge_incremental_retention_maintenance,
+        run_execution_bridge_incremental_retention_maintenance_after_task_refresh,
         run_execution_bridge_retention_maintenance,
     },
 };
@@ -27,7 +27,7 @@ impl NodeRuntimeExecutionDriver {
             &self.execution_world,
             self.hot_window_heights,
         )
-        .and_then(|_| {
+        .and_then(|validated_task_retention| {
             if reconcile_due {
                 run_execution_bridge_retention_maintenance(
                     self.records_dir.as_path(),
@@ -35,10 +35,11 @@ impl NodeRuntimeExecutionDriver {
                     self.hot_window_heights,
                 )
             } else {
-                run_execution_bridge_incremental_retention_maintenance(
+                run_execution_bridge_incremental_retention_maintenance_after_task_refresh(
                     self.records_dir.as_path(),
                     &self.execution_store,
                     record,
+                    validated_task_retention,
                     self.hot_window_heights,
                     self.checkpoint_interval_heights,
                     self.checkpoint_keep_latest,

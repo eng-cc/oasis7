@@ -62,11 +62,12 @@ impl Drop for NodeStopOnDrop {
         let _ = node.stop();
     }
 }
-#[derive(Default, serde::Serialize)]
+#[derive(Clone, Copy, Default, serde::Serialize)]
 struct CleanupCategories {
     submit_response: u64,
     submit_unknown: u64,
     submit_transport: u64,
+    submit_http_503: u64,
     lookup_unknown: u64,
     lookup_pending: u64,
     lookup_received: u64,
@@ -74,6 +75,25 @@ struct CleanupCategories {
     lookup_committed: u64,
     lookup_transport: u64,
     cooldown: u64,
+}
+fn report_cleanup_boundary(
+    phase: &'static str,
+    error: &oasis7::world_service::client::WorldServiceClientError,
+    categories: &CleanupCategories,
+) {
+    use oasis7::world_service::client::WorldServiceClientError;
+    let (class, status) = match error {
+        WorldServiceClientError::Configuration(_) => ("configuration", None),
+        WorldServiceClientError::Transport(_) => ("transport", None),
+        WorldServiceClientError::Rejected { status, .. } => ("rejected", Some(*status)),
+        WorldServiceClientError::Assurance(_) => ("assurance", None),
+        WorldServiceClientError::Cooldown { status, .. } => ("cooldown", Some(*status)),
+    };
+    // Only fixed classes, HTTP status and counters: never private payload or raw errors.
+    eprintln!(
+        "TASK_CLEANUP_BOUNDARY {}",
+        serde_json::json!({"phase":phase,"class":class,"status":status,"categories":categories})
+    );
 }
 fn settle_cleanup_original(
     client: &RemoteWorldServiceClient,
@@ -101,7 +121,18 @@ fn settle_cleanup_original(
                 Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
                     ..
                 }) => categories.cooldown += 1,
-                Err(_) => return Err("cleanup submit boundary rejected"),
+                Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
+                    status: 503,
+                    ..
+                }) => {
+                    categories.submit_http_503 += 1;
+                    // The unsigned service boundary does not establish whether this exact
+                    // original was admitted. Keep its identity and query its canonical result.
+                }
+                Err(error) => {
+                    report_cleanup_boundary("submit", &error, categories);
+                    return Err("cleanup submit boundary rejected");
+                }
             }
         }
         match client.lookup(
@@ -134,10 +165,17 @@ fn settle_cleanup_original(
             Err(oasis7::world_service::client::WorldServiceClientError::Cooldown { .. }) => {
                 categories.cooldown += 1
             }
-            Err(_) => return Err("cleanup lookup boundary rejected"),
+            Err(error) => {
+                report_cleanup_boundary("lookup", &error, categories);
+                return Err("cleanup lookup boundary rejected");
+            }
         }
         std::thread::sleep(Duration::from_millis(100));
     }
+    eprintln!(
+        "TASK_CLEANUP_DEADLINE {}",
+        serde_json::json!({"categories":categories})
+    );
     Err("cleanup original deadline exceeded")
 }
 // Only an exact, still-live terminal stale decision can omit the redundant
@@ -357,6 +395,34 @@ fn run_prepared_world_service_kind(
     kind: PreparedWorldKind,
     cleanup_admission_delay: Duration,
 ) -> std::path::PathBuf {
+    run_prepared_world_service_kind_with_cognition_503(
+        ready,
+        tick_interval,
+        immediate_cleanup,
+        cleanup_after_height,
+        drop_first_cleanup_submit,
+        cleanup_budget,
+        kind,
+        cleanup_admission_delay,
+        false,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit isolated prepared world and fault controls"
+)]
+fn run_prepared_world_service_kind_with_cognition_503(
+    ready: std::path::PathBuf,
+    tick_interval: Duration,
+    immediate_cleanup: bool,
+    cleanup_after_height: Option<u64>,
+    drop_first_cleanup_submit: bool,
+    cleanup_budget: Duration,
+    kind: PreparedWorldKind,
+    cleanup_admission_delay: Duration,
+    reject_first_cognition_submit_503: bool,
+) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
     let logistics = matches!(kind, PreparedWorldKind::Logistics);
@@ -552,6 +618,10 @@ fn run_prepared_world_service_kind(
     let stop = AtomicBool::new(false);
     let first_cleanup_drop = AtomicBool::new(drop_first_cleanup_submit);
     let first_cleanup_slow = AtomicBool::new(!cleanup_admission_delay.is_zero());
+    let first_cognition_submit_503 = AtomicBool::new(reject_first_cognition_submit_503);
+    let injected_cognition_submit_503 = AtomicBool::new(false);
+    let exact_cognition_retry_seen = AtomicBool::new(false);
+    let original_cognition_submit_body = Mutex::new(None::<Vec<u8>>);
     std::thread::scope(|scope| {
         let _listener_stop = ListenerStopOnDrop(&stop);
         let server = scope.spawn(|| {
@@ -588,6 +658,13 @@ fn run_prepared_world_service_kind(
                         let Some(path) = first.next().map(str::to_owned) else {
                             continue;
                         };
+                        let route = task_private_route_tag(&path);
+                        if route != "other" {
+                            eprintln!(
+                                "TASK_PRIVATE_FIXTURE fixture={} route={route} outcome=accepted",
+                                kind.tag()
+                            );
+                        }
                         let length = headers
                             .split("\r\n")
                             .filter_map(|line| line.split_once(':'))
@@ -601,6 +678,46 @@ fn run_prepared_world_service_kind(
                         if stream.read_exact(&mut body).is_err() {
                             continue;
                         }
+                        let is_cognition_submit = method == "POST"
+                            && path == SUBMIT_PATH
+                            && serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(
+                                &body,
+                            )
+                            .is_ok_and(|request| {
+                                matches!(request.signed_payload, WorldServicePayloadV1::Cognition(_))
+                            });
+                        if is_cognition_submit
+                            && first_cognition_submit_503.swap(false, Ordering::SeqCst)
+                        {
+                            *original_cognition_submit_body
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                                Some(body);
+                            injected_cognition_submit_503.store(true, Ordering::SeqCst);
+                            eprintln!("TASK_CLEANUP_FAULT injected_cognition_submit_503=1");
+                            write!(
+                                stream,
+                                "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            )
+                            .unwrap();
+                            continue;
+                        }
+                        if is_cognition_submit
+                            && reject_first_cognition_submit_503
+                            && injected_cognition_submit_503.load(Ordering::SeqCst)
+                            && !exact_cognition_retry_seen.load(Ordering::SeqCst)
+                        {
+                            let original = original_cognition_submit_body
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(original) = original.as_ref() {
+                                assert!(
+                                    original == &body,
+                                    "cleanup must retry the byte-identical signed cognition request"
+                                );
+                                exact_cognition_retry_seen.store(true, Ordering::SeqCst);
+                            }
+                        }
                         let drop_original=path==SUBMIT_PATH&&serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(&body).is_ok_and(|request|matches!(request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop"));
                         if drop_original&&first_cleanup_drop.swap(false,Ordering::SeqCst){println!("TASK_CLEANUP_FAULT original Stop connection closed before admission");continue;}
                         if drop_original && first_cleanup_slow.swap(false,Ordering::SeqCst) {
@@ -608,6 +725,7 @@ fn run_prepared_world_service_kind(
                             std::thread::sleep(cleanup_admission_delay);
                         }
                         bytes.extend(body);
+                        let handler_started = Instant::now();
                         let response = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
                             &bytes,
@@ -621,6 +739,19 @@ fn run_prepared_world_service_kind(
                             &signer,
                             Some(&store),
                         );
+                        if route != "other" {
+                            let outcome = match &response {
+                                Ok(true) => "completed",
+                                Ok(false) => "unhandled",
+                                Err(error) if error == "private response write failed" => "write_failed",
+                                Err(_) => "handler_failed",
+                            };
+                            eprintln!(
+                                "TASK_PRIVATE_FIXTURE fixture={} route={route} outcome={outcome} elapsed_ms={}",
+                                kind.tag(),
+                                handler_started.elapsed().as_millis()
+                            );
+                        }
                         let handled = match response {
                             Ok(handled) => handled,
                             Err(error) if error == "private response write failed" => {
@@ -820,184 +951,8 @@ fn run_prepared_world_service_kind(
     root
 }
 
-#[test]
-fn private_task_prepared_world_no_model_authority_cleanup() {
-    let _probe_slot = prepared_world_probe_slot();
-    let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "oasis7-task-cleanup-ready-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let root = run_prepared_world_service(
-        ready.clone(),
-        Duration::from_millis(100),
-        true,
-        None,
-        false,
-        Duration::from_secs(30),
-    );
-    let cleanup: serde_json::Value =
-        serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
-            .unwrap();
-    let operations = cleanup["authority_operations"].as_array().unwrap();
-    assert_eq!(operations.len(), 2);
-    assert!(
-        operations
-            .iter()
-            .all(|result| result["outcome"]["status"] == "committed")
-    );
-    let identity =
-        super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
-    let pinned = super::super::super::world_service_read::pin(
-        &root.join("records"),
-        &root.join("store"),
-        &identity,
-        None,
-    )
-    .unwrap();
-    assert!(
-        game_task::current_control(&pinned.world, "agent-a")
-            .unwrap()
-            .unwrap()
-            .executor_binding
-            .is_none()
-    );
-    assert!(
-        pinned
-            .world
-            .capability_revocation_state()
-            .agent_signer_delegations["agent-a"]
-            .revoked
-    );
-    assert_eq!(
-        pinned.world.state().agents["agent-a"].state.pos,
-        oasis7::GeoPos::new(0, 0, 0)
-    );
-    fs::remove_file(ready).unwrap();
-    fs::remove_dir_all(root).unwrap();
-}
-#[test]
-fn private_task_prepared_world_listener_guard_stops_scoped_thread_on_panic() {
-    let stop = AtomicBool::new(false);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        std::thread::scope(|scope| {
-            let _guard = ListenerStopOnDrop(&stop);
-            scope.spawn(|| {
-                let until = Instant::now() + Duration::from_secs(2);
-                while !stop.load(Ordering::SeqCst) {
-                    assert!(Instant::now() < until, "scoped listener leaked after panic");
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            });
-            panic!("intentional fixture unwinding fault");
-        })
-    }));
-    assert!(result.is_err());
-    assert!(stop.load(Ordering::SeqCst));
-}
-
-#[test]
-fn private_task_prepared_world_aged_cleanup_diagnostic() {
-    let _probe_slot = prepared_world_probe_slot();
-    let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "oasis7-task-aged-cleanup-ready-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    println!("TASK_AGED_CLEANUP_READY {}", ready.display());
-    let root = run_prepared_world_service(
-        ready.clone(),
-        Duration::from_millis(100),
-        false,
-        Some(72),
-        false,
-        Duration::from_secs(30),
-    );
-    let cleanup: serde_json::Value =
-        serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
-            .unwrap();
-    println!("TASK_AGED_CLEANUP_CATEGORIES {}", cleanup["categories"]);
-    assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
-    assert!(
-        cleanup["authority_operations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|result| result["outcome"]["status"] == "committed")
-    );
-    fs::remove_file(ready).unwrap();
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
-    let _probe_slot = prepared_world_probe_slot();
-    let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
-        "oasis7-task-unknown-cleanup-ready-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    println!("TASK_UNKNOWN_CLEANUP_READY {}", ready.display());
-    // One-second retained-original resend + four-second adverse admission +
-    // a five-second worker tick + CI canonical commit total up to 4.6 seconds
-    // (including retention/persistence).
-    // Four ticks provide a bounded 20-second per-original settlement budget.
-    let cadence = Duration::from_secs(5);
-    let root = run_prepared_world_service_scenario(
-        ready.clone(),
-        cadence,
-        true,
-        None,
-        true,
-        cadence * 4,
-        false,
-        Duration::from_secs(4),
-    );
-    let cleanup: serde_json::Value =
-        serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
-            .unwrap();
-    println!("TASK_UNKNOWN_CLEANUP_CATEGORIES {}", cleanup["categories"]);
-    assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
-    assert!(
-        cleanup["authority_operations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|result| result["outcome"]["status"] == "committed")
-    );
-    assert_eq!(cleanup["categories"][0]["submit_unknown"], 1);
-    let identity =
-        super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
-    let pinned = super::super::super::world_service_read::pin(
-        &root.join("records"),
-        &root.join("store"),
-        &identity,
-        None,
-    )
-    .unwrap();
-    let stops=pinned.world.capability_revocation_state().world_service_results.values().filter_map(|value|serde_json::from_value::<CanonicalIntentResultV1>(value.clone()).ok()).filter(|result|matches!(&result.request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop")).collect::<Vec<_>>();
-    assert_eq!(stops.len(), 1);
-    assert!(stops[0].rejected.is_none());
-    assert_eq!(
-        game_task::current_control(&pinned.world, "agent-a")
-            .unwrap()
-            .unwrap()
-            .executor_epoch
-            .0,
-        2
-    );
-    fs::remove_file(ready).unwrap();
-    fs::remove_dir_all(root).unwrap();
-}
+#[path = "world_service_task_cleanup_tests.rs"]
+mod cleanup_tests;
 
 #[path = "world_service_task_logistics_playtest.rs"]
 mod logistics_playtest;
@@ -1011,6 +966,30 @@ enum PreparedWorldKind {
     Logistics,
     Production,
     StarterChain,
+}
+impl PreparedWorldKind {
+    const fn tag(self) -> &'static str {
+        match self {
+            Self::Movement => "movement",
+            Self::Logistics => "logistics",
+            Self::Production => "production",
+            Self::StarterChain => "starter_chain",
+        }
+    }
+}
+fn task_private_route_tag(path: &str) -> &'static str {
+    match path.split('?').next().unwrap_or(path) {
+        oasis7::world_service::private_task_context::TASK_CONTEXT_PREPARE_PATH => {
+            "task_context_prepare"
+        }
+        oasis7::world_service::private_task_context::TASK_CONTEXT_READ_PATH => "task_context_read",
+        oasis7::world_service::private_task_context::TASK_SNAPSHOT_PATH => "task_snapshot",
+        oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH => "task_recipe_quote",
+        oasis7::world_service::task_factory_quote::TASK_FACTORY_QUOTE_PATH => "task_factory_quote",
+        oasis7::world_service::private_goal_read::GOAL_PREPARE_PATH => "goal_prepare",
+        oasis7::world_service::private_goal_read::GOAL_CURRENT_PATH => "goal_current",
+        _ => "other",
+    }
 }
 #[path = "world_service_task_starter_chain_playtest.rs"]
 mod starter_chain_playtest;

@@ -40,6 +40,114 @@ pub(crate) fn pin(
     )
 }
 
+/// Verify the immutable initial publication package without consulting live
+/// CAS. The caller authenticates each archived byte string and the original
+/// node signature before using this result; current heads still use `pin`.
+pub(crate) fn verify_archived_initial_publication(
+    record_bytes: &[u8],
+    snapshot_bytes: &[u8],
+    journal_bytes: &[u8],
+    proof_bytes: &[u8],
+    identity: &WorldIdentity,
+    expected_commit: &CommitRef,
+) -> Result<(), String> {
+    let record: ExecutionBridgeRecord =
+        serde_json::from_slice(record_bytes).map_err(|_| "initial execution record invalid")?;
+    let snapshot_ref = record
+        .snapshot_ref
+        .as_deref()
+        .ok_or("record snapshot ref unavailable")?;
+    let journal_ref = record
+        .journal_ref
+        .as_deref()
+        .ok_or("record journal ref unavailable")?;
+    let proof_ref = record
+        .world_head_proof_ref
+        .as_deref()
+        .ok_or("record world head proof unavailable")?;
+    if record.world_id != identity.world_id
+        || record.height == 0
+        || record.height != expected_commit.position
+        || record.latest_state_ref.as_deref() != Some(snapshot_ref)
+        || record.execution_state_root != blake3_hex(snapshot_bytes)
+        || blake3_hex(snapshot_bytes) != snapshot_ref
+        || blake3_hex(journal_bytes) != journal_ref
+        || blake3_hex(proof_bytes) != proof_ref
+        || expected_commit.world != *identity
+        || expected_commit.state_root_ref != snapshot_ref
+        || expected_commit.execution_block_hash != record.execution_block_hash
+    {
+        return Err("archived initial refs differ from the signed original commit".into());
+    }
+    let snapshot: Snapshot =
+        serde_cbor::from_slice(snapshot_bytes).map_err(|_| "initial snapshot invalid")?;
+    let journal: Journal =
+        serde_cbor::from_slice(journal_bytes).map_err(|_| "initial journal invalid")?;
+    if snapshot.journal_len != record.journal_len
+        || journal.len() != record.journal_len
+        || journal.events.last().map_or(0, |event| event.id) != snapshot.last_event_id
+    {
+        return Err("pinned snapshot/journal root or boundary mismatch".into());
+    }
+    let proof: WorldHeadProofV1 =
+        serde_cbor::from_slice(proof_bytes).map_err(|_| "initial world head proof invalid")?;
+    proof.validate_contract()?;
+    if Some(proof.proof_hash()?.as_str()) != record.world_head_proof_hash.as_deref()
+        || proof.world_id != record.world_id
+        || proof.height != record.height
+        || proof.timestamp_ms != record.timestamp_ms
+        || proof.execution.execution_state_root != record.execution_state_root
+        || proof.execution.execution_block_hash != record.execution_block_hash
+        || proof.execution.node_block_hash != record.node_block_hash.as_deref().unwrap_or("")
+        || proof.execution.action_root != record.action_root.as_deref().unwrap_or("")
+        || proof.snapshot_manifest_ref.content_hash != snapshot_ref
+        || proof.journal_segments_ref.content_hash != journal_ref
+    {
+        return Err("pinned proof does not bind execution record and CAS refs".into());
+    }
+    let world = World::from_snapshot(snapshot, journal)
+        .map_err(|_| "pinned world snapshot could not be restored")?;
+    let binding = world
+        .current_cognition_runtime_binding()
+        .map_err(|_| "pinned binding unavailable")?;
+    if binding.world_id != identity.world_id {
+        return Err("pinned binding world mismatch".into());
+    }
+    let commit = CommitRef {
+        world: identity.clone(),
+        binding: ExecutionBinding {
+            provider_world_id: binding.world_id,
+            branch_id: binding.branch_id,
+            finality_ref: authority::request_digest(
+                "finality",
+                &(
+                    binding.finality_epoch,
+                    binding.finality_status,
+                    binding.finality_block_hash,
+                ),
+            )?,
+            reorg_generation: binding.reorg_epoch,
+            governing_manifest_ref: binding.runtime_manifest_hash.to_string(),
+            authority_generation: world
+                .capability_revocation_state()
+                .authority_records
+                .values()
+                .map(|record| record.governance_epoch)
+                .max()
+                .unwrap_or(0),
+            permission_generation: world.capability_revocation_state().epoch,
+        },
+        position: record.height,
+        execution_block_hash: record.execution_block_hash,
+        state_root_ref: snapshot_ref.into(),
+    };
+    commit.validate().map_err(|e| e.to_string())?;
+    if &commit != expected_commit {
+        return Err("archived initial proof differs from signed original commit".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn pin_at_height(
     records: &Path,
     storage: &Path,

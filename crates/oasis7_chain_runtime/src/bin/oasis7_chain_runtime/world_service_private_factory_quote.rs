@@ -13,7 +13,10 @@ pub(super) fn process(
     verify_factory_quote_request(&proof).map_err(|_| PrivateError::Invalid)?;
     let context_proof = &proof.request.context_proof;
     let fence = &context_proof.request.context.fence;
-    let pinned = pinned(service, fence, &proof.subject_public_key, true)?;
+    let pinned = service.pin(None)?;
+    let task = validate_pinned_task(service, &pinned, fence, &proof.subject_public_key, true)?;
+    let pinned = task.pinned;
+    let captured = load_captured(service, store, context_proof, &task)?;
     if pinned
         .world
         .current_cognition_base_binding()
@@ -22,7 +25,6 @@ pub(super) fn process(
     {
         return Err(PrivateError::QuoteBaseDrift);
     }
-    let captured = load_captured(service, store, context_proof, &pinned)?;
     if oasis7::runtime::builtin_factory_spec(&proof.request.factory_kind, &proof.request.factory_id)
         .is_none()
     {
@@ -73,17 +75,27 @@ pub(super) fn process(
         .validate_against(&proof)
         .map_err(|_| PrivateError::Recovery)?;
     before_delivery();
-    let fresh = pinned_check(service, fence, &proof.subject_public_key, true)?;
-    if fresh.commit != pinned.commit {
+    let fresh = service.pin(None)?;
+    let fresh_task = validate_pinned_task(service, &fresh, fence, &proof.subject_public_key, true)?;
+    fresh_task
+        .history
+        .validate_prefix_capture(&context_proof.request.context, &proof.subject_public_key)
+        .map_err(|error| {
+            capture_validation_conflict(
+                &fresh_task.pinned.world,
+                &context_proof.request.context,
+                ReadCheckPoint::Delivery,
+                &error,
+            )
+        })?;
+    check_record_live(
+        fresh_task.pinned,
+        &captured.prepared,
+        Some(ReadCheckPoint::Delivery),
+    )?;
+    if fresh_task.pinned.commit != pinned.commit {
         return Err(PrivateError::QuoteDeliveryDrift);
     }
-    game_task::validate_task_context_capture(
-        &fresh.world,
-        &context_proof.request.context,
-        &proof.subject_public_key,
-    )
-    .map_err(|_| PrivateError::Conflict)?;
-    check_record_live(&fresh, &captured.prepared)?;
     service
         .signed(TASK_FACTORY_QUOTE_PATH, &proof, output)
         .map_err(PrivateError::from)

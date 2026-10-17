@@ -97,6 +97,8 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可选凭证。实现与代码验证见 [#4669](https://github.com/eng-cc/oasis7/pull/4669)，部署进度及交付阻断项见 [#4671](https://github.com/eng-cc/oasis7/issues/4671)。协议边界由 [账号设计](../../p2p/blockchain/hosted-public-join-key-based-onboarding.design.md) 和 [验收手册](../../testing/manual/hosted-passkey-account.manual.md) 承接；技术预览不代签正式邀请资格。
 
+新建独立 DevLocal 世界的身份、创世材料和 WorldService 消费者绑定由 [预览初始化合同](../../p2p/design.md#des-p2p-fresh-preview-bootstrap) 与 [操作手册](../../testing/manual/fresh-world-preview-bootstrap.manual.md) 承接。该入口不恢复旧世界或激活正式 authority profile；部署和验收结果继续在交付任务中维护。
+
 目标和观察口径已定义；持久世界与实际体验满足首次开放条件后，才开展目标玩家两次会话观察。
 本轮未取得真人完成证据。届时需区分独立完成、提示、代操作、未完成和未覆盖，并区分安排的第二次会话与自发回访。
 来源：[core 受控真人验证工作包](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 历史验收范围](https://github.com/eng-cc/oasis7/issues/4363)。

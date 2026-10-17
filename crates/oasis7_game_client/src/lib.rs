@@ -204,7 +204,20 @@ impl WorldServiceTransport {
             ))
             .json(request)
             .send()
-            .map_err(|_| WorldServiceClientError::Transport("private transport failed".into()))?;
+            .map_err(|error| {
+                let category = if error.is_timeout() {
+                    "timed out"
+                } else if error.is_connect() {
+                    "connection failed"
+                } else if error.is_body() {
+                    "request body failed"
+                } else if error.is_request() {
+                    "request failed"
+                } else {
+                    "send failed"
+                };
+                WorldServiceClientError::Transport(format!("private transport {category}"))
+            })?;
         let status = response.status().as_u16();
         if status != 200 {
             return Err(WorldServiceClientError::Rejected {

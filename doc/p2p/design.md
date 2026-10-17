@@ -21,6 +21,7 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [身份与 profile 边界](prd.md#p2p-authority-profiles) | 新建隔离 DevLocal 世界时，真实初始化材料、节点服务 signer 与消费者固定身份必须一致；不继承旧世界历史 | [新预览世界初始化](#des-p2p-fresh-preview-bootstrap) | Runtime/P2P 初始化与 CAS；ops 独立固定输入和 consumer pin；QA 持久化与竞争验证 | 不产生正式 activation/profile/finality、资产发行许可或邀请资格 |
 | [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) | 固定世界身份与合法 profile 激活，工程前置材料不自授正式权威 | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
 | [单权威提交](prd.md#p2p-single-authority-durable-commit) | 固定身份/epoch 的本机原子追加、去重与恢复查询 | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | DistFS 本机 journal 与 Runtime 接收 | 仅工程前置；不证明跨故障域持久确认 |
 | [单权威提交](prd.md#p2p-single-authority-durable-commit) | 双端持久确认、未知结果保留原请求及单调 head | [双端协议前置](#des-p2p-replicated-durability-prerequisite) | P2P/DistFS 双端与 Runtime 接收 | 本地协议验证不证明真实独立故障域、正式提交或 readiness |
@@ -482,6 +483,36 @@ writer、signer 或最高 head 的来源。
 未开始隔离且未持久计划前可放弃一次接管准备；进入持久恢复流程后按表单调推进，
 不把恢复失败当作旧机器重新上线的授权。
 
+<a id="des-p2p-fresh-preview-bootstrap"></a>
+### 新预览世界初始化
+
+`initialize-preview-world` 是普通新建 DevLocal 技术预览的显式初始化入口。
+它消费操作员固定的 world/node ID、已有受保护 node key directory、全新绝对 root、
+loopback endpoint 与 genesis 初始化 nonce；nonce 不选择模拟世界 seed，也不是授权凭据。
+已有世界的身份、历史或部分目录不能被该命令覆盖、修复或重新创世。
+
+创世摘要使用版本化域分离编码，绑定真实保留的初始状态/日志字节、初始化参数和节点派生
+服务公钥。初始化使用现有 canonical Runtime preset、实际 step 与原 NodeRuntime/execution
+driver，生成可验证 CAS、提交记录和 world proof；不写入测试能力、虚构资金、占位提交或
+人为 finality。cognition 的 pending binding 和本地提交只证明该预览的初始化材料。
+
+输出在同文件系统的 0700 sibling staging 构建，文件和目录同步后通过 OS 原子 no-replace
+发布。receipt 固定初始 publication manifest 的摘要；manifest 绑定原始 execution record、
+节点签名 envelope 及 snapshot、journal、world-head proof 的确切 CAS 字节，使初始证明在
+历史 CAS 回收后仍可验证。目标已存在时核对原 receipt、创世原字节、identity、实际 signer、
+归档初始证明与当前 live CAS/record/proof；缺失、冲突、篡改或非受保护路径立即拒绝。旧根若
+没有该认证归档，只能从已验证备份恢复，初始化器不重建、不重签、不改写旧证明；幂等查询也
+不因后续真实提交推进而把原初始锚改写成当前 head。
+
+私钥只保留在受保护配置中。公开初始化 receipt 给出 identity、材料承诺和 derived
+feedback-submit service public key，不提供 node seed 或消费者签名私钥。操作员通过独立
+认证的部署通道核对该 pin 后，将 endpoint/world/genesis/service key 和独立 public-read
+配置交给 Viewer；读取签名不授予 Agent、operator、validator 或治理权限。
+
+这是新建隔离预览的 provenance 和初始化合同，不替代上文正式创世授权、profile 激活、
+历史恢复链或独立故障域耐久性。跨平台输出需核对相关 schema/hash/persistence 等价并在
+目标机器实际打开和验证 pin。使用与负例验证见 [初始化手册](../testing/manual/fresh-world-preview-bootstrap.manual.md)。
+
 ## 5. 关键运行流程
 
 先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest执行并匹配receipt commitments→fenced epoch/parent/head 下原子预备追加及跨故障域持久确认→合法 profile 生成并验证提交决定/证明→最终决定/证明跨故障域持久确认→消费者committed读取。BFT 的独立重执行与投票步骤继续适用其专属合同；单权威不通过等待尚未生成的证明制造循环依赖。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。
@@ -529,6 +560,7 @@ target protected validators + public services；governed registry有效epoch/sta
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [身份与 profile 边界](prd.md#p2p-authority-profiles) | [新预览世界初始化](#des-p2p-fresh-preview-bootstrap) | 显式新世界材料与 signer/consumer 一致；不可覆盖、部分成功或工程材料升格 | [初始化手册](../testing/manual/fresh-world-preview-bootstrap.manual.md)；同候选实际初始化、原 receipt 重验、状态推进、身份/nonce/key 冲突、CAS/证明篡改、权限/symlink、双初始化及带外目标竞争，部署机器 signed read 与重启 | 当次交付 Issue 的原 source/binary、真实持久材料与拒绝/接收结果；不在设计保存执行过程 | 未证明正式 activation/finality、分布式共识、跨故障域、生产 mint 或完整玩家旅程 |
 | [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | 固定身份与合法 profile 激活，工程证据不授予正式权威 | [testing-manual.md](../../testing-manual.md) S9A；planned 同候选 profile/identity 错配、无激活证明、工程 scope 升格负例与合法转换正例 | 同 world/profile 候选、激活材料与拒绝/接收结果 | profile 原则验证不证明正式入口实现、真实域或 BFT |
 | [professional_acceptance: p2p-single-authority-durable-commit](prd.md#p2p-single-authority-durable-commit) | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | 仅固定身份/epoch的本机原子记录、去重与恢复查询；不授予正式 committed | [testing-manual.md](../../testing-manual.md) S9A；`cargo test -p oasis7_distfs controlled_authority`；同候选测试竞争写者、stale epoch/parent、请求碰撞、各持久阶段故障、跨世界/proof篡改、带外最低anchor截断拒绝；Unix持久行为与不支持平台拒绝分别判定 | 当次 GitHub Issue #4363 候选/命令/exit/log；只有实际执行结果可记录通过 | 未提供独立副本确认、跨主机 fencing、完整 runtime prepare/commit 接线或 BFT/激活证明 |
 | [professional_acceptance: p2p-single-authority-durable-commit](prd.md#p2p-single-authority-durable-commit) | [双端协议前置](#des-p2p-replicated-durability-prerequisite) | 双端确认与未知结果恢复维持原请求和单调 head | [testing-manual.md](../../testing-manual.md) S9A；`cargo test -p oasis7_distfs replicated_protocol` 为现有本机协议基线；逐持久阶段中断、单端不可用、重复原请求与错误 receipt/head；真实独立域验证仍 planned | 双端持久阶段、原请求/回执与恢复 head；同候选实际命令结果 | 本地目录不证明跨主机 fencing、正式激活或真实故障域 |

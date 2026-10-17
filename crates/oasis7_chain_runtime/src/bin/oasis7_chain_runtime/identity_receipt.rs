@@ -9,8 +9,12 @@ use super::derive_node_libp2p_identity_keypair_config;
 use super::node_keypair_config;
 
 pub(super) fn dispatch<'a>(mut args: impl Iterator<Item = &'a str>) -> Option<Result<(), String>> {
+    let command = args.next()?;
+    if command == "initialize-preview-world" {
+        return Some(super::preview_world_init::run(args));
+    }
     use super::cli::cli_contract::{CommandKind, offline_command};
-    match offline_command(args.next()?)? {
+    match offline_command(command)? {
         CommandKind::Inspect => Some(super::inspect_cli::run(args)),
         CommandKind::Dev => Some(super::dev_cli::run(args)),
         CommandKind::ProvisionIdentity => Some(super::identity_provision::run(args)),
