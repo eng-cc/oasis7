@@ -3844,7 +3844,7 @@ function DetailsPanel() {
     </div>
   );
 }
-function AppShell() {
+function AppShell(props = {}) {
   observeViewerStateRevision();
   const locale = () => uiLocale();
   const directorSession = createViewerDirectorSession({ core, fetchImpl: window.fetch?.bind(window) });
@@ -3893,7 +3893,9 @@ function AppShell() {
               <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
             <WorldStageHero />
-            <PixelWorldHost locale={locale()} />
+            <Show when={props.pixelWorldReady !== false}>
+              <PixelWorldHost locale={locale()} />
+            </Show>
             <Show when={!diagnosticsVisualFixture()}>
               <WorldSummaryPanel directorController={directorSession.controller} onRequestDirector={directorSession.request} />
             </Show>
@@ -3943,7 +3945,10 @@ export function mountViewerApp(root = document.getElementById("app")) {
   }
 
   const initialized = core.initializeSoftwareSafeCore();
-  let dispose = mount(() => <AppShell />, root);
+  // The shell stays interactive during identity bootstrap. Construct the world
+  // scope guard only once the initial identity, endpoint and fixtures are set.
+  const [pixelWorldReady, setPixelWorldReady] = createSignal(false);
+  let dispose = mount(() => <AppShell pixelWorldReady={pixelWorldReady()} />, root);
   core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
   let disposed = false;
   void Promise.resolve(initialized).then(() => {
@@ -3952,6 +3957,7 @@ export function mountViewerApp(root = document.getElementById("app")) {
     if (fixtureName) root.setAttribute("data-viewer-visual-fixture", fixtureName);
     else root.removeAttribute("data-viewer-visual-fixture");
     if (visualTestAdapter) window.__OASIS7_VIEWER_FIXTURE_READY__ = true;
+    setPixelWorldReady(true);
     core.requestRender();
   }).catch(() => {});
 

@@ -11,7 +11,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/solid-js/dist/solid.js
+//#region ../../../oasis7-engineering-ecs-preview-doc-closeout/crates/oasis7_viewer/node_modules/solid-js/dist/solid.js
 var sharedConfig = {
 	context: void 0,
 	registry: void 0,
@@ -750,7 +750,7 @@ function Show(props) {
 	}, void 0, void 0);
 }
 //#endregion
-//#region node_modules/solid-js/web/dist/web.js
+//#region ../../../oasis7-engineering-ecs-preview-doc-closeout/crates/oasis7_viewer/node_modules/solid-js/web/dist/web.js
 var memo = (fn) => createMemo(() => fn());
 function reconcileArrays(parentNode, a, b) {
 	let bLength = b.length, aEnd = a.length, bEnd = bLength, aStart = 0, bStart = 0, after = a[aEnd - 1].nextSibling, map = null;
@@ -2362,7 +2362,7 @@ function IndustrialStarterOutcomeCard(props) {
 	});
 }
 //#endregion
-//#region node_modules/solid-js/store/dist/store.js
+//#region ../../../oasis7-engineering-ecs-preview-doc-closeout/crates/oasis7_viewer/node_modules/solid-js/store/dist/store.js
 var $RAW = Symbol("store-raw");
 var $NODE = Symbol("store-node");
 var $HAS = Symbol("store-has");
@@ -28785,7 +28785,7 @@ function DetailsPanel() {
 		return _el$369;
 	})();
 }
-function AppShell() {
+function AppShell(props = {}) {
 	observeViewerStateRevision();
 	const locale = () => uiLocale();
 	const directorSession = createViewerDirectorSession({
@@ -28834,9 +28834,16 @@ function AppShell() {
 			}
 		}), null);
 		insert(_el$400, createComponent(WorldStageHero, {}), null);
-		insert(_el$400, createComponent(PixelWorldHost, { get locale() {
-			return locale();
-		} }), null);
+		insert(_el$400, createComponent(Show, {
+			get when() {
+				return props.pixelWorldReady !== false;
+			},
+			get children() {
+				return createComponent(PixelWorldHost, { get locale() {
+					return locale();
+				} });
+			}
+		}), null);
 		insert(_el$400, createComponent(Show, {
 			get when() {
 				return !diagnosticsVisualFixture();
@@ -28908,7 +28915,10 @@ function readAgentContextFixtureGameplay(...args) {
 function mountViewerApp(root = document.getElementById("app")) {
 	if (!root) throw new Error("viewer root #app is missing");
 	const initialized = initializeSoftwareSafeCore();
-	let dispose = render$1(() => createComponent(AppShell, {}), root);
+	const [pixelWorldReady, setPixelWorldReady] = createSignal(false);
+	let dispose = render$1(() => createComponent(AppShell, { get pixelWorldReady() {
+		return pixelWorldReady();
+	} }), root);
 	setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
 	let disposed = false;
 	Promise.resolve(initialized).then(() => {
@@ -28917,6 +28927,7 @@ function mountViewerApp(root = document.getElementById("app")) {
 		if (fixtureName) root.setAttribute("data-viewer-visual-fixture", fixtureName);
 		else root.removeAttribute("data-viewer-visual-fixture");
 		if (visualTestAdapter) window.__OASIS7_VIEWER_FIXTURE_READY__ = true;
+		setPixelWorldReady(true);
 		requestRender();
 	}).catch(() => {});
 	return () => {
