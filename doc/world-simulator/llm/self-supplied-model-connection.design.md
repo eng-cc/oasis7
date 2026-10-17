@@ -186,6 +186,10 @@ Trace refs: O7-REQ-d3d63078-ef30-45fb-8ae6-2f6db1f46c34；[上游要求](../../p
 
 错误码按本地语义归一为 `authentication_failed`、`quota_unavailable`、`budget_exhausted`、`rate_limited`、`model_unavailable`、`capability_unsupported`、`input_limit`、`transport_failed`、`session_expired`、`version_conflict` 等；HTTP 200 也需验证终态/工具结果。错误码不覆盖原世界 operation 的 pending/committed/rejected 等权威状态。
 
+协议拒绝必须保留可安全投影的固定失败分类：意外 event stream 为 `unexpected_streaming`；返回模型与配置不符为 `model_identity_mismatch`；Chat Completions 的 `finish_reason: length` 为 `output_limit`；其他非 `stop`/`tool_calls` 终态为 `unsupported_finish_reason`；模型调用未声明工具为 `unsupported_tool`；空、超长或重复工具 call ID 为 `invalid_tool_identity`；Responses 消息中不支持的内容子类型为 `unsupported_content`。未实现的协议/配置组合仍用 `capability_unsupported`；格式损坏仍用 `invalid_response`。`output_limit` 拒绝整份响应，不把完整或部分工具调用变成游戏动作；这些分类不触发自动重试、切换协议、提高预算或恢复已停运行。
+
+Provider 的固定分类必须通过 Harness 的可选 `model_failure` 诊断字段投影到运行报告和 Launcher 状态；旧报告缺字段按未知分类读取。投影只接受本地固定枚举，不保存或输出响应原文、私有推理、供应商原始错误、模型返回的任意字段或凭证。通用 `model_failed` 仍表达运行阻塞，具体分类与权威世界 operation 状态分开；旧记录只有 `capability_unsupported` 时不能反推其具体原因。验收须覆盖每个分类、截断工具不执行、诊断跨报告回读，以及缺字段旧报告兼容。网页消费者同样只接受固定分类，并提供可读原因与安全下一步；未知字段不得原样显示，缺诊断的旧状态保留通用阻塞表达。Stop、围栏改变或取消状态优先于残留模型诊断，不把旧失败误报成当前运行。重启恢复须先扫描全部原件；若某个原 prefix 已提交、尚无原 action/outcome、完整任务围栏与当前执行许可仍有效，而 Context 的原 tick 租期已过，应使用原身份提交固定 `context_expired` 终止 outcome。只有该 outcome 明确 committed 后才跳过该 Context 并在原 run／持久预算下取得新 Context；不把清理计为成功业务 turn。已缓存的同类 committed outcome 可在下一次恢复时同样跳过，其他 aborted outcome、未知／pending 原件、撤权或围栏变化仍停止。过期私有正文不得重读，不在原件扫描阶段产生清理提交。进程重启先核对原操作的权威结果及其历史材料；已消费 Context 的历史证据仍按活跃任务完整 fence 保留，不能因 Context 不再可写而提前 GC。历史不可用时保留原身份并阻塞新效果，不重置预算或以新世界替代原世界恢复。执行结束后的自动连接清理保留该轮失败诊断；显式 Stop 则清除当前诊断并以递增 generation 标记停止，旧执行器的迟到结果不得覆盖更新轮次。重放旧 Stop 回执不得改变之后激活或结束的轮次。
+
 ## 10. 兼容、迁移与部署
 
 先复用第一方 Harness/Game Client 接缝，增加 provider-neutral 配置与短期凭证注入，再接 Web 组件。已有全局环境变量只允许显式单用户 legacy 路径继续使用；多用户 BYOK 路径中 credential_ref 缺失必须失败，禁止继承宿主 LetAI/OpenAI/任意全局 Key。

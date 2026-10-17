@@ -269,3 +269,47 @@ fn activate_accepts_only_target_reference_and_explicit_displayed_limits() {
         );
     }
 }
+
+#[test]
+fn explicit_stop_hides_finished_failure_and_late_old_generation() {
+    let (host, _) = fixture();
+    let p = principal("a", "one");
+    let connection = create(&host, &p);
+    let id = connection["id"].as_str().unwrap();
+    let generation = connection["generation"].as_u64().unwrap();
+    let stale = json!({"phase":"finished","reason":"model_failed","model_failure":"output_limit","generation":generation});
+    host.executions.set(id, stale.clone());
+    let path = format!("/model-connections/{id}");
+    let stopped = request(
+        &host,
+        &p,
+        "POST",
+        &format!("{path}/stop"),
+        json!({"expected_version":connection["version"],"operation_id":"stop-after-failure"}),
+    );
+    assert_eq!(stopped.status, 200);
+    assert_eq!(stopped.body["connection"]["execution"]["phase"], "stopped");
+    assert!(stopped.body["connection"]["execution"]["model_failure"].is_null());
+    host.executions.set(id, stale);
+    let read = request(&host, &p, "GET", &path, json!({}));
+    assert_eq!(read.body["connection"]["execution"]["phase"], "stopped");
+    let later = host
+        .manager
+        .stop(
+            &p,
+            id,
+            stopped.body["connection"]["version"].as_u64().unwrap(),
+        )
+        .unwrap();
+    let finished = json!({"phase":"finished","reason":"model_failed","model_failure":"output_limit","generation":later.generation});
+    host.executions.set(id, finished.clone());
+    let replay = request(
+        &host,
+        &p,
+        "POST",
+        &format!("{path}/stop"),
+        json!({"expected_version":connection["version"],"operation_id":"stop-after-failure"}),
+    );
+    assert_eq!(replay.status, 200);
+    assert_eq!(replay.body["connection"]["execution"], finished);
+}

@@ -131,6 +131,8 @@ impl Drop for SignedWorld {
     }
 }
 fn read_request(stream: &mut TcpStream) -> SignedReadRequest<ReadWorldViewRequest> {
+    // Accepted sockets may inherit the nonblocking listener mode on macOS.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();

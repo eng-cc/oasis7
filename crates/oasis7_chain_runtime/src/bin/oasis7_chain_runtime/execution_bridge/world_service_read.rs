@@ -49,6 +49,32 @@ pub(crate) fn pin_at_height(
     load(records, storage, identity, Some(height), None)
 }
 
+/// Historical result reads may outlive the retained full material window.
+pub(crate) fn pin_retained_at_height(
+    records: &Path,
+    storage: &Path,
+    identity: &WorldIdentity,
+    height: u64,
+) -> Result<Option<PinnedWorld>, String> {
+    let path = checkpoint::execution_bridge_record_path(records, height);
+    match std::fs::metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("historical record unavailable".into()),
+        Ok(_) => {}
+    }
+    let record = checkpoint::load_execution_bridge_record(&path)?;
+    if record.world_id != identity.world_id || record.height != height || height == 0 {
+        return Err("historical record world or height invalid".into());
+    }
+    if record.snapshot_ref.is_none()
+        && record.latest_state_ref.is_none()
+        && record.journal_ref.is_none()
+    {
+        return Ok(None);
+    }
+    pin_at_height(records, storage, identity, height).map(Some)
+}
+
 fn load(
     records: &Path,
     storage: &Path,

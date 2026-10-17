@@ -74,16 +74,21 @@ fn outcome(
             reason: WorldServiceErrorKind::Conflict,
         });
     }
-    // Recover the actual immutable record of execution, never current Tick.
-    if service.guarded.is_none()
-        && !service
-            .records
-            .join(format!("{:020}.json", result.committed_height))
-            .exists()
-    {
-        return Ok(IntentOutcome::HistoryUnavailable);
-    }
-    let historical = service.pin_at_height(result.committed_height)?;
+    // A compacted header does not retain the immutable execution material.
+    let historical = if service.guarded.is_some() {
+        service.pin_at_height(result.committed_height)?
+    } else {
+        let Some(historical) = world_service_read::pin_retained_at_height(
+            service.records,
+            service.storage,
+            &service.identity,
+            result.committed_height,
+        )?
+        else {
+            return Ok(IntentOutcome::HistoryUnavailable);
+        };
+        historical
+    };
     if historical
         .world
         .capability_revocation_state()
