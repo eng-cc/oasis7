@@ -38,7 +38,7 @@ fn prefix(
                 captured_base_binding: world.current_cognition_base_binding().unwrap(),
                 operation: SchedulerOperationV1::ProviderPrefix {
                     request: context.clone(),
-                    context_digest: crate::simulator::h_v1("oasis7.cognition.context.v1", &logical)
+                    context_digest: oasis7_agent_api::h_v1("oasis7.cognition.context.v1", &logical)
                         .to_string(),
                 },
             },
@@ -85,7 +85,7 @@ fn is_active(world: &World, context: &ContinuousAgentRequestContextV1) -> bool {
                 &context.decision_request_id,
                 context.request_digest.as_str(),
             ),
-            &crate::simulator::h_v1("oasis7.cognition.context.v1", &logical).to_string(),
+            &oasis7_agent_api::h_v1("oasis7.cognition.context.v1", &logical).to_string(),
             context.provider_invocation_key().as_str(),
         )
         .is_ok()

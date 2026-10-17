@@ -1,6 +1,6 @@
 //! World event types that wrap all event kinds.
 
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{CapabilityGrantV2, ModuleCallFailure, ModuleEmitEvent, ModuleStateUpdate};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -108,8 +108,8 @@ pub enum CapabilityAuthorizationEvent {
         identity: CapabilityAgentIdentity,
     },
     AgentSignerDelegationInstalled {
-        signed: crate::world_service::SignedReadRequest<
-            crate::world_service::AgentSignerDelegationChangeV1,
+        signed: crate::runtime::service_admission::SignedReadRequest<
+            crate::runtime::service_admission::AgentSignerDelegationChangeV1,
         >,
     },
     WorldServiceIntentRecorded {

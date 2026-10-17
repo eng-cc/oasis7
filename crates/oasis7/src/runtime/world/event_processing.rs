@@ -23,7 +23,7 @@ use crate::runtime::main_token::{
     MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD, main_token_account_id_from_node_public_key,
     validate_main_token_config_bounds,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use std::collections::BTreeSet;
 
 const GOVERNANCE_MIN_VOTING_WINDOW_TICKS: u64 = 1;

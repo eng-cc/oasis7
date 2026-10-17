@@ -1,7 +1,7 @@
 use super::super::events::Action;
 use super::super::{ModuleRuntimeChargeEvent, WorldEventBody};
 use super::{World, WorldError};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::ModuleStateUpdate;
 
 fn charge_for(payer: &str, compute: i64, electricity: i64) -> ModuleRuntimeChargeEvent {

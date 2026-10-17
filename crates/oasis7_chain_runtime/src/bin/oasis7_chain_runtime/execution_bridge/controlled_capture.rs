@@ -171,7 +171,7 @@ pub(super) fn validate_snapshot_continuity(
         return Err("unrecognized resource annotation transition".into());
     }
     let resource = &incoming.chain_resource_manifest;
-    let expected_delta = ChainResourceDelta::latest_from_runtime_manifest(
+    let expected_delta = oasis7::runtime::chain_resource::latest_from_runtime_manifest(
         ChainResourceDerivationContext {
             world_id: &resource.world_id,
             chain_id: &resource.chain_id,

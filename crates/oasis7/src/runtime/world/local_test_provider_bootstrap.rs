@@ -974,7 +974,7 @@ fn local_test_authority_proof(
 fn validate_existing_local_authority(
     record: &CapabilityAuthorityRecord,
     proof: &CapabilityAuthorityFinalityProof,
-    binding: &crate::simulator::RuntimeBindingV1,
+    binding: &oasis7_agent_api::RuntimeBindingV1,
     finality_block_hash: &str,
 ) -> Result<(), WorldError> {
     if record.world_id != binding.world_id

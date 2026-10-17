@@ -1,9 +1,9 @@
 use super::World;
 use crate::runtime::cognition_recovery::cognition_digest_v1;
-use crate::runtime::{RuntimeCognitionCommitRequestV1, WorldError};
-use crate::world_service::{
+use crate::runtime::service_admission::{
     AgentSignerDelegationChangeV1, CognitionIntentV1, SignedReadRequest, agent_authority,
 };
+use crate::runtime::{RuntimeCognitionCommitRequestV1, WorldError};
 use serde_json::json;
 #[path = "world_service_scheduler.rs"]
 mod scheduler;
@@ -23,7 +23,8 @@ pub(super) fn apply_service_authorization_event(
                 .insert(signed.request.agent_id.clone(), signed.request.clone());
         }
         Event::WorldServiceIntentRecorded { key, record } => {
-            crate::world_service::correlation::validate_result(key, record).map_err(deny)?;
+            crate::runtime::service_admission::correlation::validate_result(key, record)
+                .map_err(deny)?;
             if world
                 .capability_revocation_state
                 .world_service_results
@@ -51,9 +52,11 @@ impl World {
     }
     pub fn record_world_service_result(
         &mut self,
-        result: crate::world_service::CanonicalIntentResultV1,
+        result: crate::runtime::service_admission::CanonicalIntentResultV1,
     ) -> Result<(), String> {
-        let key = crate::world_service::correlation::key_digest(&result.request.correlation.key)?;
+        let key = crate::runtime::service_admission::correlation::key_digest(
+            &result.request.correlation.key,
+        )?;
         let record = serde_json::to_value(result).map_err(|e| e.to_string())?;
         self.append_capability_authorization_event_batch(vec![
             crate::runtime::CapabilityAuthorizationEvent::WorldServiceIntentRecorded {
@@ -90,7 +93,7 @@ impl World {
 
     pub fn apply_authenticated_feedback_ack(
         &mut self,
-        signed: SignedReadRequest<crate::world_service::FeedbackAckIntentV1>,
+        signed: SignedReadRequest<crate::runtime::service_admission::FeedbackAckIntentV1>,
     ) -> Result<serde_json::Value, String> {
         agent_authority::validate_feedback_ack(self, &signed)?;
         let ack = signed.request;
@@ -137,7 +140,7 @@ impl World {
     /// cognition may close that exact turn and publish rejection feedback.
     pub(crate) fn publish_authenticated_stale_cognition_rejection(
         &mut self,
-        rejection: crate::world_service::ValidatedStaleCognitionRejection,
+        rejection: crate::runtime::cognition_disposition::ValidatedStaleCognitionRejection,
     ) -> Result<(), String> {
         let (feedback, envelope_digest, idempotency_key) = rejection.into_parts();
         let mut transaction = self.clone();
@@ -168,13 +171,13 @@ impl World {
     pub fn commit_authenticated_cognition_staged(
         &mut self,
         signed: SignedReadRequest<CognitionIntentV1>,
-        staged: &[crate::world_service::CanonicalIntentResultV1],
+        staged: &[crate::runtime::service_admission::CanonicalIntentResultV1],
     ) -> Result<serde_json::Value, String> {
         match self.commit_authenticated_cognition_disposition_staged(signed, staged)? {
-            crate::world_service::AuthenticatedCognitionDisposition::Committed(receipt) => {
+            crate::runtime::cognition_disposition::AuthenticatedCognitionDisposition::Committed(receipt) => {
                 Ok(receipt)
             }
-            crate::world_service::AuthenticatedCognitionDisposition::RejectedStale(rejection) => {
+            crate::runtime::cognition_disposition::AuthenticatedCognitionDisposition::RejectedStale(rejection) => {
                 Err(rejection.rejection_text())
             }
         }
@@ -184,8 +187,9 @@ impl World {
     pub fn commit_authenticated_cognition_disposition_staged(
         &mut self,
         signed: SignedReadRequest<CognitionIntentV1>,
-        staged: &[crate::world_service::CanonicalIntentResultV1],
-    ) -> Result<crate::world_service::AuthenticatedCognitionDisposition, String> {
+        staged: &[crate::runtime::service_admission::CanonicalIntentResultV1],
+    ) -> Result<crate::runtime::cognition_disposition::AuthenticatedCognitionDisposition, String>
+    {
         agent_authority::validate_cognition_staged(self, &signed, staged)?;
         let subject = signed.subject_public_key;
         let intent = signed.request;
@@ -264,7 +268,7 @@ impl World {
             .ok()
             .is_some_and(|current| intent.request.captured_base_binding != current);
         let rejected_metadata =
-            crate::world_service::ValidatedStaleCognitionRejection::from_evaluated_request(
+            crate::runtime::cognition_disposition::ValidatedStaleCognitionRejection::from_evaluated_request(
                 &intent.request,
                 &intent.action,
             )?;
@@ -288,7 +292,7 @@ impl World {
                         == crate::runtime::CognitionCommitRejectReasonV1::StaleBase.code() =>
             {
                 return Ok(
-                    crate::world_service::AuthenticatedCognitionDisposition::RejectedStale(
+                    crate::runtime::cognition_disposition::AuthenticatedCognitionDisposition::RejectedStale(
                         rejected_metadata,
                     ),
                 );
@@ -339,7 +343,7 @@ impl World {
             .ok_or("canonical causal proposal index invalid")?;
         proposals.insert(key, proposal);
         Ok(
-            crate::world_service::AuthenticatedCognitionDisposition::Committed(
+            crate::runtime::cognition_disposition::AuthenticatedCognitionDisposition::Committed(
                 serde_json::json!({"commit_record": record, "lineage": lineage, "feedback": feedback.payload}),
             ),
         )

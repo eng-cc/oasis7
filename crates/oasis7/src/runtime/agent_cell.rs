@@ -1,6 +1,6 @@
 //! Agent cell representation - wraps agent state with mailbox and activity tracking.
 
-use crate::models::AgentState;
+use crate::runtime::agent_state::AgentState;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 

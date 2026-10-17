@@ -24,7 +24,7 @@ use super::capability_authorization_command_stage::{
     ModuleCallTarget, TrustedCommandStage, execute_module_call_for_target,
 };
 use super::module_runtime_labels::{module_kind_label, module_role_label};
-use crate::simulator::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ModuleInstallTarget;
 
 fn count_exceeds_limit(count: usize, limit: u32) -> bool {
     match u32::try_from(count) {

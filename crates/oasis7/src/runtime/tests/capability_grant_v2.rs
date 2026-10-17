@@ -633,7 +633,11 @@ pub(super) fn fixture_world_with_revocations_and_budget_and_effect_grant(
     };
     activate_module_for_test(&mut world, manifest.clone());
     world
-        .set_agent_resource_balance(SUBJECT_ID, crate::simulator::ResourceKind::Electricity, 128)
+        .set_agent_resource_balance(
+            SUBJECT_ID,
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
+            128,
+        )
         .expect("seed module installer electricity");
     world.submit_action(Action::InstallModuleFromArtifact {
         installer_agent_id: SUBJECT_ID.to_string(),

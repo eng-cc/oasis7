@@ -2,7 +2,7 @@ use oasis7_wasm_abi::{ModuleCallErrorCode, ModuleCallFailure, ModuleOutput};
 
 use super::super::{ModuleManifest, ModuleRuntimeChargeEvent, WorldError, WorldEventBody};
 use super::World;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use std::collections::BTreeMap;
 
 pub(super) struct PreparedModuleRuntimeCharge {

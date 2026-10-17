@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::runtime::{AGENT_INTENT_V2_SCHEMA_VERSION, AgentIntentV2};
-use crate::simulator::canonical_agent_intent_summary;
+use oasis7_agent_api::intent_summary::canonical_agent_intent_summary;
 
 const STATUS_PROPOSED: &str = "proposed";
 const STATUS_SUBMITTED: &str = "submitted";

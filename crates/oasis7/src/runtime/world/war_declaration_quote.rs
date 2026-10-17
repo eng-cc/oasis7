@@ -114,11 +114,11 @@ impl World {
         let mobilization_electricity_current = initiator
             .state
             .resources
-            .get(crate::simulator::ResourceKind::Electricity);
+            .get(oasis7_agent_api::world_action::ResourceKind::Electricity);
         let mobilization_data_current = initiator
             .state
             .resources
-            .get(crate::simulator::ResourceKind::Data);
+            .get(oasis7_agent_api::world_action::ResourceKind::Data);
         let mobilization_electricity_after =
             mobilization_electricity_current.saturating_sub(mobilization_electricity_required);
         let mobilization_data_after =

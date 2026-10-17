@@ -2,7 +2,7 @@ use crate::runtime::{
     AgentLocationAuthorityV1, FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1,
     FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1, World,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 
 pub(crate) fn factory_spec(

@@ -1,6 +1,6 @@
 use super::pos;
 use crate::BodyKernelView;
-use crate::models::{BodySlotType, CargoEntityEntry, CargoEntityKind};
+use crate::runtime::agent_state::{BodySlotType, CargoEntityEntry, CargoEntityKind};
 use crate::runtime::events::Observation;
 use crate::runtime::*;
 

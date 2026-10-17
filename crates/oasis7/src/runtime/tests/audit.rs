@@ -1,6 +1,6 @@
 use super::super::*;
 use super::pos;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use serde_json::json;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};

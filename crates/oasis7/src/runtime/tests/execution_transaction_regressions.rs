@@ -1,7 +1,7 @@
 use super::super::*;
 use super::pos;
-use crate::models::BodyKernelView;
-use crate::simulator::ResourceKind;
+use crate::runtime::agent_state::BodyKernelView;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallRequest, ModuleEffectIntent, ModuleOutput,
     ModuleSandbox,

@@ -44,10 +44,8 @@ fn validate_context_expiry(
     world: &World,
     context: &oasis7_agent_api::game::TaskContextIdentityV1,
 ) -> Result<(), String> {
-    let authority = crate::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
-        world,
-        &context.fence.agent_id,
-    )?;
+    let authority =
+        crate::runtime::World::canonical_agent_service_context(world, &context.fence.agent_id)?;
     if world.state().time > context.valid_until_tick.0
         || context.valid_until_tick.0 > authority.capability_catalog.valid_until_tick
     {
@@ -174,10 +172,8 @@ pub fn task_cognition_intent(
     subject: &str,
 ) -> Result<CognitionIntentV1, String> {
     validate_task_context_capture(world, context, subject)?;
-    let authority = crate::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
-        world,
-        &context.fence.agent_id,
-    )?;
+    let authority =
+        crate::runtime::World::canonical_agent_service_context(world, &context.fence.agent_id)?;
     let actor = world
         .state()
         .agents

@@ -9,12 +9,12 @@
 //! to read an owner-scoped result; the owning service must apply its existing
 //! caller and privacy checks before returning a decoded value.
 
+use crate::runtime::service_admission::{CanonicalIntentResultV1, FeedbackAckIntentV1};
 use crate::runtime::world_event::WorldEvent;
 use crate::runtime::{
     AgentIntentV2, CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
     CapabilityInvocationContext,
 };
-use crate::world_service::{CanonicalIntentResultV1, FeedbackAckIntentV1};
 use oasis7_distfs::controlled_authority::formal::business_index::{
     BusinessIndexLeafKindV1, BusinessIndexLeafV1, BusinessIndexNodeReader, BusinessIndexRootV1,
 };
@@ -146,9 +146,10 @@ macro_rules! impl_retained_history_read_methods {
                         "retained WorldService result bytes are not canonical".into(),
                     ));
                 }
-                let recomputed =
-                    crate::world_service::correlation::key_digest(&result.request.correlation.key)
-                        .map_err(RetainedHistoryReadError::Invalid)?;
+                let recomputed = crate::runtime::service_admission::correlation::key_digest(
+                    &result.request.correlation.key,
+                )
+                .map_err(RetainedHistoryReadError::Invalid)?;
                 if recomputed != correlation_key_digest {
                     return Err(RetainedHistoryReadError::Invalid(
                         "retained WorldService result correlation mismatch".into(),
@@ -156,7 +157,7 @@ macro_rules! impl_retained_history_read_methods {
                 }
                 let as_json = serde_json::to_value(&result)
                     .map_err(|error| RetainedHistoryReadError::Invalid(error.to_string()))?;
-                crate::world_service::correlation::validate_result(
+                crate::runtime::service_admission::correlation::validate_result(
                     correlation_key_digest,
                     &as_json,
                 )
@@ -234,7 +235,9 @@ macro_rules! impl_retained_history_read_methods {
                         )
                     })?;
                 let witnessed_nonce = match &witness.request.signed_payload {
-                    crate::world_service::WorldServicePayloadV1::AgentChat(request) => {
+                    crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(
+                        request,
+                    ) => {
                         if let Some(auth) = request.auth.as_ref()
                             && digest_text("owner-public-key", &auth.public_key)
                                 .map_err(RetainedHistoryReadError::Invalid)?
@@ -1040,7 +1043,7 @@ pub(crate) fn chat_result_matches(
     {
         return Ok(false);
     }
-    let crate::world_service::WorldServicePayloadV1::AgentChat(request) =
+    let crate::runtime::service_admission::WorldServicePayloadV1::AgentChat(request) =
         &result.request.signed_payload
     else {
         return Ok(false);
@@ -1069,7 +1072,7 @@ pub(crate) fn feedback_result_matches(
 ) -> bool {
     result.rejected.is_none()
         && matches!(&result.request.signed_payload,
-            crate::world_service::WorldServicePayloadV1::Cognition(signed)
+            crate::runtime::service_admission::WorldServicePayloadV1::Cognition(signed)
                 if signed.request.request.agent_id == lookup.agent_id
                     && signed.request.request.agent_session_id == lookup.agent_session_id
                     && signed.request.request.agent_turn_id == lookup.agent_turn_id
@@ -1096,7 +1099,7 @@ pub(crate) fn game_task_result_matches(
     if result.rejected.is_some() {
         return Ok(false);
     }
-    let crate::world_service::WorldServicePayloadV1::GameTaskCreate(signed) =
+    let crate::runtime::service_admission::WorldServicePayloadV1::GameTaskCreate(signed) =
         &result.request.signed_payload
     else {
         return Ok(false);

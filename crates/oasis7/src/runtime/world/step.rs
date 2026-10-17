@@ -11,7 +11,7 @@ use super::logistics::logistics_path_id;
 use crate::runtime::EconomicContractFulfillmentKind;
 use crate::runtime::RuntimeCommittedTickContext;
 use crate::runtime::events::LogisticsOwnerPayout;
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default)]

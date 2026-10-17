@@ -232,7 +232,7 @@ impl World {
     ) -> Result<(), WorldError> {
         match event {
             CapabilityAuthorizationEvent::WorldServiceIntentRecorded { key, record } => {
-                crate::world_service::correlation::validate_result(key, record)
+                crate::runtime::service_admission::correlation::validate_result(key, record)
                     .map_err(|reason| super::capability_authorization::deny(&reason))?;
                 if let Some(existing) = capability_revocation_state.world_service_results.get(key)
                     && existing != record
@@ -247,8 +247,10 @@ impl World {
                 Ok(())
             }
             CapabilityAuthorizationEvent::AgentSignerDelegationInstalled { signed } => {
-                crate::world_service::agent_authority::validate_delegation(self, signed)
-                    .map_err(|reason| super::capability_authorization::deny(&reason))?;
+                crate::runtime::service_admission::agent_authority::validate_delegation(
+                    self, signed,
+                )
+                .map_err(|reason| super::capability_authorization::deny(&reason))?;
                 capability_revocation_state
                     .agent_signer_delegations
                     .insert(signed.request.agent_id.clone(), signed.request.clone());

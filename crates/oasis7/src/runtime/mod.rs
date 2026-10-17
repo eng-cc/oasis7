@@ -405,3 +405,13 @@ pub use world_event::{
 
 // Committed governance queries and explicit runtime adoption status.
 pub use governance_membership::{RuntimeMembershipApplicationView, WorldGovernanceMembershipView};
+
+pub mod chain_resource;
+
+pub(crate) mod service_context;
+
+pub mod cognition_disposition;
+
+pub mod service_admission;
+
+pub mod agent_state;

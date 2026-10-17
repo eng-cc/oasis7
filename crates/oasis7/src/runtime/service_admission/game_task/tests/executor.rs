@@ -1,5 +1,6 @@
 use super::*;
-use crate::world_service::{SchedulerIntentV1, SchedulerOperationV1};
+use crate::runtime::service_admission::{SchedulerIntentV1, SchedulerOperationV1};
+use crate::world_service::projection;
 use oasis7_agent_api::game::{
     GAME_EXECUTOR_CONTROL_DOMAIN, GameExecutorControlV1, GameExecutorOperationV1, GameTaskFenceV1,
     TaskContextIdentityV1,
@@ -549,7 +550,7 @@ fn game_executor_retention_overflow_preserves_revision_chain_and_fails_closed() 
     let error = world.prepare_formal_retention_candidate().unwrap_err();
     assert!(error.contains("WorldService history cannot fit the hot count/byte budget"));
     assert_eq!(world.snapshot(), before);
-    let hot = crate::world_service::retained_queries::hot_results(&world).unwrap();
+    let hot = crate::runtime::service_admission::retained_queries::hot_results(&world).unwrap();
     assert_eq!(
         reduce(hot.into_values().collect()).unwrap()[&expected.task_id].control,
         expected

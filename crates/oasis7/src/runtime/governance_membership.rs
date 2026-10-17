@@ -2,7 +2,7 @@
 //! resolve its state_root_ref to the supplied state root before invoking this adapter.
 //! A CAS snapshot reference is not itself a world state hash.
 use super::{GovernanceFinalitySignerRegistry, GovernanceValidatorAdmissionRecord, World};
-use crate::world_service::{CommitRef, authority};
+use crate::runtime::service_admission::CommitRef;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -47,7 +47,7 @@ impl WorldGovernanceMembershipView {
         let binding = world
             .current_cognition_runtime_binding()
             .map_err(|e| format!("{e:?}"))?;
-        let finality_ref = authority::request_digest(
+        let finality_ref = oasis7_client_api::world_service::request_digest(
             "finality",
             &(
                 binding.finality_epoch,
@@ -81,8 +81,10 @@ impl WorldGovernanceMembershipView {
         let effective_registry = world
             .resolve_governance_effective_finality_signer_registry()
             .map_err(|error| format!("{error:?}"))?;
-        let effective_registry_digest =
-            authority::request_digest("governance-membership-registry-v1", &effective_registry)?;
+        let effective_registry_digest = oasis7_client_api::world_service::request_digest(
+            "governance-membership-registry-v1",
+            &effective_registry,
+        )?;
         Ok(Self {
             commit: commit.clone(),
             state_root_hash,

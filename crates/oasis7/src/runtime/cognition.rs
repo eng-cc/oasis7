@@ -1022,11 +1022,11 @@ fn resolve_precondition_value(
                 "electricity" => cell
                     .state
                     .resources
-                    .get(crate::simulator::ResourceKind::Electricity),
+                    .get(oasis7_agent_api::world_action::ResourceKind::Electricity),
                 "data" => cell
                     .state
                     .resources
-                    .get(crate::simulator::ResourceKind::Data),
+                    .get(oasis7_agent_api::world_action::ResourceKind::Data),
                 _ => return Err(CognitionValidationError::new("precondition_failed")),
             };
             Ok(JsonValue::from(amount))

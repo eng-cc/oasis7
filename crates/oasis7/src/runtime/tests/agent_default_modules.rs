@@ -2,8 +2,8 @@
 
 use super::super::*;
 use super::pos;
-use crate::models::{CargoEntityEntry, CargoEntityKind};
-use crate::simulator::ResourceKind;
+use crate::runtime::agent_state::{CargoEntityEntry, CargoEntityKind};
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_executor::WasmExecutor;
 
 fn default_module_sandbox() -> WasmExecutor {

@@ -106,8 +106,8 @@ pub(super) fn validate_with(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world_service::correlation::RESULT_VALIDATIONS;
-    use crate::world_service::correlation::result_cache_tests::fixture;
+    use crate::runtime::service_admission::correlation::RESULT_VALIDATIONS;
+    use crate::runtime::service_admission::correlation::result_cache_tests::fixture;
 
     #[test]
     fn bounds_and_oversize_bypass_preserve_cold_validation() {

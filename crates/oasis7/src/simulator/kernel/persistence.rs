@@ -7,9 +7,7 @@ use super::super::types::{
     CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION, WorldEventId,
 };
 use super::WorldKernel;
-use crate::chain_resource_schema::{
-    ChainResourceDelta, ChainResourceDerivationContext, ChainResourceManifest,
-};
+use crate::chain_resource_schema::ChainResourceDerivationContext;
 
 impl WorldKernel {
     fn restore_persisted_state(
@@ -43,18 +41,19 @@ impl WorldKernel {
         &self,
         context: ChainResourceDerivationContext<'_>,
     ) -> WorldSnapshot {
-        let chain_resource_manifest = ChainResourceManifest::from_simulator_state(
+        let chain_resource_manifest = crate::simulator::chain_resource::from_simulator_state(
             context,
             &self.model,
             &self.config,
             &self.chunk_runtime,
             &self.journal,
         );
-        let latest_chain_resource_delta = ChainResourceDelta::latest_from_simulator_journal(
-            context,
-            &chain_resource_manifest,
-            &self.journal,
-        );
+        let latest_chain_resource_delta =
+            crate::simulator::chain_resource::latest_from_simulator_journal(
+                context,
+                &chain_resource_manifest,
+                &self.journal,
+            );
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,

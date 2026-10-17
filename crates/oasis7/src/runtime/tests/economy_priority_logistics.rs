@@ -6,7 +6,7 @@ use crate::runtime::{
     MaterialLedgerId, MaterialProfileV1, MaterialTransitPriority, MaterialTransportLossClass,
     ProductProfileV1, ProposalDecision, RecipeProfileV1, RejectReason, World, WorldEventBody,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack, RecipeExecutionPlan};
 
 #[path = "economy_priority_governance_tests.rs"]

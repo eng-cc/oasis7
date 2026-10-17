@@ -4,7 +4,7 @@ use crate::runtime::{
     ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, PolicySet,
     ProposalDecision, RejectReason, World, WorldEventBody, util,
 };
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::{
     FactoryBuildDecision, MaterialStack, ModuleEmit, ModuleOutput, ProductValidationDecision,
     RecipeExecutionPlan,

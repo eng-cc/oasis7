@@ -1,7 +1,7 @@
 use super::super::{Action, ActionEnvelope, DomainEvent, ModuleProfileChanges, WorldEventBody};
 use super::{World, WorldError};
 use crate::runtime::state::ModuleReleaseRequestStatus;
-use crate::simulator::ModuleInstallTarget;
+use oasis7_agent_api::world_action::ModuleInstallTarget;
 use oasis7_wasm_abi::*;
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {

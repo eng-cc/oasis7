@@ -322,7 +322,7 @@ fn route_aware_transfer_quote_matches_explicit_two_hop_action_without_mutation()
     world
         .set_agent_resource_balance(
             requester,
-            crate::simulator::ResourceKind::Electricity,
+            oasis7_agent_api::world_action::ResourceKind::Electricity,
             1_000,
         )
         .expect("seed route quote electricity");

@@ -1,5 +1,5 @@
 use super::World;
-use crate::world_service::{
+use crate::runtime::service_admission::{
     SchedulerIntentV1, SchedulerOperationV1, SignedReadRequest, agent_authority,
     verify_read_request,
 };
@@ -23,7 +23,7 @@ impl World {
     pub fn apply_authenticated_scheduler_staged(
         &mut self,
         signed: SignedReadRequest<SchedulerIntentV1>,
-        staged: &[crate::world_service::CanonicalIntentResultV1],
+        staged: &[crate::runtime::service_admission::CanonicalIntentResultV1],
     ) -> Result<Value, String> {
         verify_read_request("scheduler", &signed)?;
         let task_context = match &signed.request.operation {
@@ -35,7 +35,7 @@ impl World {
             if let SchedulerOperationV1::TaskProviderFailure { reason, .. } =
                 &signed.request.operation
             {
-                crate::world_service::game_task::validate_task_failure_context(
+                crate::runtime::service_admission::game_task::validate_task_failure_context(
                     self,
                     context,
                     &signed.subject_public_key,
@@ -44,7 +44,7 @@ impl World {
                     staged,
                 )?;
             } else {
-                crate::world_service::game_task::validate_task_context_identity(
+                crate::runtime::service_admission::game_task::validate_task_context_identity(
                     self,
                     context,
                     &signed.subject_public_key,
@@ -52,7 +52,7 @@ impl World {
                     staged,
                 )?;
             }
-            crate::world_service::private_goal_prepare::verify_owner_signature_strict(
+            oasis7_client_api::world_service::private_goal::verify_owner_signature_strict(
                 "scheduler",
                 &signed.request,
                 &signed.subject_public_key,
@@ -61,7 +61,7 @@ impl World {
             if context.fence.agent_id != signed.request.agent_id {
                 return Err("task context subject mismatch".into());
             }
-            crate::world_service::game_task::validate_cognition_fence_staged(
+            crate::runtime::service_admission::game_task::validate_cognition_fence_staged(
                 self,
                 &signed.request.agent_id,
                 Some(&context.fence),
@@ -74,7 +74,7 @@ impl World {
             SchedulerOperationV1::ProviderPrefix { .. }
                 | SchedulerOperationV1::ProviderFailure { .. }
         ) {
-            crate::world_service::game_task::validate_cognition_fence_staged(
+            crate::runtime::service_admission::game_task::validate_cognition_fence_staged(
                 self,
                 &signed.request.agent_id,
                 None,
@@ -107,7 +107,7 @@ impl World {
             SchedulerOperationV1::TaskProviderPrefix { context } => {
                 context.validate_capture_deadline(intent.captured_base_binding.base_tick)?;
 
-                crate::world_service::game_task::prepare_task_prefix(
+                crate::runtime::service_admission::game_task::prepare_task_prefix(
                     &mut transaction,
                     &context,
                     staged,
@@ -188,7 +188,7 @@ impl World {
                         context.transport_attempt,
                     )
                     .map_err(error)?;
-                crate::world_service::game_task::release_task_context_leases(
+                crate::runtime::service_admission::game_task::release_task_context_leases(
                     &mut transaction,
                     &context,
                 )?;
@@ -339,7 +339,7 @@ impl World {
                 request.validate().map_err(|e| e.to_string())?;
                 let mut logical = request.clone();
                 logical.transport_attempt = 1;
-                if crate::simulator::h_v1("oasis7.cognition.context.v1", &logical).to_string()
+                if oasis7_agent_api::h_v1("oasis7.cognition.context.v1", &logical).to_string()
                     != context_digest
                 {
                     return Err("provider context digest mismatch".into());

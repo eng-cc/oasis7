@@ -260,7 +260,7 @@ impl World {
         action: crate::runtime::Action,
         response_artifact: RuntimeCognitionResponseArtifactV1,
         task_authority: (&oasis7_agent_api::game::GameTaskFenceV1, &str, u64),
-        staged: &[crate::world_service::CanonicalIntentResultV1],
+        staged: &[crate::runtime::service_admission::CanonicalIntentResultV1],
     ) -> Result<(WorldCommitRecordV1, RuntimeReceiptLineageV1), WorldError> {
         self.commit_cognition_action_inner(
             request,
@@ -277,7 +277,7 @@ impl World {
         action: crate::runtime::Action,
         response_artifact: RuntimeCognitionResponseArtifactV1,
         task_authority: Option<(&oasis7_agent_api::game::GameTaskFenceV1, &str, u64)>,
-        staged: &[crate::world_service::CanonicalIntentResultV1],
+        staged: &[crate::runtime::service_admission::CanonicalIntentResultV1],
     ) -> Result<(WorldCommitRecordV1, RuntimeReceiptLineageV1), WorldError> {
         request
             .validate()
@@ -353,7 +353,7 @@ impl World {
             }
         }
 
-        crate::world_service::game_task::validate_task_cognition_admission(
+        crate::runtime::service_admission::game_task::validate_task_cognition_admission(
             self,
             &request,
             task_authority,

@@ -1,6 +1,6 @@
 //! Event-bound sparse projection for raw power redemption outcomes.
 
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use serde::ser::SerializeStruct;
 use std::collections::BTreeMap;
 

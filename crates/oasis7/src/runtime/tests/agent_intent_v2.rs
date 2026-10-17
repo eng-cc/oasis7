@@ -1,6 +1,6 @@
 use super::super::*;
 use super::pos;
-use crate::models::AgentState;
+use crate::runtime::agent_state::AgentState;
 
 const AGENT_ID: &str = "agent-intent-v2";
 

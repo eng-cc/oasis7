@@ -2,7 +2,7 @@ use super::super::{
     Action, ActionEnvelope, DomainEvent, GovernanceEvent, ProposalDecision, WorldEventBody,
 };
 use super::{World, WorldError};
-use crate::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_wasm_abi::*;
 
 #[path = "rollback_admission_freeze_test.rs"]
@@ -402,7 +402,7 @@ fn rollback_reducer_rejections_preserve_priority_and_all_observables() {
             wasm_hash: "old-hash".into(),
             from_wasm_hash: None,
             from_release_request_id: None,
-            install_target: crate::simulator::ModuleInstallTarget::SelfAgent,
+            install_target: oasis7_agent_api::world_action::ModuleInstallTarget::SelfAgent,
             active: true,
             proposal_id: 0,
             manifest_hash: "not-used-by-raw-reducer".into(),
