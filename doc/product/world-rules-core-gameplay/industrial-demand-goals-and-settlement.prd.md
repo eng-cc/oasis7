@@ -98,9 +98,9 @@ Trace ID: O7-REQ-bfd4b2f4-6b21-4c4a-961d-387b220e762f
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清同一 goal_authority_ref 快照的六类数量、batch quantum、shortage/surplus、全部占用/机会成本和 unknown/blocked 的实际读面。
+- 实现与验证依据：2026-10-17 固定基线静态追链：普通 gameplay builder 读取工厂、工业阶段和首局 feasibility；私有协作 goal_revision 不是数量目标。 [gameplay_snapshot.rs:291–365](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L365)；[goal.rs:1–60](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/goal.rs#L1-L60)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：SC31 goal authority→六类数量、quantum、成本/占用与 next_recheck 的专用 producer/读面尚未闭合。
 
 - 性质：已采纳目标
 - 适用条件：玩家在 demand goal 提交前比较一个有 `goal_authority_ref` 的目标。
@@ -118,9 +118,9 @@ Trace ID: O7-REQ-3c8dcb96-cb2b-4ec8-824a-5cb50b75f060
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清 full/reduced/补料/hold surplus/stop/defer/supplemental 各路径的真实准入、成本与无效果 preview；普通 market quote 不证明 demand plan。
+- 实现与验证依据：2026-10-17 固定基线静态追链：普通 ScheduleRecipe 接收并检查计划与正批次；没有由这些事实建立 demand-goal full/reduced/hold/stop/supplemental 选项与准入的绑定。 [action_to_event_economy.rs:435–584](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/event_processing/action_to_event_economy.rs#L435-L584)；[gameplay_snapshot.rs:291–365](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L365)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：目标计划生产者、只读 preview 和所有真实支持选项的消费者仍未核清。
 
 - 性质：已采纳目标
 - 适用条件：目标报价存在可继续、受限或不可用的候选路径。
@@ -138,9 +138,9 @@ Trace ID: O7-REQ-ebb96559-33a9-4029-af82-a709c71225e0
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清 matching delivery/terminal receipt 更新目标满足量与奖励的 producer/消费者；首产物 milestone 不等于 demand settlement。
+- 实现与验证依据：2026-10-17 固定基线静态追链：RecipeCompleted 实际写产物账本和首局 milestone；settled_outcome 对该 milestone 进行归属与工业 profile 检查。该结果是生产完成事实，不是 SC31 matching delivery/terminal goal 满足量更新。 [recipe_lifecycle.rs:369–577](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L369-L577)；[recipe_lifecycle.rs:504–538](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L504-L538)；[starter_industrial_outcome.rs:11–57](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L11-L57)；[material_transit.rs:151–271](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/material_transit.rs#L151-L271)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：matching receipt 与 goal root/revision 的生产者、满足量/奖励消费者及非 matching 去重仍未核清。
 
 - 性质：已采纳目标
 - 适用条件：目标链路产生 production receipt、delivery receipt 或 terminal settlement。
@@ -158,9 +158,9 @@ Trace ID: O7-REQ-32d009e3-a57c-4994-8876-4cbc7517b2a3
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清满足后停止旧 schedule/Agent retry，以及 surplus 不自动出售、销毁或计成长的实际状态变化。
+- 实现与验证依据：2026-10-17 固定基线静态追链：完成清除当前 pending job；pause 只调整工厂状态。未核清由目标 matched 驱动停止旧 schedule/Agent retry 或识别 surplus 的消费者。 [recipe_lifecycle.rs:369–577](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L369-L577)；[recipe_lifecycle.rs:20–75](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L20-L75)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：目标状态驱动的停止和 surplus 保护链仍未核清，普通单 job 完成不是该机制的证明。
 
 - 性质：已采纳目标
 - 适用条件：目标已由匹配结算满足，或合法 batch 产出超过 remaining。
@@ -178,9 +178,9 @@ Trace ID: O7-REQ-62129528-2238-4733-8b8e-d226dc40943d
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清 parent-linked supplemental revision 的单次创建与 baseline/actual/loss/remaining 保全；stop/defer 必须没有新 revision。
+- 实现与验证依据：2026-10-17 固定基线静态追链：普通 recipe job 与私有文本 goal_revision 都不是已核定的 SC31 supplemental revision；目前无法串起 matching shortage→一次 parent-linked 补产。 [events.rs:78–101](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/events.rs#L78-L101)；[state.rs:189–220](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state.rs#L189-L220)；[goal.rs:1–60](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/goal.rs#L1-L60)；[recipe_lifecycle.rs:325–350](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L325-L350)；[recipe_lifecycle.rs:438–454](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L438-L454)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：baseline/actual/loss/fulfilled/remaining 保全、stop/defer 不创建 revision 的专用生产链仍未核清。
 
 - 性质：已采纳目标
 - 适用条件：matching settlement 只满足部分目标，或玩家主动选择停止/延期。
@@ -198,9 +198,9 @@ Trace ID: O7-REQ-544d08be-9d56-4106-bd80-89c46786bfdf
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清 demand target/库存/quantum/产率/terminal capacity 漂移下重报价、原子拒绝或有界 pending 全组合。
+- 实现与验证依据：2026-10-17 固定基线静态追链：普通 ScheduleRecipe 重验当前工厂、槽位、plan 与 stage；该读取不证明 goal target、quantum、产率与 terminal capacity 一起绑定的漂移检查。 [action_to_event_economy.rs:435–584](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/event_processing/action_to_event_economy.rs#L435-L584)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：目标报价身份、提交重验、原子拒绝/有界 pending 的 SC31 专用组合仍未核清。
 
 - 性质：已采纳目标
 - 适用条件：报价或承诺后目标、库存、batch quantum、产率或 terminal capacity 发生变化。
@@ -218,9 +218,9 @@ Trace ID: O7-REQ-1e60706a-d6b6-43e8-b3f9-86af391700fd
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未核清 root/revision 级 production/delivery/需求减少/surplus/奖励/容量释放在重复、乱序与 replay 下的一次性账本。
+- 实现与验证依据：2026-10-17 固定基线静态追链：recipe settled_job 与 logistics settled_transit 各自有去重；没有因此核清 goal root/revision 级 delivery/需求减少/surplus/reward/capacity-release 的统一消费者。 [recipe_lifecycle.rs:369–577](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L369-L577)；[material_transit.rs:151–271](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/material_transit.rs#L151-L271)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：目标级 effect ledger 和重复/乱序/重连/replay 的映射仍待定位；相邻 job 去重不代签。
 
 - 性质：已采纳目标
 - 适用条件：同一 submit、delivery、恢复处置或其事件发生重复、乱序、重连、恢复或 replay。
@@ -238,9 +238,9 @@ Trace ID: O7-REQ-34f477af-5903-48fd-8889-ceb8b1028ef3
 - 系统设计状态：未核实
 - 实现状态：未核实
 - 系统设计依据：本条产品与专业权威已按原适用范围复核；尚未建立覆盖下列剩余义务的准确专业设计条款、反向承接和验证计划组合。相邻设计或产品体验 design 不作为完整技术覆盖依据。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。玩家工业快照builder以world state/阶段/工厂事实构造投影；没有据此核清SC31 root/revision和目标matching settlement。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L375)；[测试定义](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs#L514-L547)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：未取得同一 demand goal 在 Viewer、pure API、Agent 三入口实际投影比较；共享 schema 不证明同义。
+- 实现与验证依据：2026-10-17 固定基线静态追链：实际 Viewer builder 输出工业工厂/失败处置和首局结果；private goal API 表达协作文本版本。尚无同一 demand goal 的三入口匹配投影链。 [gameplay_snapshot.rs:291–365](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs#L291-L365)；[goal.rs:1–60](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_agent_api/src/game/goal.rs#L1-L60)；[recipe_lifecycle.rs:504–538](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/recipe_lifecycle.rs#L504-L538)；[starter_industrial_outcome.rs:11–57](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/starter_industrial_outcome.rs#L11-L57)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：Viewer/pure API/Agent 的同 goal authority、数量层与动作/blocker/recheck 消费者仍未核清，之后还需真实对照验收。
 
 - 性质：已采纳目标
 - 适用条件：同一 demand goal 从 Viewer、pure API 或 Agent 读面查看、推荐或恢复。
@@ -258,9 +258,9 @@ Trace ID: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2
 - 系统设计状态：部分覆盖
 - 实现状态：未核实
 - 系统设计依据：[cross-region-delivery-and-escrow-settlement.design / des-wr-cr-001](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-001)；[cross-region-delivery-and-escrow-settlement.design / des-wr-cr-002](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-002)。已承接：跨区发现、运输/接收分层与条件 escrow 结算、去重/争议恢复。
-- 实现与验证依据：已核对本条需求及适用AC，并读取下列固定版本的相邻实际生产路径/测试定义；仍不足以确认本条组合义务实现。实际只读条件route quote，核验路线/容量/损耗等物流条件；尚未核清与商业合同、存储acceptance及ownership/escrow绑定。 [源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/logistics.rs#L653-L753)；[源码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/logistics.rs#L954-L1030)。本轮只读静态源码与断言，未运行Rust或正式玩家入口；同SHA CI的业务job为skipped，不能记为这些测试通过。实现交付PR到本条的完整映射仍未核清。
-- 核对日期与基线：2026-10-17；需求、专业设计与静态源码基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；仅GitHub只读源码及CI日志审查，未执行本条业务测试、正式入口、跨节点或真人验收。
-- 剩余范围：已核清物流层只读route quote与pending transit到期Completed/route/loss机制；本条适用跨区报价/合同到目的地存储、ownership及escrow的玩家分层读面，尚未核清物流job与商业合同、storage acceptance、ownership/escrow里程碑绑定及read consumer。不能以transport模块单独交付推断此组合已实现；普通market quote无demand goal绑定，也不代替SC31目标计划。
+- 实现与验证依据：2026-10-17 固定基线静态追链：物流完成准备层校验 pending 的来源/目的账本、数量、距离、路径与损耗，实际入账接收量并记物流 receipt；其签名没有商业合同、ownership/escrow 里程碑绑定。 [material_transit.rs:151–271](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/state/industry_transition/material_transit.rs#L151-L271)。本轮未运行业务测试、正式入口或真人验收；测试定义及此前结构 CI 不能作为本卡验收通过。
+- 核对日期与基线：2026-10-17；需求与源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；复查 main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅文档增量，相关源码未变；本轮仅静态追链。
+- 剩余范围：SC31 商业合同→storage acceptance→ownership/escrow 的专用绑定及玩家分层读面仍未核清；已审物流完成不能提升为商业最终结算。
 
 - 性质：已采纳目标
 - 适用条件：玩家查看跨区供给/需求并从报价或合同进入物理交付、目的地存储和 ownership/escrow 结算。
