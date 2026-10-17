@@ -116,6 +116,7 @@
     "command_center": []
   },
   "package_groups": {
+    "scenario_test_runner": ["oasis7_required"],
     "oasis7_simulator": ["oasis7_required", "launcher_web"],
     "oasis7_agent_api": [
       "workspace_support"

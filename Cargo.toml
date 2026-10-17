@@ -41,6 +41,7 @@ members = ["crates/oasis7_model_provider",
     "crates/oasis7_wasm_sdk",
     "crates/oasis7_wasm_router",
     "crates/oasis7_wasm_store",
+    "tools/scenario_test_runner",
     "tools/wasm_build_suite",
     "tools/wasm_module_observe",
 ]
