@@ -263,16 +263,16 @@ fn scheduler_api_preserves_capability_digest_rejection_diagnostics() {
             .validate_production_lane()
             .expect_err("tampered digest");
         let api_error = api.validate_production_lane().expect_err("tampered digest");
-        assert_eq!(host_error.code, "capability_context_digest_mismatch");
+        assert_eq!(host_error.code(), "capability_context_digest_mismatch");
         assert_eq!(
-            host_error.message,
+            host_error.message(),
             if catalog_mismatch {
                 "capability catalog digest does not match the Runtime-bound snapshot"
             } else {
                 "capability invocation context digest does not match the Runtime-bound context"
             }
         );
-        assert_eq!(api_error.code, host_error.code);
-        assert_eq!(api_error.message, host_error.message);
+        assert_eq!(api_error.code(), host_error.code());
+        assert_eq!(api_error.message(), host_error.message());
     }
 }
