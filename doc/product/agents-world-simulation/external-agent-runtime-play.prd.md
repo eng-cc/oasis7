@@ -381,7 +381,7 @@ Trace ID: O7-REQ-c5c90e09-ae74-4d77-9858-a4769562b01e
 
 - 功能点：[REQ-EXT-007](#req-ext-007)；适用范围沿本条原条件与 [AC-EXT-007](#ac-ext-007)，不扩大入口或阶段。
 - 系统设计状态：部分覆盖
-- 系统设计依据：[adapter结构与控制循环](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-loop)已明确独立worker、关闭Viewer不退出worker、控制/决策循环分离；[adapter-liveness](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-liveness)承接诊断时效、自有进程与本机权限边界。原“独立于GUI设计仍未核清”已缩小；各声明viewer/pure_api入口的观战、执行、委托及结果四层状态生产到消费的完整承接仍待逐项核对，不据此提升设计状态。
+- 系统设计依据：[运行诊断与生命周期](../../world-simulator/llm/external-agent-runtime-adapter.design.md#adapter-liveness)承接 active run、最近同步/结果、过期unknown/offline及自有进程/本机权限边界；同文需求与验证映射回链AC-EXT-007。各声明viewer/pure_api入口的观战、执行、委托及结果四层状态及独立运行条件的完整组合仍待逐项核对；维持部分覆盖。
 - 实现状态：未核实
 - 实现与验证依据：[真实启动者](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_model_client/execution.rs#L85-L136)将SessionModelProvider交给后台NativeTaskRunner；[页面续期](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_viewer/software_safe_src/model_connection_panel.jsx#L116-L134)与[服务端过期/资格重验](https://github.com/nil-studio/oasis7/blob/bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5/crates/oasis7_model_provider/src/connection.rs#L604-L636)说明这是第一方BYOK会话执行切片，不能用线程不随HTTP返回退出证明外部Runtime独立委托。已核清native的ownership、预算、fence及停止原因，但OpenClaw/Codex实际driver、observer断连后的持续执行与分层反馈生产链仍未核清；本轮仅静态审读，未执行AC-EXT-007。
 - 核对日期与基线：2026-10-17；本条需求、设计及本轮新增静态源码固定`bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5`；只读GitHub与本地文本。历史native prepared-world记录仍限定其原候选/入口，不作为本候选观战断连或Runtime停止验收；未调用外部Runtime、模型、浏览器、部署或用户电脑。
