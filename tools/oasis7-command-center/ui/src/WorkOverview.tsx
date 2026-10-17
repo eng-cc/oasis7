@@ -2,6 +2,7 @@ import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { bridge, errorMessage, observedTime, statusLabel, subscribeRuntime } from './bridge';
 import type { WorkItem, WorkProjection, WorkRef } from './generated/core';
 import type { Snapshot } from './types';
+import { runtimeLabel } from './runtimeState';
 
 type Props = { snapshot?: Snapshot; view: string; sourceGeneration: unknown; onExecution: () => void };
 const keyOf = (reference: WorkRef) => JSON.stringify(reference);
@@ -53,7 +54,7 @@ export default function WorkOverview(props: Props) {
       <div class="panel-title"><h3>返回已有工作</h3><button disabled={loading()} onClick={() => void read()}>{loading() ? '正在读取工作' : '刷新工作列表'}</button></div>
       <div class="panel-body"><p class="muted">按已读取来源列出，未按优先级排序。进入详情核对结果、剩余条件和原工作入口。</p>
         <Show when={error()}><p role="alert" class="notice">工作读取失败：{error()}。保留本项目最近结果。</p></Show>
-        <For each={projection()?.sources}>{source => <div class="metadata"><span>{source.kind === 'github' ? 'GitHub' : '自管会话'} · {statusLabel(source.state)}</span><span>{source.coverage}</span><Show when={source.error}><span>{source.error}</span></Show></div>}</For>
+        <For each={projection()?.sources}>{source => <div class="metadata"><span>{source.kind === 'github' ? 'GitHub' : '自管会话'} · {source.kind === 'codex' ? runtimeLabel(source.state) : statusLabel(source.state)}</span><span>{source.kind === 'codex' ? '仅当前项目的公开自管会话；其他工具中的会话仍未知。' : source.coverage}</span><Show when={source.error}><span>{source.error}</span></Show></div>}</For>
         <Show when={!projection() && loading()}><p role="status">正在读取已有工作来源。</p></Show>
         <Show when={projection() && !projection()!.items.length}><p>当前已读取范围未列出工作；请核对来源覆盖。可在开发执行连接 GitHub 或查看自管会话。</p><button onClick={props.onExecution}>查看开发执行</button></Show>
       </div>
