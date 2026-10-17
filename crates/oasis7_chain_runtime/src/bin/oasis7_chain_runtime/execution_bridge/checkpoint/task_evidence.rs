@@ -1,6 +1,6 @@
 //! Derived live-task read dependencies. This scope is a GC cache, never authority.
 use super::*;
-use oasis7::world_service::{correlation, game_task, CanonicalIntentResultV1};
+use oasis7::world_service::{CanonicalIntentResultV1, correlation, game_task};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -402,8 +402,8 @@ mod historical_validation_tests {
     use super::*;
     #[test]
     fn owned_height_still_requires_its_original_signature() {
-        use oasis7::world_service::{sign_read_request, SubmitIntentRequest, WorldIdentity};
-        use oasis7_agent_api::game::{DecimalU64, GameTaskCreateV1, GAME_TASK_CREATE_DOMAIN};
+        use oasis7::world_service::{SubmitIntentRequest, WorldIdentity, sign_read_request};
+        use oasis7_agent_api::game::{DecimalU64, GAME_TASK_CREATE_DOMAIN, GameTaskCreateV1};
         let identity = WorldIdentity {
             world_id: "world".into(),
             genesis_digest: "genesis".into(),
