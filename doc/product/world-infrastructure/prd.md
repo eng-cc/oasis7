@@ -41,6 +41,7 @@
 
 - [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md)：共识最终性、单一 canonical history、复制/状态同步、存储角色、网络暴露、bootstrap 与灾难恢复。
 - [`确定性世界执行`](deterministic-world-execution.prd.md)：共识之上的版本化确定性执行、验证者重执行、消费者协议、升级 lane 与 finality 缺失时的 fail-closed 语义。
+- [`完整世界历史与无损存储`](lossless-world-history-storage.prd.md)：完整历史与恢复依赖的保留边界、无损减少重复存储、冷热读取、独立副本、回收与迁移，以及容量和恢复的组合验收；目标合同已承接，实现与运行证据按专题分别列示。
 
 ### 非权威迁移索引
 

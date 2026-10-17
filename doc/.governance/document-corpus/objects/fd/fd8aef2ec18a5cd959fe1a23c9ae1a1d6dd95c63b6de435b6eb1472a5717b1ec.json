@@ -2,7 +2,7 @@
   "record": {
     "authority_entry": "doc/engineering/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "df9b055c9c1b83f869b99984bff01422451309f5f9973dfd8deea5d8e0e33c7e",
+    "content_sha256": "70cacf79976e53afb5fbc048d3d0430602219607344a30b007fe57e1fc0fb8dd",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
     "object_kind": "landing",
