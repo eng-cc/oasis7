@@ -429,6 +429,8 @@ attempt 回收要求原 Published envelope 与 P/R 分别完成的独立 typed �
 
 上述 16 个 FD 指保留到分组完成的 anchor，另允许一个临时 probe FD 校验新 alias 身份；probe 不计入保留组，不能累计。frame 解码复用只覆盖当前 recipe 分组；不同 recipe 或已释放后重新遇到的分组仍重新读验，不能为全调用去重引入无界 frame 缓存。
 
+尚未启用物理 codec 的受控 CAS 根仍需保持原 pack 的耐久去重：同一有界批内可按上述当前 FD 身份对共享原 pack 分组，本批重新检查固定 pack header 和各请求的二分索引、span 与声明长度，逐对象读取并验证原 hash，分组结束对 anchor 文件同步一次。不能因新增 codec 批量分支移除原有按 inode 的批内同步去重，退化为共享 pack 的每个成员各自 fsync。该路径同样受 1,024 请求/8 MiB 输出、16 anchor 加一个 probe 的限制，不物化完整 pack，不跨调用缓存内容，也不通过更改根的 codec 启用状态或测试材料来声称优化收益。
+
 同一次有界物理写入中，每个新 frame 仍先完成原文件 fsync、无覆盖发布及既有内容一致性检查；允许将 frame 目录和私有 staging 目录的重复 fsync 合并到该次 frame 批次结束。所有相关目录同步成功后，才可发布引用这些 frame 的 recipe/selector；其本身仍沿原发布顺序耐久同步，不跨写入调用延迟。目录同步失败或中途崩溃时，尚未发布的引用不得获得成功回执，源材料必须保留；仅留下可由原批次重试重建的未选中 frame/暂存文件，不能把文件内容同步等同于目录项已耐久。
 
 

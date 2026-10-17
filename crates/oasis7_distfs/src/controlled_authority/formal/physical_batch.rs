@@ -72,14 +72,14 @@ mod unix {
         let selected = root.join(SELECTORS).join(id);
         paths::parents(path)?;
         match fs::symlink_metadata(&selected) {
-            Ok(_) => {}
+            Ok(metadata) => paths::metadata(&metadata, false)?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(io(error)),
         }
         paths::parents(&selected)?;
         let file = match OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
             .open(&selected)
         {
             Ok(file) => file,
@@ -249,6 +249,51 @@ mod unix {
 mod tests {
     use super::super::tests::{Fixture, object};
     use super::*;
+    #[test]
+    fn physical_fifo_selector_is_rejected_without_blocking_open() {
+        const CHILD_ROOT: &str = "OASIS7_TEST_PHYSICAL_FIFO_ROOT";
+        let id = "00".repeat(32);
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            let root = PathBuf::from(root);
+            assert!(read_durable_batch(&root, &[(root.join(&id), id, 1)]).is_err());
+            return;
+        }
+        let fixture = Fixture::new();
+        let path = fixture.0.join(SELECTORS).join(&id);
+        use std::os::unix::ffi::OsStrExt;
+        let name = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: name is a live NUL-terminated path in our owned test directory.
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        struct Probe(std::process::Child);
+        impl Drop for Probe {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let test = std::thread::current().name().unwrap().to_owned();
+        let mut child = Probe(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", &test])
+                .env(CHILD_ROOT, &fixture.0)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let Some(status) = child.0.try_wait().unwrap() {
+                assert!(status.success(), "FIFO rejection child failed: {status}");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "FIFO selector open blocked"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
     fn requests(root: &Path, objects: &[(String, Vec<u8>)]) -> Vec<(PathBuf, String, usize)> {
         objects
             .iter()

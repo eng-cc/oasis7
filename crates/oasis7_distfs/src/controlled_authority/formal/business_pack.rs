@@ -19,6 +19,8 @@ pub(super) const MAX_PACK: u64 = 80 * 1024 * 1024;
 const MAX_LOGICAL: u64 = 64 * 1024 * 1024;
 pub(crate) const MAX_PACK_NODE: u64 = 4 * 1024 * 1024 + 128;
 const MAX_ENTRIES: usize = BUSINESS_INDEX_MAX_UPDATES * (BUSINESS_INDEX_DEPTH + 1);
+#[path = "business_pack_legacy_batch.rs"]
+mod legacy_batch;
 #[cfg(test)]
 static NEXT: AtomicU64 = AtomicU64::new(0);
 fn io(error: std::io::Error) -> FormalError {
@@ -346,6 +348,7 @@ pub(crate) fn persist(
 }
 // The physical selector was absent inside the caller's pinned batch. Inspect
 // raw/legacy pack bounds before allocating a logical object, not afterwards.
+#[cfg(any(not(unix), test))]
 pub(super) fn read_legacy_durable_expected(
     path: &Path,
     id: &str,
@@ -421,12 +424,19 @@ fn persist_inner(
             // Larger logical objects retain the original single-object bound.
             vec![read_object_durable(&requests[0].0, &requests[0].1)?]
         };
-        for (write, (request, physical)) in
-            writes[begin..end].iter().zip(requests.iter().zip(existing))
-        {
+        let legacy_requests = requests
+            .iter()
+            .zip(&existing)
+            .filter(|(_, physical)| physical.is_none())
+            .map(|(request, _)| request.clone())
+            .collect::<Vec<_>>();
+        let mut legacy = legacy_batch::read_durable_batch(&legacy_requests)?.into_iter();
+        for (write, physical) in writes[begin..end].iter().zip(existing) {
             let current = match physical {
                 Some(bytes) => Some(bytes),
-                None => read_legacy_durable_expected(&request.0, &write.digest, write.bytes.len())?,
+                None => legacy
+                    .next()
+                    .ok_or_else(|| invalid("business legacy batch result missing"))?,
             };
             match current {
                 Some(bytes) if bytes != write.bytes => {
