@@ -130,6 +130,7 @@ pub(crate) struct FormalWriter<P: FormalDurabilityEndpoint, R: FormalDurabilityE
     business_reader: Option<super::formal_business_package::SharedBusinessReader>,
     recovery: Option<VerifiedRecovery>,
     attempt_scan: Option<std::fs::ReadDir>,
+    attempt_reclaim_current: Option<PathBuf>,
 }
 #[path = "formal_writer_published.rs"]
 mod published;
@@ -567,6 +568,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             business_reader: None,
             recovery,
             attempt_scan: None,
+            attempt_reclaim_current: None,
         };
         if let Some((candidate, proof)) =
             read_published_candidate_at(&instance.root, instance.anchor.head().record().position)?

@@ -13,6 +13,7 @@ struct Memory {
     entries: BTreeMap<String, FormalRequestStateV1>,
     lose_decide: bool,
     closure_readback: bool,
+    closure_pending_pages: usize,
 }
 #[derive(Clone)]
 struct Endpoint(Arc<Mutex<Memory>>);
@@ -59,7 +60,13 @@ impl FormalDurabilityEndpoint for Endpoint {
         oasis7_distfs::controlled_authority::formal::coordinator::FormalPublishedClosureReceiptV1,
         FormalError,
     > {
-        let memory = self.0.lock().unwrap();
+        let mut memory = self.0.lock().unwrap();
+        if memory.closure_pending_pages > 0 {
+            memory.closure_pending_pages -= 1;
+            return Err(FormalError::Conflict(
+                "published closure verification pending; fixture page".into(),
+            ));
+        }
         if !memory.closure_readback {
             return invalid();
         }
@@ -300,6 +307,7 @@ fn endpoint(
         entries: BTreeMap::new(),
         lose_decide,
         closure_readback: false,
+        closure_pending_pages: 0,
     })))
 }
 fn continuation(world: &World) -> NodeLocalExecutionContinuation {

@@ -126,3 +126,88 @@ fn published_attempt_reclamation_retries_independent_readback_and_partial_unlink
     drop(reopened);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn pending_attempt_finishes_while_new_attempt_directories_keep_arriving() {
+    let policy = ReleaseSecurityPolicy::default();
+    let (world, _, anchor, _) = fixtures::actual_world_initial_fixture_with_execution_policy(
+        formal_package::execution_policy_material(&policy)
+            .unwrap()
+            .2,
+    );
+    let primary = endpoint(&anchor, EndpointRole::Primary, false);
+    let replica = endpoint(&anchor, EndpointRole::Replica, false);
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("oasis7-attempt-scheduler-{}", std::process::id()));
+    assert!(!root.exists());
+    let mut writer = FormalWriter::open(
+        root.clone(),
+        fixtures::key(4),
+        policy,
+        world.clone(),
+        anchor,
+        primary.clone(),
+        replica.clone(),
+    )
+    .unwrap();
+    writer.prepare(&continuation(&world)).unwrap();
+    writer.resume_original().unwrap();
+    let attempt = std::fs::read_dir(root.join("attempts"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let manifest = std::fs::read(attempt.join("attempt-lifecycle-v1.cbor")).unwrap();
+    primary.0.lock().unwrap().closure_readback = true;
+    primary.0.lock().unwrap().closure_pending_pages = 6;
+    replica.0.lock().unwrap().closure_readback = true;
+    // Start genuine discovery with only the original present. This call must
+    // consume one modeled P/R page and preserve that job's scheduling priority.
+    writer.attempt_scan = None;
+    writer.advance_storage_maintenance();
+    assert_eq!(primary.0.lock().unwrap().closure_pending_pages, 5);
+    for tick in 0..8 {
+        // These are independently discovered durable attempt manifests, never
+        // deletion authority. Arrival continues faster than one page per tick.
+        for arrival in 0..3 {
+            let added = root
+                .join("attempts")
+                .join(format!("arriving-{tick}-{arrival}"));
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .mode(0o700)
+                .create(&added)
+                .unwrap();
+            let mut arriving: serde_cbor::Value = serde_cbor::from_slice(&manifest).unwrap();
+            let serde_cbor::Value::Map(ref mut fields) = arriving else {
+                panic!("attempt map")
+            };
+            fields.insert(
+                serde_cbor::Value::Text("attempt_id".into()),
+                serde_cbor::Value::Text(added.file_name().unwrap().to_str().unwrap().into()),
+            );
+            durable_transaction::write_private_file_durable(
+                &added.join("attempt-lifecycle-v1.cbor"),
+                &serde_cbor::to_vec(&arriving).unwrap(),
+            )
+            .unwrap();
+        }
+        writer.advance_storage_maintenance();
+    }
+    #[derive(Deserialize)]
+    struct Summary {
+        phase: String,
+    }
+    let original: Summary =
+        serde_cbor::from_slice(&std::fs::read(attempt.join("attempt-lifecycle-v1.cbor")).unwrap())
+            .unwrap();
+    assert_eq!(
+        original.phase, "Reclaimed",
+        "new arrivals cannot dilute a live original job"
+    );
+    drop(writer);
+    std::fs::remove_dir_all(root).unwrap();
+}

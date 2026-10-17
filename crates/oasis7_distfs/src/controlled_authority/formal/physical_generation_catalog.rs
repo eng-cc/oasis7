@@ -30,7 +30,7 @@ struct Node {
 #[derive(Serialize, Deserialize)]
 enum Kind {
     Leaf(#[serde(deserialize_with = "decode_ids")] Vec<String>),
-    Branch([Option<NodeRef>; 16]),
+    Branch(Box<[Option<NodeRef>; 16]>),
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -152,7 +152,22 @@ fn parsed(bytes: &[u8], digest: [u8; 32]) -> Result<Arc<Node>, FormalError> {
         return Ok(node.clone());
     }
     let node = Arc::new(decode(bytes)?);
-    let weight = bytes.len() * 4 + std::mem::size_of::<Node>() + 256;
+    let allocations = match &node.kind {
+        Kind::Leaf(ids) => {
+            ids.capacity() * std::mem::size_of::<String>()
+                + ids.iter().map(String::capacity).sum::<usize>()
+        }
+        Kind::Branch(children) => {
+            std::mem::size_of::<[Option<NodeRef>; 16]>()
+                + children
+                    .iter()
+                    .flatten()
+                    .map(|child| child.digest.capacity())
+                    .sum::<usize>()
+        }
+    };
+    let weight =
+        bytes.len() + std::mem::size_of::<Node>() + node.prefix.capacity() + allocations + 256;
     const BYTES: usize = 4 * 1024 * 1024;
     if weight <= BYTES {
         while cache.nodes.len() >= 16 || cache.bytes + weight > BYTES {
@@ -237,7 +252,7 @@ fn build(dir: &Path, prefix: &str, ids: Vec<String>) -> Result<NodeRef, FormalEr
         Node {
             version: 3,
             prefix: prefix.into(),
-            kind: Kind::Branch(children),
+            kind: Kind::Branch(Box::new(children)),
         },
     )
 }

@@ -320,8 +320,10 @@ fn run_initialization() -> Result<(), String> {
     // process deadline still bounds the whole test.
     while !gate.blocked.load(Ordering::Acquire) {
         if let Some(status) = interrupted.0.try_wait().map_err(|e| e.to_string())? {
+            let diagnostics = finish_cli(interrupted, status.success())?;
             return Err(format!(
-                "world-init exited before durable boundary: {status}"
+                "world-init exited before durable boundary: {status}: {}",
+                String::from_utf8_lossy(&diagnostics),
             ));
         }
         if let Some(error) = gate.error.lock().map_err(|_| "gate error lock")?.clone() {

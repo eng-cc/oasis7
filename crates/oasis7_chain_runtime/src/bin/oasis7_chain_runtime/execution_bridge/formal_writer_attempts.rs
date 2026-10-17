@@ -1,5 +1,10 @@
 //! Publication-bound, retryable reclamation under the writer lease.
 use super::*;
+enum AttemptReclaimProgress {
+    Complete,
+    Pending,
+    Yield,
+}
 impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R> {
     pub(crate) fn advance_storage_maintenance(&mut self) {
         match read_published_candidate_at(&self.root, self.anchor.head().record().position) {
@@ -18,6 +23,13 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         // Incremental discovery is only a scheduling cursor, never deletion
         // authority. Reopening restarts the directory scan and every selected
         // attempt is rebound to its original durable publication and both P/R.
+        // Finish one live paged job before discovering more work. Continuous
+        // business publications must not dilute an older job's progress. This
+        // path is scheduling only; every page rebinds durable source authority.
+        if let Some(path) = self.attempt_reclaim_current.take() {
+            self.advance_attempt_path(expected, &path);
+            return;
+        }
         if self.attempt_scan.is_none() {
             match std::fs::read_dir(self.root.join("attempts")) {
                 Ok(scan) => self.attempt_scan = Some(scan),
@@ -40,63 +52,77 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                     break;
                 }
             };
-            let position = match super::super::formal_attempt_lifecycle::pending_position(&path) {
-                Ok(Some(position)) => position,
-                Ok(None) => continue,
-                Err(e) => {
-                    eprintln!("formal-attempt inventory blocked reason={e}");
-                    continue;
-                }
-            };
-            if position > expected.candidate.candidate.record.position {
-                continue;
+            if self.advance_attempt_path(expected, &path) {
+                break;
             }
-            if position == expected.candidate.candidate.record.position {
-                self.reclaim_one_attempt_publication(expected, &path);
-            } else {
-                match read_published_candidate_at(&self.root, position) {
-                    Ok(Some((candidate, proof))) => self.reclaim_one_attempt_publication(
-                        &Published {
-                            schema_version: 1,
-                            candidate,
-                            proof,
-                        },
-                        &path,
-                    ),
-                    Ok(None) => {
-                        eprintln!("formal-attempt publication unavailable position={position}")
-                    }
-                    Err(e) => eprintln!(
-                        "formal-attempt publication blocked position={position} reason={e}"
-                    ),
-                }
-            }
-            break; // one bounded closure page per ordinary business operation
         }
     }
-    fn reclaim_one_attempt_publication(&mut self, expected: &Published, attempt_path: &Path) {
-        if let Err(error) = self.try_reclaim_published_attempts(expected, attempt_path) {
-            if let Ok(digest) =
-                super::super::formal_attempt_lifecycle::candidate_digest(&expected.candidate)
-            {
-                let _ = super::super::formal_attempt_lifecycle::mark(
-                    attempt_path,
-                    &digest,
-                    super::super::formal_attempt_lifecycle::Phase::RecoveryPinned,
-                    &error,
-                );
+    // Return whether this path consumed the tick's single closure page.
+    fn advance_attempt_path(&mut self, expected: &Published, path: &Path) -> bool {
+        let position = match super::super::formal_attempt_lifecycle::pending_position(path) {
+            Ok(Some(position)) if position <= expected.candidate.candidate.record.position => {
+                position
             }
-            eprintln!(
-                "formal-attempt-reclamation blocked position={} reason={error}",
-                expected.candidate.candidate.record.position
+            Ok(_) => return false,
+            Err(error) => {
+                eprintln!("formal-attempt inventory blocked reason={error}");
+                return false;
+            }
+        };
+        let original = if position == expected.candidate.candidate.record.position {
+            None
+        } else {
+            match read_published_candidate_at(&self.root, position) {
+                Ok(Some((candidate, proof))) => Some(Published {
+                    schema_version: 1,
+                    candidate,
+                    proof,
+                }),
+                Ok(None) => return false,
+                Err(error) => {
+                    eprintln!(
+                        "formal-attempt publication blocked position={position} reason={error}"
+                    );
+                    return false;
+                }
+            }
+        };
+        let publication = original.as_ref().unwrap_or(expected);
+        if self.reclaim_one_attempt_publication(publication, path) {
+            self.attempt_reclaim_current = Some(path.to_owned());
+        }
+        true
+    }
+    fn reclaim_one_attempt_publication(
+        &mut self,
+        expected: &Published,
+        attempt_path: &Path,
+    ) -> bool {
+        let error = match self.try_reclaim_published_attempts(expected, attempt_path) {
+            Ok(progress) => return matches!(progress, AttemptReclaimProgress::Pending),
+            Err(error) => error,
+        };
+        if let Ok(digest) =
+            super::super::formal_attempt_lifecycle::candidate_digest(&expected.candidate)
+        {
+            let _ = super::super::formal_attempt_lifecycle::mark(
+                attempt_path,
+                &digest,
+                super::super::formal_attempt_lifecycle::Phase::RecoveryPinned,
+                &error,
             );
         }
+        eprintln!(
+            "formal-attempt-reclamation blocked position={} reason={error}",
+            expected.candidate.candidate.record.position
+        );
+        false // A failed/unknown original yields to other durable attempts.
     }
     fn try_reclaim_published_attempts(
         &mut self,
         expected: &Published,
         attempt_path: &Path,
-    ) -> Result<bool, String> {
+    ) -> Result<AttemptReclaimProgress, String> {
         let path = self.root.join("published").join(format!(
             "{:020}.cbor",
             expected.candidate.candidate.record.position
@@ -127,20 +153,28 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         let p = match primary.verify_published_closure(request, &digest) {
             Ok(receipt) => receipt,
             Err(FormalError::Conflict(reason))
-                if reason.starts_with("published closure verification pending")
-                    || reason.starts_with("published closure job capacity") =>
+                if reason.starts_with("published closure verification pending") =>
             {
-                return Ok(false);
+                return Ok(AttemptReclaimProgress::Pending);
+            }
+            Err(FormalError::Conflict(reason))
+                if reason.starts_with("published closure job capacity") =>
+            {
+                return Ok(AttemptReclaimProgress::Yield);
             }
             Err(error) => return Err(error.to_string()),
         };
         let r = match replica.verify_published_closure(request, &digest) {
             Ok(receipt) => receipt,
             Err(FormalError::Conflict(reason))
-                if reason.starts_with("published closure verification pending")
-                    || reason.starts_with("published closure job capacity") =>
+                if reason.starts_with("published closure verification pending") =>
             {
-                return Ok(false);
+                return Ok(AttemptReclaimProgress::Pending);
+            }
+            Err(FormalError::Conflict(reason))
+                if reason.starts_with("published closure job capacity") =>
+            {
+                return Ok(AttemptReclaimProgress::Yield);
             }
             Err(error) => return Err(error.to_string()),
         };
@@ -157,7 +191,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             &[p.inventory_digest, r.inventory_digest],
         )?;
         if !complete {
-            return Ok(false);
+            return Ok(AttemptReclaimProgress::Pending);
         }
         primary
             .release_published_closure(&digest)
@@ -165,6 +199,6 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         replica
             .release_published_closure(&digest)
             .map_err(|e| e.to_string())?;
-        Ok(true)
+        Ok(AttemptReclaimProgress::Complete)
     }
 }
