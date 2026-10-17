@@ -2,7 +2,7 @@
 
 Task: `task_490d0cf6273b423eb9510723170eef9a`, Issue #4254. QA authoring slice; this document does not constitute independent review.
 
-## Latest aggregate acceptance — 2026-10-09
+## Historical aggregate acceptance — source 5e5dad4, 2026-10-09
 
 A and B passed on immutable source `5e5dad4d63cf3ceb62f01c9e9755ccebb0f1d3e5`. PR #4378 CI and merge remain pending; this is local acceptance, not completed code delivery. C is `not_run`; production is `not_evaluated`.
 
@@ -16,7 +16,7 @@ A and B passed on immutable source `5e5dad4d63cf3ceb62f01c9e9755ccebb0f1d3e5`. P
 
 Linux arm64 build identity/configuration/world/service-key evidence is in `/tmp/pre2-linux-build-5e5dad4d6-20261009/build-manifest.json` and the integration report's `topology_evidence`. Linux test ELF SHA256 `9e40e4353dd8ea315a3b867e78acf85cf14041820bcde7a7e339cc005d5c84e7`; shipped Viewer ELF SHA256 `6e332078c87e618874a3e6549ac366366b9d68eec90fbd928999109be8e20295`. Runtime image `sha256:278a56aea9756566c3e23c72776531c4c5f49de21f94502f9ad10e42b834ddcc`. The app mounts only its bundle/private storage, not node storage/source/Docker socket. Docker memory was the original4096MiB during this build and acceptance. Darwin full70 has its own platform artifacts/digests; no cross-platform artifact equivalence is claimed.
 
-Component runners retain conservative `topology_A/B: not_evaluated` fields because each alone cannot establish aggregate acceptance. The joined results above cover the required A/B scope; no individual field was rewritten to fabricate a pass. Historical failures below describe earlier checkpoints and are superseded only by these actual final results.
+Component runners retain conservative `topology_A/B: not_evaluated` fields because each alone cannot establish aggregate acceptance. The joined results above cover the required A/B scope; no individual field was rewritten to fabricate a pass. These joined results apply only to immutable source `5e5dad4d63cf3ceb62f01c9e9755ccebb0f1d3e5` and its recorded artifacts. Earlier failures retain their original results; later candidates, failures and pending acceptance recorded below are not superseded by this historical pass. This section is not current-HEAD acceptance or current PR delivery status.
 
 ## Runner and historical execution record
 

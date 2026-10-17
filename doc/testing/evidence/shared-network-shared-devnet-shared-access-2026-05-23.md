@@ -15,6 +15,7 @@
   - `39.104.204.172:5023`
 - `operator_contact_ref`:
   - `.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md`
+  - 固定历史定位：[原始 execution log](https://github.com/nil-studio/oasis7/blob/0450e84dce0ae037be3a7fe8041f7f10f154e721/.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md)；原路径仅为历史身份，独立人员交接的证明限制见本文末尾补注。
 - `independent_operator_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-shared-access-2026-05-23.md`
 
@@ -103,3 +104,9 @@
   - a real cloud shared endpoint exists on the sequencer host
   - operator/handoff truth is pinned in the task execution log and this candidate-window evidence
   - independent access evidence is now pinned from both an external workstation and the cloud storage host path in the same candidate window
+
+## 历史引用与 handoff 证明边界补注
+
+上述 verdict 和 `shared_multi_operator` 为原窗口的历史记录，保持原值；其中 “operator/handoff truth is pinned” 不应扩读为已验证独立人员交接。可取回的 [原日志](https://github.com/nil-studio/oasis7/blob/0450e84dce0ae037be3a7fe8041f7f10f154e721/.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md) 记录访问与 lane 处置；本页的 workstation/cloud storage host 证明来自不同访问位置，未给出可关联的独立人员接手记录，`independent_operator_ref` 的自引用也不能补足该证明。
+
+[May 24 QA/producer 决定](https://github.com/nil-studio/oasis7/blob/0450e84dce0ae037be3a7fe8041f7f10f154e721/.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md#L198-L220) 确实存在，但针对 mixed-topology catch-up 和 uplift，并非 shared-access 独立人 handoff 验收。保留原始 `pass` 不等于新增这项证明，不表示已补做交接或当前 readiness。

@@ -112,6 +112,8 @@
 - `pass_uplift_decision_ref`:
   - `.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md (2026-05-24 10:14:18 CST qa_engineer recheck + 2026-05-24 10:14:54 CST producer_system_designer uplift approval)`
 
+  - 固定历史定位：[原始 QA/producer uplift 决定](https://github.com/nil-studio/oasis7/blob/0450e84dce0ae037be3a7fe8041f7f10f154e721/.pm/tasks/task_c52321688c6b4ea09a59e7d5db749190.execution.md#L198-L220)；上面的原字段值保留作历史身份，不要求当前工作树存在该路径。
+
 ## Explicit Caveats
 - proxy drill evidence remains approximation, not dedicated sentry/NAT lab truth
 - this `pass` only upgrades the current `shared_devnet` mixed-topology lane for `shared-devnet-live-reset-20260523-01`; it does not upgrade public-claims readiness or dedicated-lab coverage
@@ -120,3 +122,7 @@
 - This packet supersedes the old April explanation that only said “no current same-window mixed-topology evidence is pinned.”
 - It does not claim observer-only topology; current repo truth is a mixed deployment of three validator-core sequencer nodes across one local workstation and two ECS hosts.
 - It still does not upgrade the lane to dedicated lab truth or public-claims readiness.
+
+## 历史定位与证明边界补注
+
+固定来源保留 2026-05-24 10:14:18 CST 的 QA 复采样和 10:14:54 CST 的 producer 接受 uplift；原 `pass`、样本及决定保持不变。该决定证明当时 mixed-topology lane 的采样与裁定，不证明独立人员接手 shared-access operator 工作；不同访问主机也不自动证明独立人 handoff。本文不构成新运行、今日网络状态、same-binary 或 readiness 证明。

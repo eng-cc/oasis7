@@ -78,7 +78,7 @@
 | 专题 PRD | 专题设计文档 | 任务追溯 |
 | --- | --- | --- |
 | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md` | `doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.design.md` | GitHub Issue / GitHub Project |
-| [chain-http-submit-explorer-contract.prd.md](blockchain/chain-http-submit-explorer-contract.prd.md) | [chain-http-submit-explorer-contract.design.md](blockchain/chain-http-submit-explorer-contract.design.md) | [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450) |
+| [chain-http-submit-explorer-contract.prd.md](blockchain/chain-http-submit-explorer-contract.prd.md) | [chain-http-submit-explorer-contract.design.md](blockchain/chain-http-submit-explorer-contract.design.md) | [历史 Issue #4450：文档承接后关闭，非实现完成](https://github.com/nil-studio/oasis7/issues/4450#issuecomment-6126251006) |
 | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md` | `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.design.md` | GitHub Issue / GitHub Project |
 | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` | `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md` | GitHub Issue / GitHub Project |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` | GitHub Issue / GitHub Project |
