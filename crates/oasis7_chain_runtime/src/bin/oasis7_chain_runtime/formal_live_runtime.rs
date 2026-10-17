@@ -36,8 +36,11 @@ use std::{
     time::Duration,
 };
 
+#[path = "formal_live_open_timing.rs"]
+mod open_timing;
 #[path = "formal_live_runtime_quiesce.rs"]
 mod quiesce;
+use open_timing::OpenTiming;
 
 pub(crate) const BUSINESS_NODE_CACHE_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const BUSINESS_NODE_CACHE_ENTRIES: usize = 16_384;
@@ -82,6 +85,38 @@ struct PendingNodeStop {
     worker: std::thread::JoinHandle<Result<(), String>>,
 }
 
+impl PendingNodeStop {
+    fn spawn(
+        runtime: Arc<Mutex<NodeRuntime>>,
+        state: FormalLiveState,
+    ) -> Result<Self, std::io::Error> {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::Builder::new()
+            .name("oasis7-formal-stop".into())
+            .spawn(move || {
+                let result = match runtime.lock() {
+                    Ok(mut runtime) => runtime
+                        .stop()
+                        .map_err(|error| format!("formal NodeRuntime stop: {error:?}")),
+                    Err(_) => Err("formal Node runtime lock poisoned".into()),
+                };
+                if result.is_ok() {
+                    state
+                        .node_running
+                        .store(false, std::sync::atomic::Ordering::Release);
+                } else if let Ok(mut last_error) = state.last_error.lock() {
+                    *last_error = result.as_ref().err().cloned();
+                }
+                let _ = send.send(result.clone());
+                result
+            })?;
+        Ok(Self {
+            result: receive,
+            worker,
+        })
+    }
+}
+
 #[path = "formal_live_business_reader.rs"]
 mod business_reader;
 #[cfg(test)]
@@ -104,13 +139,23 @@ impl FormalLiveRuntime {
     pub(crate) fn open_from_validated_with_native_history(
         validated: ValidatedFormalLiveConfigV1,
     ) -> Result<Self, String> {
+        let timing = OpenTiming::new();
+        let _open = timing.stage("open_total");
+        let initial = timing.stage("history_resolver_and_startup_anchor");
         let business_reader = business_reader_for(&validated)?;
         let (history, startup) = super::formal_live_history::from_validated_for_runtime(
             &validated,
             business_reader.clone(),
         )?;
         business_reader.bind_verified_startup(&validated, &startup)?;
-        Self::open_validated_with_startup(validated, history, business_reader, Some(startup))
+        drop(initial);
+        Self::open_validated_with_startup(
+            validated,
+            history,
+            business_reader,
+            Some(startup),
+            &timing,
+        )
     }
 
     fn open_validated_with_startup(
@@ -118,6 +163,7 @@ impl FormalLiveRuntime {
         history: Arc<dyn FormalLiveHistoryResolver>,
         business_reader: Arc<RemoteBusinessIndexReader>,
         startup: Option<super::formal_live_history::FormalLiveStartupAnchorV1>,
+        timing: &OpenTiming,
     ) -> Result<Self, String> {
         validate_loaded_execution_policy(&validated)?;
         // Seed only content-addressed bytes from the exact configured initial
@@ -176,13 +222,16 @@ impl FormalLiveRuntime {
         )
         .map_err(|error| format!("formal replica endpoint: {error}"))?;
 
-        prewarm_from_matching_native_heads(
+        let prewarm = timing.stage("protected_head_hint_prewarm");
+        let prewarm_receipt = prewarm_from_matching_native_heads(
             &validated,
             startup_anchor,
             &authority,
             &*history,
             &*business_reader,
         )?;
+        timing.flag("hint_prewarm_completed", prewarm_receipt.is_some());
+        drop(prewarm);
 
         let writer_root = validated.config.writer_directory.clone();
         let release_policy = validated.release_policy.clone();
@@ -190,6 +239,7 @@ impl FormalLiveRuntime {
         // Every open starts from both protected native heads beneath the same
         // external origin, including the first already-qualified activation.
         let writer = {
+            let restore = timing.stage("dual_native_restore");
             // The request carries the original trusted authority. A signed
             // raw head or endpoint checkpoint is never used as a new pin.
             let dual = if let Some(activation) = startup
@@ -222,6 +272,8 @@ impl FormalLiveRuntime {
                     &*business_reader,
                 )?
             };
+            drop(restore);
+            let _writer = timing.stage("writer_open_and_verified_material");
             let primary_restore = dual.primary;
             let replica_restore = dual.replica;
             if let Some(initial) = validated.approved_initial.as_ref()
@@ -276,18 +328,31 @@ impl FormalLiveRuntime {
                 )
             }
             .map_err(|error| format!("open restored formal native writer: {error}"))?
-        }
-        .with_business_reader(business_reader.clone())
-        .map_err(|error| format!("open formal profile-2 business reader: {error}"))?;
+        };
+        let attach = timing.stage("writer_business_reader");
+        let writer = writer
+            .with_business_reader(business_reader.clone())
+            .map_err(|error| format!("open formal profile-2 business reader: {error}"))?;
+        drop(attach);
         let active_authority = writer.anchor().authority().clone();
-        history
-            .prewarm_qualified_business_history(writer.anchor(), business_reader.as_ref())
+        let prewarm = timing.stage("exact_writer_prewarm");
+        let reused = history
+            .prewarm_qualified_business_history_after_hint(
+                writer.anchor(),
+                business_reader.as_ref(),
+                prewarm_receipt,
+            )
             .map_err(|error| format!("prewarm verified formal business history: {error}"))?;
+        timing.flag("exact_prewarm_reused", reused);
+        drop(prewarm);
+        let seed = timing.stage("seed_committed_business_nodes");
         let committed_business_nodes = writer
             .committed_business_nodes()
             .map_err(|error| format!("read exact qualified formal business nodes: {error}"))?;
         business_reader.seed_verified_writes(committed_business_nodes)?;
+        drop(seed);
 
+        let _bootstrap = timing.stage("publication_and_node_bootstrap");
         let published = Arc::new(PublishedReadState::default());
         let (effect_delivery, sink): (
             _,
@@ -580,44 +645,20 @@ impl FormalLiveRuntime {
                 .store(true, std::sync::atomic::Ordering::Release);
         }
         if self.started && self.stop_worker.is_none() {
-            let runtime = Arc::clone(&self.runtime);
-            let state = self.state.clone();
-            let (send, receive) = std::sync::mpsc::sync_channel(1);
-            let worker = std::thread::Builder::new()
-                .name("oasis7-formal-stop".into())
-                .spawn(move || {
-                    let result = match runtime.lock() {
-                        Ok(mut runtime) => runtime
-                            .stop()
-                            .map_err(|error| format!("formal NodeRuntime stop: {error:?}")),
-                        Err(_) => Err("formal Node runtime lock poisoned".into()),
-                    };
-                    if result.is_ok() {
-                        state
-                            .node_running
+            self.stop_worker = Some(
+                match PendingNodeStop::spawn(Arc::clone(&self.runtime), self.state.clone()) {
+                    Ok(pending) => pending,
+                    Err(error) => {
+                        self.state
+                            .stopping
                             .store(false, std::sync::atomic::Ordering::Release);
-                    } else if let Ok(mut last_error) = state.last_error.lock() {
-                        *last_error = result.as_ref().err().cloned();
+                        if let Ok(mut last_error) = self.state.last_error.lock() {
+                            *last_error = Some(format!("formal Node stop worker: {error}"));
+                        }
+                        return Err(format!("formal Node stop worker: {error}"));
                     }
-                    let _ = send.send(result.clone());
-                    result
-                });
-            let worker = match worker {
-                Ok(worker) => worker,
-                Err(error) => {
-                    self.state
-                        .stopping
-                        .store(false, std::sync::atomic::Ordering::Release);
-                    if let Ok(mut last_error) = self.state.last_error.lock() {
-                        *last_error = Some(format!("formal Node stop worker: {error}"));
-                    }
-                    return Err(format!("formal Node stop worker: {error}"));
-                }
-            };
-            self.stop_worker = Some(PendingNodeStop {
-                result: receive,
-                worker,
-            });
+                },
+            );
         }
         if let Some(pending) = self.stop_worker.as_ref() {
             match pending
@@ -691,7 +732,7 @@ fn prewarm_from_matching_native_heads(
     authority: &oasis7_distfs::controlled_authority::formal::VerifiedAuthorityV1,
     history: &dyn FormalLiveHistoryResolver,
     reader: &dyn BusinessIndexNodeReader,
-) -> Result<(), String> {
+) -> Result<Option<super::formal_live_history::VerifiedBusinessPrewarmReceipt>, String> {
     let probe = |address, role| {
         let mut endpoint = RemoteFormalEndpoint::new(
             address,
@@ -709,13 +750,13 @@ fn prewarm_from_matching_native_heads(
         }
     };
     let Some(primary) = probe(validated.config.primary, EndpointRole::Primary)? else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(replica) = probe(validated.config.replica, EndpointRole::Replica)? else {
-        return Ok(());
+        return Ok(None);
     };
     if primary != replica {
-        return Ok(());
+        return Ok(None);
     }
     let hint = oasis7_client_api::world_service::FormalReadAnchorRefV1 {
         position: primary.position,

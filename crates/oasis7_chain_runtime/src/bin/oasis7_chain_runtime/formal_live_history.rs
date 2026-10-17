@@ -32,6 +32,7 @@ use std::{
 
 #[path = "formal_live_business_history.rs"]
 mod business;
+pub(crate) use business::VerifiedBusinessPrewarmReceipt;
 #[path = "formal_live_durable_set_activation.rs"]
 mod durable_set_activation;
 #[path = "formal_live_history_material.rs"]
@@ -129,6 +130,7 @@ fn resolver_from_validated(
         activation_markers: durable_set_activation::DurableSetActivationMarkerStoreV1::new(
             validated.config.writer_directory.clone(),
         ),
+        prewarm_scope: Arc::new(()),
     })
 }
 
@@ -191,6 +193,9 @@ struct NativeHistoryResolver {
     writer_directory: PathBuf,
     origin_history_directory: Option<PathBuf>,
     activation_markers: durable_set_activation::DurableSetActivationMarkerStoreV1,
+    // An unforgeable in-memory scope for one constructor's immutable origin,
+    // permissions, activation markers, release policy and endpoint bindings.
+    prewarm_scope: Arc<()>,
 }
 impl NativeHistoryResolver {
     fn startup_anchor(
@@ -463,8 +468,17 @@ impl FormalLiveHistoryResolver for NativeHistoryResolver {
         &self,
         hint: &FormalReadAnchorRefV1,
         reader: &dyn BusinessIndexNodeReader,
-    ) -> Result<(), String> {
+    ) -> Result<Option<VerifiedBusinessPrewarmReceipt>, String> {
         business::prewarm_qualified_history_hint(self, hint, reader)
+    }
+
+    fn prewarm_qualified_business_history_after_hint(
+        &self,
+        target: &VerifiedFormalReadAnchorV1,
+        reader: &dyn BusinessIndexNodeReader,
+        receipt: Option<VerifiedBusinessPrewarmReceipt>,
+    ) -> Result<bool, String> {
+        business::prewarm_qualified_history_after_hint(self, target, reader, receipt)
     }
 
     #[cfg(test)]

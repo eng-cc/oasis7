@@ -717,7 +717,9 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
             .report_stage("long successor history and cold lookup verified")?;
     }
 
-    stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
+    if runtime.started {
+        stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
+    }
     let stopped = runtime.published.current()?;
     let stopped_snapshot = stopped.world.snapshot();
     drop(runtime);
@@ -787,17 +789,20 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         .report_stage("before cold original retry after restart")?;
     wait_for_published_position(&reopened, reopened_cut.anchor.head().record().position + 1)?;
     let after_duplicate = reopened.published.current()?;
+    let duplicate_commit = lookup_original_commit(&reopened_owner, &case.owner_request)?;
+    // Complete the necessary signed HTTP read before closing ingress, then
+    // inspect the immutable captured cut with the Node already stopping/stopped.
+    stop_healthy_runtime(&mut reopened, case.scenario_deadline)?;
     if retained_result_from_hot_or_cold(&after_duplicate.world, &original_key)? != original_result
         || game_task::current_control(&after_duplicate.world, "agent")
             .map_err(|error| error.to_string())?
             != Some(original_game_task)
-        || lookup_original_commit(&reopened_owner, &case.owner_request)? != original_commit
+        || duplicate_commit != original_commit
     {
         return Err("cold original retry created a second Game task effect or result".into());
     }
     case.scenario_deadline
         .report_stage("cold retry preserved original CommitRef and effects")?;
-    stop_healthy_runtime(&mut reopened, case.scenario_deadline)?;
     drop((
         case.primary_oracle,
         case.replica_oracle,
@@ -939,89 +944,6 @@ pub(super) fn write_healthy_endpoint_config(
     )
 }
 
-fn wait_for_boundary(runtime: &FormalLiveRuntime, position: u64) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let cut = runtime.published.current()?;
-        if cut.anchor.head().record().position >= position {
-            if cut.anchor.head().record().position != position {
-                return Err(format!(
-                    "healthy arm passed exact boundary {position}: current {}",
-                    cut.anchor.head().record().position
-                ));
-            }
-            return Ok(());
-        }
-        let status = runtime
-            .runtime
-            .lock()
-            .map_err(|_| "healthy boundary runtime lock poisoned")?
-            .snapshot();
-        if let Some(error) = status.last_error {
-            return Err(format!(
-                "Node failed before healthy boundary {position}: {error}"
-            ));
-        }
-        if Instant::now() >= deadline {
-            return Err(format!(
-                "Node did not qualify healthy boundary {position}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?}",
-                status.running,
-                status.tick_count,
-                status.consensus.slot,
-                status.consensus.latest_height,
-                status.consensus.committed_height,
-                status.consensus.last_execution_height,
-                status.consensus.pending_consensus_actions,
-            ));
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-}
-
-fn wait_for_request_result(
-    runtime: &FormalLiveRuntime,
-    request: &SubmitIntentRequest<WorldServicePayloadV1>,
-) -> Result<oasis7::world_service::CanonicalIntentResultV1, String> {
-    let key = correlation::key_digest(&request.correlation.key).map_err(|e| e.to_string())?;
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let cut = runtime.published.current()?;
-        if let Some(result) = optional_retained_result_from_hot_or_cold(&cut.world, &key)? {
-            if result.request != *request || result.rejected.is_some() {
-                return Err(format!(
-                    "healthy-set request has wrong or rejected canonical outcome: {:?}",
-                    result.rejected
-                ));
-            }
-            return Ok(result);
-        }
-        let status = runtime
-            .runtime
-            .lock()
-            .map_err(|_| "healthy request runtime lock poisoned")?
-            .snapshot();
-        if let Some(error) = status.last_error {
-            return Err(format!(
-                "Node failed before healthy request result: {error}"
-            ));
-        }
-        if Instant::now() >= deadline {
-            return Err(format!(
-                "healthy-set request result missing at position {}; running={} ticks={} slot={} height={} committed={} executed={} pending={:?}",
-                cut.anchor.head().record().position,
-                status.running,
-                status.tick_count,
-                status.consensus.slot,
-                status.consensus.latest_height,
-                status.consensus.committed_height,
-                status.consensus.last_execution_height,
-                status.consensus.pending_consensus_actions,
-            ));
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-}
-
 fn exercise_successor_long_history(
     mut runtime: FormalLiveRuntime,
     case: &HealthySetCase,
@@ -1037,6 +959,11 @@ fn exercise_successor_long_history(
     let owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
         .map_err(|error| error.to_string())?;
     for ordinal in 0..40_u64 {
+        let request_started = Instant::now();
+        case.scenario_deadline.report_stage(&format!(
+            "successor history submitting request {}/40",
+            ordinal + 1
+        ))?;
         let cut = runtime.published.current()?;
         let binding = cut
             .world
@@ -1095,8 +1022,13 @@ fn exercise_successor_long_history(
                 .map_err(|error| format!("healthy successor delegation {ordinal}: {error}"))?,
             &request.correlation,
         )?;
-        let result = wait_for_request_result(&runtime, &request)
-            .map_err(|error| format!("healthy successor change {ordinal}: {error}"))?;
+        let result = wait_for_new_request_result(
+            &runtime,
+            &request,
+            Duration::from_secs(20),
+            "healthy successor",
+        )
+        .map_err(|error| format!("healthy successor change {ordinal}: {error}"))?;
         let after = runtime.published.current()?;
         if after
             .world
@@ -1110,11 +1042,18 @@ fn exercise_successor_long_history(
                 "healthy successor delegation {ordinal} did not produce its exact canonical state"
             ));
         }
+        eprintln!(
+            "formal_healthy_history stage=request ordinal={} stage_ms={} position={}",
+            ordinal + 1,
+            request_started.elapsed().as_millis(),
+            runtime.published.position()?
+        );
         if ordinal == 15 || ordinal == 31 {
             stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
             let before = runtime.published.current()?;
             let snapshot = before.world.snapshot();
             drop(runtime);
+            let reopen_started = Instant::now();
             runtime = FormalLiveRuntime::open_with_native_history(&case.runtime_config_path)
                 .map_err(|error| format!("healthy long-history reopen {ordinal}: {error}"))?;
             if runtime.published.current()?.world.snapshot() != snapshot
@@ -1127,6 +1066,11 @@ fn exercise_successor_long_history(
                 return Err("healthy long-history reopen changed qualified successor state".into());
             }
             runtime.start()?;
+            eprintln!(
+                "formal_healthy_history stage=reopen completed={} stage_ms={}",
+                ordinal + 1,
+                reopen_started.elapsed().as_millis()
+            );
         }
         case.scenario_deadline.report_stage(&format!(
             "successor history qualified {}/40 distinct requests",
@@ -1147,44 +1091,30 @@ fn exercise_successor_long_history(
     {
         return Err("long healthy set did not evict original result from the hot map".into());
     }
+    let owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
+        .map_err(|error| error.to_string())?;
+    if lookup_original_commit(&owner, &case.owner_request)? != *original_commit {
+        return Err("signed lookup changed old CommitRef after healthy successor history".into());
+    }
+    stop_healthy_runtime(&mut runtime, case.scenario_deadline)?;
+    let cold_started = Instant::now();
     if retained_result_from_hot_or_cold(&cut.world, original_key)? != *original_result
         || game_task::current_control(&cut.world, "agent").map_err(|e| e.to_string())?
             != Some(original_game_task.clone())
     {
         return Err("cold healthy-set lookup changed original result or Game task".into());
     }
-    let owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
-        .map_err(|error| error.to_string())?;
-    if lookup_original_commit(&owner, &case.owner_request)? != *original_commit {
-        return Err("signed lookup changed old CommitRef after healthy successor history".into());
-    }
+    eprintln!(
+        "formal_healthy_history stage=stopped_cold_history stage_ms={}",
+        cold_started.elapsed().as_millis()
+    );
     Ok(runtime)
 }
 
-/// Keep the same runtime and pending stop worker until graceful completion,
-/// bounded by this scenario's original expiry rather than a fresh allowance.
-pub(super) fn stop_healthy_runtime(
-    runtime: &mut FormalLiveRuntime,
-    scenario: ScenarioDeadline,
-) -> Result<(), String> {
-    loop {
-        let remaining = scenario
-            .expires_at
-            .checked_duration_since(Instant::now())
-            .filter(|remaining| !remaining.is_zero())
-            .ok_or("healthy runtime stop exceeded the original scenario deadline")?;
-        match runtime.stop(remaining.min(Duration::from_secs(10))) {
-            Ok(()) => {
-                scenario.report_stage("healthy runtime graceful stop completed")?;
-                return Ok(());
-            }
-            Err(error) if error == "formal Node stop is still pending; runtime remains owned" => {
-                scenario.report_stage("healthy runtime stop pending; retaining same owner")?;
-            }
-            Err(error) => return Err(error),
-        }
-    }
-}
+#[path = "formal_live_protected_durable_set_tests/runtime_wait.rs"]
+mod runtime_wait;
+pub(super) use runtime_wait::stop_healthy_runtime;
+use runtime_wait::{wait_for_boundary, wait_for_request_result};
 
 #[path = "formal_live_protected_durable_set_tests/managed_endpoint.rs"]
 mod managed_endpoint;

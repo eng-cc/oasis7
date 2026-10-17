@@ -146,7 +146,7 @@ fn healthy_copy_enqueues_every_signed_business_delta_write() {
         ],
     };
     let mut work = Vec::new();
-    enqueue_material(&material, 2, true, &mut work).unwrap();
+    enqueue_material(&material, 2, true, &mut work, None).unwrap();
     let queued: BTreeMap<_, _> = work
         .into_iter()
         .filter_map(|visit| match visit {

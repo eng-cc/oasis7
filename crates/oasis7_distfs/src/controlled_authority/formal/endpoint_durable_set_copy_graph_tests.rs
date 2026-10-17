@@ -113,6 +113,20 @@ fn healthy_copy_walker_rejects_reused_index_branch_under_invalid_second_edge() {
     );
     // The old (tag,id) marker skipped `shared` on that second edge and returned
     // success. The contextual marker reaches the actual walker depth rejection.
+    let error = super::super::store::durable_set::copy_authenticated_closure(
+        &fixture.pdir,
+        &signed_checkpoint(&body),
+        &public(5),
+        &source,
+        1,
+        64 * 1024 * 1024,
+        true,
+    )
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("healthy copy index depth"),
+        "{error}"
+    );
 }
 
 #[cfg(unix)]
@@ -189,7 +203,7 @@ fn healthy_copy_walker_reuses_entry_intrinsics_but_rejects_wrong_second_history_
         )
         .unwrap()
     };
-    let walk = |body: &HotBody| {
+    let walk = |body: &HotBody, copy| {
         super::super::store::durable_set::copy_authenticated_closure(
             &fixture.pdir,
             &signed_checkpoint(body),
@@ -197,10 +211,10 @@ fn healthy_copy_walker_reuses_entry_intrinsics_but_rejects_wrong_second_history_
             &source,
             1,
             64 * 1024 * 1024,
-            false,
+            copy,
         )
     };
-    walk(&body).unwrap();
+    walk(&body, false).unwrap();
     // One genuine Qualified entry is reached from both signed history and index.
     assert_eq!(
         super::super::store::durable_set::entry_validation_counts(),
@@ -241,7 +255,20 @@ fn healthy_copy_walker_reuses_entry_intrinsics_but_rejects_wrong_second_history_
     // parser, never a production authority/floor/activation token. DFS first
     // validates the real ancestor entry, then encounters the same bytes under
     // this root's wrong head. The compact cache must reject that second context.
-    let error = walk(&body).unwrap_err();
+    let error = walk(&body, false).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("qualified material/history binding"),
+        "{error}"
+    );
+    assert_eq!(
+        super::super::store::durable_set::entry_validation_counts(),
+        (1, 1)
+    );
+    // Content memo hits during a copy also need the second history edge's
+    // original head binding, even though the Entry bytes are unchanged.
+    let error = walk(&body, true).unwrap_err();
     assert!(
         error
             .to_string()

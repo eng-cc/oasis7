@@ -347,6 +347,15 @@ writer 不能直接读出 signer key、替换最终存储文件或绕过接收�
 恢复写入必须先恢复完整双端条件。独立域和实际 fsync 能力另须部署事实证明，不能由签名
 或两个目录推导。首次正式开放及单故障域演练仍由现有运行验收闸门控制。
 
+<a id="formal-replica-staging-content-reuse"></a>
+#### 健康 Replica 归档安装中的内容复用
+
+健康集合安装仍先验证 archive transfer 的签名 checkpoint、seal 和新绑定，再遍历完整认证闭包。copy walk 内的共享索引路径及已验证 Result envelope 的 business delta node writes 可以重复引用相同内容；每次引用不必再次进行远端签名 chunk 传输。
+
+一次 `copy_authenticated_closure(copy=true)` 内可使用最多 16 MiB、4096 个对象的有界内容缓存，所有接纳字节先核对原 CAS digest；仅回填当前已验证材料内的 inline writes 或本次源读取的正确字节。16 MiB 约束保留对象的 bytes 权重，key/map、解码及返回值等临时分配不在此限内，不代表总 RSS 上限。缓存只提供相同 digest 的 bytes，每条引用边的 schema、深度、head/root/上下文、proof 和整体闭包预算仍独立验证。容量不足时按原源读取路径继续，不放宽预算、不缓存 absence 或任何授权/资格判定。缓存每次 walk 新建，失败、重启及跨 manifest 不复用；预复制的 raw seed 不成为缓存接纳依据或权威捷径。
+
+provider 的 `copy=false` 独立本地 descriptor 读回不使用该内容缓存；目的端原文件校验、fsync、绑定与持久安装顺序保持。实际读取或接纳的源 bytes 与 digest 不符、缺边、错误 manifest/authority 及目的端已有对象损坏继续拒绝；已认证 inline Result 中完整的相同 digest bytes 可以用于重建目的逻辑对象，但不能据此声称原源副本完整或可用。分别记录 transfer 验证、closure copy、binding/persist 的单调耗时及源对象读取次数/字节、缓存命中/未命中；源对象读取数不冒充 chunk RPC 帧数，不记录 payload 或凭据。回归使用真实闭包与计数源证明重复读取减少，并验证容量退化、坏 hash、每条边校验、跨 operation 隔离和独立 provider 篡改拒绝。
+
 #### 普通 WorldService / client 消费
 
 目标正式服务固定使用 `WorldService contract_version=2`；v1 原 wire/signature 和工程策略保持

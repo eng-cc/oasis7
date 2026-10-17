@@ -5,6 +5,8 @@ use std::{
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
 };
+#[path = "startup_diagnostics.rs"]
+mod startup_diagnostics;
 pub(crate) struct ManagedEndpointChild {
     child: Child,
     config: PathBuf,
@@ -31,6 +33,7 @@ impl ManagedEndpointChild {
         let mut child = Command::new(binary)
             .arg("--config")
             .arg(config)
+            .env("OASIS7_HEALTHY_NATIVE_TRACE", "1")
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_file))
             .spawn()
@@ -76,7 +79,9 @@ impl ManagedEndpointChild {
             "formal_endpoint_awaiting_management=",
             expected,
             scenario.expires_at,
-        )
+        )?;
+        startup_diagnostics::report(&self.stderr, self.child.id());
+        Ok(())
     }
     pub(crate) fn wait_ordinary(
         &mut self,
