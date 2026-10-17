@@ -1,5 +1,6 @@
 //! Derived live-task read dependencies. This scope is a GC cache, never authority.
 use super::*;
+use oasis7::world_service::wire::{SchedulerOperationV1, WorldServicePayloadV1};
 use oasis7::world_service::{CanonicalIntentResultV1, correlation, game_task};
 use serde::Deserialize;
 use std::collections::BTreeMap;
