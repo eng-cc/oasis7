@@ -35,7 +35,7 @@ native 与 Web 复用同一 launcher UI 与控制面语义；Web 经既有 `/api
 
 ## 查询一致性要求
 
-以下为现有查询能力需要满足的目标合同；实现及各项回归由 [Issue #4450](https://github.com/eng-cc/oasis7/issues/4450) 分别承接。采纳本节不表示 H1～H4 已实现或验收通过。本文拥有可观察结果，后台状态合并、锁序和批次同步由后端专业设计定义。
+以下为现有查询能力需要满足的目标合同；[Issue #4450](https://github.com/eng-cc/oasis7/issues/4450#issuecomment-6126251006) 已按文档承接决定以 `not_planned` 停止独立跟踪，仅保留历史来源；H1～H4 的原要求、实现缺口与各项行为验收继续由规范承接，实际交付记录在对应实现 PR。采纳本节不表示 H1～H4 已实现或验收通过。本文拥有可观察结果，后台状态合并、锁序和批次同步由后端专业设计定义。
 
 <a id="explorer-query-lifecycle"></a>
 ### 已确认事实与观察超时

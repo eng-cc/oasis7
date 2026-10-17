@@ -68,7 +68,9 @@ device_config_path = "/absolute/private/device.json"
 
 诊断 `input_limit` 先核对历史模式与实际编码大小。SessionModelProvider 自持结构化历史，同一 Context 的后续输入不得再次嵌入累计 transcript，工具结果仅沿原 supplier call ID 交付一次；新 Context 首轮仍需完整当前输入。完整候选请求的无副作用预检先于持久物理调用预留，纯本地拒绝不增加物理请求数或 unknown usage。已预留后的竞态/结果不明仍保守计入，不能据此退款。不得记录完整 prompt/Key 来排障。
 
-必要输入真实超限时保持明确阻塞，保留 Context、运行身份、工具结果及原 operation；不自动 retry、新 slot、清空必要历史、扩大限额或重置预算。先查未知原件，独立确认 Stop；重启不能作为绕过容量或预算的恢复方式。修复重复编码后仍须重验当前授权与 fence，普通离线多轮通过不代签真实模型续玩。
+目标恢复合同：必要输入真实超限时保持明确阻塞，保留 Context、运行身份、工具结果及原 operation；不自动 retry、新 slot、清空必要历史、扩大限额或重置预算。先查未知原件，独立确认 Stop；重启不能作为绕过容量或预算的恢复方式。修复重复编码后仍须重验当前授权与 fence，普通离线多轮通过不代签真实模型续玩。
+
+当前实现边界：`SessionModelProvider` 的结构化 conversation 只保存在该适配器实例内；`NativeTaskRunner::run(self)` 消耗 runner/provider，Launcher 后续重新开始会构造新的 provider（`conversation: None`）。因此同一存活适配器的 input-limit/preflight 测试只证明实例内历史保持，不证明 runner 退出、Stop/重新开始后所需 conversation/工具历史可恢复。跨此生命周期的必要历史恢复仍有实现与验证缺口，不能把重新开始当成容量恢复办法或宣称上述目标已全量满足。原世界 operation 的持久恢复与稳定 run 预算是独立合同，仍按下段执行；此缺口不意味着预算可绕过，也不允许暴露私有历史。
 
 内置工业循环使用有限成功效果数和持久物理调用预算；同一设备和完整任务 fence 的稳定 run 身份用于恢复，重启不追加预算。未知原件先查原请求；只有 SDK 校验的 canonical `stale_base` 终结反馈允许新 slot 重新读取上下文和决策，不替换或重签原件。
 

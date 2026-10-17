@@ -30,7 +30,7 @@
 ### 3.2 工程治理执行链路
 - 规范定义：`doc/engineering/doc-governance/*`、`doc/engineering/rust-governance/*`、`doc/engineering/governance/*`
 - 项目追踪：按需使用 Issue/Project；结果查看 PR、实际 CI 与评审记录（Issue 按需）
-- 过程记录：PR、实际 CI 与评审记录（Issue 按需）；历史 `.pm/tasks/*` 记录已归档到 `.pm/github-project-sync/task-archive.jsonl`
+- 过程记录：PR、实际 CI 与评审记录（Issue 按需）；历史 `.pm/tasks/*` 记录见[固定版本归档](https://github.com/nil-studio/oasis7/blob/4d8c742a9f5eca75c02a4156678d71ccc7e87d53/.pm/github-project-sync/task-archive.jsonl)，不是当前任务入口
 - 静态校验：`scripts/doc-governance-check.sh`
 - ROUND 台账：Git history
 
