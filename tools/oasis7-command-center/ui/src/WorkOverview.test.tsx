@@ -74,7 +74,7 @@ it('restores focus to the current source row after a background projection repla
 
 it('reads only explicitly selected PR checks and separates unread from successful empty CI', async () => {
   const before=projection(); before.items[0].checks=[];
-  const after=projection(); after.items[0].checks=[]; after.items[0].checksSource={state:'partial',observedAt:'50',coverage:'REST first pages only',error:null};
+  const after=projection(); after.items[0].checks=[]; after.items[0].checksSource={schemaVersion:1,state:'partial',observedAt:'50',coverage:'REST first pages only',error:null};
   vi.mocked(bridge.workProjection).mockResolvedValueOnce(before).mockResolvedValueOnce(after);
   vi.mocked(bridge.refreshWorkChecks).mockResolvedValue({} as never);
   render(() => <WorkOverview snapshot={snapshot()} view="direction" sourceGeneration={0} onExecution={() => {}}/>);
@@ -85,4 +85,13 @@ it('reads only explicitly selected PR checks and separates unread from successfu
   await screen.findByText(/已读取的 CI 页面为空/);
   expect(bridge.refreshWorkChecks).toHaveBeenCalledExactlyOnceWith('1',null);
   expect(screen.getByText('REST first pages only')).toBeInTheDocument();
+});
+
+it('never labels a REST associated commit as the actual tested checkout', async () => {
+  const value=projection();value.items[0].checks[0].sourceOid='associated-sha';
+  vi.mocked(bridge.workProjection).mockResolvedValue(value);
+  render(() => <WorkOverview snapshot={snapshot()} view="direction" sourceGeneration={0} onExecution={() => {}}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'修复本地工具'}));
+  expect(screen.getByText(/实际测试版本 未知/)).toBeInTheDocument();
+  expect(screen.getByText(/GitHub 关联提交 associated-sha/)).toBeInTheDocument();
 });

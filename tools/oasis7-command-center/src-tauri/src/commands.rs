@@ -477,6 +477,7 @@ pub async fn refresh_work_checks(
             Ok((checks, coverage)) => {
                 target.checks = checks;
                 oasis7_command_center_core::github::PullChecksSource {
+                    schema_version: 1,
                     state: if target.checks.is_empty() {
                         "empty"
                     } else {
@@ -489,6 +490,7 @@ pub async fn refresh_work_checks(
                 }
             }
             Err(error) => oasis7_command_center_core::github::PullChecksSource {
+                schema_version: 1,
                 state: "error".into(),
                 observed_at: target
                     .checks_source

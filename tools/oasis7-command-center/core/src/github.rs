@@ -42,12 +42,17 @@ pub struct Check {
     pub name: String,
     pub state: String,
     pub tested_oid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source_oid: Option<String>,
     pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PullChecksSource {
+    #[serde(default)]
+    pub schema_version: u32,
     pub state: String,
     pub observed_at: Option<String>,
     pub coverage: String,
@@ -87,6 +92,16 @@ impl GitHubClient {
         self.current.clone()
     }
     pub fn restore(mut snapshot: GitHubSnapshot) -> Self {
+        for pull in &mut snapshot.pulls {
+            if pull
+                .checks_source
+                .as_ref()
+                .is_some_and(|source| source.schema_version != 1)
+            {
+                pull.checks.clear();
+                pull.checks_source = None;
+            }
+        }
         if snapshot.observed_at.is_some() {
             snapshot.state = "stale".into();
         }
@@ -115,7 +130,10 @@ impl GitHubClient {
                         if let Some(previous) = self.current.pulls.iter().find(|old| {
                             old.id == pull.id
                                 && old.head_oid == pull.head_oid
-                                && old.checks_source.is_some()
+                                && old
+                                    .checks_source
+                                    .as_ref()
+                                    .is_some_and(|source| source.schema_version == 1)
                         }) {
                             pull.checks = previous.checks.clone();
                             pull.checks_source = previous.checks_source.clone();
@@ -291,7 +309,10 @@ fn decode_checks(runs: &Value, statuses: &Value, head: &str) -> Result<(Vec<Chec
                 .or(check["status"].as_str())
                 .unwrap_or("UNKNOWN")
                 .to_ascii_uppercase(),
-            tested_oid: tested.map(str::to_owned),
+            // REST associates this check/status with a commit; it does not
+            // prove a workflow's checkout SHA or tested merge tree.
+            tested_oid: None,
+            source_oid: tested.map(str::to_owned),
             url: check["html_url"].as_str().map(str::to_owned),
         });
     }
@@ -303,12 +324,15 @@ fn decode_checks(runs: &Value, statuses: &Value, head: &str) -> Result<(Vec<Chec
         checks.push(Check {
             name: field(status, "context")?,
             state: field(status, "state")?.to_ascii_uppercase(),
-            tested_oid: tested.map(str::to_owned),
+            // REST associates this check/status with a commit; it does not
+            // prove a workflow's checkout SHA or tested merge tree.
+            tested_oid: None,
+            source_oid: tested.map(str::to_owned),
             url: status["target_url"].as_str().map(str::to_owned),
         });
     }
     let coverage = format!(
-        "REST check-runs 第 1 页 {}/{} 项；commit statuses 第 1 页 {}/{} 项；每来源最多 100 项，未读后续页及 required 定义，不能据此认定全部检查通过。",
+        "REST check-runs 第 1 页 {}/{} 项；commit statuses 第 1 页 {}/{} 项；每来源最多 100 项，未读后续页及 required 定义；关联提交不证明实际 checkout 的测试对象，不能据此认定全部检查通过。",
         run_list.len(),
         runs["total_count"],
         status_list.len(),

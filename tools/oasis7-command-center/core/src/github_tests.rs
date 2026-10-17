@@ -44,6 +44,7 @@ esac
     assert!(!calls.contains("graphql"));
     assert!(!calls.contains("check-runs"));
     client.current.pulls[0].checks_source = Some(PullChecksSource {
+        schema_version: 1,
         state: "partial".into(),
         observed_at: Some("old-ci-time".into()),
         coverage: "first page".into(),
@@ -52,7 +53,8 @@ esac
     client.current.pulls[0].checks = vec![Check {
         name: "test".into(),
         state: "SUCCESS".into(),
-        tested_oid: Some("abc".into()),
+        tested_oid: None,
+        source_oid: Some("abc".into()),
         url: None,
     }];
     let same = client.refresh(tmp.path(), program.to_str());
@@ -88,11 +90,12 @@ fn rest_pr_merge_fact_and_unknown_reviews_are_independent() {
     assert!(decode_pulls(&json!([])).unwrap().is_empty());
 }
 #[test]
-fn actual_tested_sha_missing_sha_empty_and_truncated_pages_stay_distinct() {
+fn associated_sha_does_not_prove_checkout_and_pages_stay_distinct() {
     let runs = json!({"total_count":101,"check_runs":[{"name":"test","status":"completed","conclusion":"success","head_sha":"abc"},{"name":"legacy","status":"in_progress","conclusion":null}]});
     let statuses = json!({"sha":"abc","total_count":0,"statuses":[]});
     let (checks, coverage) = decode_checks(&runs, &statuses, "abc").unwrap();
-    assert_eq!(checks[0].tested_oid.as_deref(), Some("abc"));
+    assert!(checks[0].tested_oid.is_none());
+    assert_eq!(checks[0].source_oid.as_deref(), Some("abc"));
     assert!(checks[1].tested_oid.is_none());
     assert!(coverage.contains("2/101"));
     assert_eq!(checks[1].state, "IN_PROGRESS");
@@ -154,4 +157,12 @@ esac
     let calls = std::fs::read_to_string(calls).unwrap();
     assert_eq!(calls.lines().count(), 2);
     assert!(!calls.contains("graphql"));
+}
+
+#[test]
+fn unsupported_ci_cache_metadata_cannot_relabel_associated_sha_as_tested() {
+    let snapshot: GitHubSnapshot=serde_json::from_value(json!({"state":"partial","repository":"o/r","account":"reader","observedAt":"20","lastAttempt":"20","coverage":"old","error":null,"pulls":[{"id":"1","title":"old","url":"https://github.com/o/r/pull/1","state":"OPEN","headOid":"abc","reviewDecision":null,"checks":[{"name":"old","state":"SUCCESS","testedOid":"abc","url":null}],"checksSource":{"state":"partial","observedAt":"20","coverage":"old","error":null}}]})).unwrap();
+    let restored = GitHubClient::restore(snapshot).snapshot();
+    assert!(restored.pulls[0].checks.is_empty());
+    assert!(restored.pulls[0].checks_source.is_none());
 }
