@@ -1219,6 +1219,7 @@ dependencies = [
  "oasis7_node",
  "oasis7_observability",
  "oasis7_proto",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
  "oasis7_wasm_materializer",
@@ -1450,6 +1451,20 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+]
+
+[[package]]
+name = "oasis7_simulator"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "oasis7_agent_api",
+ "oasis7_wasm_abi",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1926,6 +1941,7 @@ name = "scenario_test_runner"
 version = "0.1.0"
 dependencies = [
  "oasis7",
+ "oasis7_simulator",
  "serde",
  "serde_json",
  "serde_yaml",

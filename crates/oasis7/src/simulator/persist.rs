@@ -6,15 +6,15 @@ use std::fs;
 use std::path::Path;
 
 use super::archive::WorldEvent;
-use super::kernel::{ChunkRuntimeConfig, MicroDepotPlayerFacilitySnapshot};
-use super::types::{
-    ActionEnvelope, ActionId, CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION,
-    WorldEventId, WorldTime,
-};
-use super::world_model::{WorldConfig, WorldModel};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::Snapshot as RuntimeSnapshot;
+use oasis7_simulator::{
+    ActionEnvelope, ActionId, CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION,
+    WorldEventId, WorldTime,
+};
+use oasis7_simulator::{ChunkRuntimeConfig, MicroDepotPlayerFacilitySnapshot};
+use oasis7_simulator::{WorldConfig, WorldModel};
 use oasis7_wasm_abi::MaterialStack;
 #[cfg(target_arch = "wasm32")]
 use serde_json::Value as RuntimeSnapshot;
@@ -1007,7 +1007,7 @@ impl Default for WorldJournal {
 // Errors
 // ============================================================================
 
-pub use super::persist_error::PersistError;
+pub use oasis7_simulator::PersistError;
 
 // ============================================================================
 // Helper functions

@@ -1,4 +1,4 @@
-use oasis7::simulator::{
+use oasis7_simulator::{
     WorldConfig, WorldInitConfig, WorldInitReport, WorldModel, WorldScenario, build_world_model,
 };
 use serde::Deserialize;

@@ -770,7 +770,7 @@ fn owner_signed_memory_correction_applies_to_matching_provider_receipt_and_reloa
                     crate::simulator::DecisionResponse {
                         decision: crate::simulator::ProviderDecision::Act {
                             action_ref: "move_agent".to_string(),
-                            action: crate::simulator::Action::MoveAgent {
+                            action: oasis7_simulator::Action::MoveAgent {
                                 agent_id: decoded
                                     .base_decision_request
                                     .observation

@@ -939,7 +939,7 @@ fn runtime_provider_backed_wake_resumes_with_fresh_request_and_origin_lineage() 
                 } else {
                     crate::simulator::ProviderDecision::Act {
                         action_ref: "move_agent".to_string(),
-                        action: crate::simulator::Action::MoveAgent {
+                        action: oasis7_simulator::Action::MoveAgent {
                             agent_id: decoded.base_decision_request.observation.agent_id.clone(),
                             to: "runtime:0:0:0".to_string(),
                         },

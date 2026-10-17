@@ -5,7 +5,8 @@ use crate::runtime::{
     RuntimeCognitionResponseArtifactV1, RuntimeFeedbackProjectionV1, World as RuntimeWorld,
     classify_cognition_commit_error,
 };
-use crate::simulator::{Action as SimulatorAction, h_v1};
+use crate::simulator::h_v1;
+use oasis7_simulator::Action as SimulatorAction;
 
 impl ViewerRuntimeLiveServer {
     /// Retry sidecar finalization from the committed Runtime receipt.

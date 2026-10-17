@@ -5,7 +5,9 @@ use oasis7::geometry::GeoPos;
 use oasis7::runtime::{
     Action as RuntimeAction, ChainResourceDerivationContext, Journal, World, WorldError, blake3_hex,
 };
-use oasis7::simulator::{ResourceKind, WorldConfig, WorldKernel, WorldModel};
+use oasis7::simulator::WorldKernel;
+use oasis7_agent_api::world_action::ResourceKind;
+use oasis7_simulator::{WorldConfig, WorldModel};
 
 struct CliOptions {
     source_world_dir: Option<PathBuf>,

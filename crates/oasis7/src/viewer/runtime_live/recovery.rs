@@ -5,10 +5,10 @@ use sha2::{Digest, Sha256};
 
 #[cfg(test)]
 pub(super) use super::recovery_persistence::RuntimeRecoveryFaultInjection;
-use crate::simulator::WorldEventKind;
 use crate::viewer::{
     claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
 };
+use oasis7_simulator::WorldEventKind;
 
 #[path = "recovery/session_mutations.rs"]
 mod session_mutations;

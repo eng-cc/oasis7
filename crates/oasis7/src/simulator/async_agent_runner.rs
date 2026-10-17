@@ -43,12 +43,12 @@ use super::decision_provider::{
     ActionCatalogEntry, MemoryWriteIntent, MockDecisionProvider, ProviderBackedAgentBehavior,
 };
 
-use super::types::WorldTime;
 use oasis7_agent_harness::{
     AsyncAgentRunner as HarnessRunner, AsyncAgentRunnerError as HarnessRunnerError,
     AsyncAgentTurnOutcome as HarnessTurnOutcome, AsyncTurnId as HarnessTurnId,
     CompatibilityTurnRequest as HarnessCompatibilityTurnRequest, RuntimeAuthority,
 };
+use oasis7_simulator::WorldTime;
 
 pub(crate) struct CommittedFeedbackMemoryInput<'a> {
     pub(crate) agent: &'a str,
@@ -254,7 +254,7 @@ fn map_harness_error(error: HarnessRunnerError) -> AsyncAgentRunnerError {
 
 fn production_outcome_from_harness(
     turn_id: AsyncTurnId,
-    completion: HarnessTurnOutcome<super::types::Action, AgentQuery>,
+    completion: HarnessTurnOutcome<oasis7_simulator::Action, AgentQuery>,
     result: Option<BehaviorTurnResult>,
     metadata: TurnMetadata,
     cognition_lease: Option<CognitionLeaseV1>,
@@ -327,7 +327,7 @@ struct RuntimeFeedbackReplayMetadata {
 }
 
 type SharedHarnessRunner = HarnessRunner<
-    super::types::Action,
+    oasis7_simulator::Action,
     AgentQuery,
     Observation,
     BehaviorTurnResult,

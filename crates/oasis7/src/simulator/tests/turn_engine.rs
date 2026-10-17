@@ -11,9 +11,8 @@ use crate::runtime::{
     COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION, COGNITION_RESOURCE_VERSION_V1,
     CognitionLeaseQuoteV1, CognitionLeaseRequestV1, World,
 };
-use crate::simulator::{
-    ContinuousAgentRequestContextV1, ContinuousAgentTurnContextV1, Observation,
-};
+use crate::simulator::{ContinuousAgentRequestContextV1, ContinuousAgentTurnContextV1};
+use oasis7_simulator::Observation;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
@@ -24,7 +23,7 @@ impl AgentBehavior for WaitBehavior {
         "agent-1"
     }
 
-    fn decide(&mut self, _observation: &crate::simulator::Observation) -> AgentDecision {
+    fn decide(&mut self, _observation: &oasis7_simulator::Observation) -> AgentDecision {
         AgentDecision::Wait
     }
 }

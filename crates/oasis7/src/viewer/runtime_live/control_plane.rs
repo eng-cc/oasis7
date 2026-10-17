@@ -19,7 +19,7 @@ use crate::runtime::{
     AgentIntentAuthorityContext, AgentIntentProviderFailureDisposition, AgentIntentV2,
     World as RuntimeWorld,
 };
-use crate::simulator::{AgentPromptProfile, PromptUpdateOperation, WorldEventKind};
+use oasis7_simulator::{AgentPromptProfile, PromptUpdateOperation, WorldEventKind};
 use sha2::{Digest, Sha256};
 
 #[path = "control_plane/agent_chat.rs"]

@@ -5,7 +5,8 @@ use crate::runtime::{
 };
 #[cfg(target_arch = "wasm32")]
 use crate::simulator::ActionResult;
-use crate::simulator::{Action as SimulatorAction, FeedbackEnvelopeV1};
+use crate::simulator::FeedbackEnvelopeV1;
+use oasis7_simulator::Action as SimulatorAction;
 use serde_json::Value as JsonValue;
 
 #[cfg(test)]

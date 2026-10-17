@@ -1,6 +1,6 @@
 //! Historical direct WorldKernel codec. Host extensions never enter native kernel state.
-use super::super::kernel::KernelState;
 use super::*;
+use oasis7_simulator::KernelState;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::VecDeque;
 

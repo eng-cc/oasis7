@@ -1,7 +1,8 @@
 use super::*;
 use crate::GeoPos;
 use crate::runtime::{Action, World, WorldState};
-use crate::simulator::{WorldEventKind, WorldKernel};
+use crate::simulator::WorldKernel;
+use oasis7_simulator::WorldEventKind;
 
 fn runtime_fixture() -> World {
     let mut world = World::new_with_state(WorldState::default());
@@ -104,7 +105,7 @@ fn native_replay_keeps_original_host_event_bytes_on_archive_rewrite() {
     let world = runtime_fixture();
     let snapshot = WorldKernel::new().snapshot();
     let journal = crate::simulator::WorldJournal {
-        version: crate::simulator::JOURNAL_VERSION,
+        version: oasis7_simulator::JOURNAL_VERSION,
         events: vec![WorldEvent {
             id: 0,
             time: 9,
@@ -148,7 +149,7 @@ fn host_archive_extensions_survive_pending_actions_and_pre_action_hooks() {
     snapshot.latest_chain_resource_delta.commit_block_hash = Some("original-block".into());
     let expected_extensions = snapshot.clone().into_kernel_parts().1;
     let journal = crate::simulator::WorldJournal {
-        version: crate::simulator::JOURNAL_VERSION,
+        version: oasis7_simulator::JOURNAL_VERSION,
         events: vec![WorldEvent {
             id: 0,
             time: 9,
@@ -166,9 +167,9 @@ fn host_archive_extensions_survive_pending_actions_and_pre_action_hooks() {
     kernel.add_pre_action_rule_hook(move |id, _, view: &WorldKernel| {
         assert_eq!(view.journal()[0].runtime_event, original_runtime);
         observed.store(true, std::sync::atomic::Ordering::SeqCst);
-        crate::simulator::KernelRuleDecision::allow(id)
+        oasis7_simulator::KernelRuleDecision::allow(id)
     });
-    kernel.submit_action(crate::simulator::Action::RegisterLocation {
+    kernel.submit_action(oasis7_simulator::Action::RegisterLocation {
         location_id: "host-boundary".into(),
         name: "Host boundary".into(),
         pos: GeoPos::new(0, 0, 0),

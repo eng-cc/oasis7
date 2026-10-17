@@ -7,7 +7,8 @@
 //! synthetic module installation hook in release builds.
 
 use crate::runtime::{World as RuntimeWorld, WorldEventBody as RuntimeWorldEventBody};
-use crate::simulator::{ModuleVisualAnchor, ModuleVisualEntity, WorldModel};
+use oasis7_agent_api::world_entity::{ModuleVisualAnchor, ModuleVisualEntity};
+use oasis7_simulator::WorldModel;
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallRequest, ModuleEmit, ModuleOutput, ModuleSandbox,
 };

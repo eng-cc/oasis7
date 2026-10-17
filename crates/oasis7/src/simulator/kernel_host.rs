@@ -2,15 +2,13 @@
 mod codec;
 mod forwarding;
 use super::archive::{WorldEvent, WorldSnapshotExtensions};
-use super::kernel::WorldKernel as NativeKernel;
-use super::kernel::*;
-use super::memory_entry::LongTermMemoryEntry;
 use super::persist::{PersistError, WorldJournal, WorldSnapshot};
-use super::power::ConsumeReason;
-use super::types::*;
-use super::world_model::*;
 use super::{KernelJournal, KernelSnapshot};
 use crate::chain_resource_schema::ChainResourceDerivationContext;
+use oasis7_simulator::ConsumeReason;
+use oasis7_simulator::LongTermMemoryEntry;
+use oasis7_simulator::WorldKernel as NativeKernel;
+use oasis7_simulator::*;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -75,10 +73,21 @@ impl WorldKernel {
             chunk_runtime,
         ))
     }
-    pub(super) fn record_event(&mut self, kind: WorldEventKind) -> WorldEvent {
-        let event = self.kernel.record_event(kind);
+    pub(super) fn record_effect_intent(
+        &mut self,
+        agent_id: AgentId,
+        intent: super::LlmEffectIntentTrace,
+    ) {
+        self.kernel.record_effect_intent(agent_id, intent);
         self.sync_journal();
-        WorldEvent::from_kernel_parts(event, None)
+    }
+    pub(super) fn record_effect_receipt(
+        &mut self,
+        agent_id: AgentId,
+        receipt: super::LlmEffectReceiptTrace,
+    ) {
+        self.kernel.record_effect_receipt(agent_id, receipt);
+        self.sync_journal();
     }
     fn sync_journal(&mut self) {
         let native = self.kernel.journal();
@@ -93,10 +102,8 @@ impl WorldKernel {
                 .map(|event| WorldEvent::from_kernel_parts(event, None)),
         );
     }
-    pub(crate) fn micro_depot_player_facility_snapshots_from_model(
-        model: &WorldModel,
-    ) -> Vec<MicroDepotPlayerFacilitySnapshot> {
-        NativeKernel::micro_depot_player_facility_snapshots_from_model(model)
+    pub(crate) fn into_model(self) -> WorldModel {
+        self.kernel.into_state().model
     }
     pub fn journal(&self) -> &[WorldEvent] {
         &self.journal
@@ -124,19 +131,16 @@ impl WorldKernel {
         );
         if let Some((native, extensions)) = &self.archive_origin {
             let context = ChainResourceDerivationContext::simulator_default(native.time);
-            let prefix = &self.journal[..native.journal_len];
-            let derived_manifest = super::chain_resource::from_simulator_state(
+            let prefix = &self.kernel.journal()[..native.journal_len];
+            let derived_manifest = oasis7_simulator::from_simulator_state(
                 context,
                 &native.model,
                 &native.config,
                 &native.chunk_runtime,
                 prefix,
             );
-            let derived_delta = super::chain_resource::latest_from_simulator_journal(
-                context,
-                &derived_manifest,
-                prefix,
-            );
+            let derived_delta =
+                oasis7_simulator::latest_from_simulator_journal(context, &derived_manifest, prefix);
             // Host-supplied chain evidence describes its original committed cut.
             // Only the explicit context API may replace that evidence. Ordinary
             // pure-kernel archives continue refreshing their default derivation.
@@ -155,17 +159,17 @@ impl WorldKernel {
         context: ChainResourceDerivationContext<'_>,
     ) -> WorldSnapshot {
         let state = self.kernel_snapshot();
-        let chain_resource_manifest = super::chain_resource::from_simulator_state(
+        let chain_resource_manifest = oasis7_simulator::from_simulator_state(
             context,
             &state.model,
             &state.config,
             &state.chunk_runtime,
-            &self.journal,
+            self.kernel.journal(),
         );
-        let latest_chain_resource_delta = super::chain_resource::latest_from_simulator_journal(
+        let latest_chain_resource_delta = oasis7_simulator::latest_from_simulator_journal(
             context,
             &chain_resource_manifest,
-            &self.journal,
+            self.kernel.journal(),
         );
         WorldSnapshot::from_kernel_parts(
             state,
@@ -275,8 +279,8 @@ impl WorldKernel {
 }
 pub fn initialize_kernel(
     config: WorldConfig,
-    init: super::init::WorldInitConfig,
-) -> Result<(WorldKernel, super::init::WorldInitReport), super::init::WorldInitError> {
-    super::init::initialize_kernel(config, init)
+    init: oasis7_simulator::WorldInitConfig,
+) -> Result<(WorldKernel, oasis7_simulator::WorldInitReport), oasis7_simulator::WorldInitError> {
+    oasis7_simulator::initialize_kernel(config, init)
         .map(|(kernel, report)| (WorldKernel::from_native(kernel), report))
 }

@@ -9,8 +9,8 @@ use super::continuous_agent_harness::{
     ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
 };
 use super::decision_provider::MemoryWriteIntent;
-use super::kernel::{Observation, RejectReason, WorldEventKind};
-use super::types::{Action, ActionId, WorldTime};
+use oasis7_simulator::{Action, ActionId, WorldTime};
+use oasis7_simulator::{Observation, RejectReason, WorldEventKind};
 
 // ============================================================================
 // Agent Interface (observe → decide → act)
@@ -126,7 +126,7 @@ pub enum AgentDecision {
     WaitTicks(u64),
 }
 
-pub use super::agent_query::{AgentQuery, AgentQueryResult, MicroDepotQuoteRequest};
+pub use oasis7_simulator::{AgentQuery, AgentQueryResult, MicroDepotQuoteRequest};
 
 impl AgentDecision {
     /// Returns true if the agent decided to act.
@@ -167,7 +167,7 @@ pub struct AgentDecisionTrace {
     pub llm_chat_messages: Vec<LlmChatMessageTrace>,
 }
 
-pub use super::effect_trace::{LlmEffectIntentTrace, LlmEffectReceiptTrace};
+pub use oasis7_simulator::{LlmEffectIntentTrace, LlmEffectReceiptTrace};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LlmStepTrace {

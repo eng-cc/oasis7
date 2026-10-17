@@ -23,7 +23,7 @@ use oasis7::runtime::{
     MainTokenAccountBalance, MainTokenConfig, MainTokenSupplyState, World, WorldState,
     main_token_account_id_from_node_public_key,
 };
-use oasis7::simulator::ResourceKind;
+use oasis7_agent_api::world_action::ResourceKind;
 use oasis7_node::{
     NodeConfig, NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook, NodeRole,
     NodeRuntime,

@@ -9,9 +9,9 @@ use std::time::{Duration, Instant};
 use super::agent::{
     ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
 };
-use super::kernel::WorldEventKind;
 use super::runtime_perf::{RuntimePerfCollector, RuntimePerfSnapshot};
-use super::types::{Action, WorldTime};
+use oasis7_simulator::WorldEventKind;
+use oasis7_simulator::{Action, WorldTime};
 
 // ============================================================================
 // Quota and Rate Limiting
@@ -823,16 +823,10 @@ impl<B: AgentBehavior> AgentRunner<B> {
             return;
         };
         for intent in &trace.llm_effect_intents {
-            kernel.record_event(WorldEventKind::LlmEffectQueued {
-                agent_id: trace.agent_id.clone(),
-                intent: intent.clone(),
-            });
+            kernel.record_effect_intent(trace.agent_id.clone(), intent.clone());
         }
         for receipt in &trace.llm_effect_receipts {
-            kernel.record_event(WorldEventKind::LlmReceiptAppended {
-                agent_id: trace.agent_id.clone(),
-                receipt: receipt.clone(),
-            });
+            kernel.record_effect_receipt(trace.agent_id.clone(), receipt.clone());
         }
     }
 

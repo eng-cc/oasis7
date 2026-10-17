@@ -1,6 +1,6 @@
 //! Explicit historical positions from the already-authorized typed event stream.
 use crate::runtime::{DomainEvent, ModuleVisualMutation, WorldEvent, WorldEventBody};
-use crate::simulator::ModuleVisualAnchor;
+use oasis7_agent_api::world_entity::ModuleVisualAnchor;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 

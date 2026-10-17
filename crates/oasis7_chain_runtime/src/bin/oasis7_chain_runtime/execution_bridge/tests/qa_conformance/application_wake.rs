@@ -1,10 +1,10 @@
 //! Real provider Wait checkpoint, canonical selection, ResumeWake and Act closure.
 use super::*;
-use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
     ViewerLiveDecisionMode, ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig,
 };
 use oasis7::world_service::client::WorldServiceAgentSignerConfig;
+use oasis7_simulator::WorldScenario;
 pub(super) fn required_child_marker(wake: bool) -> &'static str {
     if wake {
         "PRE2_APPLICATION_OS_DENIAL_AND_GENUINE_WAKE_PASSED"
@@ -225,7 +225,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
             .join("wait-wake-lineage.json"),
     );
     let mut server = ViewerRuntimeLiveServer::new(config).unwrap();
-    let action = oasis7::simulator::Action::MoveAgent {
+    let action = oasis7_simulator::Action::MoveAgent {
         agent_id: "agent-a".into(),
         to: "runtime:2:2:0".into(),
     };

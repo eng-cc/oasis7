@@ -480,12 +480,12 @@ mod tests {
 
     #[test]
     fn module_visual_emit_events_project_authoritative_ids_for_upsert_and_remove() {
-        let entity = crate::simulator::ModuleVisualEntity {
+        let entity = oasis7_agent_api::world_entity::ModuleVisualEntity {
             entity_id: "module-relay".to_string(),
             module_id: "fixture.visual-module".to_string(),
             kind: "relay".to_string(),
             label: Some("Relay".to_string()),
-            anchor: crate::simulator::ModuleVisualAnchor::Absolute {
+            anchor: oasis7_agent_api::world_entity::ModuleVisualAnchor::Absolute {
                 pos: crate::geometry::GeoPos::new(100, 200, 0),
             },
         };
@@ -534,12 +534,12 @@ mod tests {
 
     #[test]
     fn module_visual_events_do_not_require_major_event_visibility_authority() {
-        let entity = crate::simulator::ModuleVisualEntity {
+        let entity = oasis7_agent_api::world_entity::ModuleVisualEntity {
             entity_id: "runtime-entity".to_string(),
             module_id: "fixture.visual-module".to_string(),
             kind: "runtime_driver".to_string(),
             label: None,
-            anchor: crate::simulator::ModuleVisualAnchor::Absolute {
+            anchor: oasis7_agent_api::world_entity::ModuleVisualAnchor::Absolute {
                 pos: crate::geometry::GeoPos::new(1, 2, 3),
             },
         };

@@ -6,6 +6,12 @@
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history
 - 对应文件级索引: `doc/world-simulator/prd.index.md`
 
+## 实现 crate 与宿主接线
+
+`oasis7_simulator` 拥有确定性 WorldKernel/WorldModel、动作与原生事件、scenario、query、快照与回放。它只依赖已有 API/ABI 合同和序列化/hash 库，独立 native/WASM 使用同一套内核实现；AgentBehavior、Runner、Provider/model 执行、源码编译 IO 与旧归档组合仍由 `oasis7` 宿主适配。纯内核的默认 compiler 不接触宿主环境，native 宿主明确注入原 compiler。内核规则与恢复测试随实现迁入新 crate；完整旧归档及宿主 compiler 集成测试留宿主。
+
+宿主只通过限定的 effect intent/receipt 记录入口提交原 trace 值，event identity/time 仍由内核分配。只读 schedule query 明确区分 SimulatorStock 与 HostLedgers；后者只省略模拟库存检查，宿主仍负责自己的账本可负担性与实际执行时重检，query 结果不是准入凭据。Viewer 通过公开只读查询消费纯内核，不跨 crate 借用私有 recorder 或内部校验方法。
+
 ## 内核持久化与历史组合归档
 
 原生 `KernelSnapshot` / `KernelJournal` / `KernelEvent` 仅表达内核状态、动作队列与事件，不拥有 Runtime snapshot/event、player gameplay 或 chain manifest/delta。旧 `WorldSnapshot` / `WorldJournal` / `WorldEvent` 是宿主的历史组合归档合同，保留原字段顺序、默认值、版本和 JSON/CBOR 编码。
@@ -72,7 +78,7 @@ Simulator 原生 Action、Agent、WorldModel 与 Runtime 模型各自保持现�
 
 产品 N/A；reason=本条维护历史 simulator adapter 的决策数据兼容，聚合字段不产生新的余额检查、扣账或独立持久成本记录；scope=仅 KernelRuleDecision.cost 的合并与不自动结算边界。该适用性不覆盖动作自身资源变化、正式 runtime 的规则成本结算或其产品结果，亦不免除下列非零 cost、溢出与持久化证据的未证明边界。
 
-`KernelRuleDecision.cost` 是历史 adapter 保留的决策数据。`crates/oasis7/src/simulator/kernel/types.rs::merge_kernel_rule_decisions` 聚合 cost；`kernel/step.rs::execute_action_envelope_at_time` 随后只按 verdict、override 和拒绝 notes 决定动作执行，不使用 cost 进行余额检查或资源扣账，也不把聚合 cost 作为独立事件写入 journal。动作自己的资源变化由其实现负责，不能据此推断所有动作都无成本。
+`KernelRuleDecision.cost` 是历史 adapter 保留的决策数据。`crates/oasis7_simulator/src/kernel/types.rs::merge_kernel_rule_decisions` 聚合 cost；`kernel/step.rs::execute_action_envelope_at_time` 随后只按 verdict、override 和拒绝 notes 决定动作执行，不使用 cost 进行余额检查或资源扣账，也不把聚合 cost 作为独立事件写入 journal。动作自己的资源变化由其实现负责，不能据此推断所有动作都无成本。
 
 正式 runtime 的 `RuleDecision` 与该 adapter 分属不同执行入口：`crates/oasis7/src/runtime/world/step.rs` 检查资源缺口并应用 `decision.cost`，成本应用失败形成结构化拒绝。保留 simulator 的兼容行为不改变正式 runtime 的结算合同。若以后让 simulator cost 生效，应明确付款主体、数值及原子性、事件/replay、旧决策与旧消费者兼容，并以针对该行为的回归验证替代对字段存在的推断。
 
@@ -125,4 +131,4 @@ Simulator 原生 Action、Agent、WorldModel 与 Runtime 模型各自保持现�
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [professional_acceptance: runner-metrics-action-window-contract（RunnerMetrics 动作与窗口）](prd.md#runner-metrics-action-window-contract) | [指标设计](#runner-metrics-action-window-design) | 唯一动作、最终结果、同窗口分母与未测语义 | [runtime-live 基线](../../crates/oasis7/src/viewer/runtime_live/tests/runtime_live_core.rs)及本页多事件/拒绝/系统事件/空样本/截断/恢复/wire 七类待执行回归；普通 Runner 与 runtime-live 分别观察，不以一方代签另一方 | 实施 PR 的候选、输入 action/event、计数分母、序列化结果及实际命令 | 文档不修复当前代码；不证明玩家等待时延或 job 最终完成率 |
-| [professional_acceptance: kernel-rule-cost-contract（Kernel 规则成本兼容边界）](prd.md#kernel-rule-cost-contract) | [cost 边界](design.md#kernel-rule-cost-boundary) | 当前 cost 聚合不自动结算；已有 deny/modify 与事件后 hook 行为保持原义。 | 固定候选，回读 `kernel/types.rs::merge_kernel_rule_decisions` 与 `kernel/step.rs::execute_action_envelope_at_time`；[kernel_rule_decisions.rs](../../crates/oasis7/src/simulator/tests/kernel_rule_decisions.rs) 的 `kernel_pre_action_rule_deny_rejects_action`、`kernel_pre_action_rule_modify_overrides_action`、`post_action_hook_receives_event_after_modify_decision` 是相关 L1 hook 基线。文档修补核对源码和既有断言，行为改动时运行适用回归。 | PR 的候选、源码回读及实际运行结果，明确区分未运行的测试计划。 | 现有用例没有非零 cost 不扣账的专门断言；不能据此声称该行为已有自动回归、聚合溢出已验证或成本已持久记录。 |
+| [professional_acceptance: kernel-rule-cost-contract（Kernel 规则成本兼容边界）](prd.md#kernel-rule-cost-contract) | [cost 边界](design.md#kernel-rule-cost-boundary) | 当前 cost 聚合不自动结算；已有 deny/modify 与事件后 hook 行为保持原义。 | 固定候选，回读 `kernel/types.rs::merge_kernel_rule_decisions` 与 `kernel/step.rs::execute_action_envelope_at_time`；[kernel_rule_decisions.rs](../../crates/oasis7_simulator/src/tests/kernel_rule_decisions.rs) 的 `kernel_pre_action_rule_deny_rejects_action`、`kernel_pre_action_rule_modify_overrides_action`、`post_action_hook_receives_event_after_modify_decision` 是相关 L1 hook 基线。文档修补核对源码和既有断言，行为改动时运行适用回归。 | PR 的候选、源码回读及实际运行结果，明确区分未运行的测试计划。 | 现有用例没有非零 cost 不扣账的专门断言；不能据此声称该行为已有自动回归、聚合溢出已验证或成本已持久记录。 |

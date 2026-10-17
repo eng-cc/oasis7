@@ -222,8 +222,8 @@ fn receipt_api_projection_is_lossless_correlation_not_runtime_readback_proof() {
 #[test]
 fn typed_provider_decision_alias_keeps_generic_payloads_without_erasure() {
     let decision: oasis7_agent_api::ProviderDecision<
-        crate::simulator::Action,
-        crate::simulator::AgentQuery,
+        oasis7_simulator::Action,
+        oasis7_simulator::AgentQuery,
     > = oasis7_agent_api::ProviderDecision::Wait;
     let _: crate::simulator::ProviderDecision = decision;
 }

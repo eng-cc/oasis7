@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
 
 use super::agent::AgentDecision;
-use super::types::{Action, WorldTime};
+use oasis7_simulator::{Action, WorldTime};
 
 const MAX_BOUNDED_TOP_N_LIMIT: usize = 1024;
 
@@ -232,7 +232,7 @@ impl ShortTermMemory {
 // Long-Term Memory
 // ============================================================================
 
-pub use super::memory_entry::LongTermMemoryEntry;
+pub use oasis7_simulator::LongTermMemoryEntry;
 
 /// Long-term memory store with basic retrieval.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

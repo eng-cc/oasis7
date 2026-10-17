@@ -197,7 +197,7 @@ impl Fixture {
         world
             .set_agent_resource_balance(
                 "agent-a",
-                oasis7::simulator::ResourceKind::Electricity,
+                oasis7_agent_api::world_action::ResourceKind::Electricity,
                 100_000,
             )
             .unwrap();

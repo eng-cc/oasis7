@@ -6337,6 +6337,7 @@ dependencies = [
  "oasis7_node",
  "oasis7_observability",
  "oasis7_proto",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
  "oasis7_wasm_materializer",
@@ -6421,6 +6422,7 @@ dependencies = [
  "oasis7_game_client",
  "oasis7_node",
  "oasis7_proto",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "oasis7_wasm_executor",
  "oasis7_wasm_router",
@@ -6462,6 +6464,7 @@ dependencies = [
  "oasis7",
  "oasis7_client_api",
  "oasis7_proto",
+ "oasis7_simulator",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
@@ -6630,6 +6633,7 @@ dependencies = [
  "oasis7_launcher_ui",
  "oasis7_model_provider",
  "oasis7_proto",
+ "oasis7_simulator",
  "prost 0.13.5",
  "reqwest 0.13.5",
  "rusqlite",
@@ -6775,7 +6779,9 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "oasis7",
+ "oasis7_agent_api",
  "oasis7_proto",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "reqwest 0.13.5",
  "serde",
@@ -6803,6 +6809,7 @@ dependencies = [
  "oasis7",
  "oasis7_letai_credit_adapter",
  "oasis7_observability",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "reqwest 0.13.5",
  "serde",
@@ -6816,6 +6823,8 @@ name = "oasis7_provider_tools"
 version = "0.1.0"
 dependencies = [
  "oasis7",
+ "oasis7_agent_api",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "serde",
  "serde_json",
@@ -6847,6 +6856,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_simulator"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "oasis7_agent_api",
+ "oasis7_wasm_abi",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "oasis7_viewer_runtime"
 version = "0.1.0"
 dependencies = [
@@ -6855,6 +6878,7 @@ dependencies = [
  "oasis7",
  "oasis7_agent_api",
  "oasis7_client_api",
+ "oasis7_simulator",
  "oasis7_wasm_abi",
  "reqwest 0.13.5",
  "serde",
