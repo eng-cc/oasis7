@@ -188,6 +188,7 @@ impl ViewerRuntimeLiveServer {
                     None,
                 )
             })?;
+        let retained_target_snapshot = checkpoint.snapshot.clone();
         if let Some(checkpoint_ref) = approval.intent.rollback_checkpoint.as_ref() {
             let rollback_checkpoint = self
                 .stable_checkpoints
@@ -465,6 +466,7 @@ impl ViewerRuntimeLiveServer {
             candidate_world.apply_governed_rollback_v2(
                 checkpoint.snapshot.clone(),
                 checkpoint.journal.clone(),
+                retained_target_snapshot,
                 &typed_approval,
                 super::recovery_receipt::current_unix_time_ms(),
             )
