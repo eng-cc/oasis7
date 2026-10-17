@@ -88,8 +88,8 @@ pub(super) fn authenticated_collect_data_to_event(
     nonce: u64,
     signature: &str,
 ) -> Result<WorldEventBody, WorldError> {
-    if let Err(error) = crate::collect_data_auth::verify_authorization(
-        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+    if let Err(error) = oasis7_proto::collect_data_auth::verify_authorization(
+        oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
         electricity_cost,
         data_amount,
         player_id,

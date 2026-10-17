@@ -7,6 +7,7 @@ impl World {
         &mut self,
         compiler: Arc<dyn oasis7_agent_api::module_source::ModuleSourceCompiler>,
     ) {
-        self.source_compiler = super::module_source_compiler::RuntimeSourceCompiler::new(compiler);
+        self.source_compiler =
+            super::super::module_source_compiler::RuntimeSourceCompiler::new(compiler);
     }
 }

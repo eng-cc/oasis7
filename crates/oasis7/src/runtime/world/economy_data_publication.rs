@@ -109,8 +109,8 @@ impl PreparedEconomyDataEvent {
                         ),
                     });
                 }
-                crate::collect_data_auth::verify_authorization(
-                    crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+                oasis7_proto::collect_data_auth::verify_authorization(
+                    oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
                     *electricity_cost,
                     *data_amount,
                     player_id,

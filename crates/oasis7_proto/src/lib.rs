@@ -20,3 +20,5 @@ pub use distributed_checkpoint_lineage::{
     CheckpointLineageValidatorV1, CheckpointLineageVoteV1, checkpoint_lineage_descriptor_digest,
     checkpoint_lineage_vote_signing_payload,
 };
+
+pub mod collect_data_auth;

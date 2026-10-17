@@ -21,8 +21,8 @@ fn authenticated_fixture() -> (World, DomainEvent) {
             .verifying_key()
             .to_bytes(),
     );
-    let signature = crate::collect_data_auth::sign_authorization(
-        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+    let signature = oasis7_proto::collect_data_auth::sign_authorization(
+        oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
         3,
         4,
         "player-40a",

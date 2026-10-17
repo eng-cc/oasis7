@@ -93,8 +93,8 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
             .verifying_key()
             .to_bytes(),
     );
-    let signature = crate::collect_data_auth::sign_authorization(
-        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+    let signature = oasis7_proto::collect_data_auth::sign_authorization(
+        oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
         7,
         11,
         "player-auth",
@@ -147,8 +147,8 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
         23
     );
 
-    let lower_signature = crate::collect_data_auth::sign_authorization(
-        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+    let lower_signature = oasis7_proto::collect_data_auth::sign_authorization(
+        oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
         7,
         11,
         "player-auth",
@@ -171,8 +171,8 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
         .expect("lower nonce deterministically rejected");
     assert_latest_rule_denied_contains(&world, "authenticated collect_data nonce replay");
 
-    let signature_10 = crate::collect_data_auth::sign_authorization(
-        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+    let signature_10 = oasis7_proto::collect_data_auth::sign_authorization(
+        oasis7_proto::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
         7,
         11,
         "player-auth",
