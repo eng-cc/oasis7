@@ -151,11 +151,11 @@ Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可�
 该候选不执行特权安装、custody 管理或生产变更，原有游戏、部署及其他 PR 的核验时点保持不变。
 来源：[候选 PR 与验证范围](https://github.com/eng-cc/oasis7/pull/4624)、[暂停范围与验收边界](local-tools.design.md)。
 
-### 指挥客户端产品收敛（2026-10-13，文档范围）
+### 指挥客户端产品收敛（2026-10-17，设计目标）
 
-本轮以 `main@81649fd3baa248a905c2dd47a979ec5f04ef4a7d` 核对产品设计与现有入口，修订目标为“首页看清重点—统一工作详情—接续原工具或自管执行—回看结果”。[产品需求](command-center.prd.md#REQ-CC-013)明确首页内容、排序及来源冲突，[关联需求](command-center.prd.md#REQ-CC-014)明确复用/修复和既有现场接续；[整体验收](command-center.prd.md#cc-product-acceptance)覆盖开始一天、处理中断和恢复工作。
+以 `main@0ec10379419b0aaedb9d16157b81c92f4e6e3495` 核对产品、系统设计与实现入口。目标仍是“首页看清重点—统一工作详情—接续原工具或自管执行—回看结果”；[产品需求](command-center.prd.md#REQ-CC-013)补齐首页字段、动作和异常状态，[关联需求](command-center.prd.md#REQ-CC-014)约定复用、修复与跨视图接续，[待处理需求](command-center.prd.md#REQ-CC-006)区分真实输入、已决定事项与同步缺口。[系统设计](command-center.design.md)承接工作投影、来源时效、持久化兼容及并发读取；工具和文档阅读分别沿[任务入口](local-tools.design.md#DES-CC-TOOLS-005)与[主题阅读](document-tree.design.md#DES-CC-TREE-004)调整。
 
-已有原文视图、手工关联和实验 runtime 是实现基础；首页现有[来源阅读降级入口](../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)直达项目状态与架构索引章节，保留正文核验窗口和缺失来源提示。四区投影、统一工作详情及完整用户任务尚待实施和验收，见[差距表](command-center.design.md#1104-日常工作闭环的实现差距)。本段只记录本轮文档设计，不表示新能力已上线、PR已合入或桌面已验收，不刷新其他目标、PR与环境事实。Apple 签名/管理员集成的已有暂停继续有效。
+已有原文视图、手工关联和实验 runtime 是实现基础；首页现有[来源阅读降级入口](../../../tools/oasis7-command-center/ui/src/SummarySources.tsx)仍不能替代四区投影、统一工作详情及[完整用户任务](command-center.prd.md#cc-product-acceptance)。具体范围见[差距表](command-center.design.md#1104-日常工作闭环的实现差距)。以上是设计目标与源码观察，不表示功能实现、PR 合入、桌面或性能验收，不刷新其他目标、PR 与环境事实。Apple 签名/管理员集成的已有暂停继续有效。
 
 ### 文档全局树设计（2026-10-13，文档范围）
 
