@@ -87,9 +87,9 @@ Trace ID: O7-REQ-86ed9522-e22d-4706-9b1e-3e1452a9fb3c
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“准入生命周期、权限/tier与固定cadence公平”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清准入生命周期、权限/tier与固定cadence公平的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现与验证依据：已沿[真实provider bootstrap输入](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/provider_backed_bootstrap.rs#L19-L43)→[live grant/catalog](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/capability_catalog.rs#L17-L74)核查：消费者接收治理finality、CapabilityGrantV2与当前World绑定，未建立产品认证状态/tier/证据转换。[World资格选择](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/cognition_orchestration.rs#L289-L320)与[每Agent每tick配额](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/cognition_scheduler.rs#L635-L676)证明现有认知调度约束，但不是认证转换后权威action slot公平验收。DevLocal grant生命周期明确为startup-only测试入口。
+- 核对日期与基线：2026-10-17；需求/设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；核查native任务、World Service、grant/catalog与scheduler切片；未执行模型、运行验收或全表面组合。
+- 剩余范围：认证证据/状态→可选profile及新意图准入、暂停/撤销对待决请求的影响、恢复后范围及权威action slot组合仍未核清。普通grant与cognition wake配额是真实相邻基础，不升级本产品项；认证专业设计映射仍待定位，保留未核实。
 
 - 要求：provider profile 只有在适用场景、权限、tier 和证据范围内才可被选择或形成新的权威意图来源；所有 provider 共享同一权威 cadence 与 action slots，不因性能、调用量或付费便利获得额外世界机会。
 - 验收：AC-AGENT-LEARNING-001
@@ -112,9 +112,9 @@ Trace ID: O7-REQ-dc313559-e262-478c-8a8d-ee2f9817e5e7
 - 系统设计状态：未核实
 - 系统设计依据：本轮已读本条、对应验收及所列专业 authority；尚未核清“训练/认证变化、当前能力与历史及待决重确认”的逐项专业设计承接。产品体验 design 或模块入口本身不作技术覆盖证明；不据此断言无设计。
 - 实现状态：未核实
-- 实现与验证依据：本轮只核对文档关系，尚未核清本条实现 Task/PR、固定实现提交与实际验收记录；[#4694](https://github.com/eng-cc/oasis7/issues/4694)只跟踪文档规范化，不证明本功能已交付。
-- 核对日期与基线：2026-10-14；需求/设计基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；远程文档快照审读；实现基线与运行环境未核实，未执行本条行为验收。
-- 剩余范围：设计：核清训练/认证变化、当前能力与历史及待决重确认的精确承接及失败边界；实现/验证：取得本条适用入口的同候选证据。
+- 实现与验证依据：已核对[CapabilityGrantV2完整字段](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_wasm_abi/src/capability_v2.rs#L265-L284)及[持久授权来源](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/capability_authorization.rs#L18-L41)、[live撤销消费者](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/runtime/world/capability_authorization.rs#L327-L340)：已有模块/issuer/finality/revocation的审计授权事实，不是训练或认证证据的provenance记录。Local Provider dual-mode recertification历史报告只证明旧窗口parity/dual-mode，不是玩家训练认证生命周期。尚未建立训练结果→当前scope→待决重新确认→历史与成本投影的生产链。
+- 核对日期与基线：2026-10-17；需求/设计/静态源码固定 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；核查native任务、World Service、grant/catalog与scheduler切片；未执行模型、运行验收或全表面组合。
+- 剩余范围：保留未核实：训练/认证记录authority、成本与模块来源、复核/重训/到期/撤销的范围变迁、成功后不得自动恢复旧待决，以及玩家可读历史组合未核清。不得把grant status=verified、治理finality certificate或QA复签等同产品认证。
 
 - 要求：训练、认证、模块和重训只能在新证据明确支持的范围内改变能力；复核、失败、到期或撤销期间必须显示当前有效范围与受影响行动，并保留既有 provenance、责任和已结算结果。
 - 验收：AC-AGENT-LEARNING-002

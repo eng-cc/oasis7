@@ -97,9 +97,9 @@ Trace ID: O7-REQ-32e47f2a-2da3-4ca6-aaf0-ef522be4b898
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
 - 实现状态：未核实
-- 实现与验证依据：认领经济和注册边界可定位，但这些不证明hosting/storage/support付费便利与世界权力隔离。 [经济claim公开边界](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md#public-claim-boundary)；[首次动作局部代码](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7/src/viewer/runtime_live/player_gameplay.rs#L542-L565)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：免费基础进入、可选 hosting/storage/support 的权力隔离及中断恢复的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。 本次实现核对剩余：服务订购/取消/失效/恢复的权限、成本、资源和世界能力对照；尚未核清完整设计及实际对应实现、验收。
+- 实现与验证依据：world/join 在有效账号和 open_preview 后受容量与 session 控制；授予的是短期 player_session。 [v2 HTTP world 入口验证账号 session/open_preview 与逐账号世界绑定](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_identity/world.rs#L65-L138)；[重新验证会话，授予短期 player_session，绑定 world/key/epoch；非泛化世界权限](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_identity/world.rs#L338-L394)。本轮静态审读；测试定义及历史 PR 结果不替代完整验收。
+- 核对日期与基线：2026-10-17；需求/源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅后继文档调整；未执行本项业务验收。
+- 剩余范围：尚未定位 hosting/storage/support 订购、取消、过期与恢复到世界资源/治理/合同/Agent 能力的真实数据流；普通会话鉴权不证明付费隔离。
 
 - 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
@@ -126,9 +126,9 @@ Trace ID: O7-REQ-dc05d050-6c0c-4dbd-bffc-a5314c6f133e
 - 系统设计状态：未核实
 - 系统设计依据：已核对本专题列出的专业权威入口，尚未核清本功能全部义务的准确系统设计承接；产品语义及根 PRD 导航不作为技术覆盖证明。
 - 实现状态：未核实
-- 实现与验证依据：上游[成熟世界认可要求](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)、[情境声誉要求](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)和入口早期负边界明确；产品语义与认领局部代码不足以证明机会来源/失效实现。 [世界认可上游产品要求](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)；[声誉机会主责](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)。本次未执行仓库测试、浏览器、安装、部署或实际业务操作；测试源码仅为定义。
-- 核对日期与基线：2026-10-14；需求与专业文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；只读文本快照审读；入口和验收范围见上述功能点；未执行运行环境或浏览器验收。
-- 剩余范围：设计：成熟世界认可/机会组合与早期入口信号不产生世界效果的负边界的技术承接仍待逐项核清；实现：尚缺对应候选的实现/交付与完整验收证据。 本次实现核对剩余：成熟期认可/机会有界来源与失效、历史不抹除和独立基线；早期接入/付费/在线时长不产生世界效果的实际负例。
+- 实现与验证依据：已核清入口授予 session 的局部范围，没有将 session 名称当认可或世界机会。 [v2 HTTP world 入口验证账号 session/open_preview 与逐账号世界绑定](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_identity/world.rs#L65-L138)；[重新验证会话，授予短期 player_session，绑定 world/key/epoch；非泛化世界权限](https://github.com/nil-studio/oasis7/blob/3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9/crates/oasis7_launcher_backend/src/bin/oasis7_game_launcher/hosted_identity/world.rs#L338-L394)。本轮静态审读；测试定义及历史 PR 结果不替代完整验收。
+- 核对日期与基线：2026-10-17；需求/源码 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`，main `bab8990cef3b42fe5a0a5538b5dd0c80ca3b19f5` 仅后继文档调整；未执行本项业务验收。
+- 剩余范围：缺成熟世界认可/机会的入口消费者、来源与失效状态映射；本次入口链不能证明早期信号完全无世界效果及历史/独立基线。
 
 - 本次实现复核：2026-10-17；需求与源码固定基线 `3c0a31a6e9d1e7b8633e3bcfcb11b89ebfcddbe9`；GitHub固定文本/PR记录审读；覆盖本条原入口/阶段及验收范围，未执行浏览器、安装或业务验收；旧核对基线只保留历史语境。
 
