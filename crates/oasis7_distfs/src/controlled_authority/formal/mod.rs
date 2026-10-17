@@ -42,3 +42,6 @@ pub use durable_set_install::*;
 
 mod durable_set_bootstrap;
 pub use durable_set_bootstrap::*;
+
+mod storage_shadow;
+pub use storage_shadow::{FormalStorageShadowReport, build_formal_storage_shadow};

@@ -953,3 +953,16 @@ fn typed_store_reads_packed_objects_and_reuses_their_logical_identity() {
     .unwrap();
     assert!(endpoint.store.get::<Vec<u64>>(&digest).is_err());
 }
+
+#[test]
+fn marked_shadow_cannot_initialize_a_serving_endpoint() {
+    let fixture = Fixture::new();
+    let endpoint = fixture.endpoint(EndpointRole::Primary);
+    let initial = endpoint.store.body.clone();
+    drop(endpoint);
+    let shadow = fixture.path.join("shadow-objects");
+    super::super::build_formal_storage_shadow(&fixture.pdir, &shadow).unwrap();
+    let result = Store::open(&shadow, initial, &key(5), vec![]);
+    assert!(matches!(result, Err(FormalError::Invalid(ref message)) if message.contains("shadow")));
+    assert!(!shadow.join("formal-checkpoint-v1.cbor").exists());
+}

@@ -173,6 +173,11 @@ impl Store {
         if !cfg!(unix) {
             return Err(invalid("formal durable endpoint needs directory fsync"));
         }
+        match fs::symlink_metadata(path.join(super::super::storage_shadow::SHADOW_MARKER)) {
+            Ok(_) => return Err(invalid("formal shadow directory cannot open an endpoint")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io(error)),
+        }
         directory(path)?;
         let lock_path = path.join(".formal-endpoint.lock");
         if fs::symlink_metadata(&lock_path).is_ok() {

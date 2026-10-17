@@ -43,6 +43,22 @@
 <a id="v-lws-codec"></a>
 ## 3. V-LWS-CODEC：原字节、共享与所有读者
 
+### 离线 v1 pack shadow 入口（S2 子范围）
+
+停机一个受控验证副本的 endpoint，在已有父目录下选择全新、位于源 endpoint 外的目标目录：
+
+```bash
+env -u RUSTC_WRAPPER cargo run --locked -p oasis7_distfs --example formal_storage_shadow -- \
+  /absolute/source-endpoint /absolute/new-shadow-directory
+```
+
+入口取得 endpoint 同名独占 lease；运行中的 endpoint 会使其在创建目标前失败。它读取 `formal-objects-v1` 全部 digest 名对象，解析原 raw/v1 pack，再把不超过既有 pack node 上限的小对象按 8 MiB payload 批次写入现有 v1 pack；空对象及更大对象保持 raw。65,536 对象、1 GiB 总逻辑输入为本工具的固定上限；单对象沿用原 reader 的 64 MiB 逻辑/80 MiB 物理限制，读回同时持有两个逻辑对象，内存最多约 128 MiB 加有界名称清单及常数解码元数据。超限返回错误并保留源，不放宽预算继续。
+
+必须将全部原对象逐个读回并比较精确 bytes；每次逻辑读取继续校验原 hash。源中未知文件、symlink、非空 staging 或不完整物理盘点都会拒绝，不能跳过 pending 材料来扩大容量收益。输出 JSON 分列原逻辑 bytes、对象数量和源/目标物理盘点；以 allocated_bytes 比较该**对象命名空间**的候选占用。目标 hardlink 的按路径 apparent_bytes 会重复计整个 pack，不代表逻辑内容增长；源/目标保留同一逻辑对象，不能从总磁盘增量推算已释放量。
+
+源文件和 checkpoint 始终保留，目标既有内容绝不覆盖；任何失败都保留源及可能不完整的目标。写入任何对象前先创建并同步 `.shadow-only` 标志；初始化阶段失败可能仅留下空目录。目标只包含对象及打包元数据，不复制 checkpoint、authority 或 generation selector，**不能作为 endpoint 启动或视为可激活的完整恢复 generation**；当前 endpoint open 在创建 checkpoint 前拒绝任何带此标志的目录。成功仅证明该命名空间的全对象精确读回；不证明 typed 全世界闭包、独立故障域、运行时恢复续跑或新 codec。原子激活、旧 reader/rollback capability、迁移恢复、压缩/分块与回收仍需独立实现和验收；本入口不执行这些动作，也不删除源来获得净释放。失败重试使用另一个新目标；清理明确归属的验证输出按仓库交付规则执行。
+
+
 **输入**：包含 raw、旧 business pack、阶段外壳、candidate/frozen、大小对象、CBOR 整数数组 artifact、snapshot/module 的固定 corpus；另有不同授权范围的两个读者。
 
 1. 保存原始 canonical bytes、对象 hash、typed digest、签名/证明结果和 range 基准。固定目标表示版本及 frame/chunker 参数，保留原 corpus。

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const MAGIC: &[u8] = b"oasis7.formal.business-cas.pack.v1\0";
 const HEADER: usize = MAGIC.len() + 4 + 4 + 8 + 8;
 const INDEX_ENTRY: u64 = 44;
-const MAX_PACK: u64 = 80 * 1024 * 1024;
+pub(super) const MAX_PACK: u64 = 80 * 1024 * 1024;
 const MAX_LOGICAL: u64 = 64 * 1024 * 1024;
 pub(crate) const MAX_PACK_NODE: u64 = 4 * 1024 * 1024 + 128;
 const MAX_ENTRIES: usize = BUSINESS_INDEX_MAX_UPDATES * (BUSINESS_INDEX_DEPTH + 1);

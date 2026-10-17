@@ -373,7 +373,9 @@ S1 的既有表示读取统一由 `business_pack::read_object` 承接本地 raw/
 | RPC / transfer / remote archive | endpoint_archive_transfer.rs、transport/client.rs；消费逻辑 bytes/chunk，不把物理 pack 传为逻辑对象 |
 | offline/published / native restore | 上述逻辑接口的消费者；大 envelope 与完整闭包预算、逐调用审计及新格式能力 gate 仍未完成 |
 
-上述前置子范围不启用压缩、recipe、迁移或回收；S0/S1 整体退出条件仍按下表和 §11 验证，正式写入保持原表示。
+S2 另有 `build_formal_storage_shadow` 和 `formal_storage_shadow` example：在持有原 endpoint 独占 lease 时，将全部 digest 对象重建到新目录的既有 v1 pack/raw 表示，并逐对象精确读回。固定 8 MiB payload 批次、65,536 对象、1 GiB 总逻辑输入及原单对象 64 MiB 上限；大于既有 pack node 上限或为空的对象保持 raw。目标必须在源外且不存在，对象写入前先同步 shadow-only 标志（初始化失败可只留下空目录）；未知条目、非空 staging、超预算或校验失败保留源并停止。它只提供对象命名空间的候选物理占用，未携带 checkpoint/authority/selector，不能作为 endpoint 或完整恢复 generation 激活；当前 Store open 在创建 checkpoint 前拒绝 shadow-only 标志。操作和失败边界见[shadow 入口](formal-world-storage-efficiency.manual.md#v-lws-codec)。
+
+上述子范围不启用压缩、recipe、迁移或回收；S0/S1 整体退出条件仍按下表和 §11 验证，正式写入保持原表示。
 
 
 阶段是技术依赖顺序，可在后续实现交付中合并处理，不新增 workflow、审批次数或每阶段强制 PR。本文这次文档交付不执行迁移、不删除运行数据。
