@@ -187,6 +187,13 @@
     "oasis7_model_provider": [
       "workspace_support"
     ],
+    "oasis7_client_storage": [
+      "workspace_support"
+    ],
+    "oasis7_signer_protocol": [
+      "workspace_support",
+      "command_center"
+    ],
     "oasis7_local_signer": [
       "workspace_support",
       "command_center"
@@ -551,6 +558,7 @@
         "scripts/local-signer/tests/**",
         "doc/p2p/blockchain/local-file-signing-backend.runbook.md",
         "crates/oasis7_local_signer/**",
+        "crates/oasis7_signer_protocol/**",
         "crates/oasis7_context/**",
         "crates/oasis7_secure_envelope/**"
       ],

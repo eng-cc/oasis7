@@ -31,6 +31,7 @@ oasis7_wasm_materializer = { path = "../oasis7_wasm_materializer" }
 oasis7_observability = { path = "../oasis7_observability" }
 oasis7_hosted_access = { path = "../oasis7_hosted_access" }
 oasis7_game_client = { path = "../oasis7_game_client" }
+oasis7_client_storage = { path = "../oasis7_client_storage" }
 oasis7_model_provider = { path = "../oasis7_model_provider" }
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 zeroize = "1"

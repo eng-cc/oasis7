@@ -35,6 +35,8 @@ scope = [
     "crates/oasis7_cas/src",
     "crates/oasis7_formal_protocol/Cargo.toml",
     "crates/oasis7_formal_protocol/src",
+    "crates/oasis7_client_storage/Cargo.toml",
+    "crates/oasis7_client_storage/src",
     "crates/oasis7_game_client/Cargo.toml",
     "crates/oasis7_game_client/src",
     "crates/oasis7_launcher_config/Cargo.toml",

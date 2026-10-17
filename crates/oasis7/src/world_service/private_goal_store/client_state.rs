@@ -11,7 +11,7 @@ impl PrivateGoalStore {
         kind: ClientStateKind,
         operation: &str,
     ) -> Result<Option<ClientStateV1>, String> {
-        oasis7_game_client::operation_store::read_client_state_with(
+        oasis7_client_storage::operation_store::read_client_state_with(
             #[cfg(unix)]
             &self.directory,
             &self.key,
@@ -26,7 +26,7 @@ impl PrivateGoalStore {
         operation: &str,
         record: &ClientStateV1,
     ) -> Result<ClientStateV1, String> {
-        oasis7_game_client::operation_store::put_client_state_with(
+        oasis7_client_storage::operation_store::put_client_state_with(
             #[cfg(unix)]
             &self.directory,
             &self.key,
@@ -38,7 +38,7 @@ impl PrivateGoalStore {
     }
     #[cfg(all(test, unix))]
     fn client_state_name(&self, kind: ClientStateKind, operation: &str) -> Result<String, String> {
-        oasis7_game_client::operation_store::client_state_name(&self.key, kind, operation)
+        oasis7_client_storage::operation_store::client_state_name(&self.key, kind, operation)
     }
 }
 #[cfg(all(test, unix))]
@@ -86,12 +86,13 @@ mod tests {
             .unwrap();
         drop(store);
         let native =
-            oasis7_game_client::operation_store::OperationStore::open(&directory, [61; 32])
+            oasis7_client_storage::operation_store::OperationStore::open(&directory, [61; 32])
                 .unwrap();
-        let Some(oasis7_game_client::operation_store::ClientStateV1::ContextPrepare(native_proof)) =
-            native
-                .read_client_state(ClientStateKind::Prepare, "stable")
-                .unwrap()
+        let Some(oasis7_client_storage::operation_store::ClientStateV1::ContextPrepare(
+            native_proof,
+        )) = native
+            .read_client_state(ClientStateKind::Prepare, "stable")
+            .unwrap()
         else {
             panic!("native SDK must reopen the same encrypted cache")
         };
